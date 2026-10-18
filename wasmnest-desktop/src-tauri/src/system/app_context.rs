@@ -1,0 +1,164 @@
+//! Application Context
+//!
+//! 全局单实例容器，集中管理桌面端所有全局服务的引用
+//! 在 lib.rs 的 run() 中一次性创建，后续通过 AppContext::global() 获取
+
+use wasmnest_discovery_engine::advertiser::MdnsAdvertiser;
+use crate::db::Database;
+use crate::system::info::SystemInfo;
+use crate::wasm_core::PluginHost;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tauri::AppHandle;
+
+/// 桌面端全局服务容器
+///
+/// 所有全局单实例统一注册在此，避免在 lib.rs 中散落大量 clone 变量
+/// 通过 AppContext::global() 获取，各模块按需取用
+pub struct AppContext {
+    /// 数据库实例
+    db: Arc<std::sync::Mutex<Database>>,
+    // 票 11：`session_manager` / `config_manager` 两个内核会话域字段已删除——
+    // 会话真源在 `com.wasmnest.terminal-session` 登记域，宿主经 `session_gateway`
+    // 窄转发层互调，不再持有内核会话对象。
+    /// 插件宿主（生命周期管理）
+    plugin_host: Arc<PluginHost>,
+    /// mDNS 广播管理器
+    mdns_advertiser: Arc<tokio::sync::RwLock<MdnsAdvertiser>>,
+    /// Tauri AppHandle
+    ///
+    /// Option 化：无头/测试上下文（`tauri::test::mock_app()` 只能产出
+    /// MockRuntime 句柄，与 Wry 类型不兼容）允许 None，依赖前端事件的
+    /// 能力在调用处降级（emit 跳过），业务链路不受影响
+    app_handle: Option<Arc<AppHandle>>,
+    /// 资源目录路径（用于项目级 hooks 脚本复制）
+    resource_dir: Arc<PathBuf>,
+    /// 系统基本信息（OS / 设备名称 / IP，启动时采集）
+    system_info: Arc<SystemInfo>,
+}
+
+/// 全局单实例存储 — init() 和 global() 必须引用同一个 static
+static APP_CONTEXT: std::sync::OnceLock<AppContext> = std::sync::OnceLock::new();
+
+impl AppContext {
+    /// 获取全局单例引用
+    pub fn global() -> &'static Self {
+        APP_CONTEXT
+            .get()
+            .expect("AppContext not initialized, call AppContext::init() first")
+    }
+
+    /// 尝试获取全局单例引用（未初始化返回 None）
+    ///
+    /// 供可能在无头/测试上下文运行的路径使用（如 WASM host functions、
+    /// 插件 deactivate），避免 global() 的 panic
+    pub fn try_global() -> Option<&'static Self> {
+        APP_CONTEXT.get()
+    }
+
+    /// 初始化全局容器（仅在 lib.rs run() 中调用一次）
+    ///
+    /// 返回 &'static Self，后续通过 global() 获取同一实例
+    pub fn init(ctx: AppContext) -> &'static Self {
+        APP_CONTEXT.get_or_init(|| ctx)
+    }
+
+    // ==================== Accessors ====================
+
+    pub fn db(&self) -> &Arc<std::sync::Mutex<Database>> {
+        &self.db
+    }
+
+    pub fn plugin_host(&self) -> &Arc<PluginHost> {
+        &self.plugin_host
+    }
+
+    pub fn mdns_advertiser(&self) -> &Arc<tokio::sync::RwLock<MdnsAdvertiser>> {
+        &self.mdns_advertiser
+    }
+
+    pub fn app_handle(&self) -> &Option<Arc<AppHandle>> {
+        &self.app_handle
+    }
+
+    pub fn resource_dir(&self) -> &Arc<PathBuf> {
+        &self.resource_dir
+    }
+
+    pub fn system_info(&self) -> &Arc<SystemInfo> {
+        &self.system_info
+    }
+}
+
+/// 构建器，用于分步组装 AppContext
+pub struct AppContextBuilder {
+    db: Option<Arc<std::sync::Mutex<Database>>>,
+    plugin_host: Option<Arc<PluginHost>>,
+    mdns_advertiser: Option<Arc<tokio::sync::RwLock<MdnsAdvertiser>>>,
+    app_handle: Option<Arc<AppHandle>>,
+    resource_dir: Option<Arc<PathBuf>>,
+    system_info: Option<Arc<SystemInfo>>,
+}
+
+impl AppContextBuilder {
+    pub fn new() -> Self {
+        Self {
+            db: None,
+            plugin_host: None,
+            mdns_advertiser: None,
+            app_handle: None,
+            resource_dir: None,
+            system_info: None,
+        }
+    }
+
+    pub fn db(mut self, db: Arc<std::sync::Mutex<Database>>) -> Self {
+        self.db = Some(db);
+        self
+    }
+
+    pub fn plugin_host(mut self, ph: Arc<PluginHost>) -> Self {
+        self.plugin_host = Some(ph);
+        self
+    }
+
+    pub fn mdns_advertiser(mut self, ma: Arc<tokio::sync::RwLock<MdnsAdvertiser>>) -> Self {
+        self.mdns_advertiser = Some(ma);
+        self
+    }
+
+    pub fn app_handle(mut self, ah: Option<Arc<AppHandle>>) -> Self {
+        self.app_handle = ah;
+        self
+    }
+
+    pub fn resource_dir(mut self, rd: Arc<PathBuf>) -> Self {
+        self.resource_dir = Some(rd);
+        self
+    }
+
+    pub fn system_info(mut self, si: Arc<SystemInfo>) -> Self {
+        self.system_info = Some(si);
+        self
+    }
+
+    /// 构建并初始化全局 AppContext
+    pub fn build_and_init(self) -> &'static AppContext {
+        let ctx = AppContext {
+            db: self.db.expect("AppContext: db is required"),
+            plugin_host: self.plugin_host.expect("AppContext: plugin_host is required"),
+            mdns_advertiser: self.mdns_advertiser.expect("AppContext: mdns_advertiser is required"),
+            // app_handle 允许 None（无头/测试上下文），其余字段仍必填
+            app_handle: self.app_handle,
+            resource_dir: self.resource_dir.expect("AppContext: resource_dir is required"),
+            system_info: self.system_info.expect("AppContext: system_info is required"),
+        };
+        AppContext::init(ctx)
+    }
+}
+
+impl Default for AppContextBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

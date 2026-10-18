@@ -1,0 +1,84 @@
+/**
+ * @binblink/wasmnest-plugin-sdk-mobile
+ *
+ * WasmNest 移动端插件开发工具包
+ */
+
+export type {
+  Disposable,
+  PluginType,
+  PluginState,
+  PluginManifest,
+  PluginConfiguration,
+  ConfigProperty,
+  MobilePluginContributes,
+  LifecycleContribution,
+  CommandContribution,
+  ViewContribution,
+  NavTabContribution,
+  SettingsContribution,
+  RouteContribution,
+  TerminalContribution,
+  TerminalToolbarItemContribution,
+  TerminalStreamHandle,
+  MobileHostSessionEvent,
+  PluginRouteDescriptor,
+  ShellSurfaceContribution,
+  ShellSlotContribution,
+  ShellCapsuleItem,
+  ShellSettingsEntry,
+  PluginDialogAction,
+  PluginDialogOptions,
+  PluginDialogHandle,
+  CommandRegistry,
+  SessionAPI,
+  UIRegistry,
+  EventAPI,
+  StorageAPI,
+  I18nAPI,
+  LifecycleAPI,
+  LoggerAPI,
+  DialogOptions,
+  DialogResult,
+  DialogAPI,
+  NotificationAPI,
+  StatusAPI,
+  SystemAPI,
+  PluginDevMock,
+  PluginContext,
+  PluginModule,
+  MobileHttpResult,
+  MobileHttpRequestOptions,
+  MobileHostApi,
+} from './types'
+
+export {
+  getSharedModule,
+  getI18n,
+  getVue,
+  getVueI18n,
+  getPinia,
+  getRouter,
+  getPluginContext,
+  getPresetTasks,
+  getMobileApi,
+} from './runtime'
+
+// SDK 常量（宿主与插件共用单一事实源）
+export { MOCK_SESSION_ID } from './constants'
+
+// 全局弹窗控制器（宿主 / dev-shell 共用，插件经 context.ui.showDialog 操控）
+export {
+  openGlobalDialog,
+  closeGlobalDialog,
+  updateGlobalDialog,
+  getGlobalDialog,
+  subscribeGlobalDialog,
+  resolveDialogDeadline,
+} from './global-dialog'
+export type {
+  GlobalDialogEntry,
+  GlobalDialogListener,
+  OpenGlobalDialogInput,
+  GlobalDialogHandleOutput,
+} from './global-dialog'

@@ -1,0 +1,501 @@
+//! Application Lifecycle
+//!
+//! 应用生命周期钩子系统 — 核心模块和插件可注册回调到启动/关闭/窗口关闭等生命周期节点
+//! 通过 LifecycleRegistry 全局单例注册，由 Tauri RunEvent 循环驱动执行
+
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+
+use crate::system::constants::HOOK_TIMEOUT_SECS;
+
+/// 生命周期阶段
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LifecyclePhase {
+    /// 应用启动完成 — 所有服务初始化后触发
+    Startup,
+    /// 应用即将关闭 — 执行清理逻辑
+    Shutdown,
+    /// 窗口关闭请求 — 可阻止关闭
+    WindowCloseRequested,
+}
+
+/// 异步钩子回调类型
+type AsyncHookFn = Arc<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+
+/// 窗口关闭请求钩子回调类型
+/// 返回 true 允许关闭，返回 false 阻止关闭
+type WindowCloseHookFn = Arc<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
+
+/// 已注册的钩子条目
+struct HookEntry {
+    /// 注册者标识（模块名或插件 ID）
+    owner: String,
+    /// 执行优先级（数值越小越先执行）
+    priority: i32,
+    /// 钩子回调
+    hook: AsyncHookFn,
+}
+
+/// 窗口关闭请求钩子条目
+struct WindowCloseHookEntry {
+    owner: String,
+    priority: i32,
+    hook: WindowCloseHookFn,
+}
+
+/// 生命周期钩子注册表
+///
+/// 核心模块和插件通过全局单例注册 Startup/Shutdown/WindowCloseRequested 钩子，
+/// 由 Tauri RunEvent 循环在对应阶段驱动执行。
+///
+/// 内部使用 std::sync::RwLock — 注册只在启动时发生，执行时短暂持锁克隆列表后释放，
+/// 不阻塞异步运行时。
+///
+/// 优先级约定：
+/// - 核心服务：0-99（SessionManager=10, PluginHost=20, ServerSupervisor=30）
+/// - 插件：100-999
+/// - 日志/辅助：9999+
+pub struct LifecycleRegistry {
+    startup_hooks: std::sync::RwLock<Vec<HookEntry>>,
+    shutdown_hooks: std::sync::RwLock<Vec<HookEntry>>,
+    window_close_hooks: std::sync::RwLock<Vec<WindowCloseHookEntry>>,
+}
+
+/// 单个 Shutdown 钩子的超时时间
+const SHUTDOWN_HOOK_TIMEOUT_SECS: u64 = HOOK_TIMEOUT_SECS;
+
+impl LifecycleRegistry {
+    /// 创建新的注册表
+    pub fn new() -> Self {
+        Self {
+            startup_hooks: std::sync::RwLock::new(Vec::new()),
+            shutdown_hooks: std::sync::RwLock::new(Vec::new()),
+            window_close_hooks: std::sync::RwLock::new(Vec::new()),
+        }
+    }
+
+    /// 注册 Startup 钩子
+    ///
+    /// # Arguments
+    /// * `owner` - 注册者标识，用于日志
+    /// * `priority` - 执行优先级，数值越小越先执行
+    /// * `hook` - 异步回调
+    pub fn on_startup<F, Fut>(&self, owner: &str, priority: i32, hook: F)
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        let mut hooks = self.startup_hooks.write().unwrap();
+        hooks.push(HookEntry {
+            owner: owner.to_string(),
+            priority,
+            hook: Arc::new(move || Box::pin(hook())),
+        });
+        hooks.sort_by_key(|e| e.priority);
+    }
+
+    /// 注册 Shutdown 钩子
+    ///
+    /// # Arguments
+    /// * `owner` - 注册者标识，用于日志
+    /// * `priority` - 执行优先级，数值越小越先执行
+    /// * `hook` - 异步回调
+    pub fn on_shutdown<F, Fut>(&self, owner: &str, priority: i32, hook: F)
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        let mut hooks = self.shutdown_hooks.write().unwrap();
+        hooks.push(HookEntry {
+            owner: owner.to_string(),
+            priority,
+            hook: Arc::new(move || Box::pin(hook())),
+        });
+        hooks.sort_by_key(|e| e.priority);
+    }
+
+    /// 注册 WindowCloseRequested 钩子
+    ///
+    /// 返回 false 可阻止窗口关闭。
+    /// 任一钩子返回 false 则整体阻止关闭。
+    ///
+    /// # Arguments
+    /// * `owner` - 注册者标识，用于日志
+    /// * `priority` - 执行优先级，数值越小越先执行
+    /// * `hook` - 异步回调，返回 true 允许关闭，false 阻止关闭
+    pub fn on_window_close_requested<F, Fut>(&self, owner: &str, priority: i32, hook: F)
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = bool> + Send + 'static,
+    {
+        let mut hooks = self.window_close_hooks.write().unwrap();
+        hooks.push(WindowCloseHookEntry {
+            owner: owner.to_string(),
+            priority,
+            hook: Arc::new(move || Box::pin(hook())),
+        });
+        hooks.sort_by_key(|e| e.priority);
+    }
+
+    /// 执行所有 Startup 钩子（按 priority 升序）
+    pub async fn run_startup_hooks(&self) {
+        // 克隆列表后立即释放锁，避免在异步执行期间持锁
+        let hooks: Vec<_> = {
+            let hooks = self.startup_hooks.read().unwrap();
+            hooks
+                .iter()
+                .map(|e| (e.owner.clone(), e.priority, e.hook.clone()))
+                .collect()
+        };
+
+        tracing::info!("Running {} startup hook(s)", hooks.len());
+
+        for (owner, priority, hook) in hooks {
+            tracing::debug!(hook = %owner, priority, "Startup hook running");
+            let result = tokio::time::timeout(std::time::Duration::from_secs(SHUTDOWN_HOOK_TIMEOUT_SECS), hook()).await;
+
+            if result.is_err() {
+                tracing::error!(
+                    owner = %owner,
+                    "Startup hook timed out after {}s",
+                    SHUTDOWN_HOOK_TIMEOUT_SECS
+                );
+            }
+        }
+
+        tracing::info!("All startup hooks completed");
+    }
+
+    /// 执行所有 Shutdown 钩子（按 priority 升序）
+    ///
+    /// 每个钩子有独立超时保护，超时后继续执行后续钩子。
+    pub async fn run_shutdown_hooks(&self) {
+        let hooks: Vec<_> = {
+            let hooks = self.shutdown_hooks.read().unwrap();
+            hooks
+                .iter()
+                .map(|e| (e.owner.clone(), e.priority, e.hook.clone()))
+                .collect()
+        };
+
+        tracing::info!("Running {} shutdown hook(s)", hooks.len());
+
+        for (owner, priority, hook) in hooks {
+            tracing::info!(hook = %owner, priority, "Shutdown hook running");
+            let result = tokio::time::timeout(std::time::Duration::from_secs(SHUTDOWN_HOOK_TIMEOUT_SECS), hook()).await;
+
+            if result.is_err() {
+                tracing::error!(
+                    owner = %owner,
+                    "Shutdown hook timed out after {}s, continuing",
+                    SHUTDOWN_HOOK_TIMEOUT_SECS
+                );
+            }
+        }
+
+        tracing::info!("All shutdown hooks completed");
+    }
+
+    /// 执行所有 WindowCloseRequested 钩子
+    ///
+    /// 任一钩子返回 false 则阻止关闭。
+    /// 返回 true 表示允许关闭，false 表示阻止关闭。
+    pub async fn run_window_close_hooks(&self) -> bool {
+        let hooks: Vec<_> = {
+            let hooks = self.window_close_hooks.read().unwrap();
+            hooks
+                .iter()
+                .map(|e| (e.owner.clone(), e.priority, e.hook.clone()))
+                .collect()
+        };
+
+        for (owner, priority, hook) in hooks {
+            let result = hook().await;
+            if !result {
+                tracing::info!(hook = %owner, priority, "Window close prevented by hook");
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+impl Default for LifecycleRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// 全局单例
+static LIFECYCLE_REGISTRY: std::sync::LazyLock<LifecycleRegistry> = std::sync::LazyLock::new(LifecycleRegistry::new);
+
+/// 获取全局生命周期注册表
+pub fn lifecycle_registry() -> &'static LifecycleRegistry {
+    &LIFECYCLE_REGISTRY
+}
+
+// ==================== 核心模块钩子注册 ====================
+
+/// 注册核心模块的 Shutdown 钩子
+///
+/// 在 lib.rs setup 闭包中调用，注册各核心服务的优雅关闭逻辑。
+/// 执行顺序由优先级决定：SessionManager(10) → PluginHost(15/20) → Server(30) → mDNS(40) → Power(50)
+pub fn register_core_lifecycle_hooks() {
+    let registry = lifecycle_registry();
+
+    // PluginHost 通知插件启动 — 优先级 10，最早执行
+    registry.on_startup("plugin-host-startup", 10, || async {
+        let ctx = crate::system::app_context::AppContext::global();
+        ctx.plugin_host().notify_startup().await;
+    });
+
+    // 引擎层 PTY 回收 — 优先级 10，最先清理（停止所有 PTY 进程）
+    //
+    // 票 11 起**只剩引擎一条线**：所有会话（业务 + 插件私有）的 PTY 都住在
+    // `host-pty` 引擎注册表，内核 `SessionManager` 的 PTY 注册表随会话目录删除。
+    //
+    // 会话 PTY **不能**依赖插件自己的 `purge_for_plugin`：关机时插件可能已停用 /
+    // 超时 / trap，按属主回收依赖停用流程被调到。引擎自持的全量回收保证不留孤儿进程，
+    // 事件仍逐条按属主补发（见 `wasmnest_pty_engine::plugin_binding::kill_all_registered`）。
+    registry.on_shutdown("pty-engine-reclaim", 10, || async {
+        // 域回收面自持（在册表 + 事件组装都在 `wasmnest-pty-engine`），关停路径只调它：
+        // 端口走进程级装配（开机期装的那一份），故这里不再取宿主上下文
+        let reclaimed = wasmnest_pty_engine::plugin_binding::kill_all_registered();
+        if reclaimed > 0 {
+            tracing::info!(reclaimed, "PTY 已在引擎层回收（系统关停）");
+        }
+    });
+
+    // PluginHost 通知插件关闭 — 优先级 15，在 deactivate 之前
+    registry.on_shutdown("plugin-host-shutdown", 15, || async {
+        let ctx = crate::system::app_context::AppContext::global();
+        ctx.plugin_host().notify_shutdown().await;
+    });
+
+    // PluginHost 停用所有插件 — 优先级 20
+    registry.on_shutdown("plugin-host-deactivate", 20, || async {
+        let ctx = crate::system::app_context::AppContext::global();
+        if let Err(e) = ctx.plugin_host().deactivate_all().await {
+            tracing::error!("Failed to deactivate all plugins during shutdown: {}", e);
+        }
+    });
+
+    // ServerSupervisor — 优先级 30，停止 HTTP/WS 服务器
+    registry.on_shutdown("server-supervisor", 30, || async {
+        let supervisor = wasmnest_server_core::supervisor::ServerSupervisor::global();
+        if supervisor.is_running().await {
+            if let Err(e) = supervisor.stop().await {
+                tracing::error!("Failed to stop server during shutdown: {}", e);
+            }
+        }
+    });
+
+    // mDNS 广播 — 优先级 40
+    registry.on_shutdown("mdns-advertiser", 40, || async {
+        let ctx = crate::system::app_context::AppContext::global();
+        let advertiser = ctx.mdns_advertiser();
+        let a = advertiser.write().await;
+        if let Err(e) = a.stop().await {
+            tracing::error!("Failed to stop mDNS during shutdown: {}", e);
+        }
+    });
+
+    // PowerManager — 优先级 50，释放休眠阻止
+    registry.on_shutdown("power-manager", 50, || async {
+        crate::system::power::power_manager().disable();
+    });
+
+    // 最终日志 — 优先级 9999
+    registry.on_shutdown("lifecycle-log", 9999, || async {
+        tracing::info!("WasmNest Desktop shutdown complete");
+    });
+}
+
+/// 注册窗口关闭请求钩子
+/// 检查是否有存活 PTY，阻止意外关闭。
+///
+/// 裁决（2026-09-23 用户定案，会话引擎下沉 P1-b）：判据从「`list_sessions()`
+/// 里有 Running 会话」改为**引擎事实「存活 PTY 计数 > 0」**——功能等价（有会话
+/// 在跑 ⇔ 有活 PTY），且不引入会话语义，避免窗口关闭路径被插件异步调用阻塞
+/// （关闭请求是同步钩子，判据必须在无 await 路径内完成）。
+///
+/// 判据 = 引擎 `host-pty` 注册表（P1-b 起业务会话也走这——插件已停用 / 超时 /
+/// trap 时仍在册句柄仍被计数，不依赖插件侧异步回调）。票 11 起内核注册表那条
+/// 计数腿随 `session/` 目录删除（它此前已被记为「生产为空，仅测试」）。
+pub fn register_window_close_hooks() {
+    let registry = lifecycle_registry();
+
+    registry.on_window_close_requested("session-guard", 10, || async {
+        let engine_live = wasmnest_pty_engine::plugin_binding::live_count() > 0;
+
+        if engine_live {
+            tracing::warn!(engine_live, "Window close prevented: live PTYs exist");
+        }
+        !engine_live
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+
+    /// 记录钩子执行顺序的共享状态
+    #[derive(Default)]
+    struct OrderLog {
+        order: Mutex<Vec<String>>,
+    }
+
+    impl OrderLog {
+        fn push(&self, name: &str) {
+            self.order.lock().unwrap().push(name.to_string());
+        }
+        fn snapshot(&self) -> Vec<String> {
+            self.order.lock().unwrap().clone()
+        }
+    }
+
+    #[tokio::test]
+    async fn startup_hooks_run_in_priority_order() {
+        let registry = LifecycleRegistry::new();
+        let log = Arc::new(OrderLog::default());
+        // 乱序注册，priority 升序执行
+        registry.on_startup("late", 100, {
+            let log = Arc::clone(&log);
+            move || {
+                let log = Arc::clone(&log);
+                async move { log.push("late") }
+            }
+        });
+        registry.on_startup("early", 10, {
+            let log = Arc::clone(&log);
+            move || {
+                let log = Arc::clone(&log);
+                async move { log.push("early") }
+            }
+        });
+        registry.on_startup("mid", 50, {
+            let log = Arc::clone(&log);
+            move || {
+                let log = Arc::clone(&log);
+                async move { log.push("mid") }
+            }
+        });
+
+        registry.run_startup_hooks().await;
+        assert_eq!(log.snapshot(), vec!["early", "mid", "late"]);
+    }
+
+    #[tokio::test]
+    async fn shutdown_hooks_run_in_priority_order() {
+        let registry = LifecycleRegistry::new();
+        let log = Arc::new(OrderLog::default());
+        registry.on_shutdown("b", 20, {
+            let log = Arc::clone(&log);
+            move || {
+                let log = Arc::clone(&log);
+                async move { log.push("b") }
+            }
+        });
+        registry.on_shutdown("a", 5, {
+            let log = Arc::clone(&log);
+            move || {
+                let log = Arc::clone(&log);
+                async move { log.push("a") }
+            }
+        });
+
+        registry.run_shutdown_hooks().await;
+        assert_eq!(log.snapshot(), vec!["a", "b"]);
+    }
+
+    #[tokio::test]
+    async fn same_priority_hooks_preserve_insertion_order() {
+        // sort_by_key 稳定排序：同 priority 保持插入顺序（当前语义显式化）
+        let registry = LifecycleRegistry::new();
+        let log = Arc::new(OrderLog::default());
+        for name in ["first", "second", "third"] {
+            registry.on_startup(name, 10, {
+                let log = Arc::clone(&log);
+                let name = name.to_string();
+                move || {
+                    let log = Arc::clone(&log);
+                    let name = name.clone();
+                    async move { log.push(&name) }
+                }
+            });
+        }
+        registry.run_startup_hooks().await;
+        assert_eq!(log.snapshot(), vec!["first", "second", "third"]);
+    }
+
+    #[tokio::test]
+    async fn hanging_hook_times_out_and_later_hooks_continue() {
+        // 超时保护：挂起钩子超时后继续执行后续钩子（票据 26）
+        let registry = LifecycleRegistry::new();
+        let executed = Arc::new(AtomicUsize::new(0));
+        registry.on_shutdown("hang", 10, || {
+            async { std::future::pending::<()>().await } // 永不完成
+        });
+        registry.on_shutdown("after", 20, {
+            let executed = Arc::clone(&executed);
+            move || {
+                let executed = Arc::clone(&executed);
+                async move {
+                    executed.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+        });
+
+        // 超时预算按常量走，无法注入——用 tokio time pause 冻结时钟避免真等 5s
+        tokio::time::pause();
+        registry.run_shutdown_hooks().await;
+        tokio::time::resume();
+        assert_eq!(executed.load(Ordering::SeqCst), 1, "超时后后续钩子必须继续执行");
+    }
+
+    #[tokio::test]
+    async fn window_close_allows_when_all_agree() {
+        let registry = LifecycleRegistry::new();
+        registry.on_window_close_requested("a", 10, || async { true });
+        registry.on_window_close_requested("b", 20, || async { true });
+        assert!(registry.run_window_close_hooks().await);
+    }
+
+    #[tokio::test]
+    async fn window_close_blocked_by_any_false_and_stops() {
+        // 任一 false 阻止关闭；后续钩子不再执行
+        let registry = LifecycleRegistry::new();
+        let log = Arc::new(OrderLog::default());
+        registry.on_window_close_requested("allow", 10, || async { true });
+        registry.on_window_close_requested("deny", 20, || async { false });
+        registry.on_window_close_requested("after", 30, {
+            let log = Arc::clone(&log);
+            move || {
+                let log = Arc::clone(&log);
+                async move {
+                    log.push("after");
+                    true
+                }
+            }
+        });
+
+        assert!(!registry.run_window_close_hooks().await);
+        assert!(log.snapshot().is_empty(), "阻止后后续钩子不应执行");
+    }
+
+    #[tokio::test]
+    async fn window_close_with_no_hooks_allows() {
+        let registry = LifecycleRegistry::new();
+        assert!(registry.run_window_close_hooks().await);
+    }
+
+    /// 全局单例可达（不触碰其内容，仅验证装配函数可调用）
+    #[test]
+    fn global_registry_reachable() {
+        let _ = lifecycle_registry();
+    }
+}

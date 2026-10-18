@@ -1,0 +1,635 @@
+#!/usr/bin/env node
+/**
+ * Dev Runner — 并行启动插件前端 watch 构建与宿主 dev 命令
+ *
+ * `npm run tauri:dev` 一条命令即完成：
+ *   - 各插件 WASM 缺失预检 + 自动补建（watch 只建前端，WASM 需一次性全量构建产出）
+ *   - 各插件前端挂载包陈旧预检 + **宿主启动前**预重建（见 ensurePluginFrontends：
+ *     启动后再写 resources 会触发 tauri dev 重启 = 前端加载两次）
+ *   - 宿主 dev 进程（tauri dev）——先启动
+ *   - 各插件前端 watch：改源码自动重建 + 复制产物（配合宿主 PluginDevWatcher 触发前端热重载）
+ *     ——等宿主首次构建完成后启动，见下方「首次构建门控」
+ * 任一子进程退出（Ctrl+C / 宿主崩溃）时统一回收全部。
+ *
+ * 用法：
+ *   node scripts/dev-run.js              # 默认：四个插件 watch + tauri dev
+ *   node scripts/dev-run.js --host-cmd "<命令>"   # 覆盖宿主命令（按空格拆分）
+ *   node scripts/dev-run.js --no-watch   # 不起插件前端 watch（默认开启，行为不变）
+ *
+ * 首次构建门控（2026-10-13 加固）：宿主先启动，插件前端 watch 等宿主输出出现 cargo
+ * `Finished `dev` profile`（兜底 `Running `target/debug/...``）后再启动。原因：watch 首次
+ * vite 构建会把产物复制进 `src-tauri/resources/plugins/desktop/<id>/`，而 `tauri dev` 的
+ * file watch 覆盖整个 `src-tauri/`，每次复制都触发 Tauri「Rebuilding application...」重启
+ * DevCommand。宿主冷构建（首次 / 大依赖变更 / cargo clean 后，wasmtime 等分钟级）期间复制
+ * = 上一轮 rustc 与重启后的构建重叠、同写 `target/debug/deps/*.rcgu.o`：先完成者归档后清理
+ * 中间文件，另一进程归档即 `failed to build archive ... failed to open object file`（cargo
+ * 不落 fingerprint，报错会反复出现、重跑才恢复）。`--host-cmd` 定制命令不保证有 cargo 输出、
+ * 无法可靠判据，跳过门控（保持旧的立即启动）。
+ *
+ * `--no-watch` 的存在理由：插件 watch 会把 vite 产物复制进
+ * `src-tauri/resources/plugins/desktop/<id>/`，而 `tauri dev` 的 file watch 覆盖整个
+ * `src-tauri/`——于是**每次插件前端重建都会重启一次宿主 app 并清空当日日志**。
+ * 需要在稳定 app 上连续观察的场景（票 01 桌面功能等价人工基线：十项清单要一口气走完）
+ * 用这条把该重启源关掉；产物已由启动前的一次性预检保证不缺（ensurePluginWasm 仍跑）。
+ */
+
+import { spawn, spawnSync, execFileSync } from 'node:child_process'
+import { readFileSync, existsSync, readdirSync, statSync, createWriteStream, mkdirSync, rmSync } from 'node:fs'
+import net from 'node:net'
+import { resolve, basename, dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { appDir, hasAppDir } from '../../scripts/app-paths.mjs'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+const ROOT = resolve(__dirname, '..')
+const IS_WIN = process.platform === 'win32'
+
+// ==================== 端口预检 ====================
+
+/**
+ * 宿主 beforeDevCommand（vite dev server）端口预检。
+ *
+ * tauri dev 启动时自动运行 beforeDevCommand（npm run dev → vite），若端口被残留进程
+ * 占用（常见于上次 dev 会话 Ctrl+C 后 vite 未退出），宿主启动必失败且表现像卡死
+ * （无提示等待 → “Port is already in use” 报错）。此处提前检测并给出明确指引。
+ */
+async function precheckDevPort() {
+  let devUrl = null
+  try {
+    const conf = JSON.parse(readFileSync(resolve(ROOT, 'src-tauri/tauri.conf.json'), 'utf-8'))
+    devUrl = conf?.build?.devUrl
+  } catch {
+    return // 读取配置失败不阻塞（预检是防御性的）
+  }
+  if (!devUrl) return
+
+  let port = 0
+  try {
+    port = Number(new URL(devUrl).port)
+  } catch {
+    return
+  }
+  if (!port) return
+
+  // 尝试监听：成功 = 空闲；失败（EADDRINUSE）= 被占用。
+  // 占用者监听 0.0.0.0 时绑定 127.0.0.1 同样会冲突，覆盖两种监听方式
+  const inUse = await new Promise((resolve_) => {
+    const srv = net.createServer()
+    srv.once('error', () => resolve_(true))
+    srv.once('listening', () => srv.close(() => resolve_(false)))
+    srv.listen(port, '127.0.0.1')
+  })
+  if (!inUse) return
+
+  console.error(
+    `[dev-run] ⚠ 端口 ${port}（${devUrl}，宿主 beforeDevCommand vite dev server）已被占用`,
+  )
+  console.error(
+    '[dev-run]   通常是上次 dev 会话残留的 vite 进程，宿主启动必失败。请先结束占用进程：',
+  )
+  console.error(`[dev-run]   netstat -ano | findstr :${port}   然后   taskkill /F /PID <pid>`)
+  process.exit(1)
+}
+
+/**
+ * HMR 端口预检（仅局域网模式）。
+ *
+ * 设置了 TAURI_DEV_HOST 时 vite 监听 0.0.0.0:1420，HMR WebSocket 走独立端口 1421
+ * （见 vite.config.ts server.hmr）。若 1421 被其他进程/残留 dev 会话占用，页面可正常
+ * 加载（1420 通）但热更新静默失效——最隐蔽的“改代码不刷新”。仅检测不阻断：
+ * 占用者可能是另一个正在运行的 dev 会话（本就该共存），此时提示排查方向即可。
+ */
+async function precheckHmrPort() {
+  if (!process.env.TAURI_DEV_HOST) return
+  const port = 1421
+
+  const inUse = await new Promise((resolve_) => {
+    const srv = net.createServer()
+    srv.once('error', () => resolve_(true))
+    srv.once('listening', () => srv.close(() => resolve_(false)))
+    srv.listen(port, '127.0.0.1')
+  })
+  if (!inUse) return
+
+  console.warn(
+    `[dev-run] ⚠ 检测到 TAURI_DEV_HOST=${process.env.TAURI_DEV_HOST}（局域网模式），但 HMR 端口 ${port} 已被占用`,
+  )
+  console.warn(
+    '[dev-run]   页面可正常加载但热更新会失效（改代码不刷新）。占用者通常是残留 dev 会话：',
+  )
+  console.warn(`[dev-run]   netstat -ano | findstr :${port}   然后   taskkill /F /PID <pid>`)
+  console.warn(
+    '[dev-run]   若不再需要局域网调试，删除环境变量后重启 dev 即回到本机模式（HMR 同端口 1420）',
+  )
+}
+
+// 包管理器 CLI 绝对路径：优先取 pnpm 注入的 pnpm_execpath（pnpm 运行生命周期脚本时
+// 同时设置 npm_execpath / pnpm_execpath，任何安装布局下都正确）；回退到 npm_execpath
+// （仍以 npm 安装/调用时临时兼容）；最后退回 Windows Node 安装器标准布局
+// （node.exe 与 node_modules/npm 同目录）——Linux/macOS 的 npm 在系统目录
+// （/usr/lib/node_modules/npm 等），与 node 二进制不同目录，故不能只用回退路径
+const PKG_MGR_CLI =
+  process.env.pnpm_execpath ??
+  process.env.npm_execpath ??
+  resolve(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js')
+
+// ==================== 平台配置 ====================
+
+/**
+ * 插件 watch 启动项（args 在应用工程目录内执行；wasmFile 为应用内 WASM 产物相对路径）。
+ *
+ * 应用源码自三仓拆分起住独立应用仓：`<WASMNEST_APPS_ROOT 或兄弟目录>/apps/<slug>/desktop`
+ * （spec §5-E7），路径统一经 `scripts/app-paths.mjs` 解析，本文件不拼 `wasm-apps/` 硬路径。
+ */
+const PLUGIN_WATCH_CMDS = [
+  {
+    slug: 'ai-chatbox',
+    id: 'com.wasmnest.ai-chatbox',
+    args: ['scripts/build.js', '--watch'],
+    // 票 03 起桌面插件统一 wasm32-wasip3（cdylib 直出 Component，免 componentize）
+    wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_ai_chatbox.wasm',
+  },
+  {
+    // terminal-session（bedcode）：前端挂载包在 dev 期**不参与 watch**——它的整包
+    // 构建最重（实测 ~20s），且每次写入 resources 都会让宿主重启一次。改了它的 UI
+    // 请单独重建：`pnpm run plugins:build` 或该目录 `node scripts/build.js --frontend-only`。
+    // 条目保留只为 ensurePluginWasm 的 WASM 缺失/陈旧补建（Rust 侧自启照旧）。
+    slug: 'bedcode',
+    id: 'com.wasmnest.terminal-session',
+    args: [],
+    skipWatch: true,
+    // 票 03 起本插件走仓库共享 wasip3 构建链（cdylib 直出 Component）
+    wasmFile: 'rust/target/wasm32-wasip3/release/bedcode_plugin_terminal_session.wasm',
+  },
+  {
+    slug: 'file-transfer',
+    id: 'com.wasmnest.file-transfer',
+    args: ['scripts/build.js', '--watch'],
+    // 单产物口径（2026-10-13）：file-transfer 与移动端共用一份 wasm，本端也走
+    // wasm32-unknown-unknown + componentize（平台仓级 `tools/componentize`），
+    // 产物落应用仓的 wasm 应用共享 target（`<appsRoot>/target/wasm-apps/…`）。
+    // 注意本字段只被 `ensurePluginWasm` 取 `basename()` 定位 resources 下的目标产物
+    // （陈旧判定比的是「resources 产物 vs Rust 源码 mtime」，不据此路径找源产物），
+    // 故这里写的是**产物文件名口径**；补建一律走 `scripts/build.js`。
+    wasmFile: 'target/wasm-apps/wasm32-unknown-unknown/release/wasmnest_plugin_file_transfer.wasm',
+  },
+  {
+    // Agent Hub：与另三个同为桌面 wasm 应用。缺席本表时 `tauri dev` 不给它起
+    // vite watch，改前端只能手工 `build:frontend`，产物长期停在旧构建
+    // （2026-10-06 实测：dist 里残留旧 CSS，热力图渲染成整块色块）。补上后
+    // 前端改动 → vite 重建 → 复制进 resources → 宿主 emit plugin:dev-reload，
+    // 与另三个应用同一条闭环；WASM 仍走 ensurePluginWasm() 的缺失/陈旧补建。
+    slug: 'agent-hub',
+    id: 'com.wasmnest.agent-hub',
+    args: ['scripts/build.js', '--watch'],
+    wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_agent_hub.wasm',
+  },
+]
+
+/** 宿主插件产物目录（各插件子目录名 = 插件 id，来自 plugin.json，与构建脚本复制目标一致） */
+const RESOURCES_BASE = resolve(ROOT, 'src-tauri/resources/plugins/desktop')
+
+/**
+ * 宿主实际扫描的两个产物目录：源码资源目录（构建脚本的复制目标）+ tauri dev 的
+ * 运行时副本（`target/debug/resources`，`tauri dev` 把 bundle resources 复制进去，
+ * 源目录删除**不会**自动同步——幽灵目录只在这里活着）。
+ */
+const RUNTIME_RESOURCES_BASE = resolve(ROOT, 'src-tauri/target/debug/resources/plugins/desktop')
+
+/**
+ * 剪掉不属于当前注册表的插件产物目录。
+ *
+ * **为什么必须有**：插件 id 改名（ADR 0056 `com.bedcode.*` → `com.wasmnest.*`）后，
+ * 构建/复制只写新目录、从不剪旧目录，于是扫描面同时存在两代产物——主屏、应用管理、
+ * 权限页、命令面板都会把幽灵应用当真应用列出来（可点、必失败）。AGENTS §5.1.4 要求
+ * 真源搬迁 fail-visible，静默注册成双份正是它要防的形态，所以这里在启动前强制对齐，
+ * 并逐个打印被删的路径（不是偷偷清理）。
+ *
+ * 只删「不在注册表里的目录」：用户安装的插件在 app_data_dir/plugins（不在这里），
+ * 内置资源目录里出现的未知 id 只可能是退役产物。
+ */
+const KNOWN_PLUGIN_IDS = new Set(PLUGIN_WATCH_CMDS.map((p) => p.id))
+
+function pruneStalePluginDirs() {
+  for (const base of [RESOURCES_BASE, RUNTIME_RESOURCES_BASE]) {
+    if (!existsSync(base)) continue
+    for (const entry of readdirSync(base, { withFileTypes: true })) {
+      if (!entry.isDirectory() || KNOWN_PLUGIN_IDS.has(entry.name)) continue
+      const target = join(base, entry.name)
+      try {
+        rmSync(target, { recursive: true, force: true })
+        console.warn(`[dev-run] 已清理退役插件产物目录（不在当前注册表）：${target}`)
+      } catch (e) {
+        // 清理失败不阻断 dev 启动，但必须喊出来：幽灵应用会继续出现在面上
+        console.error(`[dev-run] ⚠ 退役插件产物清理失败：${target}（${e.message}）`)
+      }
+    }
+  }
+}
+
+/** 宿主 dev 命令（可用 --host-cmd 覆盖）
+ *
+ * 直接 spawn 包管理器 CLI（pnpm/npm）作为命令入口——ELF/可执行文件自带
+ * shebang 或自身就是解释器（pnpm 12+ 是单文件 ELF），无需 node 套壳。
+ * 历史误写成 `[process.execPath, [PKG_MGR_CLI, ...]]` 会让 node 把 pnpm ELF
+ * 当 JS 加载，在 Node 24 下抛 `SyntaxError: Invalid or unexpected token`（pnpm:1 ELF>...）。
+ * 注意 pnpm 12 会把 `run tauri -- dev` 中的 `--` 原样透传给 tauri CLI，
+ * 导致 `tauri -- dev` 报 unexpected argument——因此不能加 `--` 分隔符。
+ */
+const DEFAULT_HOST_CMD = [PKG_MGR_CLI, ['run', 'tauri', 'dev']]
+
+// ==================== 进程管理 ====================
+
+const children = []
+let shuttingDown = false
+
+/**
+ * dev 会话输出落盘（tee）：宿主/webview console（Tauri dev 转发到 stdout）不写入
+ * 其他日志文件——插件前端裸 `console.*` 排障时只在这里可见。统一追加写入
+ * `.dev-logs/dev-run.YYYY-MM-DD.log`（已被 .gitignore 忽略），控制台输出行为不变。
+ */
+function openDevLog() {
+  try {
+    const dir = resolve(ROOT, '.dev-logs')
+    mkdirSync(dir, { recursive: true })
+    const d = new Date()
+    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+      d.getDate(),
+    ).padStart(2, '0')}`
+    return createWriteStream(resolve(dir, `dev-run.${stamp}.log`), { flags: 'a' })
+  } catch {
+    // 落盘失败不影响 dev 启动（仅失去可回读能力）
+    return null
+  }
+}
+
+const devLog = openDevLog()
+
+function start(cmd, args, cwd, onOutput) {
+  // POSIX：detached 让子进程自成进程组长（pgid = 自己的 pid），shutdown 时可用
+  // 负 pgid 一次杀整棵子树（已实测：孙进程自动继承该 pgid，无需各自 detached）。
+  // Windows 必须排除：detached 会传 CREATE_NEW_CONSOLE 弹出额外控制台窗口，
+  // Windows 侧走下方 taskkill /T /F 分支
+  //
+  // stdio 用管道而非 inherit：既保持控制台输出（手动转发），又同时落盘排障日志
+  const child = spawn(cmd, args, { cwd, stdio: ['inherit', 'pipe', 'pipe'], detached: !IS_WIN })
+  for (const [stream, target] of [
+    [child.stdout, process.stdout],
+    [child.stderr, process.stderr],
+  ]) {
+    stream?.on('data', (chunk) => {
+      target.write(chunk)
+      devLog?.write(chunk)
+      // 门控按 chunk 消费宿主输出（stdout/stderr 都走这里：cargo 构建进度在 stderr）
+      onOutput?.(chunk)
+    })
+  }
+  children.push(child)
+  return child
+}
+
+// ==================== 宿主首次构建门控（2026-10-13） ====================
+
+/**
+ * 等宿主输出里出现 cargo「构建完成」标记后回调一次（仅一次）。
+ *
+ * 判据先去掉 `--color always` 的 ANSI 控制序列（颜色 CSI + cargo `Finished` 行里指向文档的
+ * OSC 8 超链接）；标记可能被 chunk 切断，保留尾部窗口拼接：
+ *   - `Finished `dev` profile`：cargo 构建完成（正常路径）
+ *   - `Running `target/debug/...``：cargo run 启动二进制（兜底，防 cargo 文案变化）
+ *
+ * 背景与必要性见文件头「首次构建门控」段。宿主命令由 `--host-cmd` 覆盖时输出不保证
+ * 含上述标记，调用方直接跳过门控；触发时若会话已在回收（shuttingDown），
+ * 由 startPluginWatches 自行短路。
+ */
+function createHostBuildGate(onReady) {
+  let ready = false
+  let tail = ''
+  return {
+    onOutput(chunk) {
+      if (ready || shuttingDown) return
+      const text = chunk
+        .toString()
+        // 去 ANSI：OSC（cargo 的 Finished 行里带指向文档的 OSC 8 超链接）+ CSI（颜色/光标）
+        .replace(/\u001b\][^\u001b\u0007]*(?:\u0007|\u001b\\)/g, '')
+        .replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '')
+      tail = (tail + text).slice(-4096)
+      if (/Finished\s+`dev`\s+profile/.test(tail) || /Running\s+`target\/debug\//.test(tail)) {
+        ready = true
+        onReady()
+      }
+    },
+  }
+}
+
+/** 回收所有子进程并退出（防重入：kill 触发的 exit 不再进入 shutdown） */
+function shutdown(code) {
+  if (shuttingDown) return
+  shuttingDown = true
+  const exitCode = code ?? 0
+
+  if (IS_WIN) {
+    // Windows：child.kill() 只杀直接子进程，且 process.exit 可能先于信号送达；
+    // 插件 watch 的孙进程（vite）会孤儿化残留。taskkill /T /F 杀整个进程树
+    for (const c of children) {
+      if (c.pid) {
+        try {
+          execFileSync('taskkill', ['/PID', String(c.pid), '/T', '/F'], { stdio: 'ignore' })
+        } catch {
+          // 已退出，忽略
+        }
+      }
+    }
+    process.exit(exitCode)
+  }
+
+  // POSIX：按进程组回收整棵子树（对齐 Windows taskkill /T /F）
+  //
+  // 负 pgid 一次覆盖组长及其全部子孙——build.js 的 vite 孙进程、宿主的 tauri
+  // CLI / cargo / 宿主进程 / vite dev server 全部在内。这是 plugin-watch.js 自清理
+  // （应用层）在调度层的对称实现，覆盖「宿主崩溃、关闭终端标签/窗口、外部 kill」
+  // 等信号无法送达孙进程的路径；此前这些路径会残留 vite（实测累积到 3 个、数十 MB、
+  // 数小时不退出）以及宿主 vite dev server 占住 1420 端口
+  for (const c of children) {
+    if (!c.pid) continue
+    try {
+      process.kill(-c.pid, 'SIGTERM')
+    } catch {
+      // 已退出或不是组长（detached 未生效），退回单进程 kill
+      try {
+        c.kill('SIGTERM')
+      } catch {
+        // 已退出，忽略
+      }
+    }
+  }
+
+  // 等 direct children 退出即可（子树内其他进程由组信号覆盖，无需逐个等待）
+  const alive = children.filter((c) => c.exitCode === null)
+  if (alive.length === 0) {
+    process.exit(exitCode)
+    return
+  }
+  for (const c of alive) {
+    c.on('exit', () => {
+      if (children.every((x) => x.exitCode !== null)) process.exit(exitCode)
+    })
+  }
+
+  // 升级兜底：2 秒后对组发 SIGKILL 并退出。plugin-watch.js 自身的升级链是 1500ms，
+  // 早于此处，两者不冲突；unref 避免子进程全部退出后阻塞退出
+  setTimeout(() => {
+    for (const c of children) {
+      if (!c.pid) continue
+      try {
+        process.kill(-c.pid, 'SIGKILL')
+      } catch {
+        // 已退出，忽略
+      }
+    }
+    process.exit(exitCode)
+  }, 2000).unref()
+}
+
+// ==================== WASM 缺失自动补建 ====================
+
+/**
+ * 各插件 WASM 产物缺失或过期时串行补建一次。
+ *
+ * dev watch 只构建前端（见 PLUGIN_WATCH_CMDS 注释），WASM 靠一次性全量构建
+ * 产出——资源目录里的旧产物不会被自动重建，会造成「新前端 + 旧 WASM」静默
+ * 错配（历史事故：file-transfer 暂停按钮报 unsupported: transfer lifecycle
+ * is plugin-store managed，见 .scratch/file-transfer-pause-concurrency）。
+ * 这里在启动 watch 前检测：
+ *   - resources/{id}/ 下 .wasm 缺失 → 补建
+ *   - Rust 源码（插件 rust/ + SDK rust/）最新 mtime 晚于产物 → 补建
+ *   - dist/index.js 已存在 → node scripts/build.js --rust-only（跳过 vite，最快路径）
+ *   - 全新目录（dist 也没有）→ node scripts/build.js 全量构建一次（含前端），
+ *     其后 watch 接管前端增量
+ * 补建失败 fail-fast：宿主起来也只会报加载失败，早停并给手动指引更可排查。
+ */
+function ensurePluginWasm() {
+  for (const { slug, id, wasmFile } of PLUGIN_WATCH_CMDS) {
+    if (!wasmFile) continue
+    const pluginRoot = appDir(slug, 'desktop')
+    const wasmDest = resolve(RESOURCES_BASE, id, basename(wasmFile))
+    const reason = wasmStaleReason(pluginRoot, wasmDest)
+    if (!reason) continue
+
+    console.warn(`[dev-run] ⚠ 插件 ${slug} WASM 需要补建：${reason}`)
+    const hasFrontend = existsSync(resolve(pluginRoot, 'dist', 'index.js'))
+    const script = hasFrontend ? ['scripts/build.js', '--rust-only'] : ['scripts/build.js']
+    console.log(`[dev-run] 自动补建 WASM（${hasFrontend ? '--rust-only' : '全量'}）：node ${script.join(' ')}`)
+    const res = spawnSync(process.execPath, script, { cwd: pluginRoot, stdio: 'inherit' })
+    if (res.status !== 0) {
+      console.error(`[dev-run] ✗ WASM 补建失败（${slug}）。请手动执行后重试：`)
+      console.error(`[dev-run]   cd ${pluginRoot} && node scripts/build.js`)
+      process.exit(res.status ?? 1)
+    }
+  }
+}
+
+/**
+ * 各插件前端挂载包（`resources/<id>/index.js`）陈旧时**在宿主启动前**补建一次。
+ *
+ * 为什么必须赶在宿主启动前：插件 watch 的首次 `vite build` 若产出与 resources 里的
+ * 字节不同，就会命中 `tauri dev` 的 file watch → 「Rebuilding application...」重启
+ * app，用户看到的就是**前端加载两次**。`plugin-watch.js` 的内容感知复制只保证
+ * 「字节相同不写」；字节真的不同（改了 app 源码直接起 dev）仍会重启一次。把它挪到
+ * 宿主启动前重建，冷启动就稳定只有一次加载（这也是本文件在 2026-10-17 新增此步的原因）。
+ *
+ * 判据与 WASM 补建同款：产物缺失，或前端源码 / 产物清单比产物新。
+ */
+function ensurePluginFrontends() {
+  for (const { slug, id, skipWatch } of PLUGIN_WATCH_CMDS) {
+    // 只处理「有前端 watch」的插件：启动后的二次加载正是它们的首次构建触发宿主重启；
+    // 无 watch 的（bedcode）启动后不会再写 resources，不存在重启风险，且其整包构建较重
+    if (skipWatch) continue
+    const pluginRoot = appDir(slug, 'desktop')
+    const bundleDest = resolve(RESOURCES_BASE, id, 'index.js')
+    const reason = frontendStaleReason(pluginRoot, bundleDest)
+    if (!reason) continue
+
+    console.warn(`[dev-run] ⚠ 插件 ${slug} 前端产物需要重建：${reason}`)
+    console.log(`[dev-run] 预重建前端挂载包（宿主启动前完成，避免启动后重启）：node scripts/build.js --frontend-only`)
+    const res = spawnSync(process.execPath, ['scripts/build.js', '--frontend-only'], {
+      cwd: pluginRoot,
+      stdio: 'inherit',
+    })
+    if (res.status !== 0) {
+      console.error(`[dev-run] ✗ 前端产物重建失败（${slug}）。请手动执行后重试：`)
+      console.error(`[dev-run]   cd ${pluginRoot} && node scripts/build.js --frontend-only`)
+      process.exit(res.status ?? 1)
+    }
+  }
+}
+
+/** 返回前端产物需要重建的原因（null = 产物最新，无需动作） */
+function frontendStaleReason(pluginRoot, bundleDest) {
+  let bundleStat
+  try {
+    bundleStat = statSync(bundleDest)
+  } catch {
+    return `产物缺失：${bundleDest}`
+  }
+  // 产物由 app 前端源码 + 共享 SDK 组件 + 打包配置共同决定：任一 newer 都要重建，
+  // 否则冷启动后的首次 watch 构建会把差异写进 resources → 宿主重启（加载两次）
+  const newestSrc = Math.max(
+    latestSourceMtime(join(pluginRoot, 'src')),
+    latestSourceMtime(join(ROOT, 'packages/plugin-sdk-desktop/src')),
+    fileMtime(join(pluginRoot, 'plugin.json')),
+    fileMtime(join(pluginRoot, 'tailwind.config.js')),
+    fileMtime(join(pluginRoot, 'vite.config.ts')),
+  )
+  if (newestSrc > bundleStat.mtimeMs) return '前端源码比产物新（需重建）'
+  return null
+}
+
+/** 单文件 mtime（ms）；缺失返回 0 */
+function fileMtime(path) {
+  try {
+    return statSync(path).mtimeMs
+  } catch {
+    return 0
+  }
+}
+
+/** 返回 wasm 需要补建的原因（null = 产物最新，无需动作） */
+function wasmStaleReason(pluginRoot, wasmDest) {
+  let wasmStat
+  try {
+    wasmStat = statSync(wasmDest)
+  } catch {
+    return `产物缺失：${wasmDest}`
+  }
+  const newestSrc = Math.max(
+    latestSourceMtime(join(pluginRoot, 'rust')),
+    latestSourceMtime(join(ROOT, 'packages/plugin-sdk-desktop/rust')),
+  )
+  if (newestSrc > wasmStat.mtimeMs) return 'Rust 源码比产物新（需重建）'
+  return null
+}
+
+/**
+ * 目录下所有文件的最新 mtime（ms）；跳过构建产物目录（target/dist/node_modules），
+ * 避免 cargo 增量产物 / vite 输出的 mtime 干扰源码新鲜度判断。
+ */
+function latestSourceMtime(root) {
+  let latest = 0
+  const skip = new Set(['target', 'dist', 'node_modules'])
+  const stack = [root]
+  while (stack.length) {
+    const dir = stack.pop()
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue // 目录缺失/不可读：无源码，视为 0
+    }
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        if (skip.has(e.name)) continue
+        stack.push(join(dir, e.name))
+      } else {
+        try {
+          const m = statSync(join(dir, e.name)).mtimeMs
+          if (m > latest) latest = m
+        } catch {
+          // 单文件 stat 失败忽略
+        }
+      }
+    }
+  }
+  return latest
+}
+
+// ==================== 启动 ====================
+
+// 解析 --host-cmd 覆盖（测试/定制用）
+const hostIdx = process.argv.indexOf('--host-cmd')
+const hostOverride = hostIdx !== -1 && process.argv[hostIdx + 1] ? process.argv[hostIdx + 1] : null
+const [hostBin, ...hostArgs] = hostOverride ? hostOverride.split(' ') : DEFAULT_HOST_CMD[1]
+const hostCmd = hostOverride ? [hostBin, hostArgs] : DEFAULT_HOST_CMD
+
+// 插件前端 watch 开关（默认开启 = 原行为）；见文件头 `--no-watch` 那段的理由
+const noWatch = process.argv.includes('--no-watch')
+
+// 0. 宿主 devUrl 端口预检（被残留 vite 占用时提前报错，避免“执行不动”假象）
+//    + HMR 端口预检（仅 TAURI_DEV_HOST 局域网模式，防“页面正常但热更失效”隐蔽坑）
+await precheckDevPort()
+await precheckHmrPort()
+
+// 1. 插件 WASM 缺失自动补建（串行同步，完成后才启动 watch / 宿主）
+ensurePluginWasm()
+
+// 1a. 插件前端挂载包预重建（陈旧才做）：必须在宿主启动前完成，否则启动后首次
+//     watch 构建写 resources → tauri dev 重启 → 前端加载两次
+ensurePluginFrontends()
+
+// 1b. 退役插件产物清理：id 改名（ADR 0056）后旧目录只增不减，扫描面会出现
+// 「主屏有、点必失败」的幽灵应用（2026-10-17 验证 P1-5）。宿主启动前对齐一次。
+pruneStalePluginDirs()
+
+/**
+ * 启动全部插件前端 watch。
+ * 插件目录可能被临时移除（停用/排查）：缺失时跳过而非 fail-fast 整组回收，
+ * 否则单个插件下线会连带杀死宿主 dev 会话。
+ */
+function startPluginWatches() {
+  if (shuttingDown) return
+  for (const { slug, args, skipWatch } of PLUGIN_WATCH_CMDS) {
+    // desktop-host-frontend-downsink：terminal-session 前端已并宿主 vite，
+    // 插件包前端 watch 无消费者（宿主编译 app 源码即 HMR）——跳过而非保持死链
+    if (skipWatch) {
+      console.log(`[dev-run] 跳过前端 watch：${slug}（前端已并入宿主 vite）`)
+      continue
+    }
+    if (!hasAppDir(slug, 'desktop')) {
+      console.warn(`[dev-run] 应用目录不存在，跳过 watch：${slug}`)
+      continue
+    }
+    const child = start(process.execPath, args, appDir(slug, 'desktop'))
+    // 插件 watch 异常退出 → 整组回收（fail fast，避免宿主运行在过期产物上）
+    child.on('exit', (code) => {
+      if (!shuttingDown) {
+        console.error(`[dev-run] 插件 watch 退出（${slug}, code=${code}），回收全部进程`)
+        shutdown(code ?? 0)
+      }
+    })
+  }
+}
+
+// 2. 宿主 dev 进程（先启动；默认路径下由它的首次构建完成信号触发插件 watch）
+//    --no-watch：不起 watch，无需门控；--host-cmd：定制命令无 cargo 标记，跳过门控
+const watchGate = (noWatch || hostOverride)
+  ? null
+  : createHostBuildGate(() => {
+      console.log('[dev-run] 宿主首次构建完成，启动插件前端 watch')
+      startPluginWatches()
+    })
+const host = start(hostCmd[0], hostCmd[1], ROOT, watchGate?.onOutput)
+host.on('exit', (code) => {
+  if (!shuttingDown) {
+    console.log(`[dev-run] 宿主 dev 退出（code=${code}），回收插件 watch`)
+    shutdown(code ?? 0)
+  }
+})
+
+// 3. 插件前端 watch
+if (noWatch) {
+  console.warn('[dev-run] 插件前端 watch 已关闭（--no-watch）：resources 产物不会随插件源码改动刷新。')
+  console.warn('[dev-run]   改了插件前端要自己重建：cd <应用仓>/apps/<slug>/desktop && node scripts/build.js')
+} else if (hostOverride) {
+  console.warn('[dev-run] --host-cmd 定制宿主：跳过首次构建门控，插件前端 watch 立即启动')
+  startPluginWatches()
+} else {
+  console.log('[dev-run] 宿主首次构建中：插件前端 watch 延后到构建完成后启动（避免构建期重启竞争）')
+}
+
+// Ctrl+C / 终止信号：广播回收
+process.on('SIGINT', () => shutdown(0))
+process.on('SIGTERM', () => shutdown(0))
+// 关闭终端标签页/窗口：终端只发 SIGHUP（SIGINT 不送 detached 子进程组），
+// 不处理则 shutdown 不执行、整棵 detached 子树孤儿化残留
+process.on('SIGHUP', () => shutdown(0))

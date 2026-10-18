@@ -1,0 +1,90 @@
+{
+  "name": "@binblink/wasmnest-plugin-sdk-desktop",
+  "version": "0.0.1",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "wasmnest-plugin-desktop": "./bin/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "bin",
+    "template",
+    "README.md",
+    "README_en.md",
+    "LICENSE",
+    "dev-shell/src",
+    "dev-shell/index.html",
+    "dev-shell/package.json",
+    "dev-shell/vite.config.ts",
+    "dev-shell/tailwind.config.js",
+    "dev-shell/postcss.config.js",
+    "dev-shell/pnpm-workspace.yaml",
+    "dev-shell/README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/vite-plugin.ts src/types.ts --format esm --dts --clean",
+    "gen:permissions": "cargo run --quiet --manifest-path rust/Cargo.toml --example gen_permission_vocabulary",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "prepublishOnly": "pnpm run build && pnpm run test:run"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite-plugin.d.ts",
+      "import": "./dist/vite-plugin.js"
+    },
+    "./ui": {
+      "types": "./src/ui/Select.d.ts",
+      "import": "./src/ui/Select.vue"
+    },
+    "./ui/zoom-compensation": {
+      "types": "./src/ui/zoom-compensation.d.ts",
+      "import": "./src/ui/zoom-compensation.ts"
+    },
+    "./ui/terminal-input-rail": {
+      "types": "./src/ui/terminal-input-rail.d.ts",
+      "import": "./src/ui/TerminalInputRail.vue"
+    },
+    "./ui/plugin-global-dialog": {
+      "types": "./src/ui/plugin-global-dialog.d.ts",
+      "import": "./src/ui/PluginGlobalDialog.vue"
+    },
+    "./ui/markdown-editor": {
+      "types": "./src/ui/markdown-editor.d.ts",
+      "import": "./src/ui/MarkdownEditor.vue"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    },
+    "./bin/manifest-gen.js": "./bin/manifest-gen.js",
+    "./bin/wasm-hash.js": "./bin/wasm-hash.js",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "magic-string": "^0.30.21",
+    "marked": "^18.0.11"
+  },
+  "peerDependencies": {
+    "vite": "^8.0.0",
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
+    "@vue/test-utils": "^2.4.11",
+    "happy-dom": "^13.10.1",
+    "tsup": "^8.5.1",
+    "vitest": "^3.2.7"
+  }
+}

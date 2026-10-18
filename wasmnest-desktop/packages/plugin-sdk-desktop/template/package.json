@@ -1,0 +1,23 @@
+{
+  "name": "{{PKG_NAME}}",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wasmnest-plugin-desktop dev",
+    "build": "wasmnest-plugin-desktop build",
+    "manifest": "wasmnest-plugin-desktop manifest"
+  },
+  "dependencies": {
+    "@binblink/wasmnest-plugin-sdk-desktop": "{{SDK_JS}}"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
+    "vite": "^8.0.0",
+    "vue": "^3.4.0",
+    "vue-i18n": "^9.0.0",
+    "typescript": "^5.0.0",
+    "terser": "^5.0.0"
+  }
+}

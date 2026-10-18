@@ -1,0 +1,248 @@
+[package]
+name = "wasmnest-desktop"
+version = "0.0.1"
+license = "MIT"
+description = "WasmNest Desktop - Remote control for Claude Code via mobile devices"
+authors = ["binblink"]
+edition = "2021"
+
+[lib]
+name = "wasmnest_desktop_lib"
+crate-type = ["cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "tray-icon", "test"] }
+# tauri-plugin-shell 已移除（前端零资源访问红线）：它给前端提供 open/spawn/execute 的
+# 直接调用面，而 shell:allow-open 正是靠一条 capability 就放开的。宿主侧打开外部链接改用
+# tauri-plugin-opener（与移动端同一口径），见 commands.rs::open_external_url。
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-os = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "process", "test-util"] }
+# 进程组信号（kill_process_group unix 分支：直接系统调用，避免外部 kill 命令引入的 SIGCHLD reaper 竞争）
+libc = "0.2"
+
+# Database
+# hooks feature：SQLite progress handler（宿主侧硬中断慢查询，DB 执行护栏票据 05）
+rusqlite = { version = "0.32", features = ["bundled", "hooks"] }
+
+# Security
+rand = "0.8"
+jsonwebtoken = "9"
+# 生物凭证验签（EC P-256 / ECDSA-SHA256，与移动端 Keystore 生成的密钥配套）
+p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
+# 通用加密/解密工具（HTTP 加密、非对称加密、文件加密传输）
+# aes-gcm：对称 AEAD（AES-256-GCM），用于 HTTP 报文与文件分块加密
+aes-gcm = "0.10"
+# chacha20poly1305：备选对称 AEAD，性能不依赖 AES-NI
+chacha20poly1305 = "0.10"
+# x25519-dalek：椭圆曲线 Diffie-Hellman 密钥协商（端到端加密 ECDH）；
+# static_secrets 启用可复用的长期密钥对（StaticSecret），便于持久化私钥
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+# rsa：常规非对称加密（RSA-OAEP / PSS 签名；pem 启用 PKCS#8/#1 编解码）
+rsa = { version = "0.9", features = ["sha2", "pem"] }
+# sha2：SHA-256 摘要
+sha2 = "0.10"
+# zip：用户插件 zip 包解压安装（与移动端同版本 4.6）
+zip = "4.6"
+# hkdf：密钥派生（HKDF-SHA256）
+hkdf = "0.12"
+
+# Encoding
+encoding_rs = "0.8"
+base64 = "0.22"
+hex = "0.4"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# UUID
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Date/Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Logging
+tracing = { version = "0.1", features = ["log", "attributes"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
+tracing-error = "0.2"
+tracing-log = "0.2"
+# ANSI 样式（控制台日志格式化器使用；与 tracing-subscriber 传递依赖同版本）
+nu-ansi-term = "0.50"
+
+# File watching
+notify = "6"
+
+# Regex for parsing
+regex = "1"
+
+# WASM runtime for plugin system
+# 48（LTS，2026-08-24）：47 非 LTS 支持期将尽（48 发布后 ~2026-10）；48 为 12 倍数 LTS（支持 24 个月）。
+# 升级范围：48 起双端同步（此前桌面单端先行、移动端滞后一版为临时分叉，收口评估见 .scratch/2026-09-26-mobile-wasmtime-48-wasip3/spec.md）
+wasmtime = "48"
+
+# HTTP client (WASM plugin HTTP proxy)
+reqwest = { version = "0.12", features = ["stream"] }
+
+# mDNS service discovery
+mdns-sd = "0.20"
+
+# Network utilities
+local-ip-address = "0.6"
+
+# System info (CPU/memory metrics)
+sysinfo = "0.33"
+
+# Plugin API
+wasmnest-plugin-api = { path = "../packages/plugin-sdk-desktop/rust" }
+# 对等网络共享基础设施（节点身份 + 自签证书，issue peer-network/01）
+wasmnest-peer-net = { path = "../../packages/peer-net" }
+# 链路报文加密协议核心（issue 09 共享 crate，与移动端 event WS 共同消费）
+wasmnest-link-crypto = { path = "../../packages/link-crypto" }
+# server-lib-split：桌面 server 基础层（错误/常量/错误边界/系统信息/网络配置/
+# 连接身份/端口 traits）与加密引擎（算法实现 + 注册表）
+wasmnest-server-base = { path = "../../packages/wasmnest-server-base" }
+# 插件宿主机制内核（仓库根 packages/，双端共享锚点，wasm-core-lib-split 票 03）：
+# 插件实例状态 `WasmPluginState` + 能力模块契约 + 自动注册表 + Store 上限与指标值对象。
+# 它必须独立于宿主 bin crate —— 否则能力 crate 无法命名 `WasmPluginState`
+# （`add_to_linker::<S,D>` 是单态）⇒ 与宿主构成 Cargo 环。本期为**零行为变更的搬迁**：
+# StoreLimits / PluginMetrics / WasmPluginState 原位从 wasm_core 搬入，宿主留转发。
+wasmnest-host-kit = { path = "../../packages/wasmnest-host-kit" }
+# 插件机制整核（wasm-core-whole-crate，.scratch/2026-10-06）：wasm_core 整目录 +
+# 引擎面（db/pty/enums/system 部分）+ 宿主胶水迁入本 crate；lib.rs 经 `pub use
+# wasmnest_wasm_core as wasm_core` 垫片保持既有 `crate::wasm_core::*` 路径零改动。
+# 2026-10-08 迁根：整核本体与能力域同落仓库根 packages/。
+wasmnest-wasm-core = { path = "../../packages/wasmnest-wasm-core" }
+# PTY 能力域（wasm-core 纯净性收口票 02/06 → pty-capability-domain 票 D1/D3）：
+# 引擎面 + host-pty WIT 接线整面迁入能力 crate（ADR 0039）。票 02 批次 02 起宿主
+# **直接消费**：端口 adapter + 强制引用行 + 白名单条目同落 `src/plugin/pty.rs`
+# （wasm-core 已不再依赖本 crate，也不再出现它的任何路径）。
+# lib 声明同时满足 crate_boundary_lock 断言③「宿主清单声明全部拆分产物」
+# （pty-engine 已登记 SPLIT_CRATES）。
+wasmnest-pty-engine = { path = "../../packages/wasmnest-pty-engine", features = ["common-host"] }
+# 组播发现能力域（mDNS，wasm-core-lib-split 票 03）：引擎 + 宿主绑定层 + 自动
+# 注册。票 02 批次 03 起宿主**直接消费**：端口 adapter 在 `src/plugin/mdns.rs`
+# （wasm-core 已不再依赖本 crate，`host_context_registry` 随其退役）。
+wasmnest-discovery-engine = { path = "../../packages/wasmnest-discovery-engine", features = ["common-host"] }
+wasmnest-crypto-engine = { path = "../../packages/wasmnest-crypto-engine" }
+# server-lib-split 票 03：传输无关内核（supervisor/filter/link_crypto/metrics + TransportFace 组合）
+wasmnest-server-core = { path = "../../packages/wasmnest-server-core" }
+# server-lib-split 票 04：HTTP 传输面（registry/gateway/controllers/middleware/dtos + HttpTransportFace）
+wasmnest-server-http = { path = "../../packages/wasmnest-server-http", features = ["common-host"] }
+# server-lib-split 票 05：WebSocket 传输面（conn/channel/registry/endpoint/routes/manager）
+wasmnest-server-websocket = { path = "../../packages/wasmnest-server-websocket", features = ["common-host"] }
+# server-lib-split 票 06：对等网络引擎域（节点身份/节点与发现守护生命周期/host-peer 引擎转发）
+wasmnest-server-peer-net = { path = "../../packages/wasmnest-server-peer-net", features = ["common-host"] }
+inventory = "0.3"
+
+# Power management (prevent system sleep)
+nosleep = "0.2"
+
+# Async trait for dyn compatibility
+async-trait = "0.1"
+
+# WebSocket
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+dirs = "6.0.0"
+
+# Actix Web (HTTP + WS server)
+actix-web = "4"
+actix = "0.13"
+actix-web-actors = "4"
+actix-rt = "2"
+
+# PTY management
+portable-pty = "0.8"
+wasmtime-wasi = { version = "48", features = ["p3"] }
+
+# Windows：WM_SETTINGCHANGE 广播（CLI PATH 注册后通知新终端/agent 进程生效）
+# + 文件定位 COM API（SHOpenFolderAndSelectItems / ShellExecuteExW，见 commands/opener.rs）
+# + 电源唤醒监听（GetModuleHandleW，见 system/power_wake.rs）
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_System_Registry", "Win32_System_LibraryLoader"] }
+
+# Linux：systemd-logind 休眠抑制（org.freedesktop.login1.Inhibit）
+# 与 nosleep 引入的 dbus crate 同版本（不新增依赖树）；
+# 相比 nosleep 只支持 GNOME SessionManager，logind 与桌面环境无关（见 system/power.rs）
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus = "0.9"
+# 正式版禁用右键原生菜单（WebKitGTK context-menu 信号）所需；版本与 wry 锁定
+# 的 =2.0.2 一致（tauri-runtime-wry → wry 传递依赖，声明为直接依赖不改变解析）
+webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
+
+# WDIO E2E 测试插件：注册仍由 lib.rs 的 cfg(debug_assertions) 门控（release 只编译不注册）。
+# 不置于 [target.'cfg(debug_assertions)'.dependencies]：cargo 不支持用 debug_assertions
+# 选择依赖（会产生 manifest warning 且不按预期工作），故放普通依赖 + 代码层门控。
+tauri-plugin-wdio = "1"
+
+[dev-dependencies]
+tempfile = "3"
+# 集成测试 HTTP 配对（POST /api/auth/* 换取 JWT）：已为运行依赖，dev 复用同版本
+reqwest = { version = "0.12", features = ["json"] }
+serde_json = "1"
+# 集成测试直连插件私有库（认证记录下沉后 pairing/历史真源在私有库，白盒断言用）
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# ==================== 桥接基准工程（bench/） ====================
+# 自带 main() 的基准驱动（非 libtest harness）：CLI 参数 / 表格报告 / JSON 导出
+# 全部由工程自己控制，故关闭默认 harness。无参数运行 = 冒烟模式（3 个数量级门禁探针），
+# 全量场景需显式 `-- --full`。详见 bench/README.md 与
+# .scratch/2026-09-26-wasm-bridge-bench/spec.md
+[[test]]
+name = "wasm_bridge_bench"
+path = "tests/wasm_bridge_bench/main.rs"
+harness = false
+
+[profile.release]
+# unwind：panic 可被 catch_unwind（错误边界/插件宿主）捕获，插件业务 panic
+# 不再拖垮整个应用（abort 会让一切 panic 处理机制失效，任何 panic 直接闪退）
+panic = "unwind"
+# fat LTO + 单 codegen unit 会在最终链接阶段合并全部 bitcode，峰值内存 8GB+（含 wasmtime/cranelift 时更甚），
+# 在 16GB 内存机器上触发 OOM；改用 thin LTO + 并行 codegen，性能损失 ~2-5%，峰值内存大幅下降
+codegen-units = 16
+lto = "thin"
+opt-level = "s"
+strip = true
+
+# ==================== 开发模式优化 ====================
+[profile.dev]
+# debug = 1 全量调试信息使 rustc 编译巨型 crate（含 wasmtime）时内存峰值过高，
+# 在 collect_and_partition_mono_items 阶段 OOM（0xc0000409，页面文件被禁用的机器上必现）。
+# line-tables-only 保留行号回溯（debugger 变量查看不可用），编译内存与 target 体积大幅下降
+debug = "line-tables-only"
+incremental = true
+split-debuginfo = "packed"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.test.package.wasmtime]
+debug-assertions = false
+
+# ==================== [patch] 本地 SDK 指回（票 07 / L2/E2a-B） ====================
+# 背景：`wasmnest-wasm-core` 的 `desktop-assembly` feature 依赖已发布版本的桌面 SDK
+# `wasmnest-plugin-api`（内核单克隆可构建，见 lib 仓 wasm-core/Cargo.toml 注释）。
+# 本端宿主默认启用该 feature（宿主必须装配桌面 Rust 插件体系面）⇒ 构建时该依赖在
+# 解析图上，必须有 source 可用。patch 把 crates.io 的 `wasmnest-plugin-api` 重定向到
+# 本仓工作树 SDK，保证同场开发用工作树代码而不是 registry 上的已发布副本。
+# 版本联动（必须一致）：patch 目标 SDK 的 `version` == lib 声明的 `version`；不匹配
+# 时 cargo 报 patch 不适用 / 解析失败（fail-visible，不静默退回 registry）。
+# 注意：本包（src-tauri）无 `[workspace]` 成员，自身即 workspace 根；wasmnest-test/cross-end-tests
+# 是另一个独立根，同样需要自己的 patch（见其 Cargo.toml）。
+[patch.crates-io]
+wasmnest-plugin-api = { path = "../packages/plugin-sdk-desktop/rust" }

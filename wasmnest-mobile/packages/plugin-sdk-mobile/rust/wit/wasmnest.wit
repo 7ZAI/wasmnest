@@ -1,0 +1,11 @@
+package wasmnest:plugin@0.0.1;
+
+world plugin {
+    include core;
+    include cap-mobile;
+    include cap-mdns;
+    include cap-peer;
+    include cap-http;
+    include cap-ws;
+    include cap-notify;
+}
