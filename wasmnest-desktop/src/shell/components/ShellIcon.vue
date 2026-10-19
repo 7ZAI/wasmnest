@@ -122,6 +122,16 @@ const PATHS: Record<string, string[]> = {
   sleep: ['M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z'],
   clock: ['M12 12a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z', 'M12 7v5l3 2'],
   menu: ['M4 6h16', 'M4 12h16', 'M4 18h16'],
+  /* 快捷设置（sliders）：三条横向调节杆 + 居中短柄（Heroicons v2 形态）。
+     与 gear（设置/齿轮）区分：齿轮 = 系统设置页，sliders = 即时开关（主题/动画/加密/防休眠）。 */
+  sliders: [
+    'M4 6h16',
+    'M4 12h16',
+    'M4 18h16',
+    'M8 4v4',
+    'M15 10v4',
+    'M11 16v4',
+  ],
 }
 
 const paths = computed(() => PATHS[props.name] ?? [])

@@ -33,6 +33,8 @@ const activeCard = ref<CardKey | null>(null)
 // ==================== 覆层（不产卡；Esc 逐层收） ====================
 
 const panelOpen = ref(false)
+/** 快捷设置面板（工具栏「快捷设置」入口；2026-10-19 与通知中心拆分） */
+const quickSettingsOpen = ref(false)
 /** 多任务全屏层（工具栏「多任务」入口；后台运行的应用在此切换 / 关闭） */
 const recentsOpen = ref(false)
 const ctxMenu = ref<ShellCtxMenu | null>(null)
@@ -129,6 +131,7 @@ function enterFace(key: CardKey | null): void {
   activeCard.value = key
   screen.value = 'card'
   panelOpen.value = false
+  quickSettingsOpen.value = false
   recentsOpen.value = false
   ctxMenu.value = null
 }
@@ -207,13 +210,27 @@ function openSys(pageId: string): void {
 /**
  * 多任务面板开合（工具栏入口）。
  *
- * 与通知中心互斥：两个都是占满视野的浏览面，同时开只会互相遮挡；打开多任务即收起
- * 通知中心与右键菜单。
+ * 与通知中心 / 快捷设置互斥：三者都是占满视野的浏览面，同时开只会互相遮挡；
+ * 打开多任务即收起通知中心、快捷设置与右键菜单。
  */
 function toggleRecents(open = !recentsOpen.value): void {
   recentsOpen.value = open
   if (!open) return
   panelOpen.value = false
+  quickSettingsOpen.value = false
+  ctxMenu.value = null
+}
+
+/**
+ * 快捷设置面板开合（工具栏入口；与通知中心拆分的独立浏览面）。
+ *
+ * 与多任务 / 通知中心互斥（同 toggleRecents 口径）；打开时收掉其余浏览面。
+ */
+function toggleQuickSettings(open = !quickSettingsOpen.value): void {
+  quickSettingsOpen.value = open
+  if (!open) return
+  panelOpen.value = false
+  recentsOpen.value = false
   ctxMenu.value = null
 }
 
@@ -260,6 +277,7 @@ function goHome(): void {
   screen.value = 'home'
   activeCard.value = null
   panelOpen.value = false
+  quickSettingsOpen.value = false
   recentsOpen.value = false
   ctxMenu.value = null
   homeQ.value = ''
@@ -278,6 +296,10 @@ function goBack(): void {
   }
   if (panelOpen.value) {
     panelOpen.value = false
+    return
+  }
+  if (quickSettingsOpen.value) {
+    quickSettingsOpen.value = false
     return
   }
   if (recentsOpen.value) {
@@ -397,6 +419,8 @@ export function useShellState() {
     cards,
     activeCard,
     panelOpen,
+    quickSettingsOpen,
+    toggleQuickSettings,
     recentsOpen,
     toggleRecents,
     ctxMenu,

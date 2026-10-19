@@ -29,6 +29,7 @@
     <!-- ============ 全局覆层（任何面可用；Esc 逐层收） ============ -->
     <ShellTaskSwitcher />
     <ShellNotificationPanel />
+    <ShellQuickSettings />
     <ShellContextMenu />
     <ShellDialogLayer />
     <ShellBootScreen />
@@ -107,6 +108,7 @@ import ShellView from './views/ShellView.vue'
 import ShellCardScreen from './components/ShellCardScreen.vue'
 import ShellToolbar from './components/ShellToolbar.vue'
 import ShellNotificationPanel from './components/ShellNotificationPanel.vue'
+import ShellQuickSettings from './components/ShellQuickSettings.vue'
 import ShellTaskSwitcher from './components/ShellTaskSwitcher.vue'
 import ShellContextMenu from './components/ShellContextMenu.vue'
 import ShellDialogLayer from './components/ShellDialogLayer.vue'
@@ -162,6 +164,7 @@ const hasOverlay = computed(
     state.dialog.value !== null ||
     state.ctxMenu.value !== null ||
     state.panelOpen.value ||
+    state.quickSettingsOpen.value ||
     state.recentsOpen.value,
 )
 
@@ -261,6 +264,14 @@ function onWindowClick(e: MouseEvent) {
     !target.closest('[data-shell-panel-trigger]')
   ) {
     state.panelOpen.value = false
+  }
+  // 快捷设置面板：与通知面板同款「点面板外（含触发按钮外）关闭」语义
+  if (
+    state.quickSettingsOpen.value &&
+    !target.closest('.shell-quick-root') &&
+    !target.closest('[data-shell-quick-trigger]')
+  ) {
+    state.quickSettingsOpen.value = false
   }
 }
 

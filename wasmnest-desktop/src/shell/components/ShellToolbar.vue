@@ -92,6 +92,18 @@
           {{ state.notifCountTotal.value }}
         </span>
       </button>
+      <!-- 快捷设置：独立图标入口（2026-10-19 与通知中心拆分；sliders 区分于
+           gear/系统设置）。开合互斥收口在 state.toggleQuickSettings。 -->
+      <button
+        class="tb-btn"
+        :class="{ on: state.quickSettingsOpen.value }"
+        data-shell-quick-trigger
+        :title="t('shell.toolbar.quickSettings')"
+        :aria-label="t('shell.toolbar.quickSettings')"
+        @click="state.toggleQuickSettings()"
+      >
+        <ShellIcon name="sliders" :size="15" />
+      </button>
       <!-- 主题切换：图标反映**当前**主题（深色=月亮 / 浅色=太阳），文案给点击后的动作 -->
       <button
         class="tb-btn"
@@ -206,13 +218,14 @@ function toggleTheme() {
 }
 
 /**
- * 通知中心 / 多任务层互斥：两个都是占满视野的浏览面，同时开只会互相遮挡
- * （打开一个即收起另一个；多任务侧的互斥在 toggleRecents 里）。
+ * 通知中心开合：与多任务 / 快捷设置互斥（两个都是占满视野的浏览面，同时开只会
+ * 互相遮挡；打开一个即收起另一个；互斥的另一半在 toggleRecents / toggleQuickSettings）。
  */
 function toggleNotifs() {
   state.panelOpen.value = !state.panelOpen.value
   if (state.panelOpen.value) {
     state.recentsOpen.value = false
+    state.quickSettingsOpen.value = false
   }
 }
 
