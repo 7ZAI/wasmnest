@@ -24,7 +24,16 @@
           </g>
         </svg>
         <div class="line">{{ t('shell.boot.line') }}</div>
-        <div class="bar"><i :style="{ width: progress + '%' }"></i></div>
+        <div
+          class="bar"
+          role="progressbar"
+          :aria-valuenow="progress"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="t('shell.boot.line')"
+        >
+          <i :style="{ width: progress + '%' }"></i>
+        </div>
         <div class="log">
           <div v-for="step in steps" :key="step.key">
             <span class="dot" :class="{ ok: step.done, running: step.active }">{{
@@ -58,6 +67,17 @@ const appsStore = useShellApps()
 const visible = computed(() => state.boot.value)
 const pluginsLoaded = computed(() => !appsStore.loading.value && appsStore.plugins.value.length > 0)
 const bootStartedAt = ref(0)
+/**
+ * 已启动毫秒数（由 interval 写入，**必须**是响应式值）
+ *
+ * 进度条此前直接读 `Date.now() - bootStartedAt`：computed 只在依赖变化时重算，
+ * 而两个依赖（visible / bootStartedAt）在启动过程中都不变 —— 进度条因此冻在 0%，
+ * 判断 100% 的那行也永远不成立，最后实际只能靠 3s 兜底收起。用一个每 120ms 递增的
+ * 响应式计数作为时间源，进度条与「就绪即收起」才真的跟着走。
+ */
+const elapsed = ref(0)
+/** 最短展示时长：链就绪得再快也让品牌屏停留一下，避免一帧闪白 */
+const MIN_BOOT_MS = 800
 
 /** 步骤状态机：注册表 → 授权 → 就绪（0/1/2） */
 const stepIndex = ref(0)
@@ -86,8 +106,7 @@ const steps = computed(() => [
 
 const progress = computed(() => {
   if (!visible.value) return 100
-  const elapsed = Date.now() - bootStartedAt.value
-  return Math.min(100, Math.round((elapsed / 2200) * 100))
+  return Math.min(100, Math.round((elapsed.value / 2200) * 100))
 })
 
 /** 就绪后落一条驻留通知（运行时就绪） */
@@ -117,8 +136,10 @@ onMounted(() => {
   // 壳启动即拉应用清单（与启动屏步骤联动）
   void appsStore.load()
   timer = setInterval(() => {
-    // 进度条驱动（re-render 用）
-    if (visible.value && progress.value >= 100) {
+    elapsed.value = Date.now() - bootStartedAt.value
+    // 链就绪且过了最短展示时长 → 立刻收起（不等进度条跑满 2.2s，
+    // 那是人为加的首屏延迟）；进度条只在加载本身慢的时候继续走。
+    if (visible.value && (progress.value >= 100 || (pluginsLoaded.value && elapsed.value >= MIN_BOOT_MS))) {
       state.boot.value = false
     }
   }, 120)
@@ -143,14 +164,17 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 .line {
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
-  font-size: calc(12px * var(--ui-scale));
+  font-size: calc(13px * var(--ui-scale));
+  font-weight: 500;
+  letter-spacing: -0.01em;
   color: var(--text-secondary);
 }
+/* 进度条做「细而稳」的一条：3px 高的轨道在深底上像一道划痕，2px + 完全圆头
+   更像仪表而非分割线；宽度过渡走 motion token，降级动效时直接跳变（内容不丢） */
 .bar {
-  width: 280px;
-  height: 3px;
-  border-radius: 2px;
+  width: 240px;
+  height: 2px;
+  border-radius: 1px;
   background: var(--border);
   overflow: hidden;
 }
@@ -158,31 +182,32 @@ onUnmounted(() => {
   display: block;
   height: 100%;
   background: var(--color-primary);
-  border-radius: 2px;
-  transition: width 0.3s;
+  border-radius: 1px;
+  transition: width var(--motion-duration-slow) var(--motion-ease);
 }
 .log {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
+  gap: 4px;
   font-size: calc(11px * var(--ui-scale));
   color: var(--text-tertiary);
-  min-width: 280px;
+  min-width: 240px;
 }
 .log div {
   display: flex;
   gap: 7px;
+  align-items: baseline;
 }
 .log .dot {
-  width: 12px;
+  width: 11px;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 .log .dot.ok {
-  color: var(--color-success);
+  color: var(--color-success-ink);
 }
 .log .dot.running {
-  color: var(--color-warning);
+  color: var(--color-warning-ink);
 }
 .note {
   font-size: calc(11px * var(--ui-scale));
@@ -190,10 +215,18 @@ onUnmounted(() => {
 }
 .boot-fade-enter-active,
 .boot-fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity var(--motion-duration-slow) var(--motion-ease);
 }
 .boot-fade-enter-from,
 .boot-fade-leave-to {
   opacity: 0;
+}
+/* 降级动效放在所有过渡声明之后：同特异性下后写的规则才生效 */
+@media (prefers-reduced-motion: reduce) {
+  .bar i,
+  .boot-fade-enter-active,
+  .boot-fade-leave-active {
+    transition-duration: 0.01ms;
+  }
 }
 </style>
