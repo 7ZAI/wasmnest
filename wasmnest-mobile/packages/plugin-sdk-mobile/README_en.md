@@ -195,7 +195,7 @@ await api.writeSetting('my-key', 'my-value')   // write a single setting key
 Mobile has **no** `context.fileService`. File-related capabilities split into two paths:
 
 - **`context.system`** (`system:open` permission): `openFile(path, displayName?)` opens with the system viewer, `revealInDir(path)` / `revealReceivedFileLocation(fileName)` locate a file in the file manager, `openDownloadDir()` opens the shared downloads directory, `requestAllFilesAccess()` guides the user to grant MANAGE_EXTERNAL_STORAGE (unauthorized access to the shared downloads directory rejects with a message starting with `needs_all_files_access` — catch it and show the guidance dialog instead of failing silently).
-- **Cross-device file transfer**: goes through app-owned `context.commands` (e.g. `file-transfer.list-remote`); the underlying peer-network / resumable transfer lives in the business core crate (`应用仓 apps/file-transfer/rust`) and is not exposed as a shared SDK API.
+- **Cross-device file transfer**: goes through app-owned `context.commands` (e.g. `file-transfer.list-remote`); the underlying peer-network / resumable transfer lives in the business core crate (`应用仓 apps/file-transfer/rust/core`) and is not exposed as a shared SDK API.
 
 ### dev-shell Mock Data (devMock)
 

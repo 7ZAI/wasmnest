@@ -206,7 +206,7 @@ await api.writeSetting('my-key', 'my-value')   // 写单个设置键
   MANAGE_EXTERNAL_STORAGE（未授权时访问公共下载目录会收到以 `needs_all_files_access` 开头的 reject，
   应捕获后弹引导弹窗而非静默失败）。
 - **跨设备文件传输**：经 `context.commands` 调业务应用自持命令（如 `file-transfer.list-remote`），
-  底层对等网络 / 断点续传在业务核 crate（`应用仓 apps/file-transfer/rust`），
+  底层对等网络 / 断点续传在业务核 crate（`应用仓 apps/file-transfer/rust/core`），
   不暴露为共享 SDK API。
 
 ### dev-shell 演示数据（devMock）

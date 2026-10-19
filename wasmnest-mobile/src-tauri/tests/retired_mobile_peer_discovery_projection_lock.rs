@@ -109,7 +109,7 @@ fn retired_peer_devices_topic_is_neither_published_nor_subscribed() {
     // 对账分支会让设备列表问题排查时误以为对账正常。发布与订阅两端都要清。
     let mut violations: Vec<String> = Vec::new();
     // 应用侧根自三仓拆分起住独立应用仓（spec §5-E7）；移动端 file-transfer 无
-    // rust/（双端单产物，共享 crate 在 apps/file-transfer/rust），该根不存在时
+    // rust/（双端单产物，共享 crate 在应用级 apps/file-transfer/rust/plugin），该根不存在时
     // 下方 `read_dir` 直接跳过——与拆仓前语义一致（原来也是不存在的目录）。
     let roots = [
         mobile_src_root().join("src"),

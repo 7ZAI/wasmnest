@@ -127,7 +127,10 @@ cmd_health() {
   local target_dir="${WASMNEST_APPS_TARGET_DIR:-$apps_root/target/wasm-apps}"
   local pass=0 fail=0
   for p in "${plugins[@]}"; do
+    # 端目录内 rust/；file-transfer 例外——双端同构 crate 收在应用级 rust 层
+    # （apps/file-transfer/rust/plugin，端目录只剩前端），故回退到该落点。
     local dir="$apps_root/apps/$p/desktop/rust"
+    [ -f "$dir/Cargo.toml" ] || dir="$apps_root/apps/$p/rust/plugin"
     [ -f "$dir/Cargo.toml" ] || { log "跳过（无 rust/Cargo.toml）: $p"; continue; }
     log "编译（零代码改动）: ${p} → wasm32-wasip3（target-dir=${target_dir}）"
     if RUSTUP_TOOLCHAIN="${WASIP3_NIGHTLY}" cargo build \

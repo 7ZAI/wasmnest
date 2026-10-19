@@ -403,7 +403,7 @@ function shutdown(code) {
  * is plugin-store managed，见 .scratch/file-transfer-pause-concurrency）。
  * 这里在启动 watch 前检测：
  *   - resources/{id}/ 下 .wasm 缺失 → 补建
- *   - Rust 源码（插件 rust/ + SDK rust/）最新 mtime 晚于产物 → 补建
+ *   - Rust 源码（插件 rust/ + 应用级 ../rust/ + SDK rust/）最新 mtime 晚于产物 → 补建
  *   - dist/index.js 已存在 → node scripts/build.js --rust-only（跳过 vite，最快路径）
  *   - 全新目录（dist 也没有）→ node scripts/build.js 全量构建一次（含前端），
  *     其后 watch 接管前端增量
@@ -503,8 +503,13 @@ function wasmStaleReason(pluginRoot, wasmDest) {
   } catch {
     return `产物缺失：${wasmDest}`
   }
+  // 源码面含两处 rust：端目录内 `rust/`（一般插件）+ 应用级 `../rust/`
+  // （file-transfer 双端同构：crate 收在 `apps/file-transfer/rust/{core,plugin}`，
+  // 端目录只剩前端——只扫端目录会让它的 wasm 陈旧判据静默失效）。
+  // 无应用级 rust 层的插件该目录缺失，`latestSourceMtime` 返回 0，不干扰判据。
   const newestSrc = Math.max(
     latestSourceMtime(join(pluginRoot, 'rust')),
+    latestSourceMtime(join(pluginRoot, '..', 'rust')),
     latestSourceMtime(join(ROOT, 'packages/plugin-sdk-desktop/rust')),
   )
   if (newestSrc > wasmStat.mtimeMs) return 'Rust 源码比产物新（需重建）'
