@@ -584,8 +584,8 @@ pruneStalePluginDirs()
 function startPluginWatches() {
   if (shuttingDown) return
   for (const { slug, args, skipWatch } of PLUGIN_WATCH_CMDS) {
-    // desktop-host-frontend-downsink：terminal-session 前端已并宿主 vite，
-    // 插件包前端 watch 无消费者（宿主编译 app 源码即 HMR）——跳过而非保持死链
+    // bedcode：dev 期跳过前端 watch（整包构建最重且每次写入都触发宿主重启，
+    // 理由见 PLUGIN_WATCH_CMDS 条目注释）——跳过而非保持死链
     if (skipWatch) {
       console.log(`[dev-run] 跳过前端 watch：${slug}（前端已并入宿主 vite）`)
       continue

@@ -32,10 +32,13 @@ const PLUGINS = {
   'com.wasmnest.file-transfer': {
     slug: 'file-transfer',
   },
-  // desktop-host-frontend-downsink（2026-10-17）：terminal-session 前端已整体并入
-  // 宿主 vite（index.html 直连其 src/main.ts），不再有插件包前端可 watch；
-  // 改前端 = 宿主 dev（pnpm tauri:dev，改码即 HMR），Rust 侧 = node scripts/build.js。
-  // 保留条目只为显性报错（与退役面 fail-visible 同口径），不让 pnpm 抛晦涩的 Missing script。
+  // terminal-session（bedcode）：dev 期前端**不参与 watch**（整包构建最重且每次
+  // 写入 resources 都触发宿主重启，见 dev-run.js PLUGIN_WATCH_CMDS 条目注释）。
+  // 保留条目 + frontendRetired 只为显性提示：改它的前端请单独重建
+  // `pnpm run plugins:build` 或应用目录 `node scripts/build.js --frontend-only`，
+  // Rust 侧 = 应用目录 `node scripts/build.js`；走 `plugins:dev` 直接报错引导。
+  // （desktop-host-frontend-downsink 遗留：曾并入宿主 vite，壳恢复后为独立挂载包，
+  //   hostAppBoundaryLock 钉住其 src/entry.ts mountApp 契约。）
   'com.wasmnest.terminal-session': {
     slug: 'bedcode',
     frontendRetired: true,
@@ -61,12 +64,12 @@ if (!config) {
 
 console.log(`\n=== Plugin Dev: ${targetPlugin} ===\n`)
 
-// desktop-host-frontend-downsink：terminal-session 前端已并入宿主 vite，
-// 无插件包前端可 watch——显性提示替代 pnpm 的 Missing script（fail-visible）
+// terminal-session（bedcode）走 plugins:dev 没有前端可 watch（整包 dev 期不参与
+// watch，理由见 PLUGINS 条目注释）——显性提示替代 pnpm 的 Missing script（fail-visible）
 if (config.frontendRetired) {
-  console.error(`[plugin-dev] ${targetPlugin} 的前端已并入宿主 vite（desktop-host-frontend-downsink）：`)
-  console.error('[plugin-dev]   改前端 → 宿主 dev（cd wasmnest-desktop && pnpm tauri:dev，改码即 HMR）')
-  console.error('[plugin-dev]   改 Rust → cd <应用仓>/apps/bedcode/desktop && node scripts/build.js')
+  console.error(`[plugin-dev] ${targetPlugin} 前端不参与 dev watch（bedcode 整包构建重，见 dev-run.js PLUGIN_WATCH_CMDS 条目注释）：`)
+  console.error('[plugin-dev]   改前端 → 应用仓 apps/bedcode/desktop 下 node scripts/build.js --frontend-only（或桌面端 pnpm run plugins:build）')
+  console.error('[plugin-dev]   改 Rust → 应用仓 apps/bedcode/desktop 下 node scripts/build.js')
   process.exit(1)
 }
 
