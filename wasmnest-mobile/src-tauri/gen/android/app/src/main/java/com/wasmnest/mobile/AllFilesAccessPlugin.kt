@@ -24,7 +24,7 @@ import app.tauri.plugin.Plugin
  * 链路）与前端按钮处配合使用；Kotlin 侧只负责状态查询与 Intent 跳转。
  *
  * 由 Rust 端 android_plugins.rs 注册（AllFilesAccessPlugin）。
- * gen/android 重建恢复清单：本文件须恢复（参见 AGENTS.md「Android」节）。
+ * gen/android 重建恢复清单：本文件须恢复（参见 docs/codemap.md §3.2）。
  */
 @TauriPlugin
 class AllFilesAccessPlugin(private val activity: Activity) : Plugin(activity) {

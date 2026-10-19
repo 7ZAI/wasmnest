@@ -31,7 +31,7 @@ import app.tauri.plugin.Plugin
  * 命中则优先返回，Rust 侧解析失败时以此兜底。
  *
  * 由 Rust 端 android_plugins.rs 注册（SafPickerPlugin）。
- * gen/android 重建恢复清单：本文件须恢复（参见 AGENTS.md「Android」节）。
+ * gen/android 重建恢复清单：本文件须恢复（参见 docs/codemap.md §3.2）。
  *
  * 为什么走 ActivityResultRegistry 无 owner 动态注册，而不用 Tauri 的
  * Plugin.startActivityForResult() + @ActivityCallback（2026-09 真机实证修复）：

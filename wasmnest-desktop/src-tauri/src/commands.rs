@@ -296,7 +296,7 @@ pub fn open_external_url(app_handle: tauri::AppHandle, url: String) -> Result<()
 // download-and-install）已从 capabilities 撤除，升级检查与安装的**发起权**收归 Rust。
 // 前端只拿已验签的版本元数据与下载进度事件，拿不到 updater 句柄。
 //
-// 归属判断（AGENTS.md §5.1.2 三问）：插件无法自建「替换宿主二进制」的能力（离宿主不能实现）
+// 归属判断（docs/architecture.md §1.2 三问）：插件无法自建「替换宿主二进制」的能力（离宿主不能实现）
 // → 归宿主；命令只做「检查 / 安装」两件事，不含版本比较策略、提示文案、更新时机等产品语义
 // （B1/B2/B5 零命中），业务呈现全在前端。
 

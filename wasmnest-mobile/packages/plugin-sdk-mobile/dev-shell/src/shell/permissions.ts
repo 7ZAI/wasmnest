@@ -5,7 +5,7 @@
  *   1. 把权限词映射成 i18n 文案 key（dev-shell 自有 `shell.permission.*` 命名空间）
  *   2. 按能力域分组，让「应用详情 → 权限」是可读清单而不是一串冒号字符串
  *
- * 授权裁决在插件侧 / 宿主后端执行，前端开关只是 UX（AGENTS.md §8）——因此这里
+ * 授权裁决在插件侧 / 宿主后端执行，前端开关只是 UX（docs/security.md §1）——因此这里
  * 的分组与文案不参与任何安全判定。
  *
  * 同构纪律：词表与分组与宿主 `wasmnest-mobile/src/shell/permissions.ts` 保持一致；

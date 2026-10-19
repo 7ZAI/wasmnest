@@ -17,7 +17,7 @@ import java.io.File
  * 文件不存在视为成功（幂等，与桌面端 host_fs_delete 语义一致）。
  *
  * 由 Rust 端 android_plugins.rs 注册（FileDeletePlugin）。
- * gen/android 重建恢复清单：本文件须恢复（参见 AGENTS.md「Android」节）。
+ * gen/android 重建恢复清单：本文件须恢复（参见 docs/codemap.md §3.2）。
  */
 @InvokeArg
 internal class FileDeleteArgs {

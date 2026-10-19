@@ -788,7 +788,7 @@ mod tests {
             runtime.contains("debug line lands in dev"),
             "dev forces debug level: {runtime}"
         );
-        // frontend target 事件既进 frontend 文件也混入 runtime（既有行为，见 AGENTS.md 日志节）
+        // frontend target 事件既进 frontend 文件也混入 runtime（既有行为，见 docs/security.md §2 日志节）
         assert!(
             runtime.contains("frontend console line lands"),
             "frontend events also land in runtime (existing behavior): {runtime}"

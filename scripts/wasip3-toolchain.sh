@@ -10,7 +10,7 @@
 #   - WASIP3_NIGHTLY=nightly-2026-09-16（rustc 1.100.0-nightly，spike 验证版本）
 #   - 切换点：stable >= 1.99（预计 2026-10 中，nightly 2026-09-12 起 std present）
 #     → rustup update + `rustup target add wasm32-wasip3`（stable）→ 本脚本去掉
-#     nightly pin，命令字眼同步 AGENTS.md §3。
+#     nightly pin，命令字眼同步 docs/commands.md §1。
 #
 # 用法：scripts/wasip3-toolchain.sh <install|verify|fixture|health|help>
 #   install  安装 pinned nightly + wasm32-wasip3 target（幂等；含镜像加速）

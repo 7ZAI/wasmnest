@@ -26,7 +26,7 @@ import java.io.FileOutputStream
  * 免存储权限、多数文件管理器可见。外部存储不可用时回退到 null（宿主侧兜底处理）。
  *
  * 由 Rust 端 android_plugins.rs 注册（DownloadsDirPlugin）。
- * gen/android 重建恢复清单：本文件须恢复（参见 AGENTS.md「Android」节）。
+ * gen/android 重建恢复清单：本文件须恢复（参见 docs/codemap.md §3.2）。
  */
 @TauriPlugin
 class DownloadsDirPlugin(private val activity: Activity) : Plugin(activity) {

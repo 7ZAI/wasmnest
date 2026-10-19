@@ -1,6 +1,6 @@
 //! 前端零资源访问 · 能力层与 CSP 层防回接锁
 //!
-//! 对应 AGENTS.md §6 前端规范「前端零资源访问（强制红线）」。这条红线的落地分三层，
+//! 对应 docs/frontend.md §1 前端规范「前端零资源访问（强制红线）」。这条红线的落地分三层，
 //! 本文件锁住其中两层**可被静默改回**的两层：
 //!
 //! 1. **能力层（Tauri ACL，运行期强制）**：`capabilities/*.json` 里**不得**出现任何
@@ -120,7 +120,7 @@ fn network_capable_plugin_permissions_are_not_reintroduced() {
          是 Tauri ACL 真的放行）。需要该能力时：\n\
          1) 把发起权收归 Rust（宿主命令或插件 host-* 原语），前端只拿元数据 / 事件；\n\
          2) 在宿主侧加闸门（scheme / 权限 / 配额白名单）；\n\
-         3) 同步更新 AGENTS.md §6 与 CHANGELOG。\n\
+         3) 同步更新 docs/frontend.md 与 CHANGELOG。\n\
          参考：shell:allow-open → commands::open_external_url；updater:default → commands::check_for_update/install_update",
         granted
     );

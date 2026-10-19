@@ -24,7 +24,7 @@ import app.tauri.plugin.Plugin
  * App 浅色 → 深色图标（isAppearanceLight*=true）。
  *
  * 由 Rust 端 android_plugins.rs 注册（Builder 名 "status-bar-style"）。
- * gen/android 重建恢复清单：本文件须恢复（参见 AGENTS.md「Android」节）。
+ * gen/android 重建恢复清单：本文件须恢复（参见 docs/codemap.md §3.2）。
  */
 @InvokeArg
 internal class SetStatusBarStyleArgs {

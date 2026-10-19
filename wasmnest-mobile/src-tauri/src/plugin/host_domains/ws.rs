@@ -1,7 +1,7 @@
 //! host-websocket 客户端域 —— 移动端薄适配器（ADR 0043 引擎抽根）
 //!
 //! 引擎机制（句柄表 / 属主仲裁 / reader-writer 双任务 / 心跳 / 退避重连 / 帧信封 /
-//! 停用回收）全部在通用能力 crate [`wasmnest_ws_client_engine`]（仓库根
+//! 停用回收）全部在通用能力 crate [`wasmnest_ws_client_engine`]（能力仓
 //! `packages/`，零 WIT / 零 SDK / 零平台形态）。本模块只保留两件事：
 //!
 //! 1. **5 条原语薄转发**：签名与历史一致（component.rs 接线 / host_impl 聚合入口

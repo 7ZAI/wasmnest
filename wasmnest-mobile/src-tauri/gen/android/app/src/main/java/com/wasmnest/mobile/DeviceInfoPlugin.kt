@@ -17,7 +17,7 @@ import app.tauri.plugin.Plugin
  * Settings.Global 取不到时回退 Build.MODEL（如 "Redmi K30"）。
  *
  * 由 Rust 端 android_plugins.rs 注册（DeviceInfoPlugin）。
- * gen/android 重建恢复清单：本文件须恢复（参见 AGENTS.md「Android」节）。
+ * gen/android 重建恢复清单：本文件须恢复（参见 docs/codemap.md §3.2）。
  */
 @TauriPlugin
 class DeviceInfoPlugin(private val activity: Activity) : Plugin(activity) {

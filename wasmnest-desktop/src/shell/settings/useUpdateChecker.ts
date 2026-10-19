@@ -5,7 +5,7 @@
  * `check_for_update` / `install_update`，拿已验签的版本元数据（Rust 侧拉取 + minisign
  * 公钥验签），下载进度经 `app://update-progress` 事件回流。
  *
- * 迁移原因（前端零资源访问红线，AGENTS.md §6）：原先直接调 `@tauri-apps/plugin-updater`
+ * 迁移原因（前端零资源访问红线，docs/frontend.md §1）：原先直接调 `@tauri-apps/plugin-updater`
  * 的 `check()`，等于让**前端发起网络请求**。该能力已随 `updater:default` 权限一并从
  * `capabilities/default.json` 撤除，Rust 运行期即拒（见 `capabilities_test.rs` 防回接锁）。
  *

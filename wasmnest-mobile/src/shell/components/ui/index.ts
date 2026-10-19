@@ -10,7 +10,7 @@
  *   退役旧页面时会牵动壳，且任何人「顺手改旧组件」都会改变新界面行为。复制
  *   一份、由壳自持，替换期才能各走各的；旧目录退役后这批副本即新真源。
  *   方向与纪律见 `.scratch/2026-10-07-mobile-wasm-platform/ui-mechanism-port.md`
- *   与 AGENTS.md §6「移动端前端重构优先对接宿主壳」。
+ *   与 docs/frontend.md §3「移动宿主壳优先」。
  *
  * 迁移映射（旧 → 壳内）：
  *   @/components/Button.vue           → ./Button.vue

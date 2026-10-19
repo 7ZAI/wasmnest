@@ -61,7 +61,7 @@ import java.util.concurrent.atomic.AtomicLong
  * 上传完成后由插件侧删除 cache 副本（见 spec「复制桥语义」）。
  *
  * 由 Rust 端 android_plugins.rs 注册（SafTransferPlugin）。
- * gen/android 重建恢复清单：本文件须恢复（参见 AGENTS.md「Android」节）。
+ * gen/android 重建恢复清单：本文件须恢复（参见 docs/codemap.md §3.2）。
  */
 @InvokeArg
 internal class ListTreeArgs {

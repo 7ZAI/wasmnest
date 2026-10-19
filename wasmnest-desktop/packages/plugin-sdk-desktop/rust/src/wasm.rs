@@ -264,7 +264,7 @@ mod tests {
 /// `on_session_stopped` / `on_ws_message` /
 /// `on_ws_client_message` / `on_task_event`）**全部**用 `log_warn` 而非 `log_error`。
 ///
-/// 依据：AGENTS.md §8「guest 自报的可处理错误不升 `error!`」。这些 `Err` 都是**插件
+/// 依据：docs/security.md §2「guest 自报的可处理错误不升 `error!`」。这些 `Err` 都是**插件
 /// 自己报告的失败**（双层 Result 语义的内层），不是宿主侧的证据——真正的宿主故障
 /// （trap、Store 中毒、fuel 耗尽）由宿主运行时自己以 `error!` 记录并计数。把 guest
 /// 自报失败也打 error 会让「error 级」从「影响功能的宿主故障」退化成「插件返回了个 Err」，

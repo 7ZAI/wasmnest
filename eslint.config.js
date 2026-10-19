@@ -8,7 +8,7 @@ const prettier = require('eslint-config-prettier')
 // src-tauri（Rust 后端）与生成物统一忽略；桌面端特例用 files 局部覆盖。
 
 // ==================== 前端资源访问红线（静态锁，双端共用一份） ====================
-// 原则（AGENTS.md §6 前端规范 + §8 安全红线）：前端只做 UI 显示，不含后端逻辑。
+// 原则（docs/frontend.md §1 前端规范 + docs/security.md §1 安全红线）：前端只做 UI 显示，不含后端逻辑。
 // HTTP / WebSocket / 文件访问一律由 Rust 端发起，并经权限仲裁（host-* 原语 +
 // egress / approval 闸门）。前端直连 = 绕过权限闸门，故在此静态禁止：
 //   · 网络原语：fetch / XMLHttpRequest / WebSocket / EventSource / sendBeacon
@@ -20,7 +20,7 @@ const prettier = require('eslint-config-prettier')
 // 确需豁免时在违规行写 eslint-disable-next-line 并注明理由：豁免随 code review 可见，不静默放行。
 
 const RESOURCE_ACCESS_MSG =
-  '前端禁止直接发起网络 / 文件访问（AGENTS.md §6 前端红线）：HTTP / WebSocket / 文件访问只能由 Rust 端发起并经权限仲裁。改走 invoke(...) → 宿主命令或插件命令面；确需豁免请写 eslint-disable-next-line 并注明理由。'
+  '前端禁止直接发起网络 / 文件访问（docs/frontend.md §1 前端红线）：HTTP / WebSocket / 文件访问只能由 Rust 端发起并经权限仲裁。改走 invoke(...) → 宿主命令或插件命令面；确需豁免请写 eslint-disable-next-line 并注明理由。'
 
 // 受锁约束的前端源码：宿主前端 / 移动插件 src、双端 SDK 前端。
 // 构建脚本、配置、测试、agent hook 脚本不在其列（它们不是运行在权限闸门内的前端）。

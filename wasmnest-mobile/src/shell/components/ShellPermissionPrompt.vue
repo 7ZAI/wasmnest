@@ -72,7 +72,7 @@
  * 裁决口径写死在这里而不是交给应用：拒绝 = 该功能不可用（fail-closed），
  * 且允许后必须真的落到数据源；数据源不支持时保留弹窗并说明，不做「点了就通过」。
  *
- * 真正的权限裁决在 Rust 端执行，本弹窗只是 UX（AGENTS.md §8）。
+ * 真正的权限裁决在 Rust 端执行，本弹窗只是 UX（docs/security.md §1）。
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

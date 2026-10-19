@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 把 src 内联的 `#[cfg(test)] mod tests { ... }` 按「功能分区」拆成多个 .rs 文件。
 //
-// 两种落点（对应 AGENTS.md「单元测试纪律」与仓库既有惯例）：
+// 两种落点（对应 docs/testing.md §1「单元测试纪律」与仓库既有惯例）：
 //   --target private  →  src/<mod>/tests/<name>.rs
 //                        源文件尾部留 `#[cfg(test)] mod tests { use super::*; mod <name>; ... }`，
 //                        子模块路径由 rustc 自动解析到 `<mod>/tests/<name>.rs`（内联模块的

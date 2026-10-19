@@ -1,6 +1,6 @@
 //! Egress Policy：外网访问声明与授权（fail-closed）
 //!
-//! 三层校验（借鉴 fs_auth 三层：白名单 → 声明 → 弹窗授权，AGENTS.md §7）：
+//! 三层校验（借鉴 fs_auth 三层：白名单 → 声明 → 弹窗授权，docs/architecture.md §5）：
 //! - **L1 桌面端目标**：目标 host:port = 连接模块当前/最近目标（配对/会话内，
 //!   无需声明；host:port 由连接模块注入，见 `add_desktop_target`）
 //! - **L2 静态声明**：宿主内置（GitHub API，`system::constants::egress`）+ 插件
