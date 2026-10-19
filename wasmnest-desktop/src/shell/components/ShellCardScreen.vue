@@ -1,6 +1,8 @@
 <template>
   <section class="card-screen" :aria-label="t(sys.nameKey)">
-    <!-- 系统页卡：页头 + 三页互切 tab（切换 = 激活另一张系统页卡，不弹栈——spec-c §1） -->
+    <!-- 系统页卡：页头 + 页体（2026-10-19 用户裁决：撤掉三页互切 tab——
+         设置页只展示设置，应用管理 / 权限与授权同理；系统页之间的跳转走主屏
+         系统网格 / 多任务面板，以及页内既有的互跳入口卡片） -->
     <div class="sysframe">
       <div class="sys-head">
         <span class="glyph-box tone-system" style="width: 34px; height: 34px">
@@ -12,19 +14,6 @@
         </div>
         <span class="grow"></span>
         <span class="shell-chip">{{ t('shell.sys.chip') }}</span>
-      </div>
-      <div class="sys-tabs" role="tablist">
-        <button
-          v-for="page in SYS_PAGES"
-          :key="page.id"
-          class="sys-tab"
-          :class="{ on: page.id === sysPageId }"
-          role="tab"
-          :aria-selected="page.id === sysPageId"
-          @click="state.openSys(page.id)"
-        >
-          <ShellIcon :name="page.icon" :size="14" /> {{ t(page.nameKey) }}
-        </button>
       </div>
       <div class="sys-body">
         <div class="sys-wrap">
@@ -42,14 +31,16 @@
  * ShellCardScreen — 系统页全屏承载（应用管理 / 权限与授权 / 设置）
  *
  * 2026-10-17 壳恢复后：应用面（bedcode 界面）由 ShellHost 直接渲染 AppContent
- * （侧边栏工作台形态），本组件只承载系统页卡——页头 + 三页互切 tab + 页体。
- * 当前页取自路由（/sys/:pageId），与 ShellHost 的分流一致。
+ * （侧边栏工作台形态），本组件只承载系统页卡——页头 + 页体。
+ * 2026-10-19 用户裁决：撤掉页头下的三页互切 tab，每张系统页只展示自己的内容
+ * （设置页不再混着「应用管理 / 权限」的切换入口）；系统页之间的跳转走主屏系统
+ * 网格 / 多任务面板与页内互跳卡片。当前页取自路由（/sys/:pageId），与 ShellHost
+ * 的分流一致。
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { SYS_PAGES } from '../state'
-import { useShellState } from '../useShellState'
+import { SYS_PAGES } from '../composables/state'
 import ShellIcon from './ShellIcon.vue'
 import SysAppsView from '../sys/SysAppsView.vue'
 import SysPermsView from '../sys/SysPermsView.vue'
@@ -57,7 +48,6 @@ import SysSettingsView from '../sys/SysSettingsView.vue'
 
 const { t } = useI18n()
 const route = useRoute()
-const state = useShellState()
 
 const sysPageId = computed(() => route.params.pageId as string)
 const sys = computed(() => SYS_PAGES.find((s) => s.id === sysPageId.value) ?? SYS_PAGES[0])
@@ -95,36 +85,6 @@ const sys = computed(() => SYS_PAGES.find((s) => s.id === sysPageId.value) ?? SY
   font-size: calc(11px * var(--ui-scale));
   color: var(--text-tertiary);
   margin-top: 2px;
-}
-.sys-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 8px 16px 0;
-  border-bottom: 1px solid var(--border);
-}
-.sys-tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  /* token 名以 style.css 为准（--radius-btn 全仓零定义，此前全靠浏览器忽略） */
-  border-radius: var(--radius-button);
-  border: 1px solid transparent;
-  font-size: calc(12px * var(--ui-scale));
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    color 0.15s,
-    background-color 0.15s;
-}
-.sys-tab:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-.sys-tab.on {
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 .sys-body {
   flex: 1;

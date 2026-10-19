@@ -106,13 +106,13 @@
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { SYS_PAGES, chipMetaOf, type AppTone } from '../state'
-import { useShellState } from '../useShellState'
-import { useShellApps } from '../useShellApps'
+import { SYS_PAGES, chipMetaOf, type AppTone } from '../composables/state'
+import { useShellState } from '../composables/useShellState'
+import { useShellApps } from '../composables/useShellApps'
 import ShellIcon from './ShellIcon.vue'
 import ShellAppTile from './ShellAppTile.vue'
 import type { CardKey } from '../types'
-import type { ShellAppEntry } from '../useShellApps'
+import type { ShellAppEntry } from '../composables/useShellApps'
 
 const { t } = useI18n()
 const state = useShellState()

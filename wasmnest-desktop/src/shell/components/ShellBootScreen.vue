@@ -48,8 +48,8 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useShellState } from '../useShellState'
-import { useShellApps } from '../useShellApps'
+import { useShellState } from '../composables/useShellState'
+import { useShellApps } from '../composables/useShellApps'
 
 const { t } = useI18n()
 const state = useShellState()

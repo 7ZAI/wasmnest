@@ -120,9 +120,9 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { isHighRisk } from '../state'
-import { useShellState } from '../useShellState'
-import { useShellApps } from '../useShellApps'
+import { isHighRisk } from '../composables/state'
+import { useShellState } from '../composables/useShellState'
+import { useShellApps } from '../composables/useShellApps'
 import ShellIcon from './ShellIcon.vue'
 
 const { t } = useI18n()

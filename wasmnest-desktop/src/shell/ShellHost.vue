@@ -7,7 +7,7 @@
     <!-- 主屏（'/'）：ShellToolbar + ShellHome + 覆层 -->
     <ShellView v-if="isHome" />
 
-    <!-- 系统页（/sys/*）：壳标题栏 + 系统页卡（页头 + tabs + 三页互切）。
+    <!-- 系统页（/sys/*）：壳标题栏 + 系统页卡（页头 + 页体，2026-10-19 起无互切 tab）。
          此前系统页用一颗 position:fixed 的悬浮返回胶囊当导航——胶囊压在页头左上角，
          正好盖住系统页图标与标题（用户反馈的「图标被入侵/显示不全」根因）。
          现在三种面（主屏 / 系统页 / 应用态）共用同一行常驻标题栏，页体永远从
@@ -96,14 +96,14 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Toaster, type ToasterProps } from 'vue-sonner'
 import SplashLoading from '@/components/SplashLoading.vue'
-import AppMountSlot from '@/components/AppMountSlot.vue'
+import AppMountSlot from '@/shell/mount/AppMountSlot.vue'
 import { useTheme } from '@/composables/useTheme'
 import { useFontSize } from '@/composables/useFontSize'
 import { usePlatform } from '@/composables/usePlatform'
 import { useSettingsStore } from '@/stores/settings'
-import { useShellState } from './useShellState'
-import { useShellApps, pluginIdOfAppRoute } from './useShellApps'
-import ShellView from './ShellView.vue'
+import { useShellState } from './composables/useShellState'
+import { useShellApps, pluginIdOfAppRoute } from './composables/useShellApps'
+import ShellView from './views/ShellView.vue'
 import ShellCardScreen from './components/ShellCardScreen.vue'
 import ShellToolbar from './components/ShellToolbar.vue'
 import ShellNotificationPanel from './components/ShellNotificationPanel.vue'
@@ -111,9 +111,9 @@ import ShellTaskSwitcher from './components/ShellTaskSwitcher.vue'
 import ShellContextMenu from './components/ShellContextMenu.vue'
 import ShellDialogLayer from './components/ShellDialogLayer.vue'
 import ShellBootScreen from './components/ShellBootScreen.vue'
-import FsAuthDialog from '@/components/FsAuthDialog.vue'
-import NetworkAuthDialog from '@/components/NetworkAuthDialog.vue'
-import { useHomeSearch } from './useHomeSearch'
+import FsAuthDialog from '@/shell/auth/FsAuthDialog.vue'
+import NetworkAuthDialog from '@/shell/auth/NetworkAuthDialog.vue'
+import { useHomeSearch } from './composables/useHomeSearch'
 
 const { t } = useI18n()
 const route = useRoute()

@@ -20,7 +20,7 @@ import './style.css'
 // `src/shell/**` 组件按类名消费）。必须在这里接线：这些类跨 9 个组件复用，只能放全局
 // 样式表；漏掉这行 import 时类名全部无样式（图标无底色、状态点塌成 0×0、壁纸失效），
 // 而组件侧看不出任何异常——2026-10-17 实机验证 P0-2 即如此。
-import './shell/shell.css'
+import './shell/styles/shell.css'
 
 import ShellHost from './shell/ShellHost.vue'
 import router from './router'

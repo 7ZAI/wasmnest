@@ -24,8 +24,8 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import i18n from '@/i18n'
 import { configureLogger, resetLoggerState, logger } from '@/utils/frontendLogger'
-import SettingsAboutSection from '@/components/settings/SettingsAboutSection.vue'
-import { useUpdateChecker } from '@/composables/useUpdateChecker'
+import SettingsAboutSection from '@/shell/settings/SettingsAboutSection.vue'
+import { useUpdateChecker } from '@/shell/settings/useUpdateChecker'
 
 // ==================== mock Tauri 边界 ====================
 

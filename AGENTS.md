@@ -230,14 +230,14 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 | 任务 | 动手前必读 |
 | --- | --- |
-| 改桌面宿主壳 / 挂载槽 / 系统页 | `wasmnest-desktop/src/main.ts` + `src/shell/**`（`useShellApps.ts` = 应用路由真源）+ §5.2；跑桌面 `test:run` + 真实 `tauri:dev` 目验 |
+| 改桌面宿主壳 / 挂载槽 / 系统页 | `wasmnest-desktop/src/main.ts` + `src/shell/**`（`src/shell/composables/useShellApps.ts` = 应用路由真源）+ §5.2；跑桌面 `test:run` + 真实 `tauri:dev` 目验 |
 | 改移动宿主壳 / 运行面 / 注册表 | `wasmnest-mobile/src/shell/registry.ts`（职责边界：只注册不决策）+ `plugin-sdk-mobile/src/types.ts`（`UIRegistry`）+ §6.4；优先移动 SDK dev-shell 预览 |
 | 改插件机制 / 生命周期 / 能力接线（Rust） | 该端 `src-tauri/src/plugin/**`（每个域一个文件，端口 adapter + 白名单条目同处，**先读文件头注释**）+ 能力仓对应 crate；跑该端 `cargo test` |
 | 改权限 / 授权闸门 | 本端 SDK `rust/src/permission.rs`（词汇真源）+ §7.2；生成物重出（桌面 `gen:permissions`）；跑相关锁 |
 | 改 WIT / ABI / 契约 | §2.4 全链 + `scripts/compose-wit.mjs`；**不在端生成物里改**；改完重拼、重建受影响 app 产物、同步 manifest |
 | 改 SDK（TS / Rust 面） | 该端 `packages/plugin-sdk-*/`（README + `src/types.ts` / `rust/src/lib.rs`）；跑 SDK `test:run`；发布走 `package-sdks.mjs`。**桌面 SDK 的 README / template / dev-shell 仍是旧贡献面形态（已知漂移）——写新代码以应用仓现有 app 为形态基准** |
 | 改构建 / dev 脚本 | 对应脚本头注释（自解释）+ 根 `scripts/app-paths.mjs`；桌面还有 `src/__tests__/scripts/pluginWatchCopy.test.ts` 等脚本锁 |
-| 新增 / 改名 / 停用桌面应用 | 应用仓先按 `../wasmnest-apps/AGENTS.md` §5 清单走；本仓四处注册表 + 一处路由 + 两处锁必须同步：`scripts/plugin-build.js` `PLUGINS`、`scripts/plugin-dev.js` `PLUGINS`、`scripts/dev-run.js` `PLUGIN_WATCH_CMDS`、`src/shell/useShellApps.ts` `SURFACE_ROUTES`（+ `src/router/index.ts` 路由条目）、`hostAppBoundaryLock.test.ts` 的 `APP_ENTRIES` + `release-manifest.json` |
+| 新增 / 改名 / 停用桌面应用 | 应用仓先按 `../wasmnest-apps/AGENTS.md` §5 清单走；本仓四处注册表 + 一处路由 + 两处锁必须同步：`scripts/plugin-build.js` `PLUGINS`、`scripts/plugin-dev.js` `PLUGINS`、`scripts/dev-run.js` `PLUGIN_WATCH_CMDS`、`src/shell/composables/useShellApps.ts` `SURFACE_ROUTES`（+ `src/router/index.ts` 路由条目）、`hostAppBoundaryLock.test.ts` 的 `APP_ENTRIES` + `release-manifest.json` |
 | 新增 / 停用移动应用 | 移动构建自动扫描 `apps/*/mobile`（无注册表）；只需同步 `release-manifest.json`；机制差异读 §5.4 |
 | 改跨端传输 / 认证 / 配对面 | §9.2；改完去 `../wasmnest-test/cross-end-tests` 跑真实互连（零 mock） |
 | 改 Android 原生（Kotlin / manifest / gradle） | `wasmnest-mobile/src-tauri/gen/android/**`；改 Kotlin 必须 gradlew 验证；`tauri android init` 重建后手工恢复手写面 |
@@ -288,7 +288,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 - **宿主壳**（`wasmnest-desktop/src/`）：主屏 + 系统页（`/sys/:pageId`：设置 / 应用管理 / 权限与授权）+ 挂载槽。**宿主零业务状态**——不持有任何 app 内部状态（装载即建、卸载即销毁）。
 - **应用是独立构建的挂载包**：宿主经 `plugin_get_asset_dir` 拿到产物根目录，`useAppMount` 动态 import `<id>/index.js`，入口契约 `mountApp(root, env): Promise<AppMountHandle>`（`AppMountEnv`：`appId` / `invoke` / `appInvoke` / `appStorage*` / `locale` / `theme` / `initialRoute` / `onEvent`）。**前端不拼产物路径**（resource 层级差一层就是 404 静默断裂，有锁）。
-- **路由真源**：`src/shell/useShellApps.ts` 的 `SURFACE_ROUTES` + `src/router/index.ts` 逐条路由（应用路由全部指向 `AppMountSlot`；未匹配落显性 not-found，不白屏）。新增桌面应用必须同步（§4）。
+- **路由真源**：`src/shell/composables/useShellApps.ts` 的 `SURFACE_ROUTES` + `src/router/index.ts` 逐条路由（应用路由全部指向 `AppMountSlot`；未匹配落显性 not-found，不白屏）。新增桌面应用必须同步（§4）。
 - **热更新闭环**：改 app 源码 → vite rebuild → 复制进资源目录 → 宿主 watcher `plugin:dev-reload` 重载前端；`tauri:dev` 自带缺口预建（别在宿主冷构建期间手工往 `src-tauri/` 拷产物，会触发重启风暴，机制见 `scripts/dev-run.js` 头注释）。
 - **壳标题栏常驻**：所有 app 页面共用壳标题栏，应用只占其下区域（`appChromeLock` 钉住）。
 

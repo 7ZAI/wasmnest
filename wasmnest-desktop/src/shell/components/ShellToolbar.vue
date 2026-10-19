@@ -142,8 +142,8 @@ import { useI18n } from 'vue-i18n'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useSettingsStore } from '@/stores/settings'
 import { useTheme } from '@/composables/useTheme'
-import { useShellState } from '../useShellState'
-import { useShellSettings } from '../useShellSettings'
+import { useShellState } from '../composables/useShellState'
+import { useShellSettings } from '../composables/useShellSettings'
 import ShellIcon from './ShellIcon.vue'
 
 const { t } = useI18n()

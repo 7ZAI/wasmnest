@@ -15,7 +15,7 @@ import hostEn from '@/i18n/host-en'
  * 少一边 = 该语言下回显 key 原文，与「禁止硬编码 / 双语同步」同一条纪律。
  */
 
-const SCAN_ROOTS = ['src/shell', 'src/components/AppMountSlot.vue']
+const SCAN_ROOTS = ['src/shell']
 
 /** 递归收集待扫描源码（.vue / .ts） */
 function collectSources(): string[] {

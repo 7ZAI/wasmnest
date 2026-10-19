@@ -161,7 +161,7 @@ export async function networkAuthRespond(
 import {
   type AuthStrategy,
   type PluginAuthOverview,
-} from './authPolicy'
+} from '@/shell/auth/authPolicy'
 
 /**
  * 应用授权读模型（spec §9.3）：策略 + 授权记录 + 第一方免询问项

@@ -26,7 +26,7 @@ import { appPath } from '../support/appPaths'
  */
 
 const HOST_SHELL = 'src/shell/ShellHost.vue'
-const MOUNT_SLOT = 'src/components/AppMountSlot.vue'
+const MOUNT_SLOT = 'src/shell/mount/AppMountSlot.vue'
 // 桌面四应用工程目录（三仓拆分 §5-E7：住应用仓 apps/<slug>/desktop）
 const DESKTOP_APPS = ['agent-hub', 'ai-chatbox', 'bedcode', 'file-transfer'].map((slug) =>
   appPath(slug, 'desktop'),

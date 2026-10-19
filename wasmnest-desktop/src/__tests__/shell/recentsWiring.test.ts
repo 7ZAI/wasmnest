@@ -109,7 +109,7 @@ describe('全屏层动作走唯一实现（不复制编排）', () => {
 describe('命令面板退役（工具栏搜索入口按用户裁决移除）', () => {
   it('组件文件已删，壳内不再挂载 / 不再有开关', () => {
     expect(existsSync('src/shell/components/ShellCommandPalette.vue')).toBe(false)
-    const shellSources = [HOST, TOOLBAR, 'src/shell/useShellState.ts'].map((p) => read(p))
+    const shellSources = [HOST, TOOLBAR, 'src/shell/composables/useShellState.ts'].map((p) => read(p))
     for (const src of shellSources) {
       const code = stripComments(src)
       expect(code).not.toContain('ShellCommandPalette')
@@ -135,7 +135,7 @@ describe('图标还原为应用自带那张', () => {
   })
 
   it('注册表投影把 manifest.icon 带进应用条目（图标文件名单一来源）', () => {
-    const apps = stripComments(read('src/shell/useShellApps.ts'))
+    const apps = stripComments(read('src/shell/composables/useShellApps.ts'))
     expect(apps).toMatch(/iconFile:\s*typeof info\.icon/)
   })
 })

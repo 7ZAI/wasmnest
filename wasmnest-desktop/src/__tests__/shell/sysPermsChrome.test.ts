@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs'
 const HOST_SHELL = 'src/shell/ShellHost.vue'
 const SYS_SCREEN = 'src/shell/components/ShellCardScreen.vue'
 const SYS_PERMS = 'src/shell/sys/SysPermsView.vue'
-const AUTH_VIEW = 'src/views/AuthorizationView.vue'
+const AUTH_VIEW = 'src/shell/auth/AuthorizationView.vue'
 const ICONS = 'src/shell/components/ShellIcon.vue'
 
 const read = (path: string): string => readFileSync(path, 'utf-8')
@@ -59,7 +59,7 @@ describe('L1 系统页 = 常驻标题栏 + 系统页卡（无浮层压页头）'
     expect(toolbarAt, '标题栏必须排在系统页卡之前（页体只占其下方区域）').toBeLessThan(screenAt)
   })
 
-  it('系统页卡自身是定高纵向 flex（页头 / tabs / 页体三段各自让位给滚动）', () => {
+  it('系统页卡自身是定高纵向 flex（页头 / 页体两段各自让位给滚动）', () => {
     const src = read(SYS_SCREEN)
     const rule = (src.match(/\.card-screen\s*\{[^}]*\}/)?.[0] ?? '').replace(/\/\*[\s\S]*?\*\//g, '')
     expect(rule, '.card-screen 必须 flex: 1 + min-height: 0（否则页体会顶出窗口）').toMatch(
@@ -67,6 +67,19 @@ describe('L1 系统页 = 常驻标题栏 + 系统页卡（无浮层压页头）'
     )
     expect(src, '页体必须独立滚动（标题栏与页头不跟着滚）').toMatch(
       /\.sys-body\s*\{[^}]*overflow-y:\s*auto/,
+    )
+  })
+
+  it('系统页卡不再渲染三页互切 tab（2026-10-19 用户裁决：设置页只展示设置，余同）', () => {
+    const template = templateOf(read(SYS_SCREEN))
+    // 三张系统页仍按路由各自承载（撤的是互切入口，不是页面本身）
+    for (const view of ['SysAppsView', 'SysPermsView', 'SysSettingsView']) {
+      expect(template, `系统页卡缺 ${view} 承载`).toContain(`<${view}`)
+    }
+    expect(template, '系统页卡不得回接互切 tab 条').not.toContain('sys-tab')
+    expect(template, '系统页卡不得回接 tablist 语义').not.toContain('role="tablist"')
+    expect(read(SYS_SCREEN), '系统页卡不得残留 tab 样式（防「删模板留样式」）').not.toMatch(
+      /\.sys-tab\b/,
     )
   })
 })
@@ -112,7 +125,7 @@ describe('L3 权限页资源分区带 SVG 图标', () => {
 
 describe('L4 图标图块基规则在壳共享样式（scoped 不外泄）', () => {
   it('shell.css 定义 .glyph-box 且 flex 居中（此前只在 ShellAppTile scoped 里）', () => {
-    const css = read('src/shell/shell.css')
+    const css = read('src/shell/styles/shell.css')
     const rule = (css.match(/\.glyph-box\s*\{[^}]*\}/)?.[0] ?? '').replace(
       /\/\*[\s\S]*?\*\//g,
       '',

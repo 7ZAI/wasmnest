@@ -33,8 +33,8 @@
  */
 import { computed, ref, watch } from 'vue'
 import ShellIcon from './ShellIcon.vue'
-import { appIconUrl } from '../appIcons'
-import type { AppTone } from '../state'
+import { appIconUrl } from '../composables/appIcons'
+import type { AppTone } from '../composables/state'
 
 const props = withDefaults(
   defineProps<{

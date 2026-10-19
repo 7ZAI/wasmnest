@@ -108,9 +108,9 @@
  * 卸载带数据清理确认（ShellDialogLayer uninstall 分支）。
  */
 import { useI18n } from 'vue-i18n'
-import { chipMetaOf, isHighRisk } from '../state'
-import { useShellState } from '../useShellState'
-import { useShellApps, type ShellAppEntry } from '../useShellApps'
+import { chipMetaOf, isHighRisk } from '../composables/state'
+import { useShellState } from '../composables/useShellState'
+import { useShellApps, type ShellAppEntry } from '../composables/useShellApps'
 import ShellIcon from '../components/ShellIcon.vue'
 import ShellCard from '../components/ShellCard.vue'
 

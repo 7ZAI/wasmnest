@@ -18,13 +18,13 @@
  */
 import { createRouter, createWebHistory } from 'vue-router'
 
-import AppMountSlot from '@/components/AppMountSlot.vue'
+import AppMountSlot from '@/shell/mount/AppMountSlot.vue'
 import {
   TERMINAL_PLUGIN_ID,
   AGENT_HUB_PLUGIN_ID,
   AI_CHATBOX_PLUGIN_ID,
   FILE_TRANSFER_PLUGIN_ID,
-} from '@/shell/useShellApps'
+} from '@/shell/composables/useShellApps'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -33,7 +33,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'shell-home',
-      component: () => import('@/shell/ShellView.vue'),
+      component: () => import('@/shell/views/ShellView.vue'),
     },
     {
       // 系统页（宿主自有管理面）：设置 / 应用管理 / 权限与授权，与业务应用同构产卡
@@ -126,7 +126,7 @@ const router = createRouter({
       // 统一落显性 not-found 页，不白屏
       path: '/:pathMatch(.*)*',
       name: 'not-found',
-      component: () => import('@/views/NotFoundView.vue'),
+      component: () => import('@/shell/views/NotFoundView.vue'),
     },
   ],
 })

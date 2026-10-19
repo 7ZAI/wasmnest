@@ -36,8 +36,8 @@ const shellState = vi.hoisted(() => {
   }
 })
 
-vi.mock('@/shell/useShellState', () => ({ useShellState: () => shellState }))
-vi.mock('@/shell/useShellApps', () => ({
+vi.mock('@/shell/composables/useShellState', () => ({ useShellState: () => shellState }))
+vi.mock('@/shell/composables/useShellApps', () => ({
   useShellApps: () => ({
     appOf: () => undefined,
     tones: { value: {} },

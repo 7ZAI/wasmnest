@@ -101,13 +101,13 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { SYS_PAGES, chipMetaOf } from '../state'
-import { useShellState } from '../useShellState'
-import { useShellApps } from '../useShellApps'
-import { useShellSettings } from '../useShellSettings'
+import { SYS_PAGES, chipMetaOf } from '../composables/state'
+import { useShellState } from '../composables/useShellState'
+import { useShellApps } from '../composables/useShellApps'
+import { useShellSettings } from '../composables/useShellSettings'
 import ShellIcon from './ShellIcon.vue'
 import ShellAppTile from './ShellAppTile.vue'
-import type { ShellAppEntry } from '../useShellApps'
+import type { ShellAppEntry } from '../composables/useShellApps'
 
 const { t } = useI18n()
 const state = useShellState()

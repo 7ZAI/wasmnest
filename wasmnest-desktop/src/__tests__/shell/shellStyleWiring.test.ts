@@ -5,7 +5,7 @@ import { join } from 'node:path'
 /**
  * 壳共享样式接线锁（2026-10-17 验证 P0-2 的回归锁）
  *
- * 背景：`src/shell/shell.css` 曾是一份 12KB 的**零引用死文件**——里面是 9 个壳组件
+ * 背景：`src/shell/styles/shell.css` 曾是一份 12KB 的**零引用死文件**——里面是 9 个壳组件
  * 依类名消费的全部共享样式（tone 底色 / 状态点 / 按钮 / chip / 壁纸 / 动效）。
  * 没有任何 import 时，样式全部静默失效：图标无底色、`.sdot` 塌成 0×0、壁纸不显示，
  * 而组件代码、类型检查、单测全绿（类名在模板里照写，CSS 只是没进构建）。
@@ -14,7 +14,7 @@ import { join } from 'node:path'
  * shell.css 里定义（防「删样式但类名还在模板里」同形态回退）。
  */
 
-const SHELL_CSS = 'src/shell/shell.css'
+const SHELL_CSS = 'src/shell/styles/shell.css'
 const MAIN_TS = 'src/main.ts'
 
 /** 从 CSS 文本抓顶层类选择器（`.foo` / `.foo.bar` 取首个）；忽略声明块内的值 */
@@ -34,11 +34,9 @@ function shellSourceText(): string {
       else if (/\.(vue|ts)$/.test(entry.name)) out.push(readFileSync(p, 'utf-8'))
     }
   }
+  // 壳域自 2026-10-19 目录整理后收在 src/shell/**：挂载槽（mount/AppMountSlot.vue）
+  // 与系统页（sys/）均在 shell 树内，walk 自然覆盖，无需特判路径
   walk('src/shell')
-  // 应用挂载槽属于壳机制面（P2-9 的两个失效 token 就在这里）
-  if (statSync('src/components/AppMountSlot.vue').isFile()) {
-    out.push(readFileSync('src/components/AppMountSlot.vue', 'utf-8'))
-  }
   return out.join('\n')
 }
 
@@ -46,7 +44,7 @@ describe('壳共享样式接线锁', () => {
   it('shell.css 由入口 main.ts 引入，且排在 style.css（token）之后', () => {
     const main = readFileSync(MAIN_TS, 'utf-8')
     const styleIdx = main.indexOf("import './style.css'")
-    const shellIdx = main.indexOf("import './shell/shell.css'")
+    const shellIdx = main.indexOf("import './shell/styles/shell.css'")
     expect(styleIdx, 'main.ts 必须引入 style.css（token 真源）').toBeGreaterThanOrEqual(0)
     expect(shellIdx, 'main.ts 必须引入 shell.css（壳共享样式）').toBeGreaterThanOrEqual(0)
     expect(shellIdx, 'shell.css 必须在 style.css 之后引入').toBeGreaterThan(styleIdx)

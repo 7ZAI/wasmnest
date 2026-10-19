@@ -51,8 +51,8 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useShellState } from '../useShellState'
-import { useShellApps } from '../useShellApps'
+import { useShellState } from '../composables/useShellState'
+import { useShellApps } from '../composables/useShellApps'
 import ShellIcon from './ShellIcon.vue'
 
 const { t } = useI18n()

@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs'
  * - 宿主侧命令必须真实注册且状态已装配（否则命令在运行期是 unknown command）。
  */
 
-const USE_APP_MOUNT = 'src/composables/useAppMount.ts'
+const USE_APP_MOUNT = 'src/shell/mount/useAppMount.ts'
 const LIB_RS = 'src-tauri/src/lib.rs'
 const ASSETS_RS = 'src-tauri/src/plugin/assets.rs'
 
