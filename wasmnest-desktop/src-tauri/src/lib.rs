@@ -437,24 +437,52 @@ pub fn run() {
             // 生产模式下 resolve 指向安装目录的 resources/...（打包时已包含）
             // 因此 dev 模式回退到源码目录
             let plugins_dir = {
-                let resolved = app_handle
-                    .path()
-                    .resolve("resources/plugins/desktop", tauri::path::BaseDirectory::Resource)
-                    .expect("Failed to resolve plugins directory");
-                if resolved.exists() {
-                    resolved
-                } else {
-                    // dev 模式 fallback：使用源码目录
-                    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
-                    let fallback = std::path::PathBuf::from(manifest_dir)
-                        .join("resources")
-                        .join("plugins")
-                        .join("desktop");
-                    tracing::info!(
-                        "Plugin resolved path not found, falling back to source dir: {:?}",
-                        fallback
-                    );
-                    fallback
+                // 外部指定优先（wasm-app 工程 dev：`WASMNEST_PLUGINS_DIR`）
+                //
+                // 宿主以**构建产物**（`tauri build --debug` 的可运行 app image）分发时，
+                // 不再有「平台仓源码目录」可 fallback：各 wasm-app 把自己的产物写进
+                // 该目录（`<dir>/<appId>/…`），宿主侧 PluginDevWatcher 监听它触发热重载。
+                // 未设置本变量时行为**逐字不变**（发布链路与平台仓 dev 均不受影响）。
+                let from_env = std::env::var("WASMNEST_PLUGINS_DIR")
+                    .ok()
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty())
+                    .map(std::path::PathBuf::from);
+                match from_env {
+                    Some(dir) => {
+                        if dir.exists() {
+                            tracing::info!("Plugin dir from WASMNEST_PLUGINS_DIR: {:?}", dir);
+                        } else {
+                            // fail-visible：拼错路径会得到一个空应用列表，必须喊出来
+                            tracing::error!(
+                                "WASMNEST_PLUGINS_DIR 指向的目录不存在，内置应用将为空: {:?}",
+                                dir
+                            );
+                        }
+                        dir
+                    }
+                    None => {
+                        let resolved = app_handle
+                            .path()
+                            .resolve("resources/plugins/desktop", tauri::path::BaseDirectory::Resource)
+                            .expect("Failed to resolve plugins directory");
+                        if resolved.exists() {
+                            resolved
+                        } else {
+                            // dev 模式 fallback：使用源码目录
+                            let manifest_dir =
+                                std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+                            let fallback = std::path::PathBuf::from(manifest_dir)
+                                .join("resources")
+                                .join("plugins")
+                                .join("desktop");
+                            tracing::info!(
+                                "Plugin resolved path not found, falling back to source dir: {:?}",
+                                fallback
+                            );
+                            fallback
+                        }
+                    }
                 }
             };
 
