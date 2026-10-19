@@ -39,7 +39,7 @@
 //!
 //! **票 08 批次三迁入平台仓测试面**：本锁同时读桌面宿主与能力仓 server 侧 crate 的源码
 //! （L2 消费点两处都有）；两者在平台仓装配下同场可读——宿主
-//! `wasmnest-desktop/src-tauri/src` + submodule 挂载 `packages/<crate>/src`。基准 =
+//! `wasmnest-desktop/src-tauri/src` + 能力仓 `../wasmnest-lib/<crate>/src`。基准 =
 //! 平台仓根（`src-tauri` 上溯两级），白名单 / 扫描根的相对键均相对它书写。
 
 // ==================== 仓布局定位（平台仓视角） ====================
@@ -63,33 +63,42 @@ fn lib_src_roots() -> Vec<std::path::PathBuf> {
     wasmnest_desktop_lib::wasm_core::crate_boundary_lock::server_lib_src_roots()
 }
 
+/// 能力仓根（平台仓同级兄弟目录；固定布局，与 Cargo path 依赖一致）
+fn lib_root() -> std::path::PathBuf {
+    platform_root().join("..").join("wasmnest-lib")
+}
+
 /// 把「相对平台仓根」的键还原成绝对路径（白名单反向自检 / 读文件用）
 fn abs_of(rel: &str) -> std::path::PathBuf {
     platform_root().join(rel)
 }
 
-/// 把扫描到的绝对路径归一为「相对平台仓根」的显示键（白名单比对用）
+/// 把扫描到的绝对路径归一为显示键（白名单比对用）
 ///
-/// 第一步 canonicalize：wasm-core 的公开登记表给出的路径含 `wasmnest-wasm-core/../
-/// wasmnest-<crate>` 这类未规范化段（其基准是 crate 目录的父目录），不归一化会得到
-/// 无法与白名单字面量比对的键。
+/// 平台仓内路径 → 仓内相对键；能力仓路径（兄弟目录）→ `../wasmnest-lib/<rel>`，
+/// 与白名单字面量同一形态。第一步 canonicalize：wasm-core 的公开登记表给出的路径
+/// 含 `wasmnest-wasm-core/../wasmnest-<crate>` 这类未规范化段（其基准是 crate 目录
+/// 的父目录），不归一化会得到无法与白名单字面量比对的键。
 fn rel_key(path: &std::path::Path) -> String {
     let root = std::fs::canonicalize(platform_root()).unwrap_or_else(|_| platform_root());
+    let lib = std::fs::canonicalize(lib_root()).unwrap_or_else(|_| lib_root());
     let normalized = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    normalized
-        .strip_prefix(&root)
-        .unwrap_or(&normalized)
-        .to_string_lossy()
-        .replace('\\', "/")
+    if let Ok(rel) = normalized.strip_prefix(&root) {
+        return rel.to_string_lossy().replace('\\', "/");
+    }
+    if let Ok(rel) = normalized.strip_prefix(&lib) {
+        return format!("../wasmnest-lib/{}", rel.to_string_lossy().replace('\\', "/"));
+    }
+    normalized.to_string_lossy().replace('\\', "/")
 }
 
 /// 允许触碰 L2 桥接面（`utils::auth::auth_center`）的宿主模块 —— 约束①白名单
 ///
 /// 逐条理由：
 /// - `utils/auth/auth_center.rs`：L2 桥接门本体（策略裁决 + 配对/QR/trust 零解析转发）；
-/// - `packages/wasmnest-server-http/src/middleware/auth_gateway.rs`（票 04 前是
+/// - `../wasmnest-lib/wasmnest-server-http/src/middleware/auth_gateway.rs`（票 04 前是
 ///   `src/server/http/middleware/auth_gateway.rs`）/
-///   `packages/wasmnest-server-websocket/src/channel/plugin.rs`（票 05 前是
+///   `../wasmnest-lib/wasmnest-server-websocket/src/channel/plugin.rs`（票 05 前是
 ///   `src/server/websocket/channel/plugin.rs`）：**安全闸门**——HTTP 网关与 WS 通道的
 ///   认证中间件（唯一正当的裁决消费方）；两个面抽 crate 后它们都经 `base::ports` 的
 ///   `AuthCenter` 端口字段取裁决，**扫描面必须跟着代码走**（见 `l2_scan_roots()`）：
@@ -129,14 +138,14 @@ fn rel_key(path: &std::path::Path) -> String {
 const L2_CONSUMER_ALLOWLIST: &[&str] = &[
     "wasmnest-desktop/src-tauri/src/utils/auth/auth_center.rs",
     "wasmnest-desktop/src-tauri/src/utils/session_gateway.rs",
-    "packages/wasmnest-wasm-core/src/test_support/common.rs",
+    "../wasmnest-lib/wasmnest-wasm-core/src/test_support/common.rs",
     "wasmnest-desktop/src-tauri/src/utils/auth/test_tokens.rs",
-    "packages/wasmnest-server-http/src/middleware/auth_gateway.rs",
-    "packages/wasmnest-server-websocket/src/channel/plugin.rs",
+    "../wasmnest-lib/wasmnest-server-http/src/middleware/auth_gateway.rs",
+    "../wasmnest-lib/wasmnest-server-websocket/src/channel/plugin.rs",
     "wasmnest-desktop/src-tauri/src/server/ports_impl.rs",
     "wasmnest-desktop/src-tauri/src/plugin/auth.rs",
-    "packages/wasmnest-wasm-core/src/manager/host/boot.rs",
-    "packages/wasmnest-wasm-core/src/manager/host/activation.rs",
+    "../wasmnest-lib/wasmnest-wasm-core/src/manager/host/boot.rs",
+    "../wasmnest-lib/wasmnest-wasm-core/src/manager/host/activation.rs",
 ];
 
 /// L2 桥接门的导出面（函数 / 常量 / `pub use` 别名）—— 锁 1b 的登记表
@@ -516,7 +525,7 @@ fn l2_bridge_public_surface_is_pinned() {
     // 父模块不得把桥接面转发出去（`pub use auth_center …` / `pub use auth_center::…`）
     // `src/utils/auth.rs` 已随无消费者整体退役（2026-10-10），parent 检查只剩 host_api.rs
     // （能力仓 wasm-core 的 host_api.rs，平台仓 submodule 挂在 `packages/` 下）
-    for parent in ["packages/wasmnest-wasm-core/src/host_api.rs"] {
+    for parent in ["../wasmnest-lib/wasmnest-wasm-core/src/host_api.rs"] {
         let content = std::fs::read_to_string(abs_of(parent)).expect("read parent module");
         let forwards: Vec<String> = production_code_lines(&content)
             .into_iter()
@@ -648,9 +657,9 @@ fn l2_gate_returns_decision_only() {
 #[test]
 fn l2_identity_payload_is_pinned_identity_only() {
     // server-lib-split：AuthenticatedIdentity 真源在 wasmnest-server-base crate
-    // （packages/wasmnest-server-base/src/identity.rs；utils/auth/identity.rs 为
+    // （../wasmnest-lib/wasmnest-server-base/src/identity.rs；utils/auth/identity.rs 为
     // re-export 薄壳），锁跨 crate 读真源文件
-    let path = abs_of("packages/wasmnest-server-base/src/identity.rs");
+    let path = abs_of("../wasmnest-lib/wasmnest-server-base/src/identity.rs");
     let content = std::fs::read_to_string(&path).expect("read identity module");
     let body = content
         .split("pub struct AuthenticatedIdentity {")
@@ -817,8 +826,8 @@ fn host_switches_on_role_predicates_not_role_values() {
 /// （`validation.rs` 的取值域断言在内联测试段内，扫描已按 `production_code_lines`
 /// 截断，故**不需要**登记——这正是白名单必须保持干净的原因。）
 ///
-/// `packages/wasmnest-wasm-core/src/manifest.rs`：中性 `PluginKind` 枚举的**定义处**
+/// `../wasmnest-lib/wasmnest-wasm-core/src/manifest.rs`：中性 `PluginKind` 枚举的**定义处**
 /// （票 02 M4，类型词汇从 SDK 迁入 wasm-core）——变体名与 wire 串只作为词表声明出现
 /// （enum 声明 / `as_str` 映射），不含按角色身份的宿主分支；与 SDK crate（在扫描根
 /// 之外）的定义地位等同。后续若在 manifest.rs 内新增角色值分支，须另择文件或拆出。
-const ROLE_VALUE_ALLOWLIST: &[&str] = &["packages/wasmnest-wasm-core/src/manifest.rs"];
+const ROLE_VALUE_ALLOWLIST: &[&str] = &["../wasmnest-lib/wasmnest-wasm-core/src/manifest.rs"];

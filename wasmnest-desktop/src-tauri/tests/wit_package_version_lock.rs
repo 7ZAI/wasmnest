@@ -1,8 +1,8 @@
 //! WIT 包版本单点化锁（ADR 0051 D3/D4 · `wit-package-semver` 票 02）
 //!
-//! 契约版本的唯一手写处 = 仓根 `contracts/wasmnest-plugin-package.rs`（Rust 常量，
-//! `PACKAGE_NAME` + `PACKAGE_VERSION`；票 03 由 JSON 迁为 Rust 常量——能力域 crate 的
-//! `inventory` 静态自报要求编译期常量，JSON 只能运行期解析）。
+//! 契约版本的唯一手写处 = 能力仓 `wasmnest-contract` crate 的 `src/lib.rs`
+//! （Rust 常量，`PACKAGE_NAME` + `PACKAGE_VERSION`；票 03 由 JSON 迁为 Rust 常量——
+//! 能力域 crate 的 `inventory` 静态自报要求编译期常量，JSON 只能运行期解析）。
 //! 双端 `compose.json` 的 `package` 字段只声明**包名**（不持版本字面量——否则
 //! bump 要改三处且清单退化成第二真源）；端生成物 `wasmnest.wit` 的 package 行由
 //! `scripts/compose-wit.mjs` 按真源拼装；WIT 源文件（11 个）自带版本字面量并被
@@ -16,7 +16,7 @@
 //!
 //! ## 判据
 //!
-//! 1. **真源形状**：`contracts/wasmnest-plugin-package.rs` 在场，`PACKAGE_NAME` 为
+//! 1. **真源形状**：`wasmnest-contract/src/lib.rs` 在场，`PACKAGE_NAME` 为
 //!    `wasmnest:<ns>` 形态、`PACKAGE_VERSION` 为三段 semver（防把版本写成 `0.1` /
 //!    `v0.1.0` / 空串这类 linker 不认的形态）、`PACKAGE` 与前两者自洽；并断言**能力域
 //!    crate 的 const 导出名清单**（`routing.rs` 的 `EXPORTS`，inventory 静态自报要求
@@ -39,14 +39,15 @@ fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// 能力仓 WIT 包版本真源（ADR 0051 D3）——Rust 常量文件，`const` 上下文可用
+/// 能力仓 WIT 包版本真源（ADR 0051 D3）——零依赖契约 crate 的常量文件
 ///
-/// 能力仓经 submodule 挂在平台仓 `packages/`，contracts 随能力仓仓根。
-const PACKAGE_SOURCE: &str = "packages/contracts/wasmnest-plugin-package.rs";
+/// 能力仓经 submodule 挂在平台仓 `packages/`；契约常量随 crate 边界走，
+/// 不再悬在仓根（`include!` 跨目录形态已退役）。
+const PACKAGE_SOURCE: &str = "../wasmnest-lib/wasmnest-contract/src/lib.rs";
 
 /// 能力域 crate 里必须与真源逐字一致的 const 导出名清单（inventory 静态自报，
 /// 字面量无法经 `contract::export_item` 派生，故由本锁钉住）
-const DOMAIN_EXPORT_LITERALS: &[&str] = &["packages/wasmnest-discovery-engine/src/routing.rs"];
+const DOMAIN_EXPORT_LITERALS: &[&str] = &["../wasmnest-lib/wasmnest-discovery-engine/src/routing.rs"];
 
 /// 生产 WIT 源文件（11 个）——`package` 行必须与真源逐字一致
 ///
@@ -60,13 +61,13 @@ const DOMAIN_EXPORT_LITERALS: &[&str] = &["packages/wasmnest-discovery-engine/sr
 /// 轻量契约房（只持 WIT，实现按端住宿主），不入 provider bindgen 面）。两类都要在本
 /// 锁在场，否则 provider 侧与 guest 侧版本漂移无人拦。
 const WIT_SOURCES: &[&str] = &[
-    "packages/wasmnest-wasm-core/wit/core.wit",
-    "packages/wasmnest-pty-engine/wit/pty.wit",
-    "packages/wasmnest-server-http/wit/http.wit",
-    "packages/wasmnest-ws-client-engine/wit/ws.wit",
-    "packages/wasmnest-server-peer-net/wit/peer.wit",
-    "packages/wasmnest-discovery-engine/wit/mdns.wit",
-    "packages/wasmnest-notify-engine/wit/notify.wit",
+    "../wasmnest-lib/wasmnest-wasm-core/wit/core.wit",
+    "../wasmnest-lib/wasmnest-pty-engine/wit/pty.wit",
+    "../wasmnest-lib/wasmnest-server-http/wit/http.wit",
+    "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit",
+    "../wasmnest-lib/wasmnest-server-peer-net/wit/peer.wit",
+    "../wasmnest-lib/wasmnest-discovery-engine/wit/mdns.wit",
+    "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit",
     "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-http.wit",
     "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-ws.wit",
     "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-desktop.wit",
@@ -196,7 +197,7 @@ fn wit_source_package_lines_match_source_of_truth() {
         assert_eq!(
             package_line(&path),
             expected,
-            "{} 的 package 行与仓根 {} 漂移——版本化后 import 名逐字匹配，\
+            "{} 的 package 行与契约真源 {} 漂移——版本化后 import 名逐字匹配，\
              源文件版本漂移＝运行期实例化失败（编译面不会红）",
             path.display(),
             PACKAGE_SOURCE

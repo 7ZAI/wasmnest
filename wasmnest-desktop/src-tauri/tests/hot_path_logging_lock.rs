@@ -1,6 +1,6 @@
 //! 热路径日志风暴 · 防回接锁
 //!
-//! 对应 AGENTS.md §8 日志红线②「热路径克制（PTY 输出 / WS 每帧不打逐帧日志，
+//! 对应 docs/security.md §2 日志红线②「热路径克制（PTY 输出 / WS 每帧不打逐帧日志，
 //! 高频 API 走 `debug!`）」。这条红线里真正会出事的一半不是「级别选错」而是
 //! **在按消息 / 按帧 / 按文件操作触发的位置写了日志**：级别再低，单条日志也会
 //! 按触发频率线性膨胀，把开发日志冲成噪声、淹没真正的 warn / error。
@@ -171,27 +171,27 @@ fn debug_log_lines(body: &str) -> Vec<usize> {
 ///
 /// **路径可以是宿主 `src/` 以外的位置**：热路径随能力域 crate 化（wasm-core-lib-split
 /// 票 03/04）后会离开 `src-tauri/src`，锁必须跟着走，否则「函数不在登记里」会被
-/// 读成「扫描器失效」。WS 帧路径现居**仓库根** `packages/wasmnest-server-websocket/src/
-/// plugin_binding.rs`（2026-10-07 能力域 lib 迁根，故登记路径是 `../../packages/…`）。
+/// 读成「扫描器失效」。WS 帧路径现居**能力仓** `../wasmnest-lib/wasmnest-server-websocket/src/
+/// plugin_binding.rs`（2026-10-07 能力域 lib 迁根，故登记路径是 `../../../wasmnest-lib/…`）。
 const LOCKED_SITES: &[(&str, &str, &str)] = &[
     (
         // wasm-core-whole-crate：wasm_core 整核迁入 `wasmnest-wasm-core` crate，
         // 热路径随迁，锁路径指向 crate 内文件（相对 src-tauri 根）。
-        // 票 06 修正：wasm-core 2026-10-08 由 `wasmnest-desktop/packages/` **迁仓库根**
+        // 票 06 修正：wasm-core 2026-10-08 由 `wasmnest-desktop/packages/` **迁能力仓**
         // `packages/`，相对 `src-tauri` 的正确前缀是 `../../`（与同表
         // `wasmnest-server-websocket` 条目同款）；旧 `../packages/` 解析到已不存在的
         // `wasmnest-desktop/packages/`，会让本锁在「站点文件缺失」上判红而长期不被发现。
-        "../../packages/wasmnest-wasm-core/src/bus.rs",
+        "../../../wasmnest-lib/wasmnest-wasm-core/src/bus.rs",
         "dispatch_publish",
         "按消息触发：PTY 输出通知 / WS 事件流等数据面 topic 走这里",
     ),
     (
-        "../../packages/wasmnest-wasm-core/src/security/fs_auth.rs",
+        "../../../wasmnest-lib/wasmnest-wasm-core/src/security/fs_auth.rs",
         "check",
         "按文件操作触发：插件每次读写都过一次放行判定",
     ),
     (
-        "../../packages/wasmnest-server-websocket/src/plugin_binding.rs",
+        "../../../wasmnest-lib/wasmnest-server-websocket/src/plugin_binding.rs",
         "record_dropped_frame",
         "按帧触发：未导出 events-ws 的插件每条 WS 帧都到这里",
     ),
@@ -303,7 +303,7 @@ fn scanner_detects_planted_and_real_violations() {
     // `plugin_binding::dispatch_frame` 不在 LOCKED_SITES 里，且其函数体确实带
     // `tracing::debug!`（同名函数名一经重命名即失效，见步骤 2b）；把它当锁定站点
     // 扫，必须报违规——证明扫描器跑在真实文件上也能命中，不是只对 fixture 有效。
-    let raw = read_source("../../packages/wasmnest-server-websocket/src/plugin_binding.rs");
+    let raw = read_source("../../../wasmnest-lib/wasmnest-server-websocket/src/plugin_binding.rs");
     let masked = blank_out_comments_and_strings(&raw);
     let real_body = extract_fn_body(&masked, "dispatch_frame").expect("真实文件里必须能抽出 dispatch_frame 函数体");
     assert!(

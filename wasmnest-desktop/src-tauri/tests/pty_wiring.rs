@@ -23,7 +23,7 @@ use support::*;
 
 use wasmnest_desktop_lib::wasm_core::permission::PermissionManager;
 
-/// 读工作区文件（`CARGO_MANIFEST_DIR` = `wasmnest-desktop/src-tauri`，上两级 = 仓库根）
+/// 读工作区文件（`CARGO_MANIFEST_DIR` = `wasmnest-desktop/src-tauri`，上两级 = 平台仓根）
 fn read_workspace(rel: &str) -> String {
     let path: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel);
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{} 不可读: {e}", path.display()))
@@ -103,7 +103,7 @@ fn kill_all_reclaim_is_wired_into_shutdown() {
 /// 的 purge 断言兜住（本文件只锁调用点存在性）。
 #[test]
 fn deactivate_path_triggers_domain_purge_hook() {
-    let activation = read_workspace("packages/wasmnest-wasm-core/src/manager/host/activation.rs");
+    let activation = read_workspace("../wasmnest-lib/wasmnest-wasm-core/src/manager/host/activation.rs");
     assert!(
         activation.contains("DomainHooksRegistry::collected()"),
         "停用路径必须取自报钩子注册表（内核不得再点名能力域）"
@@ -113,7 +113,7 @@ fn deactivate_path_triggers_domain_purge_hook() {
         "停用路径必须遍历域名 purge 钩子"
     );
 
-    let binding = read_workspace("packages/wasmnest-pty-engine/src/plugin_binding.rs");
+    let binding = read_workspace("../wasmnest-lib/wasmnest-pty-engine/src/plugin_binding.rs");
     assert!(
         binding.contains("on_plugin_purge: Some(on_plugin_purge)"),
         "pty 能力域必须自报停用回收钩子（漏报 ⇒ 停用后句柄悬挂）"
@@ -133,7 +133,7 @@ fn deactivate_path_triggers_domain_purge_hook() {
 /// 钩子返回 `Err` ⇒ 内核不装载该插件（`continue`），且该回调必须先于授权等副作用。
 #[test]
 fn quota_registration_is_wired_into_the_load_funnel() {
-    let loader = read_workspace("packages/wasmnest-wasm-core/src/manager/loader.rs");
+    let loader = read_workspace("../wasmnest-lib/wasmnest-wasm-core/src/manager/loader.rs");
     assert!(
         loader.contains("DomainHooksRegistry::collected()"),
         "加载漏斗必须取自报钩子注册表（内核不得再点名能力域）"
@@ -164,7 +164,7 @@ fn quota_registration_is_wired_into_the_load_funnel() {
         "域拒绝后必须 continue（跳过该插件），不得吞掉 Err 继续装载"
     );
 
-    let binding = read_workspace("packages/wasmnest-pty-engine/src/plugin_binding.rs");
+    let binding = read_workspace("../wasmnest-lib/wasmnest-pty-engine/src/plugin_binding.rs");
     assert!(
         binding.contains("ptyQuota") && binding.contains("registry::register_quota(plugin_id, declared)"),
         "pty 能力域必须从原文解析 ptyQuota 并登记为生效配额"
@@ -174,7 +174,7 @@ fn quota_registration_is_wired_into_the_load_funnel() {
         "区间仲裁必须由 pty 能力域自持并返回 Err 拒绝装载（不夹取到上限）"
     );
 
-    let validation = read_workspace("packages/wasmnest-wasm-core/src/manager/validation.rs");
+    let validation = read_workspace("../wasmnest-lib/wasmnest-wasm-core/src/manager/validation.rs");
     assert!(
         !validation.contains("validate_pty_quota"),
         "内核不得再拥有 ptyQuota 判据（判据与常量真源都在能力域，见票 02 批次 03）"

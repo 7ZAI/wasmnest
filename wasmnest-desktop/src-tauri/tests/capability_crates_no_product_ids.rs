@@ -12,7 +12,7 @@
 //!
 //! ## 扫描面与排除面（排除必须显式、可审计）
 //!
-//! - **扫**：`wasmnest-*` 能力域 / 传输面 crate 的 `src/`（15 个，均在**仓库根
+//! - **扫**：`wasmnest-*` 能力域 / 传输面 crate 的 `src/`（15 个，均在**能力仓 `../wasmnest-lib`
 //!   `packages/`**，2026-10-07 从 `wasmnest-desktop/packages/` 迁根；`wasmnest-ws-client-engine`
 //!   随 ADR 0043 抽根入面；机制内核 `wasmnest-host-kit`、host_api 共享核、无头探针与
 //!   通知契约房于 2026-10-14 入面/补登记）。
@@ -50,6 +50,10 @@ use std::path::{Path, PathBuf};
 /// 新增能力 crate 必须登记进来——**不登记 = 不受本锁管辖**，故登记动作本身是
 /// 「承认它进入语义管辖范围」的一次显式决定。
 const SCANNED_CRATES: &[&str] = &[
+    // 契约 crate（2026-10-19 新建）：只装包名 / 版本常量，零依赖、零产品语义。
+    // C-3 反向断言要求 `packages/` 下每个 `wasmnest-*` 目录归桶——新建即入面，
+    // 不留 `PENDING` 窗口（它没有需要先清偿的产品 id 债）。
+    "wasmnest-contract",
     "wasmnest-server-base",
     "wasmnest-crypto-engine",
     "wasmnest-server-core",
@@ -166,16 +170,16 @@ fn desktop_packages_dir() -> PathBuf {
         .expect("src-tauri 的上级应是 wasmnest-desktop")
 }
 
-/// 平台仓 `packages/`（机制内核 `wasmnest-host-kit`、8 个能力域 / 传输面 crate
+/// 能力仓 `../wasmnest-lib`（机制内核 `wasmnest-host-kit`、8 个能力域 / 传输面 crate
 /// 自 2026-10-07 起、整核本体 `wasmnest-wasm-core` 自 2026-10-08 起落此处；
-/// 三仓拆分后 = 能力仓 submodule 的挂载点）
-fn repo_packages_dir() -> PathBuf {
-    repo_root().join("packages")
+/// 平台侧经 Cargo sibling path 消费）
+fn lib_dir() -> PathBuf {
+    repo_root().join("..").join("wasmnest-lib")
 }
 
-/// 扫描面根目录全集（**两个** packages/ 都要枚举，C-3 反向断言才有完整覆盖面）
-fn packages_dirs() -> Vec<PathBuf> {
-    vec![repo_packages_dir(), desktop_packages_dir()]
+/// 扫描面根目录全集（**两个**根都要枚举，C-3 反向断言才有完整覆盖面）
+fn governance_roots() -> Vec<PathBuf> {
+    vec![lib_dir(), desktop_packages_dir()]
 }
 
 /// 按 crate 名解析它的目录：逐个根找，**找不到即 panic**——
@@ -183,13 +187,13 @@ fn packages_dirs() -> Vec<PathBuf> {
 /// 登记表指向一个不存在的目录时，扫描器会静默扫不到任何文件（假绿灯）；
 /// 这正是本锁最危险的失守形态，故做成 fail-visible。
 fn crate_dir(crate_name: &str) -> PathBuf {
-    for root in packages_dirs() {
+    for root in governance_roots() {
         let candidate = root.join(crate_name);
         if candidate.is_dir() {
             return candidate;
         }
     }
-    // 三仓拆分：组件化工具自 `packages/wasmnest-componentize` 迁平台仓
+    // 组件化工具已迁平台仓 `tools/componentize`（原能力仓 crate）
     // `tools/componentize`（目录名去掉 wasmnest- 前缀）——登记名不变，落点单独解析。
     if crate_name == "wasmnest-componentize" {
         let candidate = repo_root().join("tools/componentize");
@@ -200,7 +204,7 @@ fn crate_dir(crate_name: &str) -> PathBuf {
     panic!(
         "crate `{crate_name}` 在所有候选根下都找不到（{}）—— crate 改名或移出必须同改登记表，\
          否则扫描器空转、本锁失效",
-        packages_dirs()
+        governance_roots()
             .iter()
             .map(|p| p.display().to_string())
             .chain(std::iter::once(repo_root().join("tools").display().to_string()))
@@ -523,7 +527,7 @@ fn every_registered_crate_is_present_and_scan_coverage_is_complete() {
 
     // 反向：两个 packages/ 下每个 wasmnest-* 目录都必须有归属
     let mut unregistered: Vec<String> = Vec::new();
-    for root in packages_dirs() {
+    for root in governance_roots() {
         let entries =
             fs::read_dir(&root).unwrap_or_else(|e| panic!("读不到 {} —— 扫描器空转，本锁失效：{e}", root.display()));
         for entry in entries.filter_map(|e| e.ok()) {
@@ -539,7 +543,7 @@ fn every_registered_crate_is_present_and_scan_coverage_is_complete() {
     }
     assert!(
         unregistered.is_empty(),
-        "以下 packages/wasmnest-* crate 未被本锁管辖（要么登记进 SCANNED_CRATES，\
+        "以下 ../wasmnest-lib/wasmnest-* crate 未被本锁管辖（要么登记进 SCANNED_CRATES，\
          要么进 PENDING_SCAN_CRATES 并写明在办票据）—— 静默漏登记等于锁失效：{:?}",
         unregistered
     );

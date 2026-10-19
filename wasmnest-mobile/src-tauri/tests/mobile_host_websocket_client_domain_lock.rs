@@ -77,7 +77,7 @@ fn mobile_wit_never_grows_websocket_server_domain() {
 ///
 /// 覆盖面随 ADR 0043 抽根更新：ws 域实现的真源自 2026-10-09 起在移动 fork crate
 /// （票 05 起 = 移动宿主 `src-tauri/src/plugin/host_domains/ws.rs`），引擎机制在
-/// 根 `packages/wasmnest-ws-client-engine`（其 `wire.rs` 自持 `ws:client` 权限字面量
+/// 根 `../wasmnest-lib/wasmnest-ws-client-engine`（其 `wire.rs` 自持 `ws:client` 权限字面量
 /// 副本——服务端词汇若出现在那里，等于给通用引擎装了个「WS 服务器」概念）。
 #[test]
 fn mobile_never_defines_ws_server_permission() {
@@ -88,10 +88,10 @@ fn mobile_never_defines_ws_server_permission() {
         // 移动宿主 adapter——陈旧路径会让本锁静默扫不到任何文件，
         // 故必须随迁移同步更新）
         mobile_root().join("src-tauri/src/plugin/host_domains/ws.rs"),
-        // WS 客户端引擎 crate（通用能力域，自 ADR 0043 抽根至仓库根 `packages/`；
-        // wire 词汇自持副本 + 引擎主体）
-        mobile_root().join("../packages/wasmnest-ws-client-engine/src/wire.rs"),
-        mobile_root().join("../packages/wasmnest-ws-client-engine/src/engine.rs"),
+        // WS 客户端引擎 crate（通用能力域，自 ADR 0043 抽根至能力仓；wire 词汇
+        // 自持副本 + 引擎主体）
+        mobile_root().join("../../wasmnest-lib/wasmnest-ws-client-engine/src/wire.rs"),
+        mobile_root().join("../../wasmnest-lib/wasmnest-ws-client-engine/src/engine.rs"),
     ];
     let mut violations = Vec::new();
     for path in &targets {

@@ -24,7 +24,7 @@ const WASM_PROFILE: &str = "release";
 /// 夹具 crate 名（cdylib 产物名 = 包名下划线形式）
 const FIXTURE_LIB: &str = "wasmnest_plugin_bench_test";
 /// wasip3 工具链 pin（单一事实来源 =
-/// `../packages/wasmnest-wasm-core/src/manager/runtime.rs::WASIP3_NIGHTLY`，
+/// `../../wasmnest-lib/wasmnest-wasm-core/src/manager/runtime.rs::WASIP3_NIGHTLY`，
 /// 与 `packages/.cargo/config.toml` 注释互指；可用环境变量覆盖以便跟随工具链迁移）
 const WASIP3_TOOLCHAIN: &str = "nightly-2026-09-16";
 
@@ -267,7 +267,7 @@ fn desktop_root() -> PathBuf {
 }
 
 /// 夹具共享 target 目录（与宿主内联 fixture 构建器同目录：
-/// `packages/wasmnest-wasm-core/src/manager/runtime/fixture_target.rs::dir()`）
+/// `../wasmnest-lib/wasmnest-wasm-core/src/manager/runtime/fixture_target.rs::dir()`）
 fn fixtures_target_dir() -> PathBuf {
     desktop_root().join("target/fixtures")
 }

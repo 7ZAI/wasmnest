@@ -272,7 +272,7 @@ fn owner_i4_structural_lock() {
     // 相对路径读取真源（`CARGO_MANIFEST_DIR` = wasmnest-desktop/src-tauri）
     let src = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../packages/wasmnest-wasm-core/src/manager/host/owner.rs"
+        "/../../../wasmnest-lib/wasmnest-wasm-core/src/manager/host/owner.rs"
     ))
     .expect("read owner.rs");
     assert!(

@@ -20,7 +20,7 @@
 //!
 //! **登记表为什么带路径**：机制内核 `wasmnest-host-kit`、八个能力域 / 传输面 crate
 //! （2026-10-07 能力域 lib 迁根）与整核本体 `wasmnest-wasm-core`（2026-10-08 迁根）
-//! 全部落**仓库根** `packages/`。只登记名字的表会
+//! 全部落**能力仓** `../wasmnest-lib/`。只登记名字的表会
 //! 默认同一个父目录，于是断言①会把它们报成「拆分产物缺失」或静默跳过——锁变成
 //! 空转，而空转的锁比没有锁更危险。
 //!
@@ -40,21 +40,21 @@
 
 use std::path::{Path, PathBuf};
 
-/// 拆分产物清单：`(crate 名, 相对仓库根 `packages/` 的路径)`
+/// 拆分产物清单：`(crate 名, 相对能力仓根 `../wasmnest-lib/` 的路径)`
 ///
 /// **单一事实源已上提 `wasmnest-wasm-core` crate**（wasm-core-whole-crate 票 05
 /// 收口：lib → crate 单向引用）。本表是那张登记表的**再导出**，不是第二份拷贝——
 /// 新增/改名拆分产物只改 `wasmnest_wasm_core::crate_boundary_lock::SPLIT_CRATES`
 /// 一处（曾为镜像表，两处同改的漂移风险已消除）。
 ///
-/// 表内容：server 五面 + 加密引擎（票 03-06）+ 机制内核（仓库根双端共享锚点）+
+/// 表内容：server 五面 + 加密引擎（票 03-06）+ 机制内核（能力仓双端共享锚点）+
 /// 能力域 crate（wasm-core-lib-split 票 03/07/08）+ **整核本体 `wasmnest-wasm-core`**
 /// （wasm-core-whole-crate 票 02/05；2026-10-08 迁根）。ADR 0036 撤销的 `bedcode-sqlite-engine`
 /// 不在表内（`host-database` / `host-plugin-database` / `host-storage` 三域与
 /// SQLite 引擎面留在核心）。
 ///
 /// **为什么带路径列**：机制内核、能力域 / 传输面 crate 与整核本体
-/// `wasmnest-wasm-core` 全部落**仓库根** `packages/`（2026-10-07 迁 8 个能力域 +
+/// `wasmnest-wasm-core` 全部落**能力仓** `../wasmnest-lib/`（2026-10-07 迁 8 个能力域 +
 /// 2026-10-08 迁整核本体）。表只给名字时，锁必须假定同一个
 /// 父目录——那种假定正是「夹具落到第二个 target 落点」那类事故的配方。
 pub(crate) use wasmnest_wasm_core::crate_boundary_lock::SPLIT_CRATES;
@@ -137,7 +137,7 @@ const ALLOWED_DOWNWARD_EDGES: &[(&str, &[&str])] = &[
     // 整核本体（wasm-core-whole-crate 票 05）：wasmnest-wasm-core 是全部拆分产物
     // 的组装点——站在基础层（base / host-kit）与全部能力域 crate（ws / peer / http）
     // 之上，把四通道与四闸门装配成一个可复用的插件机制内核。它依赖
-    // `wasmnest-plugin-api`（SDK WIT 绑定）与根 `packages/` 的 `wasmnest-peer-net` /
+    // `wasmnest-plugin-api`（SDK WIT 绑定）与能力仓的 `wasmnest-peer-net` /
     // `wasmnest-link-crypto`，但后两者不在拆分产物登记表内（第三方 / 独立 crate，
     // 不归本锁管辖面）。
     (
@@ -242,10 +242,14 @@ fn crate_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
 }
 
-/// 拆分产物基准目录（仓库根 `packages/`；2026-10-08 整核本体迁根后全部拆分产物
-/// 同落此处，登记表内条目即裸 crate 名）
+/// 拆分产物基准目录（能力仓兄弟目录 `../wasmnest-lib`；全部拆分产物同落此处，
+/// 登记表内条目即裸 crate 名）
 fn packages_dir() -> PathBuf {
-    crate_root().join("..").join("..").join("packages")
+    crate_root()
+        .join("..")
+        .join("..")
+        .join("..")
+        .join("wasmnest-lib")
 }
 
 /// 拆分产物的 `src` 扫描根（供宿主的退役面防回接锁共用）
@@ -520,7 +524,7 @@ fn server_lib_manifests_have_no_lateral_or_upward_edges() {
         let manifest_path = split_crate_dir(crate_name).join("Cargo.toml");
         assert!(
             manifest_path.exists(),
-            "拆分产物缺失：{}（{crate_name}）——被从 packages/ 摘掉了？",
+            "拆分产物缺失：{}（{crate_name}）——被从能力仓摘掉了？",
             manifest_path.display()
         );
         let manifest = read_file(&manifest_path);

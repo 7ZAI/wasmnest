@@ -13,7 +13,7 @@
 //!   （ADR 0022 四类薄壳④；Channel 是 Tauri 传输机制，插件无法持有）
 //! - `host_impl/terminal_stream.rs`：WIT `forward-output` 权限门（C3 二进制出口）
 //! - `host_impl/ws.rs`（薄适配器）：宿主 token 投影（C4：token 不落插件）
-//! - **引擎 crate `packages/wasmnest-ws-client-engine/src/engine.rs`**（ADR 0043 抽根后真源）：
+//! - **引擎 crate `../wasmnest-lib/wasmnest-ws-client-engine/src/engine.rs`**（ADR 0043 抽根后真源）：
 //!   `jwt-auth` 首帧代发 + 心跳 + auto-reconnect
 //! - `host_impl/connection.rs`：`primary-target` 主连接事实读取（票 13 复用）
 //!
@@ -68,7 +68,7 @@ const RETIRED_FRONTEND_LITERALS: [&str; 8] = [
 ];
 
 /// 宿主保留面（窄转发 + ABI v15 原语）必须仍在：本票只摘协议编排，不摘传输面。
-/// 票 06 批次 03/04 后真源随 fork 退役迁入**仓库根**单一 wasm-core
+/// 票 06 批次 03/04 后真源随 fork 退役迁入**能力仓**单一 wasm-core
 /// `wasmnest-wasm-core`（单形态 2026-10-13 起无 common/bare 之分，rename 别名已随
 /// 票 05 删除），锁钉根 crate 路径。
 const RETAINED_FACE: [(&str, &str); 7] = [
@@ -98,12 +98,12 @@ const RETAINED_FACE: [(&str, &str); 7] = [
     (
         // 抽根后 jwt-auth 代发真源在引擎（ADR 0043；根 packages/ 相对本锁基准
         // mobile_root()=`src-tauri` 需上跳两级）
-        "../../packages/wasmnest-ws-client-engine/src/engine.rs",
+        "../../../wasmnest-lib/wasmnest-ws-client-engine/src/engine.rs",
         "jwt_auth == Some(true)",
     ),
     (
         // 抽根后退避重连真源在引擎（ADR 0043）
-        "../../packages/wasmnest-ws-client-engine/src/engine.rs",
+        "../../../wasmnest-lib/wasmnest-ws-client-engine/src/engine.rs",
         "fn run_reconnect(",
     ),
     (

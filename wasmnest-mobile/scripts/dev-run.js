@@ -311,7 +311,8 @@ function ensurePluginWasm() {
  *     共享 crate（桌面 wasm-app，声明值指向其 Cargo.toml）+ 其链接的桌面 SDK。
  *     不能沿用移动 SDK：那会把移动 WIT 改动误判为产物过期，且真源（共享 crate /
  *     桌面 SDK）改动检测不到。
- * 注：共享 crate 的 `packages/wasmnest-*` 路径依赖不在此扫描（与桌面 dev-run 同口径）。
+ * 注：共享 crate 的 sibling path 依赖（`../wasmnest-lib/wasmnest-*`）不在此扫描
+ *（与桌面 dev-run 同口径）。
  */
 function wasmStaleReason(pluginRoot, wasmDest) {
   let wasmStat

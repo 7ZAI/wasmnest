@@ -148,7 +148,7 @@ mod tests {
     /// 那条入口已经不存在（`session:read` 这把钥匙连门都没有了）。
     ///
     /// 扫描根**跟着域走**（票 02 批次 05）：域迁宿主后锁定双根——内核
-    /// `packages/wasmnest-wasm-core/src`（原判定目标）与本 crate `src/`（新判定
+    /// `../wasmnest-lib/wasmnest-wasm-core/src`（原判定目标）与本 crate `src/`（新判定
     /// 目标），跳过本文件（锁自身，避免自匹配）。
     #[tokio::test]
     async fn session_read_alone_no_longer_reads_connections() {
@@ -159,7 +159,7 @@ mod tests {
 
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let roots = [
-            manifest_dir.join("../../packages/wasmnest-wasm-core/src"),
+            manifest_dir.join("../../../wasmnest-lib/wasmnest-wasm-core/src"),
             manifest_dir.join("src"),
         ];
         let mut hits: Vec<String> = Vec::new();

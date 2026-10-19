@@ -127,9 +127,9 @@ const RETIRED_WS_CRYPTO: [&str; 8] = [
 /// 针脚取 `.get("jwtAuth")` 而非整行 `request.get("jwtAuth")`：后者在 rustfmt 把链式调用
 /// 折成多行后即失效（假红——语义面仍在，只是行形态变了；本锁判据是「保留面在场」）。
 const KEEP_HOST_FACE: [(&str, &str); 3] = [
-    ("../../packages/wasmnest-server-http/src/plugin_binding/egress.rs", ".get(\"jwtAuth\")"),
+    ("../../../wasmnest-lib/wasmnest-server-http/src/plugin_binding/egress.rs", ".get(\"jwtAuth\")"),
     (
-        "../../packages/wasmnest-server-http/src/plugin_binding/ports.rs",
+        "../../../wasmnest-lib/wasmnest-server-http/src/plugin_binding/ports.rs",
         "fn jwt_auth_token(&self, _plugin_id: &str) -> Result<Option<String>, String>",
     ),
     (

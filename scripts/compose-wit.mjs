@@ -6,12 +6,15 @@
  * 端 cap 真源）+ wasmnest.wit（package 声明 + world plugin { include … }）。
  * 「组合了什么」的唯一答案在双端 `compose.json` 端清单。
  *
- * **包版本真源 = 仓根 `contracts/wasmnest-plugin-package.rs`**（ADR 0051 D3）：Rust
- * 常量而非 JSON——能力域 crate 的导出名清单走 `inventory` 静态自报（要求编译期
+ * **包版本真源 = 能力仓 `wasmnest-contract` crate 的 `src/lib.rs`**（ADR 0051 D3）：
+ * Rust 常量而非 JSON——能力域 crate 的导出名清单走 `inventory` 静态自报（要求编译期
  * 常量），JSON 只能运行期解析，与该约束结构性冲突。端清单的 `package` 字段只声明
  * **包名**（`wasmnest:plugin`），`wasmnest.wit` 的 `package wasmnest:plugin@<version>;`
  * 行由本脚本按真源拼装——版本只有一处手写，双端清单不持版本字面量（否则 bump 要改
  * 三处，且清单会退化成第二真源）。
+ *
+ * 能力仓经 `scripts/lib-paths.mjs` 解析（默认兄弟目录 `../wasmnest-lib`，
+ * `WASMNEST_LIB_ROOT` 可覆盖）；端清单里的 core / caps 路径同样指向该兄弟目录。
  * bump 政策（任何 WIT 变更含函数级追加 → patch；interface 增删 / 签名变 → minor）
  * 见 ADR 0051 D4；源文件 package 行、生成物 package 行与真源的一致性由
  * `wit_package_version_lock.rs` 断言（本脚本只负责注入，不重复做一致性判定）。
@@ -28,6 +31,8 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { libPath } from "./lib-paths.mjs";
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const ENDS = {
@@ -35,9 +40,11 @@ const ENDS = {
   mobile: "wasmnest-mobile/packages/plugin-sdk-mobile/compose.json",
 };
 
-/** 能力仓 WIT 包版本真源（ADR 0051 D3）——Rust 常量，全仓唯一手写处；
- *  能力仓经 submodule 挂在 `packages/`（票 02 仓根直挂，contracts 随仓根） */
-const PACKAGE_SOURCE = join(ROOT, "packages/contracts/wasmnest-plugin-package.rs");
+/** 能力仓 WIT 包版本真源（ADR 0051 D3）——`wasmnest-contract` crate 的 `src/lib.rs`；
+ *  能力仓经 `lib-paths.mjs` 解析（默认兄弟目录 `../wasmnest-lib`）。正则只认
+ *  `pub const <NAME>: &str = "<值>";` 的精确文本形状（crate 头注把该形状写成了
+ *  跨语言契约，勿改成 macro / `env!`） */
+const PACKAGE_SOURCE = libPath("wasmnest-contract", "src", "lib.rs");
 
 function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");

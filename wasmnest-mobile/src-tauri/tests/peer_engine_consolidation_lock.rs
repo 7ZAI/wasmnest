@@ -4,7 +4,7 @@
 //!
 //! 移动宿主的对等网络引擎控制面（节点装配 / 生命周期闸门 / 会话句柄表 /
 //! 接收回执表与设置落盘 / 事件翻译载荷 / 远端拉取编排）已整体下沉共享能力域
-//! `packages/wasmnest-server-peer-net`（双端同引纯引擎形态）；移动侧只剩适配层
+//! `../wasmnest-lib/wasmnest-server-peer-net`（双端同引纯引擎形态）；移动侧只剩适配层
 //! ——2026-10-14 模块化收拢后住在 `src/peer/`（原五个 `src/peer_*.rs` 平铺文件：
 //! 原 `peer_net.rs` 拆为 `net.rs`（装配 + 生命周期 + 委托）/ `ports.rs`（端口实现）/
 //! `seam.rs`（平台缝），`transfer/receive/remote/migration` 原样入模块）。谁把这些
@@ -44,7 +44,7 @@ const ADAPTER_FILES: &[&str] = &[
 /// 一次性幂等迁入插件存储键）——只做在场断言，不参与退役面扫描
 const HOST_MIGRATION_FILES: &[&str] = &["src/peer/migration.rs"];
 
-/// 退役面：出现即回接（引擎控制面真源在 `packages/wasmnest-server-peer-net`）
+/// 退役面：出现即回接（引擎控制面真源在 `../wasmnest-lib/wasmnest-server-peer-net`）
 const RETIRED_ENGINE_NEEDLES: &[&str] = &[
     // 节点装配 / 生命周期闸门
     "fn start_locked(",
@@ -136,7 +136,7 @@ fn mobile_peer_engine_control_plane_is_not_reintroduced() {
     }
     assert!(
         violations.is_empty(),
-        "移动宿主重新持有对等网络引擎控制面（真源 = packages/wasmnest-server-peer-net，\
+        "移动宿主重新持有对等网络引擎控制面（真源 = ../wasmnest-lib/wasmnest-server-peer-net，\
          只允许适配层委托 + 平台缝注入）：\n{}",
         violations.join("\n")
     );

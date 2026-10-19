@@ -4,7 +4,7 @@
 //!
 //! 票 06 把移动 fork crate `wasmnest-mobile/packages/wasmnest-wasm-core`
 //! （package `wasmnest-wasm-core-mobile`）整面退役：移动 `src-tauri` 改为依赖**仓库根
-//! 单一 wasm-core**（`packages/wasmnest-wasm-core`），当时以 **package rename 别名**
+//! 单一 wasm-core**（能力仓 `../wasmnest-lib/wasmnest-wasm-core`），当时以 **package rename 别名**
 //! （依赖键 `wasmnest-wasm-core-mobile`）过渡。
 //! **票 05 收口**：别名删除——移动侧直连单 crate（依赖键就是 `wasmnest-wasm-core`），
 //! 源码 `wasmnest_wasm_core::` 导入路径。本锁自此泛化为「禁止任何 fork / rename
@@ -26,14 +26,14 @@
 //!    （包名回来 = fork crate 复活）；
 //! 3. 移动侧构建面文件不得出现 fork 形态路径（上跳一级 / 裸引用
 //!    `"../packages/wasmnest-wasm-core"`；根 crate 的合法形态是上跳两级
-//!    `"../../packages/wasmnest-wasm-core"`）；
+//!    `"../../../wasmnest-lib/wasmnest-wasm-core"`）；
 //! 4. 移动 `src-tauri` **直连**根 crate：依赖键为 `wasmnest-wasm-core` +
 //!    `default-features = false`（单形态起无 bare-host；不开 `desktop-assembly`
 //!    桌面专属装配面，dev 依赖加 `test-support`），且不存在任何
 //!    `wasmnest-wasm-core-mobile` 依赖键（rename 别名回归）；移动 `src` / `tests`
 //!    源码不得再出现 `wasmnest_wasm_core_mobile` 标识符；
-//! 5. **（票 06 补）仓库内只有一份 wasm-core 织体**：`packages/wasmnest-wasm-core`
-//!    之外不得再有任何 `wasmnest-wasm-core*` 目录。
+//! 5. **（票 06 补）仓库内只有一份 wasm-core 织体**：能力仓
+//!    `../wasmnest-lib/wasmnest-wasm-core` 之外不得再有任何 `wasmnest-wasm-core*` 目录。
 //!
 //! 判据 5 与 1–4 的分工：1–4 盯的是「移动 fork 这一个已知织体」的各种回接字形；
 //! 判据 5 盯的是**任何**第二份织体——哪怕换个新名字（`wasmnest-wasm-core-shim` /
@@ -59,11 +59,15 @@ fn mobile_repo_root() -> PathBuf {
     mobile_root().parent().expect("src-tauri 的父目录").to_path_buf()
 }
 
-/// 仓库根
+/// 工作区根（四仓共同父目录 `WasmNest/`）
+///
+/// 「全工作区只有一份 wasm-core 织体」的不变量必须覆盖能力仓 sibling
+///（`../wasmnest-lib`）——只扫平台仓根会漏掉唯一合法落点，断言退化成空转。
 fn workspace_root() -> PathBuf {
     mobile_repo_root()
         .parent()
-        .expect("wasmnest-mobile 的父目录")
+        .and_then(Path::parent)
+        .expect("平台仓的父目录（四仓同场布局）")
         .to_path_buf()
 }
 
@@ -100,8 +104,8 @@ fn mobile_wasm_core_fork_directory_is_retired() {
     let fork_dir = mobile_repo_root().join("packages/wasmnest-wasm-core");
     assert!(
         !fork_dir.exists(),
-        "移动 fork crate 目录复活：{}（票 06 批次 04 已整面退役——单一 wasm-core 在仓库根 \
-         `packages/wasmnest-wasm-core`，移动侧 `default-features = false` 消费，\
+        "移动 fork crate 目录复活：{}（票 06 批次 04 已整面退役——单一 wasm-core 在能力仓 \
+         `../wasmnest-lib/wasmnest-wasm-core`，移动侧 `default-features = false` 消费，\
          单形态 2026-10-13 起无 bare-host feature）",
         fork_dir.display()
     );
@@ -174,7 +178,7 @@ fn mobile_build_files_never_reference_the_fork_path() {
     }
     assert!(
         violations.is_empty(),
-        "移动侧构建面出现 fork 形态路径引用（应上跳两级指向仓库根 `../../packages/wasmnest-wasm-core`）：\n{}",
+        "移动侧构建面出现 fork 形态路径引用（应上跳两级指向仓库根 `../../../wasmnest-lib/wasmnest-wasm-core`）：\n{}",
         violations.join("\n")
     );
 }
@@ -203,9 +207,9 @@ fn mobile_wasm_core_dep_is_direct_single_crate() {
             continue;
         }
         direct += 1;
-        if !t.contains("path = \"../../packages/wasmnest-wasm-core\"") {
+        if !t.contains("path = \"../../../wasmnest-lib/wasmnest-wasm-core\"") {
             violations.push(format!(
-                "Cargo.toml:{}: 未指向仓库根 crate（`path = \"../../packages/wasmnest-wasm-core\"`）：{t}",
+                "Cargo.toml:{}: 未指向仓库根 crate（`path = \"../../../wasmnest-lib/wasmnest-wasm-core\"`）：{t}",
                 idx + 1
             ));
         }
@@ -339,8 +343,8 @@ fn repo_has_exactly_one_wasm_core_body() {
     found.sort();
     assert_eq!(
         found,
-        vec!["packages/wasmnest-wasm-core".to_string()],
-        "仓库内出现第二份 wasm-core 织体（唯一合法落点 `packages/wasmnest-wasm-core`）——\
+        vec!["wasmnest-lib/wasmnest-wasm-core".to_string()],
+        "仓库内出现第二份 wasm-core 织体（唯一合法落点 `../wasmnest-lib/wasmnest-wasm-core`）——\
          两份机制面同名不同型，装配期 `defined twice` 或静默双写，且无既有测试会红"
     );
 }

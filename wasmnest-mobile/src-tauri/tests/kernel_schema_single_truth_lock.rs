@@ -1,4 +1,4 @@
-//! 防回接锁：主库 schema 单真源 = 内核 `packages/wasmnest-wasm-core/src/db/schema.sql`
+//! 防回接锁：主库 schema 单真源 = 内核 `../wasmnest-lib/wasmnest-wasm-core/src/db/schema.sql`
 //!
 //! ## 背景（2026-10-14 真源归位）
 //!
@@ -46,7 +46,7 @@ fn crate_root() -> PathBuf {
 
 /// 内核 schema 真源（相对移动 crate 根：`wasmnest-mobile/src-tauri` → 仓根 packages）
 fn kernel_schema_sql() -> PathBuf {
-    crate_root().join("../../packages/wasmnest-wasm-core/src/db/schema.sql")
+    crate_root().join("../../../wasmnest-lib/wasmnest-wasm-core/src/db/schema.sql")
 }
 
 /// 移动宿主 Rust 源码文件表（`src/**/*.rs`，跳过产物目录）
@@ -88,7 +88,7 @@ fn host_src_holds_no_ddl() {
     }
     assert!(
         hits.is_empty(),
-        "移动宿主不得自持 DDL（单一真源 = packages/wasmnest-wasm-core/src/db/schema.sql）。\n\
+        "移动宿主不得自持 DDL（单一真源 = ../wasmnest-lib/wasmnest-wasm-core/src/db/schema.sql）。\n\
          内核表 DDL 一律落内核真源；确需宿主自有表时在本锁登记豁免后再放行：\n{}",
         hits.join("\n")
     );

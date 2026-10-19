@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn mdns_target_method_family_matches_the_self_reported_exports() {
         let ctx_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../packages/wasmnest-wasm-core/src/host_api/context.rs");
+            .join("../../../wasmnest-lib/wasmnest-wasm-core/src/host_api/context.rs");
         let ctx = std::fs::read_to_string(&ctx_path)
             .unwrap_or_else(|e| panic!("读内核 CapabilityTarget 声明 {}: {e}", ctx_path.display()));
         let start = ctx.find("pub trait CapabilityTarget").expect("trait 必须存在");

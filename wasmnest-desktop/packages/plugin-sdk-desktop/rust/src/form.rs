@@ -1,8 +1,8 @@
 //! 产物形态常量（WIT `abi-form` 接口；`form()` 导出值）
 //!
 //! **只管形态，不管版本**（ADR 0051 D2）：整数 `ABI_VERSION` 与 WIT `interface abi`
-//! 已退役——契约版本搬上 wire（`package wasmnest:plugin@<version>`，真源见仓根
-//! `contracts/wasmnest-plugin-package.rs`），宿主与 guest 版本不等由 wasmtime linker
+//! 已退役——契约版本搬上 wire（`package wasmnest:plugin@<version>`，真源见能力仓
+//! `wasmnest-contract` crate），宿主与 guest 版本不等由 wasmtime linker
 //! 按含版本的完整 import 名精确匹配直接拒绝，诊断自带包名 + 版本。
 //!
 //! 形态与版本**正交**：`abi-form.form` 走独立接口（v36 自 `abi` 拆出），语义是

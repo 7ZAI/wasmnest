@@ -141,7 +141,7 @@ function copySharedWasm(manifest, wasmPath) {
  *   `rust/target/`：那会重建已退役的 `apps/file-transfer/mobile/rust/` 目录，
  *   触发 wiring_lock 的「移动端产物源不得重建」判据；
  * - 组件化工具 = 平台仓级 `tools/componentize`（双端同一编码路径；三仓拆分后从
- *   `packages/wasmnest-componentize` 迁来，旧路径不再存在）。
+ *   能力仓原 `wasmnest-componentize` crate 迁来，旧路径不再存在）。
  * 返回组件化后的 wasm 路径。
  */
 function buildSharedRust(cwd, manifest, sharedRustManifest) {

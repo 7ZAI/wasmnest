@@ -4,7 +4,7 @@
 //! `impl Trait for WasmPluginState` 要求 trait 或类型之一本地——`WasmPluginState`
 //! 属 host-kit（对任何消费方都是外部类型），故**装配方必须自己生成 trait**。
 //! **票 04 起本文件是桌面 WIT 绑定的唯一落点**：wasm-core 内核不再 bindgen 桌面
-//! world（它只绑 core 交集，见 `packages/wasmnest-wasm-core/src/manager/runtime/
+//! world（它只绑 core 交集，见 `../wasmnest-lib/wasmnest-wasm-core/src/manager/runtime/
 //! core_binding.rs`），cap 扩展 interface 的 trait 由本文件生成，各能力 crate
 //! （provider 侧）则 bindgen 各自的 `wit/<domain>.wit` 分片。三方生成的
 //! `wasmnest::plugin::host_*::Host` **同名但不同类型**。
@@ -47,10 +47,10 @@ mod tests {
     //!      真源在宿主 `wit-src/`，MODULE_INTERFACES 在宿主 `src/plugin/`。
     //! - cap-desktop.wit 的 world cap-desktop import 名集合 == 宿主路径 B 域
     //!   MODULE_INTERFACES 的 host-* 名并集（11 个）。
-    //! - 版本一致性（票 05 替代原 abi.version 双查）：端清单 package 名 == 仓根
-    //!   `contracts/wasmnest-plugin-package.rs` 的 `PACKAGE_NAME`，桌面 WIT 源文件
-    //!   package 行 == `package <name>@<version>;`（ADR 0051 D3/D4；`abi.version`
-    //!   随票 04 退役，本判据不读它）。
+    //! - 版本一致性（票 05 替代原 abi.version 双查）：端清单 package 名 == 能力仓
+    //!   `wasmnest-contract` crate 的 `PACKAGE_NAME`，桌面 WIT 源文件 package 行 ==
+    //!   `package <name>@<version>;`（ADR 0051 D3/D4；`abi.version` 随票 04 退役，
+    //!   本判据不读它）。
 
     use std::path::PathBuf;
 
@@ -66,14 +66,14 @@ mod tests {
 
     /// 能力仓 WIT 包版本真源（ADR 0051 D3；票 05 版本一致性检查的真源）
     ///
-    /// 真源是 Rust 常量文件 `packages/contracts/wasmnest-plugin-package.rs`（能力仓经
-    /// submodule 挂在 `packages/`，contracts 随仓根；票 03 单点化：能力域
-    /// `inventory` 静态自报要求编译期常量，JSON 真源结构性冲突）；抽取只认
+    /// 真源是零依赖契约 crate 的常量文件 `wasmnest-contract/src/lib.rs`（能力仓经
+    /// submodule 挂在 `packages/`；票 03 单点化：能力域 `inventory` 静态自报要求
+    /// 编译期常量，JSON 真源结构性冲突）；抽取只认
     /// `pub const <NAME>: &str = "<值>";` 形态，并断言 `PACKAGE` 与前后两者自洽。
     fn package_source() -> (String, String) {
-        let path = repo_root().join("packages/contracts/wasmnest-plugin-package.rs");
+        let path = repo_root().join("../wasmnest-lib/wasmnest-contract/src/lib.rs");
         let raw = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("能力仓 packages/contracts/wasmnest-plugin-package.rs 缺失: {e}"));
+            .unwrap_or_else(|e| panic!("能力仓 ../wasmnest-lib/wasmnest-contract/src/lib.rs 缺失: {e}"));
         let const_of = |name: &str| -> String {
             let needle = format!("pub const {name}: &str = \"");
             let start = raw.find(&needle).unwrap_or_else(|| {
@@ -115,8 +115,8 @@ mod tests {
         assert_eq!(m["world"], "plugin", "主 world 名是组合装配面");
         assert_eq!(
             m["package"], "wasmnest:plugin",
-            "端清单 package 只声明包名——版本由 scripts/compose-wit.mjs 按仓根 \
-             contracts/wasmnest-plugin-package.rs 注入（ADR 0051 D3 单点化），清单回写版本=第二真源"
+            "端清单 package 只声明包名——版本由 scripts/compose-wit.mjs 按能力仓 \
+             wasmnest-contract 注入（ADR 0051 D3 单点化），清单回写版本=第二真源"
         );
 
         let mut caps: Vec<&str> = m["caps"].as_object().unwrap().keys().map(|s| s.as_str()).collect();
@@ -138,9 +138,9 @@ mod tests {
             "worlds 漂移：桌面 7 个 world 是合成 package 的完整面（desktop-compat = file-transfer 单产物的移动宿主桩绑定面，binding-only）");
 
         // 版本一致性检查（票 05 替代原 abi.version 双查；票 02 新锁口径）：compose
-        // package 版本 == 桌面 WIT 源文件 package 行。版本真源 = 仓根
-        // contracts/wasmnest-plugin-package.rs（票 03 单点化）；`abi.version` 是票 04
-        // 的退役面，本判据不读它。
+        // package 版本 == 桌面 WIT 源文件 package 行。版本真源 = 能力仓
+        // wasmnest-contract crate（票 03 单点化）；`abi.version` 是票 04 的退役面，
+        // 本判据不读它。
         let (pkg_name, pkg_version) = package_source();
         assert_eq!(
             m["package"], pkg_name,
@@ -148,13 +148,13 @@ mod tests {
         );
         let expected_pkg = format!("package {pkg_name}@{pkg_version};");
         for rel in [
-            "packages/wasmnest-wasm-core/wit/core.wit",
-            "packages/wasmnest-pty-engine/wit/pty.wit",
-            "packages/wasmnest-discovery-engine/wit/mdns.wit",
-            "packages/wasmnest-server-peer-net/wit/peer.wit",
-            "packages/wasmnest-server-http/wit/http.wit",
-            "packages/wasmnest-ws-client-engine/wit/ws.wit",
-            "packages/wasmnest-notify-engine/wit/notify.wit",
+            "../wasmnest-lib/wasmnest-wasm-core/wit/core.wit",
+            "../wasmnest-lib/wasmnest-pty-engine/wit/pty.wit",
+            "../wasmnest-lib/wasmnest-discovery-engine/wit/mdns.wit",
+            "../wasmnest-lib/wasmnest-server-peer-net/wit/peer.wit",
+            "../wasmnest-lib/wasmnest-server-http/wit/http.wit",
+            "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit",
+            "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit",
             "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-http.wit",
             "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-ws.wit",
             "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-desktop.wit",
@@ -169,7 +169,7 @@ mod tests {
                 .to_string();
             assert_eq!(
                 line, expected_pkg,
-                "{rel} 的 package 行与仓根 contracts/wasmnest-plugin-package.rs 漂移——\
+                "{rel} 的 package 行与契约真源 wasmnest-contract/src/lib.rs 漂移——\
                  版本化后 import 名逐字匹配，源文件版本漂移＝运行期实例化失败（编译面不红）"
             );
         }
@@ -253,16 +253,16 @@ mod tests {
     fn capability_domains_bind_their_own_wit_slices() {
         // (crate 目录, 绑定源文件, 自持分片（可含 `..` 相对路径）, world)
         const DOMAINS: &[(&str, &str, &str, &str)] = &[
-            ("packages/wasmnest-pty-engine", "src/plugin_binding.rs", "wit/pty.wit", "cap-pty"),
-            ("packages/wasmnest-server-http", "src/plugin_binding.rs", "wit/http.wit", "cap-http"),
+            ("../wasmnest-lib/wasmnest-pty-engine", "src/plugin_binding.rs", "wit/pty.wit", "cap-pty"),
+            ("../wasmnest-lib/wasmnest-server-http", "src/plugin_binding.rs", "wit/http.wit", "cap-http"),
             (
-                "packages/wasmnest-server-websocket",
+                "../wasmnest-lib/wasmnest-server-websocket",
                 "src/plugin_binding.rs",
                 "../wasmnest-ws-client-engine/wit/ws.wit",
                 "cap-ws",
             ),
-            ("packages/wasmnest-server-peer-net", "src/plugin_binding.rs", "wit/peer.wit", "cap-peer"),
-            ("packages/wasmnest-discovery-engine", "src/lib.rs", "wit/mdns.wit", "cap-mdns"),
+            ("../wasmnest-lib/wasmnest-server-peer-net", "src/plugin_binding.rs", "wit/peer.wit", "cap-peer"),
+            ("../wasmnest-lib/wasmnest-discovery-engine", "src/lib.rs", "wit/mdns.wit", "cap-mdns"),
         ];
         let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         for (crate_dir, src_rel, slice_rel, world) in DOMAINS {

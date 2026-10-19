@@ -88,7 +88,7 @@ const CORE_EXPORTS: &[&str] = &["command", "lifecycle", "manifest", "events-bina
 
 #[test]
 fn core_wit_stays_mechanism_only() {
-    let src = read("packages/wasmnest-wasm-core/wit/core.wit");
+    let src = read("../wasmnest-lib/wasmnest-wasm-core/wit/core.wit");
 
     // ① interface 定义集 == 白名单（业务能力 interface 回流即点名）
     let expected: BTreeSet<String> = CORE_IMPORTS.iter().chain(CORE_EXPORTS).map(|s| s.to_string()).collect();
@@ -125,12 +125,12 @@ fn core_wit_stays_mechanism_only() {
 
 /// 域契约（双端功能级交集）→ 能力域 crate 的真源文件
 const DOMAIN_CONTRACT_HOUSES: &[(&str, &str)] = &[
-    ("pty", "packages/wasmnest-pty-engine/wit/pty.wit"),
-    ("mdns", "packages/wasmnest-discovery-engine/wit/mdns.wit"),
-    ("peer", "packages/wasmnest-server-peer-net/wit/peer.wit"),
-    ("http", "packages/wasmnest-server-http/wit/http.wit"),
-    ("ws", "packages/wasmnest-ws-client-engine/wit/ws.wit"),
-    ("notify", "packages/wasmnest-notify-engine/wit/notify.wit"),
+    ("pty", "../wasmnest-lib/wasmnest-pty-engine/wit/pty.wit"),
+    ("mdns", "../wasmnest-lib/wasmnest-discovery-engine/wit/mdns.wit"),
+    ("peer", "../wasmnest-lib/wasmnest-server-peer-net/wit/peer.wit"),
+    ("http", "../wasmnest-lib/wasmnest-server-http/wit/http.wit"),
+    ("ws", "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit"),
+    ("notify", "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit"),
 ];
 
 /// 桌面端扩展（声明与实现都在端宿主）→ 端 wit-src
@@ -193,7 +193,7 @@ fn compose_caps_map_to_the_right_contract_houses() {
                 "移动 caps.{key} 必须与桌面消费同一份域契约真源（ADR 0052 D2/D3）"
             );
             assert!(
-                path.starts_with("packages/wasmnest-"),
+                path.starts_with("../wasmnest-lib/wasmnest-"),
                 "域契约真源必须落能力域 crate（{path}），不得挂回 core / 端 wit-src"
             );
         }
@@ -296,7 +296,7 @@ fn collect_rs(dir: &Path, out: &mut Vec<PathBuf>) {
 
 #[test]
 fn capability_domains_stay_end_neutral() {
-    let packages = repo_root().join("packages");
+    let packages = repo_root().join("../wasmnest-lib");
 
     for crate_name in COMMON_HOST_CRATES {
         let crate_dir = packages.join(crate_name);

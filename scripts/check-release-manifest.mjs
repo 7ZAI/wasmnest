@@ -8,9 +8,9 @@
  * 判据（任一失败即 exit 1，错误逐条打印，不静默降级）：
  *  1. schema：product / repos.lib.tag / repos.apps.tag / contract{package,version,witSha256} / apps
  *     product 与平台仓根 `package.json` 版本一致；
- *  2. `repos.lib.tag` == 平台仓 submodule `packages/` 的精确 tag（submodule 指针漂移即红；
- *     工作树脏同样红——发布装配要求干净 submodule）；
- *  3. `contract.version` == `packages/contracts/wasmnest-plugin-package.rs` 的 `PACKAGE_VERSION`；
+ *  2. `repos.lib.tag` == 能力仓（兄弟目录 `../wasmnest-lib`，或 `WASMNEST_LIB_ROOT`）HEAD
+ *     的精确 tag；工作树脏同样红——发布装配要求能力仓处于干净的 tag 提交；
+ *  3. `contract.version` == 能力仓 `wasmnest-contract/src/lib.rs` 的 `PACKAGE_VERSION`；
  *  4. `contract.witSha256` == 双端组合 WIT 产物指纹：对
  *     `wasmnest-{desktop,mobile}/packages/plugin-sdk-{desktop,mobile}/rust/wit/**` 全部文件
  *     按仓内相对路径升序，逐文件喂 `relpath \0 content \0` 的 sha256（十六进制）；
@@ -32,10 +32,12 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { appsRoot } from './app-paths.mjs'
+import { libRoot } from './lib-paths.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const MANIFEST_PATH = join(ROOT, 'release-manifest.json')
-const CONTRACTS_PATH = join(ROOT, 'packages', 'contracts', 'wasmnest-plugin-package.rs')
+/** 契约真源（能力仓零依赖 crate 的常量文件；正则只认普通字符串字面量形状） */
+const CONTRACTS_PATH = join(libRoot(), 'wasmnest-contract', 'src', 'lib.rs')
 
 /** WIT 产物目录（相对平台仓根；与 compose-wit.mjs 的输出目录一致） */
 const WIT_DIRS = [
@@ -123,21 +125,24 @@ requireField(
   `product=${manifest.product} 与平台仓 package.json 版本=${pkgJson.version} 不一致`,
 )
 
-// ==================== 2. submodule 指针 == 长 lib.tag ====================
-const packagesDir = join(ROOT, 'packages')
+// ==================== 2. 能力仓 HEAD tag == 清单 lib.tag ====================
+// 平台仓不再用 submodule 记录指针，改由 manifest 的 repos.lib.tag 钉住能力仓版本；
+// 校验同时要求工作树干净——脏工作树意味着「构建读到的源码」与「tag 记录的版本」不是
+// 同一个事实，发布装配必须拒绝。
+const libDir = libRoot()
 try {
-  const tag = execFileSync('git', ['-C', packagesDir, 'describe', '--tags', '--exact-match'], {
+  const tag = execFileSync('git', ['-C', libDir, 'describe', '--tags', '--exact-match'], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   }).trim()
   requireField(
     tag === manifest.repos.lib.tag,
-    `submodule 指针 tag=${tag} 与 repos.lib.tag=${manifest.repos.lib.tag} 不一致（git submodule update / 改 manifest）`,
+    `能力仓 HEAD tag=${tag} 与 repos.lib.tag=${manifest.repos.lib.tag} 不一致（checkout 对应 tag / 改 manifest）`,
   )
-  const dirty = execFileSync('git', ['-C', packagesDir, 'status', '--porcelain'], { encoding: 'utf8' }).trim()
-  requireField(dirty === '', `submodule 工作树不干净（发布装配要求 clean）：\n${dirty}`)
+  const dirty = execFileSync('git', ['-C', libDir, 'status', '--porcelain'], { encoding: 'utf8' }).trim()
+  requireField(dirty === '', `能力仓工作树不干净（发布装配要求 clean）：\n${dirty}`)
 } catch (e) {
-  fail(`submodule 指针校验失败: ${e.message}（packages/ 未挂载或 HEAD 无精确 tag）`)
+  fail(`能力仓版本校验失败: ${e.message}（${libDir} 不是 git 仓或 HEAD 无精确 tag）`)
 }
 
 // ==================== 3. contract.version == 契约真源 ====================

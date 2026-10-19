@@ -1,3 +1,0 @@
-[submodule "packages"]
-	path = packages
-	url = https://github.com/7ZAI/wasmnest-lib.git

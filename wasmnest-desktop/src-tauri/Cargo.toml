@@ -110,43 +110,43 @@ sysinfo = "0.33"
 # Plugin API
 wasmnest-plugin-api = { path = "../packages/plugin-sdk-desktop/rust" }
 # 对等网络共享基础设施（节点身份 + 自签证书，issue peer-network/01）
-wasmnest-peer-net = { path = "../../packages/peer-net" }
+wasmnest-peer-net = { path = "../../../wasmnest-lib/peer-net" }
 # 链路报文加密协议核心（issue 09 共享 crate，与移动端 event WS 共同消费）
-wasmnest-link-crypto = { path = "../../packages/link-crypto" }
+wasmnest-link-crypto = { path = "../../../wasmnest-lib/link-crypto" }
 # server-lib-split：桌面 server 基础层（错误/常量/错误边界/系统信息/网络配置/
 # 连接身份/端口 traits）与加密引擎（算法实现 + 注册表）
-wasmnest-server-base = { path = "../../packages/wasmnest-server-base" }
-# 插件宿主机制内核（仓库根 packages/，双端共享锚点，wasm-core-lib-split 票 03）：
+wasmnest-server-base = { path = "../../../wasmnest-lib/wasmnest-server-base" }
+# 插件宿主机制内核（能力仓 `../wasmnest-lib`，双端共享锚点，wasm-core-lib-split 票 03）：
 # 插件实例状态 `WasmPluginState` + 能力模块契约 + 自动注册表 + Store 上限与指标值对象。
 # 它必须独立于宿主 bin crate —— 否则能力 crate 无法命名 `WasmPluginState`
 # （`add_to_linker::<S,D>` 是单态）⇒ 与宿主构成 Cargo 环。本期为**零行为变更的搬迁**：
 # StoreLimits / PluginMetrics / WasmPluginState 原位从 wasm_core 搬入，宿主留转发。
-wasmnest-host-kit = { path = "../../packages/wasmnest-host-kit" }
+wasmnest-host-kit = { path = "../../../wasmnest-lib/wasmnest-host-kit" }
 # 插件机制整核（wasm-core-whole-crate，.scratch/2026-10-06）：wasm_core 整目录 +
 # 引擎面（db/pty/enums/system 部分）+ 宿主胶水迁入本 crate；lib.rs 经 `pub use
 # wasmnest_wasm_core as wasm_core` 垫片保持既有 `crate::wasm_core::*` 路径零改动。
-# 2026-10-08 迁根：整核本体与能力域同落仓库根 packages/。
-wasmnest-wasm-core = { path = "../../packages/wasmnest-wasm-core" }
+# 2026-10-08 迁根：整核本体与能力域同落能力仓（平台侧经兄弟目录 `../wasmnest-lib` 消费）。
+wasmnest-wasm-core = { path = "../../../wasmnest-lib/wasmnest-wasm-core" }
 # PTY 能力域（wasm-core 纯净性收口票 02/06 → pty-capability-domain 票 D1/D3）：
 # 引擎面 + host-pty WIT 接线整面迁入能力 crate（ADR 0039）。票 02 批次 02 起宿主
 # **直接消费**：端口 adapter + 强制引用行 + 白名单条目同落 `src/plugin/pty.rs`
 # （wasm-core 已不再依赖本 crate，也不再出现它的任何路径）。
 # lib 声明同时满足 crate_boundary_lock 断言③「宿主清单声明全部拆分产物」
 # （pty-engine 已登记 SPLIT_CRATES）。
-wasmnest-pty-engine = { path = "../../packages/wasmnest-pty-engine", features = ["common-host"] }
+wasmnest-pty-engine = { path = "../../../wasmnest-lib/wasmnest-pty-engine", features = ["common-host"] }
 # 组播发现能力域（mDNS，wasm-core-lib-split 票 03）：引擎 + 宿主绑定层 + 自动
 # 注册。票 02 批次 03 起宿主**直接消费**：端口 adapter 在 `src/plugin/mdns.rs`
 # （wasm-core 已不再依赖本 crate，`host_context_registry` 随其退役）。
-wasmnest-discovery-engine = { path = "../../packages/wasmnest-discovery-engine", features = ["common-host"] }
-wasmnest-crypto-engine = { path = "../../packages/wasmnest-crypto-engine" }
+wasmnest-discovery-engine = { path = "../../../wasmnest-lib/wasmnest-discovery-engine", features = ["common-host"] }
+wasmnest-crypto-engine = { path = "../../../wasmnest-lib/wasmnest-crypto-engine" }
 # server-lib-split 票 03：传输无关内核（supervisor/filter/link_crypto/metrics + TransportFace 组合）
-wasmnest-server-core = { path = "../../packages/wasmnest-server-core" }
+wasmnest-server-core = { path = "../../../wasmnest-lib/wasmnest-server-core" }
 # server-lib-split 票 04：HTTP 传输面（registry/gateway/controllers/middleware/dtos + HttpTransportFace）
-wasmnest-server-http = { path = "../../packages/wasmnest-server-http", features = ["common-host"] }
+wasmnest-server-http = { path = "../../../wasmnest-lib/wasmnest-server-http", features = ["common-host"] }
 # server-lib-split 票 05：WebSocket 传输面（conn/channel/registry/endpoint/routes/manager）
-wasmnest-server-websocket = { path = "../../packages/wasmnest-server-websocket", features = ["common-host"] }
+wasmnest-server-websocket = { path = "../../../wasmnest-lib/wasmnest-server-websocket", features = ["common-host"] }
 # server-lib-split 票 06：对等网络引擎域（节点身份/节点与发现守护生命周期/host-peer 引擎转发）
-wasmnest-server-peer-net = { path = "../../packages/wasmnest-server-peer-net", features = ["common-host"] }
+wasmnest-server-peer-net = { path = "../../../wasmnest-lib/wasmnest-server-peer-net", features = ["common-host"] }
 inventory = "0.3"
 
 # Power management (prevent system sleep)

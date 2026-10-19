@@ -2,7 +2,7 @@
 //!
 //! ## 判据（一条规则，两个可测形态）
 //!
-//! 拆分产物（仓库根 `packages/wasmnest-*` 与 `wasmnest-desktop/packages/` 的契约/夹具 crate）是
+//! 拆分产物（能力仓 `../wasmnest-lib/wasmnest-*` 与 `wasmnest-desktop/packages/` 的契约/夹具 crate）是
 //! **可复用引擎 crate**，不是应用。
 //! 一个 crate 根的 `tests/` 目录 = 一个独立测试二进制 = 一个只能经 `pub` API 访问的
 //! **对外行为面**。它带来两重代价：
@@ -36,9 +36,9 @@
 //!
 //! ## 覆盖面按**目录约定**推导，不靠手写名单
 //!
-//! 治理面 = **两个** `packages/`（仓库根 + `wasmnest-desktop/packages/`）下每个
+//! 治理面 = **两个**根（能力仓 `../wasmnest-lib` + `wasmnest-desktop/packages/`）下每个
 //! `wasmnest-*` 目录，**新增 crate 自动纳入**。2026-10-07 八个能力域 / 传输面 crate
-//! 从 `wasmnest-desktop/packages/` 迁到仓库根 `packages/` 后，只扫单根会让另一半覆盖面
+//! 从 `wasmnest-desktop/packages/` 迁到能力仓后，只扫单根会让另一半覆盖面
 //! 静默归零而锁照绿——故两个根都要枚举。
 //! 这是 `empty_dir_lock.rs` 的同一手法：手写名单天然是一条零成本后门（删掉一行覆盖面
 //! 少一块而锁照绿）。
@@ -46,7 +46,7 @@
 //! ## 登记例外桶
 //!
 //! 当前 1 个条目：`wasmnest-host-kit`（机制内核，自 2026-10-07 起与能力域 crate 同落
-//! 仓库根 `packages/`）——它的 `tests/forced_link.rs` + `tests/forced_link_absent.rs`
+//! 能力仓 `../wasmnest-lib`）——它的 `tests/forced_link.rs` + `tests/forced_link_absent.rs`
 //! 是**按设计**的跨 crate 集成测试（探针 fixture crate + 链接器二进制两个 target 钉「强制
 //! 引用行漏掉 ⇒ 注册丢失」两侧），搬迁要连 fixture 一起搬，另立票据。
 //! `wasmnest-wasm-core` 曾是唯一条目（机制整核改造在途 + 本解析当时不支持平台条件段），
@@ -69,7 +69,7 @@ use std::path::{Path, PathBuf};
 
 /// 已知但**不**纳入管辖的 crate（须写明在办票据；处置完删条目即自动纳入）
 ///
-/// 与目录推导出的治理面合起来构成完整覆盖：治理面 = 两个 `packages/` 下全部
+/// 与目录推导出的治理面合起来构成完整覆盖：治理面 = 两个根下全部
 /// `wasmnest-*` 减去本桶。没有本桶，「把 crate 排除出管辖」就是一条零成本后门。
 ///
 /// **1 个条目**：`wasmnest-host-kit`——机制内核 crate 的 `tests/forced_link.rs` +
@@ -92,6 +92,17 @@ const PENDING_GOVERNANCE: &[(&str, &str)] = &[(
 /// 且在引擎 crate 里同样会诱发 dev 依赖追加。
 const FORBIDDEN_CRATE_TEST_DIRS: &[&str] = &["tests", "benches", "examples"];
 
+/// crate 根 `tests/` 的显式例外（仅限「锁自身」形态）
+///
+/// 例外必须满足：只读仓内文本、不引入内部 dev-dependency、不提供对外可消费的
+/// API 面。当前唯一条目是能力仓的零平台引用锁——它必须扫整个能力仓，放在 crate
+/// 根 `tests/` 是它的正确归属（迁进 `src/` 会变成生产代码面）。条目按文件精确
+/// 登记，且每次运行反向自检：文件不存在即红（悬空例外会放行新违规）。
+const CRATE_TEST_DIR_EXCEPTIONS: &[(&str, &str)] = &[(
+    "wasmnest-wasm-core/tests/platform_reference_registry_lock.rs",
+    "能力仓零平台引用锁：只读仓内文本、零内部 dev-dep、无对外 API 面",
+)];
+
 /// 内部 crate 的命名前缀（dev 段里出现即为一条只存在于测试的内部依赖边）
 const INTERNAL_CRATE_PREFIX: &str = "wasmnest";
 
@@ -112,12 +123,12 @@ struct MigratedEvidence {
 const MIGRATED_EVIDENCE: &[MigratedEvidence] = &[
     MigratedEvidence {
         host_rel: "tests/link_crypto_http.rs",
-        came_from: "packages/wasmnest-server-http/tests/",
+        came_from: "../wasmnest-lib/wasmnest-server-http/tests/",
         min_cases: 4,
     },
     MigratedEvidence {
         host_rel: "tests/error_envelope_ipc.rs",
-        came_from: "packages/wasmnest-server-base/tests/",
+        came_from: "../wasmnest-lib/wasmnest-server-base/tests/",
         min_cases: 3,
     },
 ];
@@ -131,31 +142,31 @@ fn crate_root() -> PathBuf {
 
 /// 桌面端 `packages/`（2026-10-08 起仅剩 `plugin-*` 契约与夹具 crate，无 `wasmnest-*`；
 /// 保留枚举是为了推导面不缩水——未来若再落回一个 `wasmnest-*` 目录会被治理面抓到）
-fn packages_dir() -> PathBuf {
+fn desktop_packages_dir() -> PathBuf {
     crate_root()
         .parent()
         .expect("src-tauri 的上级应是 wasmnest-desktop")
         .join("packages")
 }
 
-/// 仓库根 `packages/`（机制内核 `wasmnest-host-kit`、8 个能力域 / 传输面 crate
+/// 能力仓 `../wasmnest-lib`（机制内核 `wasmnest-host-kit`、8 个能力域 / 传输面 crate
 /// 自 2026-10-07 起、整核本体 `wasmnest-wasm-core` 自 2026-10-08 起落此处）
-fn repo_packages_dir() -> PathBuf {
+fn lib_dir() -> PathBuf {
     crate_root()
         .parent()
         .and_then(Path::parent)
-        .expect("wasmnest-desktop 的上级应是仓库根")
-        .join("packages")
+        .expect("wasmnest-desktop 的上级应是平台仓根")
+        .join("..").join("wasmnest-lib")
 }
 
 /// 治理面推导所枚举的根目录（**两个**都要：只扫一个 ⇒ 另一半覆盖面静默归零）
-fn packages_dirs() -> Vec<PathBuf> {
-    vec![repo_packages_dir(), packages_dir()]
+fn governance_roots() -> Vec<PathBuf> {
+    vec![lib_dir(), desktop_packages_dir()]
 }
 
 /// 按 crate 名解析目录：逐根找，**找不到即 panic**（推导面静默空转是本锁最坏的形态）
 fn crate_dir(crate_name: &str) -> PathBuf {
-    for root in packages_dirs() {
+    for root in governance_roots() {
         let candidate = root.join(crate_name);
         if candidate.is_dir() {
             return candidate;
@@ -164,10 +175,10 @@ fn crate_dir(crate_name: &str) -> PathBuf {
     panic!("crate `{crate_name}` 在两个根下都找不到 —— crate 改名或移出必须同改本锁的推导规则")
 }
 
-/// 推导治理面：两个 `packages/` 下每个 `wasmnest-*` 目录，减去 `PENDING_GOVERNANCE`
+/// 推导治理面：两个根下每个 `wasmnest-*` 目录，减去 `PENDING_GOVERNANCE`
 fn governed_crates() -> Vec<String> {
     let mut out = Vec::new();
-    for root in packages_dirs() {
+    for root in governance_roots() {
         let entries =
             fs::read_dir(&root).unwrap_or_else(|e| panic!("读不到 {} —— 扫描器空转，本锁失效：{e}", root.display()));
         for entry in entries.filter_map(|e| e.ok()) {
@@ -516,16 +527,24 @@ fn governed_crates_have_no_crate_level_integration_test_surfaces() {
                 let mut entries: Vec<String> = fs::read_dir(&path)
                     .map(|rd| {
                         rd.filter_map(|e| e.ok())
+                            .filter(|e| {
+                                let rel = format!("{crate_name}/{dir}/{}", e.file_name().to_string_lossy());
+                                !CRATE_TEST_DIR_EXCEPTIONS.iter().any(|(allowed, _)| *allowed == rel)
+                            })
                             .map(|e| e.file_name().to_string_lossy().to_string())
                             .collect()
                     })
                     .unwrap_or_default();
                 entries.sort();
-                violations.push(format!(
-                    "{crate_name}/{dir}/ 存在（{}）—— crate 根的 `{dir}/` 是只能经 pub API \
-                     访问对外行为的可编译面。跨 crate 集成测试请迁到宿主 `src-tauri/tests/`",
-                    entries.join(", ")
-                ));
+                if !entries.is_empty() {
+                    violations.push(format!(
+                        "{crate_name}/{dir}/ 存在未登记条目（{}）—— crate 根的 `{dir}/` 是只能经 \
+                         pub API 访问对外行为的可编译面。跨 crate 集成测试请迁到宿主 \
+                         `src-tauri/tests/`；确属「锁自身」形态的按文件登记进 \
+                         CRATE_TEST_DIR_EXCEPTIONS",
+                        entries.join(", ")
+                    ));
+                }
             }
         }
         let declared = declared_extra_targets(&read_manifest(crate_name));
@@ -536,6 +555,18 @@ fn governed_crates_have_no_crate_level_integration_test_surfaces() {
             ));
         }
     }
+    // 反向自检：例外条目不得悬空（删掉文件却留条目 = 新违规被静默放行）
+    for (rel, reason) in CRATE_TEST_DIR_EXCEPTIONS {
+        assert!(
+            !reason.trim().is_empty(),
+            "crate 根测试目录例外 {rel} 必须写明理由"
+        );
+        assert!(
+            lib_dir().join(rel).is_file(),
+            "crate 根测试目录例外已悬空：{rel} 不存在——核实后删除条目"
+        );
+    }
+
     assert!(
         violations.is_empty(),
         "拆分产物 crate 只保留单元测试（`src/` 内的 `#[cfg(test)]`），跨 crate 集成测试归宿主：\n  - {}",
@@ -585,7 +616,7 @@ fn governed_crates_have_no_dev_only_internal_crate_dependencies() {
 /// ② `PENDING_GOVERNANCE` 变成垃圾桶（条目不再需要却留着 = 覆盖面静默少一块）。
 #[test]
 fn governance_coverage_is_derived_and_pending_bucket_cannot_rot() {
-    let discovered: Vec<String> = packages_dirs()
+    let discovered: Vec<String> = governance_roots()
         .iter()
         .flat_map(|root| {
             fs::read_dir(root)
@@ -599,7 +630,7 @@ fn governance_coverage_is_derived_and_pending_bucket_cannot_rot() {
 
     assert!(
         !discovered.is_empty(),
-        "两个 `packages/` 下没有任何 `wasmnest-*` 目录 —— 目录推导落空，本锁必须失效报错"
+        "两个根下没有任何 `wasmnest-*` 目录 —— 目录推导落空，本锁必须失效报错"
     );
     for (name, reason) in PENDING_GOVERNANCE {
         assert!(

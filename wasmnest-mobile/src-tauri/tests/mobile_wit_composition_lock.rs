@@ -8,9 +8,9 @@
 //! 双端 ABI 锁步流程 ADR 0019）：
 //!
 //! 1. 端清单 `compose.json` 的 package 版本 == 移动侧 WIT 源文件 package 行
-//!    （票 05 替代原 abi.version 双查；版本真源 = 仓根 `contracts/wasmnest-plugin-package.rs`，
-//!    票 03 单点化——「组合了什么」的版本只有一个答案；`abi.version` 随票 04 退役，
-//!    本锁不读它）；
+//!    （票 05 替代原 abi.version 双查；版本真源 = 能力仓 `wasmnest-contract` crate
+//!    的 `src/lib.rs`，票 03 单点化——「组合了什么」的版本只有一个答案；
+//!    `abi.version` 随票 04 退役，本锁不读它）；
 //! 2. 生成物 `wasmnest.wit` 的 `world plugin` include 集 == `core` + 各 caps 键
 //!    （拼装脚本产物与端清单一致；手改生成物另有 `scripts/compose-wit.mjs --check`
 //!    的逐字漂移锁，本锁管**结构**，两者互补）；
@@ -36,8 +36,8 @@ fn read(path: &Path) -> String {
 
 /// ① 端清单 package 版本 == 源文件 package 行（票 05 替代原 abi.version 双查）
 ///
-/// 版本真源 = 仓根 `contracts/wasmnest-plugin-package.rs`（ADR 0051 D3 单点化，票 03
-/// 迁为 Rust 常量：能力域 `inventory` 静态自报要求编译期常量）：端清单 `package`
+/// 版本真源 = 能力仓 `wasmnest-contract` crate 的 `src/lib.rs`（ADR 0051 D3 单点化，
+/// 票 03 迁为 Rust 常量：能力域 `inventory` 静态自报要求编译期常量）：端清单 `package`
 /// 只声明包名，版本由 `scripts/compose-wit.mjs` 注入；本判据钉住「移动端组合面的
 /// package 版本 == 移动侧 WIT 源文件 package 行」——版本化后 import 名逐字匹配，
 /// 源文件版本漂移＝运行期实例化失败（编译面不红）。`abi.version` 是票 04 的退役面，
@@ -48,18 +48,19 @@ fn compose_manifest_package_version_matches_wit_sources() {
     let m: serde_json::Value = serde_json::from_str(&compose).expect("端清单 JSON 可解析");
     let declared = m["package"].as_str().expect("compose.json 缺 package");
 
-    // 能力仓版本真源（能力仓经 submodule 挂在平台仓 `packages/`，contracts 随仓根）：
-    // Rust 常量文件，抽取只认 `pub const <NAME>: &str = "<值>";` 形态并断言 PACKAGE 自洽。
+    // 能力仓版本真源（能力仓经 submodule 挂在平台仓 `packages/`；契约常量随 crate
+    // 边界走）：Rust 常量文件，抽取只认 `pub const <NAME>: &str = "<值>";` 形态并
+    // 断言 PACKAGE 自洽。
     let root = mobile_root().join("../..");
-    let raw = read(&root.join("packages/contracts/wasmnest-plugin-package.rs"));
+    let raw = read(&root.join("../wasmnest-lib/wasmnest-contract/src/lib.rs"));
     let const_of = |name: &str| -> String {
         let needle = format!("pub const {name}: &str = \"");
         let start = raw.find(&needle).unwrap_or_else(|| {
-            panic!("contracts/wasmnest-plugin-package.rs 缺常量 {name}")
+            panic!("wasmnest-contract/src/lib.rs 缺常量 {name}")
         }) + needle.len();
         let rest = &raw[start..];
         let end = rest.find('"').unwrap_or_else(|| {
-            panic!("contracts/wasmnest-plugin-package.rs 常量 {name} 未闭合")
+            panic!("wasmnest-contract/src/lib.rs 常量 {name} 未闭合")
         });
         rest[..end].to_string()
     };
@@ -68,7 +69,7 @@ fn compose_manifest_package_version_matches_wit_sources() {
     assert_eq!(
         const_of("PACKAGE"),
         format!("{name}@{version}"),
-        "contracts/wasmnest-plugin-package.rs 的 PACKAGE 与 NAME@VERSION 自洽（ADR 0051 D3）"
+        "wasmnest-contract/src/lib.rs 的 PACKAGE 与 NAME@VERSION 自洽（ADR 0051 D3）"
     );
     assert_eq!(
         declared, name,
@@ -77,12 +78,12 @@ fn compose_manifest_package_version_matches_wit_sources() {
     assert!(
         !declared.contains('@'),
         "端清单 package 不应持版本字面量 `{declared}`——版本真源单点化在 \
-         contracts/wasmnest-plugin-package.rs，清单回写版本=第二真源"
+         wasmnest-contract，清单回写版本=第二真源"
     );
 
     let expected = format!("package {name}@{version};");
     for rel in [
-        "packages/wasmnest-wasm-core/wit/core.wit",
+        "../wasmnest-lib/wasmnest-wasm-core/wit/core.wit",
         "wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit-src/cap-mobile.wit",
     ] {
         let path = root.join(rel);
@@ -94,7 +95,7 @@ fn compose_manifest_package_version_matches_wit_sources() {
             .to_string();
         assert_eq!(
             line, expected,
-            "{rel} 的 package 行与仓根 contracts/wasmnest-plugin-package.rs 漂移——版本化 \
+            "{rel} 的 package 行与契约真源 wasmnest-contract/src/lib.rs 漂移——版本化 \
              后 import 名逐字匹配，源文件版本漂移＝运行期实例化失败（编译面不红）"
         );
     }

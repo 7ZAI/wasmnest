@@ -66,7 +66,7 @@ fn read(path: &Path) -> String {
 
 /// wasm-core 源码根
 fn wasm_core_src() -> PathBuf {
-    repo_root().join("packages/wasmnest-wasm-core/src")
+    repo_root().join("../wasmnest-lib/wasmnest-wasm-core/src")
 }
 
 /// 移动宿主 `plugin/` 目录
@@ -231,18 +231,18 @@ fn core_domain_bindings_stay_out_of_wasm_core() {
 /// `(相对仓库根路径, 必须在场针脚)`
 const SHARED_CORES: [(&str, &str); 4] = [
     (
-        "packages/wasmnest-server-http/src/plugin_binding/egress.rs",
+        "../wasmnest-lib/wasmnest-server-http/src/plugin_binding/egress.rs",
         "pub fn http_fetch(",
     ),
-    ("packages/wasmnest-host-api-core/src/fs.rs", "pub fn fs_read("),
-    ("packages/wasmnest-host-api-core/src/storage.rs", "pub fn storage_get("),
-    ("packages/wasmnest-host-api-core/src/bus.rs", "pub fn bus_publish("),
+    ("../wasmnest-lib/wasmnest-host-api-core/src/fs.rs", "pub fn fs_read("),
+    ("../wasmnest-lib/wasmnest-host-api-core/src/storage.rs", "pub fn storage_get("),
+    ("../wasmnest-lib/wasmnest-host-api-core/src/bus.rs", "pub fn bus_publish("),
 ];
 
 /// `(宿主 adapter 相对 plugin/ 路径, 必须转发的共享核针脚)`
 ///
 /// 单形态（2026-10-13）：fs / storage 的 host_domains adapter 已随「双端全等 8 域
-/// 迁内核 core_binding」删除——对应薄转发在 `packages/wasmnest-wasm-core/src/
+/// 迁内核 core_binding」删除——对应薄转发在 `../wasmnest-lib/wasmnest-wasm-core/src/
 /// host_api/{fs,storage}.rs`（同走 wasmnest-host-api-core 共享核），由 wasm-core
 /// 自身测试覆盖；本表只钉移动宿主仍持有的端差异域。
 const HOST_ADAPTER_CORE_FORWARDS: [(&str, &str); 3] = [
@@ -357,13 +357,13 @@ fn mobile_only_mechanisms_and_retired_shims_stay_out_of_wasm_core() {
 #[test]
 fn retired_mobile_http_engine_stays_retired() {
     let root = repo_root();
-    let engine = root.join("packages/wasmnest-wasm-core/src/host_api/http_engine.rs");
+    let engine = root.join("../wasmnest-lib/wasmnest-wasm-core/src/host_api/http_engine.rs");
     assert!(
         !engine.exists(),
         "已退役的移动 http 引擎又出现了：{}（执行本体住能力域 crate）",
         engine.display()
     );
-    let host_api = read(&root.join("packages/wasmnest-wasm-core/src/host_api.rs"));
+    let host_api = read(&root.join("../wasmnest-lib/wasmnest-wasm-core/src/host_api.rs"));
     assert!(
         !host_api.contains("pub mod http_engine"),
         "wasm-core 重新挂载了已退役的 http 引擎模块"

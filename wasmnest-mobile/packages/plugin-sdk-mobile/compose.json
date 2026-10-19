@@ -1,15 +1,15 @@
 {
   "package": "wasmnest:plugin",
   "world": "plugin",
-  "core": "packages/wasmnest-wasm-core/wit/core.wit",
+  "core": "../wasmnest-lib/wasmnest-wasm-core/wit/core.wit",
   "out": "wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit",
   "caps": {
     "mobile": "wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit-src/cap-mobile.wit",
-    "mdns": "packages/wasmnest-discovery-engine/wit/mdns.wit",
-    "peer": "packages/wasmnest-server-peer-net/wit/peer.wit",
-    "http": "packages/wasmnest-server-http/wit/http.wit",
-    "ws": "packages/wasmnest-ws-client-engine/wit/ws.wit",
-    "notify": "packages/wasmnest-notify-engine/wit/notify.wit"
+    "mdns": "../wasmnest-lib/wasmnest-discovery-engine/wit/mdns.wit",
+    "peer": "../wasmnest-lib/wasmnest-server-peer-net/wit/peer.wit",
+    "http": "../wasmnest-lib/wasmnest-server-http/wit/http.wit",
+    "ws": "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit",
+    "notify": "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit"
   },
   "worlds": ["plugin", "plugin-binary"],
   "abi": { "version": 21 }

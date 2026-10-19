@@ -1,15 +1,15 @@
 {
   "package": "wasmnest:plugin",
   "world": "plugin",
-  "core": "packages/wasmnest-wasm-core/wit/core.wit",
+  "core": "../wasmnest-lib/wasmnest-wasm-core/wit/core.wit",
   "out": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit",
   "caps": {
-    "pty": "packages/wasmnest-pty-engine/wit/pty.wit",
-    "mdns": "packages/wasmnest-discovery-engine/wit/mdns.wit",
-    "peer": "packages/wasmnest-server-peer-net/wit/peer.wit",
-    "http": "packages/wasmnest-server-http/wit/http.wit",
-    "ws": "packages/wasmnest-ws-client-engine/wit/ws.wit",
-    "notify": "packages/wasmnest-notify-engine/wit/notify.wit",
+    "pty": "../wasmnest-lib/wasmnest-pty-engine/wit/pty.wit",
+    "mdns": "../wasmnest-lib/wasmnest-discovery-engine/wit/mdns.wit",
+    "peer": "../wasmnest-lib/wasmnest-server-peer-net/wit/peer.wit",
+    "http": "../wasmnest-lib/wasmnest-server-http/wit/http.wit",
+    "ws": "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit",
+    "notify": "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit",
     "http-endpoint": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-http.wit",
     "ws-server": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-ws.wit",
     "desktop": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-desktop.wit"

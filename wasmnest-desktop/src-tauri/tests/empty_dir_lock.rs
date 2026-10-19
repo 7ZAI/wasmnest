@@ -3,7 +3,7 @@
 //! ## 锁什么
 //!
 //! 一方源码目录里**不得存在空目录**。这些空目录几乎全是同一件事的残留：把
-//! `foo/mod.rs` 拍平成同层兄弟文件 `foo.rs`（AGENTS.md §6「模块入口文件与目录同名，
+//! `foo/mod.rs` 拍平成同层兄弟文件 `foo.rs`（docs/backend.md §1「模块入口文件与目录同名，
 //! 不用 `mod.rs`」的目标形态）时，旧目录没删掉，于是同一个模块在文件树上留下
 //! `foo.rs` 与空 `foo/` 两层壳。
 //!
@@ -65,8 +65,8 @@ const SOURCE_ROOT_PATTERNS: [&str; 7] = [
     "wasmnest-mobile/packages/*/src",
     // 移动端：前端
     "wasmnest-mobile/src",
-    // 仓库根：机制内核 crate（能力仓 submodule 挂载点）
-    "packages/*/src",
+    // 能力仓 `../wasmnest-lib`：机制内核 crate
+    "../wasmnest-lib/*/src",
 ];
 // 跨端测试工程 2026-10-18 迁出为独立容器仓 `wasmnest-test/cross-end-tests/`——
 // 不再属于本仓源码面，故不在上面的空目录锁清单内。

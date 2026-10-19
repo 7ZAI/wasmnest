@@ -4,7 +4,7 @@
 //!
 //! server-lib-split 票 03/04/05/06/07：传输无关内核（生命周期 / 流量过滤链 / 链路加密 / 指标 /
 //! 组合装配）、两个传输面（HTTP / WebSocket）与对等网络引擎域均已抽为独立 crate
-//! （`packages/wasmnest-server-core` / `-http` / `-websocket` / `-peer-net`），宿主侧不再有
+//! （`../wasmnest-lib/wasmnest-server-core` / `-http` / `-websocket` / `-peer-net`），宿主侧不再有
 //! `server::core` / `server::http` / `server::websocket` / `server::peer_net` 模块；
 //! 本目录只剩宿主壳职责：组合根（`composition`：把两个面的 face 交给内核 `serve`、
 //! 并持有全局端口注册表的**唯一**装配点）、端口实现（`ports_impl`）、crate 边界锁

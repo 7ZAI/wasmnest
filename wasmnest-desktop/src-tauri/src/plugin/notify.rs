@@ -3,7 +3,7 @@
 //! 2026-10-13 功能级统一（ADR 0052 D3 / domain-owned-contracts 票 04）：桌面
 //! `host-events-desktop.notify(title, body)` 与移动
 //! `host-notify.notify(title, body, options-json)` 是同一功能 → 统一为共享域契约
-//! `host-notify`（真源 `packages/wasmnest-notify-engine/wit/notify.wit`，双端 caps
+//! `host-notify`（真源 `../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit`，双端 caps
 //! 直接消费）。本文件是桌面端的实现：经 Tauri 事件发前端 toast（`plugin:notify`
 //! 事件，payload 与迁移前逐字一致）。
 //!
