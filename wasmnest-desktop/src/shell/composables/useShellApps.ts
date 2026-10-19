@@ -80,15 +80,15 @@ export interface ShellAppEntry {
   permissions: string[]
   enabled: boolean
   autostart: boolean
-  /** 宿主挂载运行面的落地路由（当前仅 bedcode 应用有前端；缺省 = 无挂载面） */
+  /** 宿主挂载运行面的落地路由（有前端界面的应用在 SURFACE_ROUTES 登记；无界面应用缺省 = 无挂载面） */
   route?: string
 }
 
 /**
- * 宿主挂载运行面路由表：应用前端由壳宿主（本 webview）承载，打开后路由进入
- * 其应用界面。当前唯一运行面 = bedcode 应用界面（AppContent / 侧边栏工作台形态，
- * downsink 后沉入 wasm-app）；registerSurface 契约为多应用扩展预留（本次不引入
- * 完整前端插件运行时——防回接锁保持，spec D2）。
+ * 宿主挂载运行面路由表（桌面 UI 宿主修正 2026-10-17）：应用前端由壳经挂载槽承载
+ * 其独立构建的前端整包（机制 B，非贡献面）。每个有前端界面的挂载包都在此登记
+ * （现状 4 个：terminal-session / agent-hub / ai-chatbox / file-transfer）；
+ * 无前端界面的应用无挂载路由。registerSurface 契约为多应用扩展预留（防回接锁保持）。
  *
  * 插件 id 家族随 ADR 0056 全改 `com.wasmnest`（bedcode 应用豁免仅显示名 / rust
  * lib 名 / 目录 slug 三件，id 不在豁免内）——此处用改名后的终态 id；产物目录
