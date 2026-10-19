@@ -86,10 +86,16 @@ describe('全屏形态（安卓 recents：虚化背景 + 大卡片）', () => {
     )
   })
 
-  it('卡片是应用窗口形态（比例 + 横向 snap），不是列表行', () => {
+  it('卡片是应用窗口形态（缩略区 16/10 + 自适应多行网格 + 超高滚动），不是列表行', () => {
     const src = stripComments(read(SWITCHER))
-    expect(src).toMatch(/\.ts-card\s*\{[^}]*aspect-ratio/)
-    expect(src).toMatch(/\.ts-cards\s*\{[^}]*scroll-snap-type/)
+    // 缩略区保持应用窗口比例（16/10），不是一行一个的列表行
+    expect(src).toMatch(/\.ts-thumb\s*\{[^}]*aspect-ratio:\s*16\s*\/\s*10/)
+    // 卡片带 = 自适应多行网格：列宽随窗口自适应（auto-fill + minmax 200–260px），
+    // 放不下自动换行；卡片过多时超出高度滚动查看
+    expect(src).toMatch(
+      /\.ts-cards\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(200px,\s*260px\)\)/,
+    )
+    expect(src).toMatch(/\.ts-cards\s*\{[^}]*overflow-y:\s*auto/)
     expect(src).toContain('role="listitem"')
   })
 })

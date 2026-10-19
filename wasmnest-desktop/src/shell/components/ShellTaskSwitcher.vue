@@ -33,7 +33,10 @@
             </button>
           </header>
 
-          <!-- 卡片带：横向滚动 + scroll-snap（卡片比例按应用窗口，点卡片切回去） -->
+          <!-- 卡片带：自适应多行网格（2026-10-19 优化）。
+               卡片列宽随窗口自适应（minmax 200–260px，宽度不够自动换行），
+               卡片过多时超出高度滚动查看；缩略区 = 品牌渐变底 + 应用真实图标
+               （安卓 recents 形态；真实界面快照受跨 Vue 实例 / canvas 内容 / DOM 卸载限制不可行） -->
           <div class="ts-cards" role="list">
             <article
               v-for="(key, i) in state.cards.value"
@@ -49,17 +52,21 @@
                 :aria-label="t('shell.recents.open', { name: state.cardTitleOf(key) })"
                 @click="switchTo(key)"
               >
-                <span class="ts-thumb">
+                <span
+                  class="ts-thumb"
+                  :class="kindOf(key) === 'app' ? 'tone-' + toneOf(key) : 'tone-system'"
+                  :style="thumbStyle(key)"
+                >
                   <ShellAppTile
                     v-if="kindOf(key) === 'app'"
                     :icon="entryOf(key)?.icon ?? 'grid'"
                     :plugin-id="idOf(key)"
                     :icon-file="entryOf(key)?.iconFile"
                     :tone="toneOf(key)"
-                    :size="96"
+                    :size="92"
                   />
                   <span v-else class="glyph-box tone-system ts-sys-glyph">
-                    <ShellIcon :name="sysIconOf(key)" :size="40" :stroke-width="1.5" />
+                    <ShellIcon :name="sysIconOf(key)" :size="36" :stroke-width="1.5" />
                   </span>
                 </span>
                 <span class="ts-meta">
@@ -120,6 +127,27 @@ const appsStore = useShellApps()
 
 const open = computed(() => state.recentsOpen.value)
 const rootEl = ref<HTMLElement | null>(null)
+
+/** 缩略区品牌渐变底：tone 档 → 语义色 token（与 tone-* 类同源） */
+const TONE_ACCENTS: Record<AppTone | 'system', string> = {
+  primary: 'var(--color-primary)',
+  info: 'var(--color-info)',
+  success: 'var(--color-success)',
+  warning: 'var(--color-warning)',
+  mix: 'var(--color-info)',
+  system: 'var(--color-info)',
+}
+
+/**
+ * 缩略图区背景：该应用品牌色的对角渐变（模拟安卓 recents 卡片的「界面快照」观感；
+ * 真实快照不可行——挂载槽只在当前面实例化、canvas 内容不可克隆）。
+ */
+function thumbStyle(key: CardKey): Record<string, string> {
+  const accent = TONE_ACCENTS[kindOf(key) === 'app' ? toneOf(key) : 'system']
+  return {
+    background: `linear-gradient(160deg, ${accent} 0%, color-mix(in srgb, ${accent} 14%, var(--bg-sidebar)) 55%, var(--bg-sidebar) 100%)`,
+  }
+}
 
 // 打开即把焦点收进全屏层：否则 Tab 还会走背后的工具栏 / 应用内容（全屏层是模态的）
 watch(open, async (isOpen) => {
@@ -251,28 +279,27 @@ function close(): void {
   color: var(--text-primary);
 }
 
-/* 卡片带：横向滚动 + snap 居中 */
+/* 卡片带：自适应多行网格。列宽随窗口自适应（minmax 200–260px），放不下自动换行；
+   卡片过多 → 纵向滚动查看（flex 容器内 grid 由 .ts-inner 决定高度，溢出滚动） */
 .ts-cards {
   flex: 1;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 4px 2px 10px;
-  scroll-snap-type: x mandatory;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 260px));
+  justify-content: center;
+  gap: 14px;
+  align-content: start;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 2px 12px;
   scrollbar-width: thin;
 }
 
-/* 卡片：按应用窗口比例（3:4），高度吃满可用区并封顶 */
+/* 卡片：高度由内容决定（缩略区 16/10 + 信息条），宽度随网格列自适应 */
 .ts-card {
   position: relative;
-  flex: 0 0 auto;
-  height: min(100%, 460px);
-  aspect-ratio: 3 / 4;
-  scroll-snap-align: center;
   display: flex;
+  flex-direction: column;
   border-radius: var(--radius-sheet);
   background: var(--bg-card);
   border: 1px solid var(--border-strong);
@@ -301,18 +328,17 @@ function close(): void {
   cursor: pointer;
   text-align: left;
 }
-/* 缩略区：应用图标居中（没有真实快照，用图标 + 底色表达「这是哪个应用」） */
+/* 缩略区：固定 16/10（应用窗口比例），品牌渐变底 + 应用真实图标居中 */
 .ts-thumb {
-  flex: 1;
-  min-height: 0;
+  aspect-ratio: 16 / 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-sidebar);
+  position: relative;
 }
 .ts-sys-glyph {
-  width: 96px;
-  height: 96px;
+  width: 72px;
+  height: 72px;
   border-radius: var(--radius-sheet);
 }
 .ts-meta {
