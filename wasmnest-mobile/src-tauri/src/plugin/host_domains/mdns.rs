@@ -1,7 +1,7 @@
 //! host-mdns v2 逻辑层 —— 移动端薄转发（双端共享 lib spec M3）
 //!
 //! 引擎机制（共享守护 / 双句柄表 / 属主仲裁 / 事件定向投递 / re-announce /
-//! purge）全部在共享引擎 [`wasmnest_discovery_engine`]（仓库根 `packages/`，
+//! purge）全部在共享引擎 [`wasmnest_discovery_engine`]（能力仓 `../wasmnest-lib/`，
 //! 零 WIT 形态，M1 落地）；本模块只保留两件事：
 //!
 //! 1. **5 条 host-mdns 原语薄转发**：函数签名与历史一致（component.rs 绑定 /

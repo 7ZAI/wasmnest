@@ -1,7 +1,7 @@
 //! host-peer 域 —— 薄转发（域逻辑在共享能力域 crate）
 //!
 //! 19 条 `host-peer` 原语的机制（session 句柄表 / 属主仲裁 / 数据面自动重拨 /
-//! 载荷校验 / 权限门位置）全在 `packages/wasmnest-server-peer-net::plugin_binding`
+//! 载荷校验 / 权限门位置）全在 `../wasmnest-lib/wasmnest-server-peer-net::plugin_binding`
 //! （WIT-无关域函数 + [`PeerPorts`] 端口，无 feature 门控）；本层只做
 //! 「取已装配端口 → 转调 crate → 按 WIT `result` 形状返回」。
 //!

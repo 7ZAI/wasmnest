@@ -7,7 +7,7 @@
 //! 三个 server 能力域的自报；桌面宿主 adapter（`src/plugin/*.rs`）自报的十几个
 //! 模块只有本 crate 的测试二进制能收集到。判据与词表真源在
 //! `wasmnest_host_kit::ModuleRegistry::product_noun_violations`（词段匹配实现与契约例
-//! 随其住在 `packages/wasmnest-host-kit/src/registry.rs`），本文件只是桌面侧的全量
+//! 随其住在 `../wasmnest-lib/wasmnest-host-kit/src/registry.rs`），本文件只是桌面侧的全量
 //! 扫描点——**不要把判据复制回宿主**，否则两端各自演化出第二套词表。
 //!
 //! ## 判据

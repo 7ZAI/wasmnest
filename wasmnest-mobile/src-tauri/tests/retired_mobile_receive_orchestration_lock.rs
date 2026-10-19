@@ -95,7 +95,7 @@ fn receive_orchestration_tests_are_not_orphaned_into_a_dead_subdirectory() {
         !orphan_dir.exists(),
         "src/peer/receive/ 子目录已随能力域集中化退役：其 tests/ 会脱离编译（无 \
          mod 声明）而成为永不编译的死测试。接收侧用例请写进 src/peer/receive.rs \
-         的 #[cfg(test)] 模块，或落到 packages/wasmnest-server-peer-net 真源处。"
+         的 #[cfg(test)] 模块，或落到 ../wasmnest-lib/wasmnest-server-peer-net 真源处。"
     );
 }
 

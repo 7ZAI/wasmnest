@@ -2,7 +2,7 @@
 //!
 //! ## 两个 interface 的分工（2026-10-13 功能级统一，ADR 0052 D3）
 //!
-//! - **`host-notify`（共享域契约，真源 `packages/wasmnest-notify-engine/wit/notify.wit`）**：
+//! - **`host-notify`（共享域契约，真源 `../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit`）**：
 //!   `notify` 本体是双端功能级交集 → 统一签名 `notify(title, body, options-json)`，
 //!   双端 caps 各消费同一份契约。移动端就地在 `-mobile` 模块内实现（同一份
 //!   Android 桥，行为与统一前逐字一致）。

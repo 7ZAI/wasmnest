@@ -2,7 +2,7 @@
 //!
 //! 口径（2026-10-10 能力域集中化，能力域集中化 spec 票 04 · R1/R3）：
 //! 询问回执表 / 策略闸门 / 接收事件桥 / 活跃批投影真源在
-//! `packages/wasmnest-server-peer-net`（`peer_engine_receive`）；本文件只保留
+//! `../wasmnest-lib/wasmnest-server-peer-net`（`peer_engine_receive`）；本文件只保留
 //! 委托入口（签名逐字保留）。
 //!
 //! **两处按拍板退役的移动端遗留**：

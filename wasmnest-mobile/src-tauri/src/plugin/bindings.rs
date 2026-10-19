@@ -8,7 +8,7 @@
 //! terminal_stream / connection / auth / 移动 events）与随域迁入的 12 个 core 域
 //! （`plugin/host_domains/`）——各自的 `Host` impl 经 `mobile-host-core` 模块
 //! 自报，装配期由内核 `ModuleRegistry` 收集（核心里已零 WIT 绑定，见
-//! `packages/wasmnest-wasm-core/src/manager/runtime/core_binding.rs` 只绑 core 交集）。
+//! `../wasmnest-lib/wasmnest-wasm-core/src/manager/runtime/core_binding.rs` 只绑 core 交集）。
 //!
 //! **纪律**：宿主 adapter 的 `Host` impl 一律引用**本文件**的绑定；不得再实现
 //! wasm-core 内核的同名 trait——同一 interface 被两份 `add_to_linker` 注册

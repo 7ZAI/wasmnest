@@ -6,7 +6,7 @@
 //! 二进制链接到的 `ModuleEntry`。wasm-core 的 lib 测试二进制看不到移动宿主
 //! adapter（`src/plugin/*.rs`）自报的模块，那些模块只有本 crate 的测试二进制能
 //! 收集到。判据与词表真源在 `wasmnest_host_kit::ModuleRegistry::product_noun_violations`
-//! （词段匹配实现与契约例随其住在 `packages/wasmnest-host-kit/src/registry.rs`），
+//! （词段匹配实现与契约例随其住在 `../wasmnest-lib/wasmnest-host-kit/src/registry.rs`），
 //! 本文件只是移动侧的全量扫描点。
 //!
 //! ## 登记例外（移动独有端扩展）

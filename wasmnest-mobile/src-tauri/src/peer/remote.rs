@@ -2,7 +2,7 @@
 //!
 //! 口径（2026-10-10 能力域集中化，能力域集中化 spec 票 04 · R2/R3）：
 //! 浏览 / 拉取 / 会话令牌表 / 建行事实事件真源在
-//! `packages/wasmnest-server-peer-net`（`peer_engine_remote`）；本文件只保留
+//! `../wasmnest-lib/wasmnest-server-peer-net`（`peer_engine_remote`）；本文件只保留
 //! 委托入口（签名与 DTO 逐字保留——DTO 由能力域再导出，wire 形状零变化）。
 //!
 //! **按拍板退役的移动端遗留（R3）**：`PULL_FILES_CAP`（512）与并发信号量

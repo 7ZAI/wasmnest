@@ -141,7 +141,7 @@ pub fn run() {
             // std Mutex：SQL 为同步操作，host fn 同步取锁，避免 block_on 绕行）
             let db_path = app_data_dir.join("wasmnest_plugins.db");
             // 连接所有权交 wasm-core `Database`；**建表与迁移的真源也在 crate 内**
-            // （`init_schema` → `packages/wasmnest-wasm-core/src/db/schema.sql`，单一
+            // （`init_schema` → `../wasmnest-lib/wasmnest-wasm-core/src/db/schema.sql`，单一
             // 事实源，AGENTS §9）：宿主不自持 DDL 副本——曾自持的那份与内核
             // 真源漂移出旧形状 `plugin_auth_records`（缺 id），使 fs 授权记录读写
             // 全失败（2026-10-14 设备实证 `no such column: id`）。已装设备的旧形状

@@ -14,7 +14,7 @@
 //!
 //! 一并删净的理由：死代码在本仓库会漂移。带 `#[allow(dead_code)]` 的抽象看起来
 //! 「留着以后会用」，实际每次读它的人都要重新判断它是否可用，而判断结果恒为
-//! 不可用。需要服务端能力时从 `packages/wasmnest-wasm-core` 或桌面端取，而非
+//! 不可用。需要服务端能力时从 `../wasmnest-lib/wasmnest-wasm-core` 或桌面端取，而非
 //! 在客户端 crate 里养一份无实现的骨架。
 
 use std::net::SocketAddr;

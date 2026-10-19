@@ -1,6 +1,6 @@
 //! 对等网络（peer-net）宿主模块：装配 / 端口 / 平台缝 / 委托入口 / 迁移。
 //!
-//! 引擎控制面真源在共享能力域 `packages/wasmnest-server-peer-net`（纯引擎形态，
+//! 引擎控制面真源在共享能力域 `../wasmnest-lib/wasmnest-server-peer-net`（纯引擎形态，
 //! 双端同引，ADR 0048）；本模块只保留宿主侧适配面：
 //!
 //! - [`net`]：装配（`peer_ctx` 是宿主唯一认识 `AppHandle` 的引擎装配点）+

@@ -1,7 +1,7 @@
 //! 发送面适配（委托共享 peer 能力域 crate）+ 平台原语 pick-files。
 //!
 //! 口径（2026-10-10 能力域集中化）：发送编排 / 会话句柄表 / 事件桥真源在
-//! `packages/wasmnest-server-peer-net`（`peer_engine_transfer`）；本文件只保留：
+//! `../wasmnest-lib/wasmnest-server-peer-net`（`peer_engine_transfer`）；本文件只保留：
 //!
 //! - **委托**：host_ports / 插件生命周期用的发送面入口（签名逐字保留）；
 //! - **移动端组合语义**：单一 `pause-transfer` / `resume-transfer` 原语同时管两个

@@ -3,7 +3,7 @@
 //! 插件系统入口 — WASM 动态加载 + 前端插件管理
 //!
 //! **票 17 批次 2b（垫片形态）+ 票 06 批次 03/04（单一 crate）**：机制面真源在
-//! 仓库根单一 wasm-core `packages/wasmnest-wasm-core`（单形态 2026-10-13 起无
+//! 能力仓单一 wasm-core `../wasmnest-lib/wasmnest-wasm-core`（单形态 2026-10-13 起无
 //! common/bare 之分）的统一机制面
 //! （manager::runtime / host_api / bus / storage / security::fs_auth /
 //! manager::{types,validation,downloader} / terminal_stream_gateway；

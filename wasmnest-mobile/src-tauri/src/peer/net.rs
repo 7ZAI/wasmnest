@@ -3,8 +3,8 @@
 //! ## 口径（2026-10-10 能力域集中化；2026-10-14 收拢进 `src/peer/` 模块）
 //!
 //! 引擎控制面（节点装配 / 生命周期 / 连接 / 首连确认 / 可信表 / 共享目录 /
-//! 发送-接收-远端控制面 / 引擎事件翻译）真源在仓库根
-//! `packages/wasmnest-server-peer-net`（纯引擎形态 `default = []`，双端同引，
+//! 发送-接收-远端控制面 / 引擎事件翻译）真源在能力仓
+//! `../wasmnest-lib/wasmnest-server-peer-net`（纯引擎形态 `default = []`，双端同引，
 //! spec `.scratch/2026-10-10-peer-capability-consolidation/`）；`src/peer/` 模块
 //! 只保留宿主侧三件事：**(a) 端口实现**（`peer::ports`：`PeerEnginePorts` 五端口
 //! bus / event_sink / paths / system_info / mdns，trait 词汇复用
