@@ -30,24 +30,30 @@ withDefaults(
 .shell-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 11px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  padding: 12px 14px;
+  padding: 14px 16px;
 }
 .shell-card-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: calc(13px * var(--ui-scale));
+  gap: 9px;
+  font-size: calc(14px * var(--ui-scale));
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
+/* 卡头图标降一档灰：标题是主语，图标是识别锚点 */
+.shell-card-title svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
 .shell-card-desc {
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(12px * var(--ui-scale));
   color: var(--text-tertiary);
   line-height: 1.55;
-  margin-top: -4px;
+  margin-top: -5px;
 }
 </style>

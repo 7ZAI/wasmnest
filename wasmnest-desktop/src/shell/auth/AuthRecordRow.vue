@@ -1,8 +1,14 @@
 <template>
   <div class="flex items-center gap-2 py-1.5" data-testid="auth-record-row">
-    <span class="w-4 h-4 flex items-center justify-center text-xs shrink-0">{{
-      effectEmoji(record.effect)
-    }}</span>
+    <!-- 效果标记用矢量图标而非 emoji：emoji 是字体依赖的字形（各平台配色/字重不一致，
+         也不能跟着 token 变色），在授权这类「要看清结果」的地方会把可读性交给系统字体 -->
+    <ShellIcon
+      class="shrink-0"
+      :name="isDeny(record) ? 'x' : 'check'"
+      :size="13"
+      :stroke-width="2.25"
+      :class="isDeny(record) ? 'text-[var(--color-danger-ink)]' : 'text-[var(--color-success-ink)]'"
+    />
     <div class="flex-1 min-w-0">
       <div class="flex items-center gap-2 min-w-0">
         <code
@@ -12,18 +18,18 @@
         <!-- 未经确认标记（免询问自动放行分区，spec §9.4：与用户确认记录视觉区分） -->
         <span
           v-if="unconfirmed"
-          class="shrink-0 px-1.5 py-0.5 rounded text-[calc(10px*var(--ui-scale))] font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
+          class="shrink-0 px-1.5 py-0.5 rounded text-[calc(11px*var(--ui-scale))] font-medium bg-[var(--color-warning-light)] text-[var(--color-warning-ink)]"
         >
           {{ $t('settings.authorization.sections.unconfirmed') }}
         </span>
         <span
           v-if="opsLabel(record.ops)"
-          class="shrink-0 px-1.5 py-0.5 rounded text-[calc(10px*var(--ui-scale))] bg-[var(--bg-hover)] text-[var(--text-secondary)]"
+          class="shrink-0 px-1.5 py-0.5 rounded text-[calc(11px*var(--ui-scale))] bg-[var(--bg-hover)] text-[var(--text-secondary)]"
         >
           {{ opsLabel(record.ops) }}
         </span>
         <span
-          class="shrink-0 px-1.5 py-0.5 rounded text-[calc(10px*var(--ui-scale))] bg-[var(--bg-hover)] text-[var(--text-tertiary)]"
+          class="shrink-0 px-1.5 py-0.5 rounded text-[calc(11px*var(--ui-scale))] bg-[var(--bg-hover)] text-[var(--text-secondary)]"
         >
           {{ sourceLabel(record.source) }}
         </span>
@@ -63,6 +69,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { effectKeySuffix, opsKeySuffix, sourceKeySuffix, type AuthRecord } from '@/shell/auth/authPolicy'
+import ShellIcon from '@/shell/components/ShellIcon.vue'
 
 const props = defineProps<{
   record: AuthRecord
@@ -83,13 +90,6 @@ function isDeny(record: AuthRecord): boolean {
   return effectKeySuffix(record.effect) === 'deny'
 }
 
-/** 效果 emoji：已授权 ✓ / 硬拒绝 ✕（未知值回退中性图标） */
-function effectEmoji(effect: string): string {
-  const key = effectKeySuffix(effect)
-  if (key === 'allow') return '✅'
-  if (key === 'deny') return '⛔'
-  return '▪️'
-}
 
 /** 操作集文案：空集（网络记录）不渲染徽标 */
 function opsLabel(ops: string[]): string {

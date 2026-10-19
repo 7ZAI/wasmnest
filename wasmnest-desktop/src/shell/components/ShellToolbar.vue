@@ -32,6 +32,7 @@
       >
       <span
         class="tb-where text-[calc(11px*var(--ui-scale))] text-[var(--text-tertiary)] whitespace-nowrap overflow-hidden text-ellipsis min-w-0"
+        :class="{ 'sr-only': !hasWhere }"
         role="status"
         aria-atomic="true"
       >
@@ -68,6 +69,7 @@
       <button
         class="tb-btn"
         :class="{ on: state.screen.value === 'home' }"
+        :aria-current="state.screen.value === 'home' ? 'page' : undefined"
         :title="t('shell.nav.homeTitle')"
         :aria-label="t('shell.nav.home')"
         @click="state.goHome()"
@@ -82,6 +84,7 @@
       <button
         class="tb-btn"
         :class="{ on: state.panelOpen.value }"
+        :aria-pressed="state.panelOpen.value"
         data-shell-panel-trigger
         :title="t('shell.toolbar.notifsTitle', { count: state.notifCountTotal.value })"
         :aria-label="t('shell.toolbar.notifs', { count: state.notifCountTotal.value })"
@@ -97,6 +100,7 @@
       <button
         class="tb-btn"
         :class="{ on: state.quickSettingsOpen.value }"
+        :aria-pressed="state.quickSettingsOpen.value"
         data-shell-quick-trigger
         :title="t('shell.toolbar.quickSettings')"
         :aria-label="t('shell.toolbar.quickSettings')"
@@ -181,6 +185,11 @@ const where = computed(() =>
     ? state.cardTitleOf(state.activeCard.value)
     : t('shell.home.where'),
 )
+
+/** 位置标签只在系统页可见：主屏时右侧「主屏」导航键已经点明位置，
+    品牌旁再写一遍同一个词是纯重复。role=status 区域保留（视觉隐藏在 .sr-only 里，
+    读屏仍会播报当前位置变化）。 */
+const hasWhere = computed(() => state.screen.value === 'card')
 
 /** 有可收的覆层或不在主屏 → 返回可用 */
 const canBack = computed(
@@ -293,12 +302,17 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   font-size: calc(12px * var(--ui-scale));
   position: relative;
   transition:
-    background-color 0.15s,
-    color 0.15s;
+    background-color var(--motion-duration-fast) var(--motion-ease),
+    color var(--motion-duration-fast) var(--motion-ease);
 }
 .tb-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+/* 按下反馈用一层比 hover 更实的底色（不位移：工具栏按钮挨着窗口控制，
+   位移会让整条工具栏看起来在抖） */
+.tb-btn:active:not(:disabled) {
+  background: var(--border);
 }
 .tb-btn:disabled {
   opacity: 0.35;
@@ -308,29 +322,34 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   background: none;
   color: var(--text-secondary);
 }
+/* 当前面（主屏 / 通知 / 快捷设置）：实底而不是 12% 主色淡染——
+   淡染在浅色主题下几乎与卡片底同色，开合状态看不出来 */
 .tb-btn.on {
-  background: var(--color-primary-light);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 .tb-btn .bdg {
   position: absolute;
-  top: 0;
-  right: 0;
-  min-width: 13px;
-  height: 13px;
+  top: -1px;
+  right: -1px;
+  min-width: 15px;
+  height: 15px;
   padding: 0 3px;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--color-danger);
   color: var(--color-primary-contrast);
-  font-size: calc(9px * var(--ui-scale));
+  font-size: calc(9.5px * var(--ui-scale));
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 2px 卡片色外圈：徽标压在 bell 图标肩上，没有外圈时与图标笔画糊在一起 */
+  box-shadow: 0 0 0 2px var(--bg-card);
 }
 .tb-sep {
   width: 1px;
-  height: 16px;
+  height: 18px;
   background: var(--border-strong);
   flex-shrink: 0;
 }
@@ -344,6 +363,7 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   color: var(--text-secondary);
   font-size: calc(9.5px * var(--ui-scale));
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -357,16 +377,22 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   align-items: center;
   justify-content: center;
   transition:
-    background-color 0.15s,
-    color 0.15s;
+    background-color var(--motion-duration-fast) var(--motion-ease),
+    color var(--motion-duration-fast) var(--motion-ease);
   -webkit-app-region: no-drag;
 }
 .tb-win:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
+.tb-win:active {
+  background: var(--border);
+}
 .tb-win.close:hover {
   background: var(--color-danger);
   color: var(--color-primary-contrast);
+}
+.tb-win.close:active {
+  filter: brightness(0.92);
 }
 </style>

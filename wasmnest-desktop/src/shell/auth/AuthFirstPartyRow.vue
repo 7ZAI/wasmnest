@@ -1,6 +1,6 @@
 <template>
   <div class="flex items-center gap-2 py-1.5" data-testid="first-party-row">
-    <span class="w-4 h-4 flex items-center justify-center text-xs shrink-0">🌟</span>
+    <ShellIcon name="folder" :size="13" class="shrink-0 text-[var(--text-tertiary)]" />
     <div class="flex-1 min-w-0">
       <div class="flex items-center gap-2 min-w-0">
         <code
@@ -8,7 +8,7 @@
           >{{ firstPartyLabel(entry) }}</code
         >
         <span
-          class="shrink-0 px-1.5 py-0.5 rounded text-[calc(10px*var(--ui-scale))] bg-[var(--bg-hover)] text-[var(--text-tertiary)]"
+          class="shrink-0 px-1.5 py-0.5 rounded text-[calc(11px*var(--ui-scale))] bg-[var(--bg-hover)] text-[var(--text-secondary)]"
         >
           {{ kindLabel }}
         </span>
@@ -45,6 +45,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { firstPartyLabel, type FirstPartyDirEntry } from '@/shell/auth/authPolicy'
+import ShellIcon from '@/shell/components/ShellIcon.vue'
 
 const props = defineProps<{
   entry: FirstPartyDirEntry

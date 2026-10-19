@@ -15,11 +15,11 @@
         >
           <!-- ==================== 退出确认（窗口关闭走退出确认弹窗） ==================== -->
           <template v-if="dialog === 'exit'">
-            <div class="dlg-h">
-              <ShellIcon name="exit" :size="16" />
+            <div class="dlg-h danger">
+              <span class="dlg-ic"><ShellIcon name="exit" :size="15" /></span>
               <span class="t">{{ t('shell.dialog.exit.title') }}</span>
-              <button class="shell-mini" :aria-label="t('shell.dialog.close')" @click="close">
-                <ShellIcon name="x" :size="12" />
+              <button class="dlg-x" :aria-label="t('shell.dialog.close')" @click="close">
+                <ShellIcon name="x" :size="13" />
               </button>
             </div>
             <div class="dlg-b">
@@ -41,10 +41,10 @@
           <!-- ==================== 审批（D5：preauthorize → activate → NeedsApproval → 批准后激活） ==================== -->
           <template v-else-if="dialog === 'approval'">
             <div class="dlg-h">
-              <ShellIcon name="shield" :size="16" />
+              <span class="dlg-ic"><ShellIcon name="shield" :size="15" /></span>
               <span class="t">{{ t('shell.dialog.approval.title', { name: app?.name ?? '' }) }}</span>
-              <button class="shell-mini" :aria-label="t('shell.dialog.close')" @click="close">
-                <ShellIcon name="x" :size="12" />
+              <button class="dlg-x" :aria-label="t('shell.dialog.close')" @click="close">
+                <ShellIcon name="x" :size="13" />
               </button>
             </div>
             <div class="dlg-b">
@@ -64,11 +64,11 @@
 
           <!-- ==================== 卸载（含数据清理确认；仅未启用应用可卸） ==================== -->
           <template v-else-if="dialog === 'uninstall'">
-            <div class="dlg-h">
-              <ShellIcon name="trash" :size="16" />
+            <div class="dlg-h danger">
+              <span class="dlg-ic"><ShellIcon name="trash" :size="15" /></span>
               <span class="t">{{ t('shell.dialog.uninstall.title', { name: app?.name ?? '' }) }}</span>
-              <button class="shell-mini" :aria-label="t('shell.dialog.close')" @click="close">
-                <ShellIcon name="x" :size="12" />
+              <button class="dlg-x" :aria-label="t('shell.dialog.close')" @click="close">
+                <ShellIcon name="x" :size="13" />
               </button>
             </div>
             <div class="dlg-b">
@@ -86,10 +86,10 @@
           <!-- 策略二次确认（授权策略切换弹窗；预留扩展点） -->
           <template v-else-if="dialog === 'strategy-confirm'">
             <div class="dlg-h">
-              <ShellIcon name="shield" :size="16" />
+              <span class="dlg-ic"><ShellIcon name="shield" :size="15" /></span>
               <span class="t">{{ t('shell.dialog.strategy.title') }}</span>
-              <button class="shell-mini" :aria-label="t('shell.dialog.close')" @click="close">
-                <ShellIcon name="x" :size="12" />
+              <button class="dlg-x" :aria-label="t('shell.dialog.close')" @click="close">
+                <ShellIcon name="x" :size="13" />
               </button>
             </div>
             <div class="dlg-b">
@@ -187,29 +187,66 @@ function confirmUninstall() {
 
 <style scoped>
 .dlg-h {
-  padding: 13px 16px 10px;
+  padding: 15px 16px 13px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   color: var(--text-primary);
 }
+/* 标题图标收进 30px 图块：与通知卡 / 系统页页头同一套语言（图标块 + 标题），
+   弹窗标题因此有视觉锚点，而不是一行灰字顶着左上角。破坏性动作（退出 / 卸载）
+   用错误色图块——并不靠颜色单独表达（标题与按钮文案都在说这件事）。 */
+.dlg-ic {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--bg-sidebar);
+  color: var(--text-secondary);
+}
+.dlg-h.danger .dlg-ic {
+  background: var(--color-danger-light);
+  color: var(--color-danger-ink);
+}
 .dlg-h .t {
-  font-size: calc(13px * var(--ui-scale));
+  font-size: calc(14.5px * var(--ui-scale));
   font-weight: 600;
+  letter-spacing: -0.01em;
   flex: 1;
   min-width: 0;
 }
+/* 关闭键：无边框圆形（弹窗头部已有描边分隔，再加一个描边按钮会挤） */
+.dlg-x {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-ease),
+    color var(--motion-duration-fast) var(--motion-ease);
+}
+.dlg-x:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
 .dlg-b {
-  padding: 13px 16px;
+  padding: 14px 16px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 .dlg-f {
-  padding: 10px 16px 12px;
+  padding: 11px 16px 13px;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -217,34 +254,34 @@ function confirmUninstall() {
   border-top: 1px solid var(--border);
 }
 .note {
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(12px * var(--ui-scale));
   color: var(--text-secondary);
   line-height: 1.55;
 }
 .perm-line {
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(11.5px * var(--ui-scale));
   color: var(--text-tertiary);
 }
 .mono {
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
+  font-family: var(--font-mono);
 }
 .shell-rec {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 10px;
+  padding: 9px 11px;
   border-radius: var(--radius-button);
   background: var(--bg-hover);
 }
 .shell-rec .tg {
   flex: 1;
   min-width: 0;
-  font-size: calc(12px * var(--ui-scale));
+  font-size: calc(12.5px * var(--ui-scale));
   color: var(--text-primary);
 }
 .shell-dlg-enter-active,
 .shell-dlg-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--motion-duration-fast) var(--motion-ease);
 }
 .shell-dlg-enter-from,
 .shell-dlg-leave-to {

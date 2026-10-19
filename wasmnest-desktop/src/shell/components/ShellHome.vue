@@ -8,13 +8,15 @@
     :aria-label="t('shell.home.aria')"
   >
     <h1 class="sr-only">{{ t('shell.home.aria') }}</h1>
-    <!-- type-to-search 提示（spec-c 已知边界：IME 合成中的 CJK 非本路径，由隐藏 input 承接） -->
-    <div v-if="q.trim() !== ''" class="qhint">
+    <!-- type-to-search 提示（spec-c 已知边界：IME 合成中的 CJK 非本路径，由隐藏 input 承接）。
+         悬在主屏顶部居中，与居中的图块列共用同一条中轴。 -->
+    <div v-if="q.trim() !== ''" class="qhint shell-fade-in" role="status" aria-live="polite">
       <ShellIcon name="search" :size="13" />
       <span class="q font-semibold">{{ q }}</span>
       <span class="n"
-        >{{ filterApps.length + matchedSys.length }} {{ t('shell.home.matches') }} · Enter</span
+        >{{ filterApps.length + matchedSys.length }} {{ t('shell.home.matches') }}</span
       >
+      <kbd class="k">Enter</kbd>
     </div>
 
     <div class="home-col">
@@ -25,7 +27,7 @@
       <section class="home-sec">
         <div class="sec-h">
           <h2 class="t">{{ t('shell.home.appsTitle') }}</h2>
-          <span class="n">{{ apps.length }} · {{ t('shell.home.installed') }}</span>
+          <span class="n">{{ apps.length }}</span>
         </div>
         <div class="appgrid" role="list" :aria-label="t('shell.home.appsTitle')">
           <div
@@ -45,7 +47,7 @@
                 :plugin-id="app.id"
                 :icon-file="app.iconFile"
                 :tone="appsStore.tones.value[app.id] ?? 'system'"
-                :size="52"
+                :size="64"
                 class="icon-hover"
               />
               <span v-if="appsStore.displayStates.value[app.id] === 'approval'" class="bdg-approval"
@@ -55,7 +57,7 @@
             </span>
             <span class="nm truncate">{{ app.name }}</span>
           </div>
-          <div v-if="!apps.length" class="note" style="grid-column: 1 / -1; padding: 14px 2px">
+          <div v-if="!apps.length" class="note" style="flex: 1 1 100%; padding: 16px 2px">
             {{ t('shell.home.noApps', { q }) }}
           </div>
         </div>
@@ -65,7 +67,7 @@
       <section v-if="matchedSys.length" class="home-sec">
         <div class="sec-h">
           <h2 class="t">{{ t('shell.home.sysTitle') }}</h2>
-          <span class="n">{{ t('shell.home.sysHint') }}</span>
+          <span class="n">{{ matchedSys.length }}</span>
         </div>
         <div class="appgrid" role="list" :aria-label="t('shell.home.sysTitle')">
           <div
@@ -79,8 +81,8 @@
             @keydown.enter="state.openSys(sys.id)"
           >
             <span class="glyph-wrap">
-              <span class="glyph-box tone-system icon-hover" style="width: 52px; height: 52px">
-                <ShellIcon :name="sys.icon" :size="23" :stroke-width="1.6" />
+              <span class="glyph-box tone-system icon-hover" style="width: 64px; height: 64px">
+                <ShellIcon :name="sys.icon" :size="28" :stroke-width="1.55" />
               </span>
             </span>
             <span class="nm truncate">{{ t(sys.nameKey) }}</span>
@@ -147,79 +149,130 @@ function onCtx(app: ShellAppEntry, e: MouseEvent) {
 </script>
 
 <style scoped>
+/* 主屏构图：一屏「巢」——内容块在壁纸上垂直 + 水平居中（auto 外边距在内容溢出时
+   自动归零，长列表照常滚动，不会像 align-items:center 那样把顶部裁掉），
+   分区标题与图块共用同一条中轴。此前内容贴左上角、图块挤在 920px 容器的左端，
+   下方 60% 屏幕是空壁纸——看起来像没铺完的看板，而不是一块桌面。 */
 .home-scroll {
   position: absolute;
   inset: 0;
   overflow-y: auto;
-  padding: 18px 20px 20px;
-  gap: 22px;
+  padding: 24px 20px 28px;
   display: flex;
   flex-direction: column;
 }
 .home-col {
-  width: min(920px, 100%);
-  margin: 0 auto;
+  width: min(720px, 100%);
+  margin: auto;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 36px;
 }
 .home-sec {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 14px;
 }
 .sec-h {
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  justify-content: center;
   gap: 8px;
-  padding: 0 2px;
 }
+/* 分区标题取显示级字号（15px × ui-scale）：与 12.5px 的图块名拉开 1.2 档，
+   标题才像标题。计数跟在标题后、按基线对齐，数字用等宽数位（tabular-nums）。 */
 .sec-h .t {
-  font-size: calc(13px * var(--ui-scale));
+  font-size: var(--font-size-h2);
   font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 .sec-h .n {
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(11.5px * var(--ui-scale));
   color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 .sec-h .grow {
   flex: 1;
 }
 
-/* 图标网格 */
+/* 图标网格：定宽图块 + 换行 + 整行居中（flex 而非 auto-fill 网格——网格的轨道会
+   铺满容器宽度，只有 4 个应用时图块全都靠在左端，右侧留一条等宽空轨道）。 */
 .appgrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-  gap: 8px 4px;
-  align-content: start;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 6px;
+  width: 100%;
 }
 .appicon {
+  flex: 0 0 104px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
-  padding: 10px 4px 8px;
-  border-radius: var(--radius-card);
+  gap: 10px;
+  padding: 12px 6px 11px;
+  border-radius: 12px;
   cursor: pointer;
   position: relative;
   background: none;
-  transition: background-color 0.15s;
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-ease),
+    transform var(--motion-duration-fast) var(--motion-ease);
+  /* 入场：图块自下浮起 + 淡入，逐个错 30ms（只定义 from，填充模式 backwards——
+     动画结束后 transform 回到元素自身，:active 的按压缩放才不会被填充态压住） */
+  animation: shell-tile-in var(--motion-duration-slow) var(--motion-ease) backwards;
+}
+.appicon:nth-child(2) {
+  animation-delay: 30ms;
+}
+.appicon:nth-child(3) {
+  animation-delay: 60ms;
+}
+.appicon:nth-child(4) {
+  animation-delay: 90ms;
+}
+.appicon:nth-child(5) {
+  animation-delay: 120ms;
+}
+.appicon:nth-child(6) {
+  animation-delay: 150ms;
+}
+.appicon:nth-child(7) {
+  animation-delay: 180ms;
+}
+.appicon:nth-child(8) {
+  animation-delay: 210ms;
+}
+
+@keyframes shell-tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
 }
 .appicon:hover {
   background: var(--bg-hover);
 }
+.appicon:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
 .appicon:active {
-  transform: scale(0.96);
+  transform: scale(0.955);
 }
 .appicon .glyph-wrap {
   position: relative;
 }
+/* 状态点 / 审批徽标压在图标右上角：外圈用半透明卡片色而不是页面色——
+   主屏底下是壁纸，实色外圈会在彩色壁纸上留下一圈「贴纸」边。 */
 .appicon .sdot {
   position: absolute;
   top: -1px;
   right: -1px;
-  box-shadow: 0 0 0 2px var(--bg-page);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg-card) 55%, transparent);
 }
 .appicon .bdg-approval {
   position: absolute;
@@ -235,17 +288,24 @@ function onCtx(app: ShellAppEntry, e: MouseEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 0 2px var(--bg-page);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg-card) 55%, transparent);
 }
 .appicon .nm {
-  font-size: calc(12px * var(--ui-scale));
+  font-size: calc(13px * var(--ui-scale));
+  font-weight: 500;
+  letter-spacing: -0.005em;
   color: var(--text-primary);
   max-width: 100%;
 }
+.appgrid .note {
+  text-align: center;
+  font-size: calc(12px * var(--ui-scale));
+  color: var(--text-secondary);
+}
 .icon-hover {
   transition:
-    transform 0.18s,
-    box-shadow 0.18s;
+    transform var(--motion-duration-base) var(--motion-ease),
+    box-shadow var(--motion-duration-base) var(--motion-ease);
 }
 .appicon:hover .icon-hover {
   transform: translateY(-2px);
@@ -255,14 +315,14 @@ function onCtx(app: ShellAppEntry, e: MouseEvent) {
 /* type-to-search 提示 */
 .qhint {
   position: absolute;
-  top: 10px;
+  top: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 7px 10px 7px 13px;
   border-radius: 999px;
   background: var(--bg-card);
   border: 1px solid var(--border-strong);
@@ -274,5 +334,15 @@ function onCtx(app: ShellAppEntry, e: MouseEvent) {
 .qhint .n {
   color: var(--text-tertiary);
   font-size: calc(11px * var(--ui-scale));
+}
+.qhint .k {
+  font-family: var(--font-mono);
+  font-size: calc(9.5px * var(--ui-scale));
+  line-height: 1;
+  padding: 4px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  color: var(--text-secondary);
 }
 </style>

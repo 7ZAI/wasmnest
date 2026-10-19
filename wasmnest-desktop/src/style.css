@@ -33,7 +33,10 @@ html.platform-linux {
 :root {
   color-scheme: light;
 
-  /* 基础排版 */
+  /* 基础排版：拉丁字形在前、CJK 字形在后（逐字回退）——不写 CJK 家族时，
+     Linux 的 system-ui 落到 DejaVu/Liberation，中文由 fontconfig 兜底，
+     不同发行版会换脸（同一界面两种字形）。显式列出三平台常见的 CJK 无衬线体，
+     命中的第一项即用，观感在三端一致。 */
   font-family:
     'Segoe UI',
     -apple-system,
@@ -41,6 +44,11 @@ html.platform-linux {
     'SF Pro Display',
     Inter,
     system-ui,
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    'Noto Sans CJK SC',
+    'Source Han Sans SC',
     sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -62,6 +70,10 @@ html.platform-linux {
   /* 界面文字缩放比例（由 useFontSize composable 动态更新，1 = "正常"档位，12px 基准） */
   --ui-scale: 1;
 
+  /* 等宽族（技术值 / 权限位 / 端口路径）：shell.css 的 .shell-pill / .shell-kv /
+     .shell-rec 以 var(--font-mono) 取用，宿主侧单一来源（此前各处各写一串回退） */
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+
   /* 动态字体大小：各档以"正常"档位实际像素为基准，随 --ui-scale 等比缩放 */
   --font-size-xs: calc(9px * var(--ui-scale));
   --font-size-sm: calc(10px * var(--ui-scale));
@@ -76,10 +88,15 @@ html.platform-linux {
   --bg-hover: #e7e4dc;
   --bg-input: #fdfcfa;
 
-  /* Text */
+  /* Text
+     对比度阶梯（对 page / card / sidebar 三个面取最差值，WCAG AA 4.5:1 为下限）：
+     primary ≈14:1 · secondary ≈6:1 · tertiary ≈4.5:1。
+     之前 tertiary 只有 2.1–2.3:1（浅色）/ 2.6–3.2:1（深色）——它承载的是设置项说明、
+     分区计数、面板副标题这类 11px 正文，属于「读得出的内容」而非装饰，
+     低于 AA 在暖色板下几乎不可读；secondary 在 --bg-sidebar 上也只到 3.9:1。 */
   --text-primary: #26231b;
-  --text-secondary: #7c7565;
-  --text-tertiary: #aba492;
+  --text-secondary: #5e584c;
+  --text-tertiary: #736b58;
 
   /* Border */
   --border: #e4e1d8;
@@ -100,6 +117,18 @@ html.platform-linux {
   --color-info: #2563eb;
   --color-info-light: rgba(37, 99, 235, 0.12);
 
+  /* 状态色「文字」档（*-ink）：只用于 tinted 底上的文字（chip / callout / 记录行标记）
+     与图标井里的字形。
+     --color-success/warning/danger 是**非文字**色（状态点 / 左侧状态条 / 实心按钮，
+     门槛 3:1）；把它们直接当 11px 徽标文字用会掉到 1.9:1（浅色主题下绿 1.97、
+     琥珀 1.86、成功色 1.97），低于 WCAG AA 4.5:1。ink 取值 = 对各自 *-light 底、
+     card、page 三面取最差仍 ≥4.5 的最近色（深浅主题各一套，深色不能沿用浅色值——
+     同一色相在深底上需要更高的亮度才够对比）。 */
+  --color-success-ink: #166534;
+  --color-warning-ink: #92400e;
+  --color-danger-ink: #b91c1c;
+  --color-info-ink: #1d4ed8;
+
   /* Radius */
   --radius-card: 10px;
   --radius-button: 8px;
@@ -116,25 +145,59 @@ html.platform-linux {
   --toolbar-h: 44px;
 
   /* 主屏壁纸：token 派生渐变（color-mix 自既有语义 token，零新 hex，双主题自动适配）。
-     遮罩层由壳单独叠加 --wall-dim（0–70% 页面色遮罩护文字对比度，spec-c §5） */
-  --wall-aurora: linear-gradient(
-    158deg,
-    color-mix(in srgb, var(--color-info) 24%, var(--bg-page)) 0%,
-    color-mix(in srgb, var(--color-success) 18%, var(--bg-page)) 52%,
-    var(--bg-page) 100%
-  );
-  --wall-dune: linear-gradient(
-    158deg,
-    color-mix(in srgb, var(--color-warning) 20%, var(--bg-page)) 0%,
-    color-mix(in srgb, var(--color-primary) 10%, var(--bg-page)) 55%,
-    var(--bg-page) 100%
-  );
-  --wall-reef: linear-gradient(
-    158deg,
-    color-mix(in srgb, var(--color-info) 18%, var(--bg-page)) 0%,
-    color-mix(in srgb, var(--color-primary) 14%, var(--bg-page)) 60%,
-    var(--bg-page) 100%
-  );
+     三层结构（自后向前）：基底斜向渐变定色相 → 左上 / 右上两处「光源」径向渐变
+     （纯透明边缘，模拟光从画面外打进来）→ 壳叠加的 --wall-dim 遮罩（护文字对比度）。
+     只有一层线性渐变的壁纸在任何主题下都是同一条色带子，画面平且没有重心。
+     浓度按主题分档：同一组百分比在深色底上混出的亮度远高于浅色底（深色主题下
+     40% 的信息蓝会糊成一块墨绿），深色档在 :root.dark 里单独降档。 */
+  --wall-aurora: radial-gradient(
+      120% 85% at 6% -14%,
+      color-mix(in srgb, var(--color-info) 30%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 4%,
+      color-mix(in srgb, var(--color-success) 22%, transparent) 0%,
+      transparent 58%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-info) 18%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-success) 13%, var(--bg-page)) 52%,
+      var(--bg-page) 100%
+    );
+  --wall-dune: radial-gradient(
+      120% 85% at 8% -14%,
+      color-mix(in srgb, var(--color-warning) 34%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 6%,
+      color-mix(in srgb, var(--color-primary) 16%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-warning) 17%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-primary) 8%, var(--bg-page)) 55%,
+      var(--bg-page) 100%
+    );
+  --wall-reef: radial-gradient(
+      120% 85% at 6% -14%,
+      color-mix(in srgb, var(--color-info) 32%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 6%,
+      color-mix(in srgb, var(--color-primary) 18%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-info) 14%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-primary) 10%, var(--bg-page)) 60%,
+      var(--bg-page) 100%
+    );
 
   /* Shadow（卡片无阴影，最多 hover 微阴影） */
   --shadow-card: 0 1px 2px rgba(38, 35, 27, 0.04);
@@ -147,12 +210,30 @@ html.platform-linux {
   --page-padding-x: 24px;
   --page-padding-y: 24px;
 
-  /* Typography */
+  /* Typography
+     --font-size-h1/h2 是「显示级」字号（系统页标题 / 主屏分区标题）：与正文 13px 拉开
+     1.4× 以上的层级差，标题才有分量——全部字号在同一档位附近会让界面看起来扁平。 */
   --font-size-title: calc(14px * var(--ui-scale));
   --font-size-card-title: calc(14px * var(--ui-scale));
   --font-size-body: calc(13px * var(--ui-scale));
   --font-size-label: calc(12px * var(--ui-scale));
   --font-size-tag: calc(11px * var(--ui-scale));
+  --font-size-h1: calc(19px * var(--ui-scale));
+  --font-size-h2: calc(15px * var(--ui-scale));
+
+  /* 交互动效：壳与挂载面共用同一组节奏（时长按距离 / 复杂度分档，缓动统一减速到达）。
+     组件 scoped 样式里不再各写一份 0.15s/0.2s —— 见 ui-ux-pro-max ux 域
+     Duration Timing：用共享 token，别把同一组数字抄进每个过渡。 */
+  --motion-duration-fast: 130ms;
+  --motion-duration-base: 200ms;
+  --motion-duration-slow: 320ms;
+  --motion-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* 键盘焦点环（所有自绘控件共用）：实色 2px + 2px 间隙，任何底色上都可辨 */
+  --focus-ring-color: var(--color-info);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
 
   /* Component Sizes */
   --input-height: 36px;
@@ -172,8 +253,8 @@ html.platform-linux {
   --bg-hover: #2a261e;
   --bg-input: #1d1a15;
   --text-primary: #ece8dc;
-  --text-secondary: #9c9482;
-  --text-tertiary: #6b6455;
+  --text-secondary: #aaa393;
+  --text-tertiary: #948c79;
   --border: #2e2a22;
   --border-strong: #3c372b;
   --border-input: #3c372b;
@@ -186,9 +267,65 @@ html.platform-linux {
   --color-danger-light: rgba(239, 68, 68, 0.15);
   --color-info: #60a5fa;
   --color-info-light: rgba(96, 165, 250, 0.14);
+  /* 状态色文字档（深色）：同一色相在深底上要更亮才够 4.5:1（见浅色档注释） */
+  --color-success-ink: #4ade80;
+  --color-warning-ink: #fbbf24;
+  --color-danger-ink: #f87171;
+  --color-info-ink: #93c5fd;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.35);
   --shadow-input-focus: 0 0 0 3px rgba(236, 232, 220, 0.12);
+
+  /* 深色档壁纸：同一套构图，浓度整体降一档（浅色语义色在深底上混合后的亮度
+     远高于浅色主题，照搬浅色百分比会糊成一块高饱和墨色）。 */
+  --wall-aurora: radial-gradient(
+      120% 85% at 6% -14%,
+      color-mix(in srgb, var(--color-info) 24%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 4%,
+      color-mix(in srgb, var(--color-success) 12%, transparent) 0%,
+      transparent 58%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-info) 10%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-success) 5%, var(--bg-page)) 52%,
+      var(--bg-page) 100%
+    );
+  --wall-dune: radial-gradient(
+      120% 85% at 8% -14%,
+      color-mix(in srgb, var(--color-warning) 26%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 6%,
+      color-mix(in srgb, var(--color-primary) 10%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-warning) 11%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-primary) 5%, var(--bg-page)) 55%,
+      var(--bg-page) 100%
+    );
+  --wall-reef: radial-gradient(
+      120% 85% at 6% -14%,
+      color-mix(in srgb, var(--color-info) 26%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 6%,
+      color-mix(in srgb, var(--color-primary) 11%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-info) 8%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-primary) 6%, var(--bg-page)) 60%,
+      var(--bg-page) 100%
+    );
 }
 
 /* ==================== 色板：cool（冷灰调） ==================== */
@@ -202,8 +339,8 @@ html.platform-linux {
   --bg-input: #fbfcfd;
 
   --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --text-tertiary: #9ca3af;
+  --text-secondary: #545964;
+  --text-tertiary: #646c7b;
 
   --border: #e2e6ec;
   --border-strong: #c9d1dc;
@@ -227,8 +364,8 @@ html.platform-linux {
   --bg-input: #1a2438;
 
   --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
+  --text-secondary: #a8b4c5;
+  --text-tertiary: #8f9cae;
 
   --border: #283548;
   --border-strong: #3b4a63;
@@ -257,8 +394,8 @@ html.platform-linux {
   --bg-input: #fdfcf7;
 
   --text-primary: #23281f;
-  --text-secondary: #6e7367;
-  --text-tertiary: #9ca092;
+  --text-secondary: #565a51;
+  --text-tertiary: #6a6e5f;
 
   --border: #e2e1d6;
   --border-strong: #cfd0c0;
@@ -282,8 +419,8 @@ html.platform-linux {
   --bg-input: #1a241f;
 
   --text-primary: #e6ede4;
-  --text-secondary: #93a29a;
-  --text-tertiary: #66756d;
+  --text-secondary: #a3b0a9;
+  --text-tertiary: #899890;
 
   --border: #27332c;
   --border-strong: #37463d;
@@ -309,8 +446,8 @@ html.platform-linux {
   --bg-input: #fafcfd;
 
   --text-primary: #1b2b33;
-  --text-secondary: #5e747f;
-  --text-tertiary: #8fa2ac;
+  --text-secondary: #4b5c65;
+  --text-tertiary: #5b707b;
 
   --border: #dde6eb;
   --border-strong: #c4d3db;
@@ -334,8 +471,8 @@ html.platform-linux {
   --bg-input: #152430;
 
   --text-primary: #e2eef4;
-  --text-secondary: #8fa7b5;
-  --text-tertiary: #5e7686;
+  --text-secondary: #9ab0bc;
+  --text-tertiary: #8198a7;
 
   --border: #1f323f;
   --border-strong: #2e4556;
@@ -361,8 +498,8 @@ html.platform-linux {
   --bg-input: #fefaf5;
 
   --text-primary: #33281f;
-  --text-secondary: #8a7565;
-  --text-tertiary: #b3a08d;
+  --text-secondary: #66564a;
+  --text-tertiary: #7d6854;
 
   --border: #ede2d6;
   --border-strong: #dfcbb8;
@@ -386,8 +523,8 @@ html.platform-linux {
   --bg-input: #2a1d18;
 
   --text-primary: #f5e9e2;
-  --text-secondary: #b0958a;
-  --text-tertiary: #7d6458;
+  --text-secondary: #bba49a;
+  --text-tertiary: #a68c80;
 
   --border: #3a2b26;
   --border-strong: #4e3a32;
@@ -413,8 +550,8 @@ html.platform-linux {
   --bg-input: #fcfbfe;
 
   --text-primary: #2a2533;
-  --text-secondary: #6f687d;
-  --text-tertiary: #a29ab2;
+  --text-secondary: #5c5768;
+  --text-tertiary: #726788;
 
   --border: #e5e0ee;
   --border-strong: #d3cce2;
@@ -438,8 +575,8 @@ html.platform-linux {
   --bg-input: #201936;
 
   --text-primary: #ece8f6;
-  --text-secondary: #a69bc2;
-  --text-tertiary: #756b8f;
+  --text-secondary: #aba0c5;
+  --text-tertiary: #928aa8;
 
   --border: #2e2647;
   --border-strong: #3e3560;

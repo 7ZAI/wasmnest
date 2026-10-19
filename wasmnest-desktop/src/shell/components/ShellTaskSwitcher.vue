@@ -37,7 +37,7 @@
                卡片列宽随窗口自适应（minmax 200–260px，宽度不够自动换行），
                卡片过多时超出高度滚动查看；缩略区 = 品牌渐变底 + 应用真实图标
                （安卓 recents 形态；真实界面快照受跨 Vue 实例 / canvas 内容 / DOM 卸载限制不可行） -->
-          <div class="ts-cards" role="list">
+          <div class="ts-cards" :class="{ 'is-empty': !state.cards.value.length }" role="list">
             <article
               v-for="(key, i) in state.cards.value"
               :key="key"
@@ -87,7 +87,14 @@
               </button>
             </article>
 
-            <p v-if="!state.cards.value.length" class="ts-empty">{{ t('shell.recents.empty') }}</p>
+            <!-- 空态：图标 + 一行说明，居中于卡片带——孤零零一句文字落在左上角
+                 网格格里，读起来像页面没加载完 -->
+            <div v-if="!state.cards.value.length" class="ts-empty">
+              <span class="ts-empty-ic">
+                <ShellIcon name="recents" :size="26" :stroke-width="1.4" />
+              </span>
+              <p class="ts-empty-t">{{ t('shell.recents.empty') }}</p>
+            </div>
           </div>
 
           <footer class="ts-foot">
@@ -250,13 +257,16 @@ function close(): void {
   padding: 2px 2px 10px;
 }
 .ts-title {
-  font-size: calc(15px * var(--ui-scale));
+  font-size: var(--font-size-h2);
   font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 .ts-count {
   font-size: calc(11px * var(--ui-scale));
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 .ts-head .grow {
   flex: 1;
@@ -271,8 +281,8 @@ function close(): void {
   color: var(--text-secondary);
   cursor: pointer;
   transition:
-    background-color 0.15s,
-    color 0.15s;
+    background-color var(--motion-duration-fast) var(--motion-ease),
+    color var(--motion-duration-fast) var(--motion-ease);
 }
 .ts-close:hover {
   background: var(--bg-hover);
@@ -294,6 +304,10 @@ function close(): void {
   padding: 4px 2px 12px;
   scrollbar-width: thin;
 }
+/* 空态：卡片带里没有卡片时，空态块占满整行并居中 */
+.ts-cards.is-empty {
+  align-content: center;
+}
 
 /* 卡片：高度由内容决定（缩略区 16/10 + 信息条），宽度随网格列自适应 */
 .ts-card {
@@ -305,11 +319,11 @@ function close(): void {
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-card-hover);
   overflow: hidden;
-  animation: ts-card-in 0.22s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+  animation: ts-card-in var(--motion-duration-base) var(--motion-ease) backwards;
   animation-delay: calc(var(--i, 0) * 35ms);
   transition:
-    transform 0.18s,
-    border-color 0.18s;
+    transform var(--motion-duration-base) var(--motion-ease),
+    border-color var(--motion-duration-base) var(--motion-ease);
 }
 .ts-card:hover {
   transform: translateY(-3px);
@@ -373,8 +387,8 @@ function close(): void {
   border: 1px solid var(--border);
   cursor: pointer;
   transition:
-    background-color 0.15s,
-    color 0.15s;
+    background-color var(--motion-duration-fast) var(--motion-ease),
+    color var(--motion-duration-fast) var(--motion-ease);
 }
 .ts-card-x:hover {
   background: var(--color-danger);
@@ -383,17 +397,35 @@ function close(): void {
 }
 
 .ts-empty {
-  flex: 1;
-  text-align: center;
-  font-size: calc(12px * var(--ui-scale));
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 0;
+}
+.ts-empty-ic {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
   color: var(--text-secondary);
+}
+.ts-empty-t {
+  font-size: calc(13px * var(--ui-scale));
+  color: var(--text-secondary);
+  text-align: center;
 }
 
 .ts-foot {
   flex-shrink: 0;
-  padding: 6px 2px 0;
-  font-size: calc(11px * var(--ui-scale));
-  color: var(--text-secondary);
+  padding: 8px 2px 0;
+  font-size: calc(11.5px * var(--ui-scale));
+  color: var(--text-tertiary);
   text-align: center;
 }
 
@@ -410,7 +442,7 @@ function close(): void {
 
 .ts-fade-enter-active,
 .ts-fade-leave-active {
-  transition: opacity 0.16s ease;
+  transition: opacity var(--motion-duration-fast) var(--motion-ease);
 }
 .ts-fade-enter-from,
 .ts-fade-leave-to {

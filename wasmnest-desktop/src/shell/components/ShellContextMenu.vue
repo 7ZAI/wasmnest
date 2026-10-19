@@ -2,7 +2,7 @@
   <Teleport to="body">
     <div
       v-if="menu"
-      class="shell-ctx-root fixed z-[60] min-w-[168px] p-1.5 bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-[var(--radius-card)] shadow-[var(--shadow-card-hover)] shell-fade-in"
+      class="shell-ctx-root fixed z-[60] min-w-[168px] p-1.5 bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-[var(--radius-card)] shadow-[var(--shadow-card-hover)]"
       :style="{ left: left, top: top }"
       role="menu"
       :aria-label="t('shell.ctx.aria')"
@@ -103,20 +103,28 @@ function uninstallApp() {
 .it {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 7px 9px;
   border-radius: var(--radius-button);
-  font-size: calc(12px * var(--ui-scale));
+  font-size: calc(12.5px * var(--ui-scale));
   color: var(--text-primary);
   cursor: pointer;
-  transition: background-color 0.12s;
+  transition: background-color var(--motion-duration-fast) var(--motion-ease);
+}
+/* 图标降一档灰：菜单项的主语是文字，图标只做识别锚点（同色同重会跟文字抢注意力） */
+.it svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 .it:hover {
   background: var(--bg-hover);
 }
 .it.danger {
-  color: var(--color-danger);
+  color: var(--color-danger-ink);
+}
+.it.danger svg {
+  color: inherit;
 }
 .it.danger:hover {
   background: var(--color-danger-light);
@@ -132,5 +140,21 @@ function uninstallApp() {
 }
 .it:disabled:hover {
   background: none;
+}
+/* 菜单入场：从左上角（弹出点）轻微放大到位——菜单是「从指针长出来」的东西，
+   纯淡入会像一块早就存在的面板突然显形 */
+.shell-ctx-root {
+  transform-origin: top left;
+  animation: ctx-in var(--motion-duration-fast) var(--motion-ease);
+}
+@keyframes ctx-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 </style>

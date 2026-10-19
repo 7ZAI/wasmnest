@@ -24,6 +24,18 @@
     user-select: none;
   }
 
+  /* ==================== 键盘焦点环（壳内所有自绘控件统一形态） ====================
+     壳里的按钮 / 图块 / 分段项 / 卡片都是 div、span 或裸 button，没有浏览器默认外观，
+     此前只有 .shell-sw 一处画了焦点环 —— 键盘 Tab 走一遍主屏与工具栏，焦点位置
+     完全看不出来（WCAG 2.4.7 可见焦点：键盘可达的每个控件都必须有可见指示）。
+     这里统一收口：`:focus-visible` 只在键盘路径触发（鼠标点击不出现），
+     2px 实色 + 2px 间隙；色取各色板 info（对 6 套色板的浅/深底都 ≥ 3:1）。
+     控件自己已定义 outline 的（.shell-sw 把环画在 track 上）保持自身声明。 */
+  .shell-root :is(button, a, [tabindex], input, select, textarea, summary):focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+  }
+
   /* ==================== 图标图块（系统页图标 / 应用图标 / 多任务系统卡共用） ====================
      这个类此前**只**定义在 ShellAppTile 的 scoped 样式里，而 scoped 样式不外泄：
      ShellCardScreen（系统页页头 34px）/ ShellHome（系统网格 52px）/ ShellTaskSwitcher
@@ -38,8 +50,8 @@
     flex-shrink: 0;
     border-radius: var(--radius-app-icon);
     transition:
-      transform 0.18s,
-      box-shadow 0.18s;
+      transform var(--motion-duration-base) var(--motion-ease),
+      box-shadow var(--motion-duration-base) var(--motion-ease);
   }
 
   /* ==================== 应用图标底色（tone 档：color-mix 自语义 token，双主题自动适配） ==================== */
@@ -50,17 +62,17 @@
   }
   .tone-info {
     background: var(--color-info-light);
-    color: var(--color-info);
+    color: var(--color-info-ink);
     border: 1px solid color-mix(in srgb, var(--color-info) 25%, transparent);
   }
   .tone-success {
     background: var(--color-success-light);
-    color: var(--color-success);
+    color: var(--color-success-ink);
     border: 1px solid color-mix(in srgb, var(--color-success) 25%, transparent);
   }
   .tone-warning {
     background: var(--color-warning-light);
-    color: var(--color-warning);
+    color: var(--color-warning-ink);
     border: 1px solid color-mix(in srgb, var(--color-warning) 28%, transparent);
   }
   .tone-mix {
@@ -72,8 +84,8 @@
     color: var(--text-primary);
   }
   .tone-system {
-    background: var(--bg-sidebar);
-    color: var(--text-secondary);
+    background: var(--bg-card);
+    color: var(--text-primary);
     border: 1px solid var(--border);
   }
 
@@ -115,25 +127,25 @@
   }
   .shell-chip.ok {
     background: var(--color-success-light);
-    color: var(--color-success);
+    color: var(--color-success-ink);
   }
   .shell-chip.warn {
     background: var(--color-warning-light);
-    color: var(--color-warning);
+    color: var(--color-warning-ink);
   }
   .shell-chip.danger {
     background: var(--color-danger-light);
-    color: var(--color-danger);
+    color: var(--color-danger-ink);
   }
   .shell-chip.info {
     background: var(--color-info-light);
-    color: var(--color-info);
+    color: var(--color-info-ink);
   }
 
   /* ==================== pill（权限位等技术标识） ==================== */
   .shell-pill {
-    font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
-    font-size: calc(10px * var(--ui-scale));
+    font-family: var(--font-mono);
+    font-size: calc(11px * var(--ui-scale));
     padding: 2px 7px;
     border-radius: var(--radius-tag);
     background: var(--bg-sidebar);
@@ -144,14 +156,18 @@
   .shell-pill.risk {
     background: var(--color-danger-light);
     border-color: transparent;
-    color: var(--color-danger);
+    color: var(--color-danger-ink);
   }
 
-  /* ==================== 开关（原生 checkbox + token 外观，键盘可达） ==================== */
+  /* ==================== 开关（原生 checkbox + token 外观，键盘可达） ====================
+     「开」用色板主色，不用成功绿：这是个通用开关（深浅色 / 自启 / 防休眠 / 链路加密），
+     不是「操作成功」的结果态——绿色留给真正表达成功与健康度的 chip / 状态点，
+     否则整页开关都在喊「成功」，语义被稀释。
+     尺寸 34×20：滑块 16px、行程 14px，指针与触控板都够用。 */
   .shell-sw {
     position: relative;
-    width: 32px;
-    height: 18px;
+    width: 34px;
+    height: 20px;
     flex-shrink: 0;
     display: inline-block;
   }
@@ -165,31 +181,31 @@
   .shell-sw .track {
     position: absolute;
     inset: 0;
-    border-radius: 9px;
+    border-radius: 10px;
     background: var(--border-strong);
-    transition: background-color 0.2s;
+    transition: background-color var(--motion-duration-fast) var(--motion-ease);
     pointer-events: none;
   }
   .shell-sw .knob {
     position: absolute;
     top: 2px;
     left: 2px;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     background: var(--bg-card);
-    transition: transform 0.2s;
+    transition: transform var(--motion-duration-base) var(--motion-ease);
     pointer-events: none;
   }
   .shell-sw input:checked ~ .track {
-    background: var(--color-success);
+    background: var(--color-primary);
   }
   .shell-sw input:checked ~ .knob {
     transform: translateX(14px);
   }
   .shell-sw input:focus-visible ~ .track {
-    outline: 2px solid var(--color-info);
-    outline-offset: 1px;
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
   }
   .shell-sw.risk input:checked ~ .track {
     background: var(--color-danger);
@@ -217,8 +233,8 @@
     color: var(--text-tertiary);
     white-space: nowrap;
     transition:
-      background-color 0.15s,
-      color 0.15s;
+      background-color var(--motion-duration-fast) var(--motion-ease),
+      color var(--motion-duration-fast) var(--motion-ease);
   }
   .shell-seg button:hover {
     color: var(--text-primary);
@@ -231,7 +247,7 @@
   }
   .shell-seg button.on.risky {
     background: var(--color-danger-light);
-    color: var(--color-danger);
+    color: var(--color-danger-ink);
     box-shadow: none;
   }
 
@@ -251,15 +267,21 @@
     white-space: nowrap;
     flex-shrink: 0;
     transition:
-      background-color 0.15s,
-      filter 0.15s;
+      background-color var(--motion-duration-fast) var(--motion-ease),
+      filter var(--motion-duration-fast) var(--motion-ease),
+      transform var(--motion-duration-fast) var(--motion-ease);
   }
   .shell-btn:hover {
     background: var(--color-primary-hover);
   }
+  /* 按压反馈：1px 下沉（按下即回弹，不带布局位移——只动 transform） */
+  .shell-btn:active {
+    transform: translateY(1px);
+  }
   .shell-btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+    transform: none;
   }
   .shell-btn.ghost {
     background: var(--bg-card);
@@ -271,7 +293,7 @@
   }
   .shell-btn.danger-outline {
     background: var(--bg-card);
-    color: var(--color-danger);
+    color: var(--color-danger-ink);
     border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
   }
   .shell-btn.danger-outline:hover {
@@ -299,15 +321,15 @@
     gap: 5px;
     white-space: nowrap;
     transition:
-      background-color 0.15s,
-      color 0.15s;
+      background-color var(--motion-duration-fast) var(--motion-ease),
+      color var(--motion-duration-fast) var(--motion-ease);
   }
   .shell-mini:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
   }
   .shell-mini.danger {
-    color: var(--color-danger);
+    color: var(--color-danger-ink);
     border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
   }
   .shell-mini.danger:hover {
@@ -334,12 +356,12 @@
   }
   .shell-callout.warn {
     background: var(--color-warning-light);
-    color: var(--color-warning);
+    color: var(--color-warning-ink);
     border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
   }
   .shell-callout.danger {
     background: var(--color-danger-light);
-    color: var(--color-danger);
+    color: var(--color-danger-ink);
     border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
   }
 
@@ -363,7 +385,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
+    font-family: var(--font-mono);
     font-size: calc(11px * var(--ui-scale));
   }
   .shell-rec {
@@ -379,7 +401,7 @@
     margin-top: 5px;
   }
   .shell-rec .tg {
-    font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
+    font-family: var(--font-mono);
     font-size: calc(11px * var(--ui-scale));
     flex: 1;
     min-width: 0;
@@ -391,17 +413,28 @@
     border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
   }
   .shell-rec.deny .tg {
-    color: var(--color-danger);
+    color: var(--color-danger-ink);
   }
 
-  /* ==================== 主屏壁纸（token 派生渐变 + 可调遮罩，spec-c §5） ==================== */
+  /* ==================== 主屏壁纸（token 派生渐变 + 可调遮罩，spec-c §5） ====================
+     遮罩不是一层平铺色：自上而下由 --wall-dim 的 40% 加深到 130%（封顶 100%），
+     上方保持壁纸本色（光源在这里），下方压住亮度给图标名字与计数兜对比度。
+     遮罩只在壁纸存在时叠加（无壁纸 → 不叠，直接透出 --bg-page）。 */
   .home-wall {
+    background-color: var(--bg-page);
     background-image:
       linear-gradient(
-        color-mix(in srgb, var(--bg-page) calc(var(--wall-dim, 0.3) * 100%), transparent) 0%,
-        color-mix(in srgb, var(--bg-page) calc(var(--wall-dim, 0.3) * 100%), transparent) 100%
+        color-mix(in srgb, var(--bg-page) calc(var(--wall-dim, 0.3) * 40%), transparent) 0%,
+        color-mix(in srgb, var(--bg-page) min(100%, calc(var(--wall-dim, 0.3) * 130%)), transparent)
+          100%
+      ),
+      radial-gradient(
+        115% 90% at 50% 38%,
+        transparent 42%,
+        color-mix(in srgb, var(--bg-page) 55%, transparent) 100%
       ),
       var(--wall-active);
+    background-attachment: scroll, scroll, scroll;
   }
   .home-wall.wall-aurora {
     --wall-active: var(--wall-aurora);
@@ -425,7 +458,7 @@
 
   /* ==================== 屏幕切换动效（减速到达，只动 transform/opacity，spec-c §1） ==================== */
   .screen-entering {
-    animation: shell-scr-in 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+    animation: shell-scr-in var(--motion-duration-base) var(--motion-ease);
   }
   @keyframes shell-scr-in {
     from {
@@ -440,12 +473,12 @@
 
   /* ==================== 弹窗进入动效 ==================== */
   .shell-dlg-in {
-    animation: shell-dlg-in 0.2s cubic-bezier(0.2, 0.8, 0.3, 1);
+    animation: shell-dlg-in var(--motion-duration-base) var(--motion-ease);
   }
   @keyframes shell-dlg-in {
     from {
       opacity: 0;
-      transform: scale(0.97) translateY(6px);
+      transform: scale(0.96) translateY(10px);
     }
     to {
       opacity: 1;
@@ -455,7 +488,7 @@
 
   /* ==================== 覆层淡入 ==================== */
   .shell-fade-in {
-    animation: shell-fade-in 0.15s ease-out;
+    animation: shell-fade-in var(--motion-duration-fast) var(--motion-ease);
   }
   @keyframes shell-fade-in {
     from {
@@ -463,5 +496,22 @@
     }
     to {
       opacity: 1;
+    }
+  }
+
+  /* ==================== 系统级「减弱动态」降级 ====================
+     与 style.css 的页面过渡降级同一条口径，但覆盖壳内所有自绘动效（系统页入场 /
+     图块交错 / 面板缩放 / 图块悬停抬升）。用 0.01ms 而不是 `animation: none`：
+     带 `both` 填充模式的入场动画若被整条移除，元素会停在 `from`（透明度 0）——
+     内容消失比动效更糟。动效只是被压成瞬时，终态一定到位。 */
+  @media (prefers-reduced-motion: reduce) {
+    .shell-root *,
+    .shell-root *::before,
+    .shell-root *::after {
+      animation-duration: 0.01ms !important;
+      animation-delay: 0ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      transition-delay: 0ms !important;
     }
   }

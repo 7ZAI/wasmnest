@@ -71,18 +71,21 @@ const timeText = computed(() => {
 </script>
 
 <style scoped>
+/* 卡片表面用「色阶」而不是描边：面板本身已经有 1px 边框，卡再描一圈边就成了
+   盒中盒（两层平行细线挤在 12px 内边距里）。同色系降一档底 + 圆角即可分层。 */
 .ntf {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  padding: 10px;
+  gap: 10px;
+  padding: 11px;
   border-radius: var(--radius-card);
   background: var(--bg-sidebar);
-  border: 1px solid var(--border);
 }
+/* 待处理（审批类）：暖色底 + 左侧 2px 状态条点明「要你动手」，
+   与普通通知在余光里就能区分（不靠颜色单独承载语义——标题与动作按钮同时在） */
 .ntf.attn {
-  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
   background: var(--color-warning-light);
+  box-shadow: inset 2px 0 0 0 color-mix(in srgb, var(--color-warning) 70%, transparent);
 }
 .ntf-ic {
   width: 28px;
@@ -108,7 +111,7 @@ const timeText = computed(() => {
 .ntf-top b {
   flex: 1;
   min-width: 0;
-  font-size: calc(12px * var(--ui-scale));
+  font-size: calc(12.5px * var(--ui-scale));
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -116,16 +119,17 @@ const timeText = computed(() => {
   text-overflow: ellipsis;
 }
 .ntf-time {
-  font-size: calc(10px * var(--ui-scale));
+  font-size: calc(10.5px * var(--ui-scale));
   color: var(--text-tertiary);
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 .ntf-src {
-  font-size: calc(10px * var(--ui-scale));
+  font-size: calc(11px * var(--ui-scale));
   color: var(--text-tertiary);
 }
 .ntf-body {
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(12px * var(--ui-scale));
   color: var(--text-secondary);
   line-height: 1.5;
 }
@@ -149,7 +153,7 @@ const timeText = computed(() => {
   background: var(--color-success);
 }
 .ntf-progress span {
-  font-size: calc(10px * var(--ui-scale));
+  font-size: calc(11px * var(--ui-scale));
   color: var(--text-secondary);
   flex-shrink: 0;
 }
@@ -168,11 +172,10 @@ const timeText = computed(() => {
   align-items: center;
   justify-content: center;
   transition:
-    background-color 0.15s,
-    color 0.15s;
+    background-color var(--motion-duration-fast) var(--motion-ease),
+    color var(--motion-duration-fast) var(--motion-ease);
 }
 .ntf-x:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
-}
-</style>
+}</style>

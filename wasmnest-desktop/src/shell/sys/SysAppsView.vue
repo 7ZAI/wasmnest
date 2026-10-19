@@ -163,16 +163,16 @@ function onUninstall(app: ShellAppEntry) {
 .sub-line {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-size: calc(12px * var(--ui-scale));
   flex-wrap: wrap;
 }
 .sub-note {
   color: var(--text-tertiary);
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(11.5px * var(--ui-scale));
 }
 .mono {
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
+  font-family: var(--font-mono);
 }
 .grow {
   flex: 1;
@@ -180,22 +180,26 @@ function onUninstall(app: ShellAppEntry) {
 .toggle {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: calc(11px * var(--ui-scale));
+  gap: 6px;
+  font-size: calc(12px * var(--ui-scale));
   color: var(--text-secondary);
   cursor: pointer;
 }
 .toggle input {
   accent-color: var(--color-primary);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
 }
 .approval-callout {
-  padding: 7px 9px;
+  padding: 8px 10px;
   border-radius: var(--radius-button);
   /* 用真实存在的 token（此前引用的 --color-danger-soft 全仓零定义，
      只靠 color-mix 兜底） */
   background: var(--color-danger-light);
   border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(12px * var(--ui-scale));
   color: var(--text-primary);
   line-height: 1.5;
 }
@@ -205,15 +209,15 @@ function onUninstall(app: ShellAppEntry) {
   flex-wrap: wrap;
 }
 .note {
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(12px * var(--ui-scale));
   color: var(--text-secondary);
   line-height: 1.55;
 }
 .note.hint {
   padding: 0 2px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 .note.err {
-  color: var(--color-danger);
+  color: var(--color-danger-ink);
 }
 </style>

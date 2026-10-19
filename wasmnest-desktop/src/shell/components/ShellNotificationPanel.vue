@@ -9,7 +9,7 @@
       <!-- 面板头 -->
       <div class="panel-h">
         <span class="t">{{ t('shell.notif.title') }}</span>
-        <span class="n">{{ total }} · {{ t('shell.notif.countUnit') }}</span>
+        <span class="n">{{ total }} {{ t('shell.notif.countUnit') }}</span>
         <span class="grow"></span>
         <button
           v-if="state.notifs.value.some((n) => !n.sticky)"
@@ -114,21 +114,24 @@ function onNotifAction(n: HostNotif, actionId: string) {
   border-radius: var(--radius-sheet);
   box-shadow: var(--shadow-card-hover);
   overflow: hidden;
+  transform-origin: top right;
 }
 .panel-h {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  padding: 10px 12px 0;
+  padding: 12px 12px 0;
 }
 .panel-h .t {
-  font-size: calc(13px * var(--ui-scale));
+  font-size: calc(14px * var(--ui-scale));
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 .panel-h .n {
   font-size: calc(11px * var(--ui-scale));
   color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 .panel-h .grow {
   flex: 1;
@@ -140,14 +143,16 @@ function onNotifAction(n: HostNotif, actionId: string) {
   flex-direction: column;
   gap: 10px;
 }
+/* 分区标签：句首大写的小标题（中文无大小写，靠字号 + 字重区分），
+   右侧细线把标签与内容的分界拉通整行 */
 .blk-t {
-  font-size: calc(10px * var(--ui-scale));
-  color: var(--text-tertiary);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: calc(11px * var(--ui-scale));
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .blk-t .line {
   flex: 1;
@@ -156,16 +161,20 @@ function onNotifAction(n: HostNotif, actionId: string) {
 }
 .empty-note {
   text-align: center;
-  padding: 12px 0;
-  font-size: calc(11px * var(--ui-scale));
-  color: var(--text-tertiary);
+  padding: 16px 0;
+  font-size: calc(12px * var(--ui-scale));
+  color: var(--text-secondary);
 }
+/* 面板入场：从触发键方向轻微下压 + 放大到位（只动 transform/opacity） */
 .shell-panel-enter-active,
 .shell-panel-leave-active {
-  transition: opacity 0.15s ease;
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-ease),
+    transform var(--motion-duration-fast) var(--motion-ease);
 }
 .shell-panel-enter-from,
 .shell-panel-leave-to {
   opacity: 0;
+  transform: translateY(-6px) scale(0.98);
 }
 </style>

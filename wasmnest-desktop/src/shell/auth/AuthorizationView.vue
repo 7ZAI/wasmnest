@@ -96,7 +96,7 @@
                     {{ app.name }}
                   </span>
                   <span
-                    class="wb-mono text-[calc(10px*var(--ui-scale))] text-[var(--text-tertiary)] truncate"
+                    class="wb-mono text-[calc(11px*var(--ui-scale))] text-[var(--text-tertiary)] truncate"
                   >
                     {{ app.pluginId }}
                   </span>
@@ -119,7 +119,7 @@
                       {{ $t(`settings.authorization.resource.${resource}`) }}
                     </span>
                     <span
-                      class="px-1.5 py-0.5 rounded text-[calc(10px*var(--ui-scale))] font-medium shrink-0"
+                      class="px-1.5 py-0.5 rounded text-[calc(11px*var(--ui-scale))] font-medium shrink-0"
                       :class="strategyClass(strategyOf(app, resource))"
                     >
                       {{ $t(`settings.authorization.strategy.${strategyOf(app, resource)}`) }}
@@ -211,7 +211,7 @@
                 </p>
                 <p
                   v-if="resourceRecords(app, resource).length === 0"
-                  class="mt-1.5 text-[calc(11px*var(--ui-scale)] text-[var(--text-tertiary)]"
+                  class="mt-1.5 text-[calc(11px*var(--ui-scale))] text-[var(--text-tertiary)]"
                 >
                   {{ $t(`settings.authorization.records.${resource}Empty`) }}
                 </p>
@@ -231,24 +231,24 @@
                          （spec §9.4；与详情页 AuthRecordRow 同一口径） -->
                     <span
                       v-if="isUnconfirmed(record)"
-                      class="shrink-0 px-1.5 py-0.5 rounded text-[calc(10px*var(--ui-scale))] font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      class="shrink-0 px-1.5 py-0.5 rounded text-[calc(11px*var(--ui-scale))] font-medium bg-[var(--color-warning-light)] text-[var(--color-warning-ink)]"
                     >
                       {{ $t('settings.authorization.sections.unconfirmed') }}
                     </span>
                     <span
-                      class="shrink-0 px-1.5 py-0.5 rounded text-[calc(10px*var(--ui-scale))] font-medium"
+                      class="shrink-0 px-1.5 py-0.5 rounded text-[calc(11px*var(--ui-scale))] font-medium"
                       :class="effectClass(record.effect)"
                     >
                       {{ effectLabel(record.effect) }}
                     </span>
                     <span
                       v-if="opsLabel(record.ops)"
-                      class="shrink-0 px-1.5 py-0.5 rounded text-[calc(10px*var(--ui-scale))] bg-[var(--bg-hover)] text-[var(--text-secondary)]"
+                      class="shrink-0 px-1.5 py-0.5 rounded text-[calc(11px*var(--ui-scale))] bg-[var(--bg-hover)] text-[var(--text-secondary)]"
                     >
                       {{ opsLabel(record.ops) }}
                     </span>
                     <span
-                      class="shrink-0 px-1.5 py-0.5 rounded text-[calc(10px*var(--ui-scale))] bg-[var(--bg-hover)] text-[var(--text-tertiary)]"
+                      class="shrink-0 px-1.5 py-0.5 rounded text-[calc(11px*var(--ui-scale))] bg-[var(--bg-hover)] text-[var(--text-secondary)]"
                     >
                       {{ sourceLabel(record.source) }}
                     </span>
@@ -284,7 +284,7 @@
                 </p>
                 <p
                   v-if="firstPartyDirsOf(app).length === 0"
-                  class="mt-1.5 text-[calc(11px*var(--ui-scale)] text-[var(--text-tertiary)]"
+                  class="mt-1.5 text-[calc(11px*var(--ui-scale))] text-[var(--text-tertiary)]"
                 >
                   {{ $t('settings.authorization.sections.firstPartyEmpty') }}
                 </p>
@@ -450,21 +450,25 @@ function goBack(): void {
   router.push({ name: 'settings' })
 }
 
-/** 档位徽标样式：始终允许用警示色（风险提示），其余中性偏弱化 */
+/** 档位徽标样式：始终允许用警示色（风险提示），其余中性偏弱化
+ *
+ *  颜色一律走 token（`--color-warning-light` + `--color-warning-ink`）：前者是 tinted 底，
+ *  后者是对该底达到 AA 4.5:1 的文字色。此前写的 Tailwind `amber-50/amber-600` 在浅色主题
+ *  只有 3.07:1，且换色板后不跟随主题。 */
 function strategyClass(strategy: AuthStrategy): string {
   if (strategy === 'always_allow') {
-    return 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
+    return 'bg-[var(--color-warning-light)] text-[var(--color-warning-ink)]'
   }
   if (strategy === 'always_ask') {
     return 'bg-[var(--bg-hover)] text-[var(--text-secondary)]'
   }
-  return 'bg-[var(--bg-hover)] text-[var(--text-tertiary)]'
+  return 'bg-[var(--bg-hover)] text-[var(--text-secondary)]'
 }
 
 /** 记录效果徽标样式：硬拒绝用警示色（与档位徽标同一套色彩语义） */
 function effectClass(effect: string): string {
   if (effectKeySuffix(effect) === 'deny') {
-    return 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
+    return 'bg-[var(--color-warning-light)] text-[var(--color-warning-ink)]'
   }
   return 'bg-[var(--bg-hover)] text-[var(--text-secondary)]'
 }

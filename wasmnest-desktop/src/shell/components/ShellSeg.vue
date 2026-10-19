@@ -34,7 +34,7 @@ defineEmits<{
 <style scoped>
 .seg-btn.on.risky {
   background: var(--color-danger-light);
-  color: var(--color-danger);
+  color: var(--color-danger-ink);
   box-shadow: none;
 }
 </style>
