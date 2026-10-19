@@ -92,7 +92,8 @@
         "section": "utils",
         "priority": "optional",
         "desktopTemplate": "resources/deb/wasmnest.desktop",
-        "postInstallScript": "resources/deb/postinst"
+        "postInstallScript": "resources/deb/postinst",
+        "postRemoveScript": "resources/deb/postrm"
       }
     }
   },
