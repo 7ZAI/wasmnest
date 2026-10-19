@@ -103,7 +103,7 @@ shell: {
       },
       settings: {
         name: 'Settings',
-        desc: 'Appearance · background · link crypto · system · about',
+        desc: 'Appearance · background · system · about',
       },
     },
     quickSettings: {

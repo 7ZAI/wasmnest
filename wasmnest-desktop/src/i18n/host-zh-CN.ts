@@ -98,7 +98,7 @@ shell: {
       },
       settings: {
         name: '设置',
-        desc: '界面 · 背景 · 链路加密 · 系统 · 关于',
+        desc: '界面 · 背景 · 系统 · 关于',
       },
     },
     quickSettings: {

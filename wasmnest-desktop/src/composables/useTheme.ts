@@ -20,10 +20,11 @@ function applyTheme(theme: string) {
   }
 }
 
-/** 应用色板（warm/cool...）：data-palette 属性驱动 CSS 变量组切换 */
-function applyPalette(palette: string) {
-  document.documentElement.dataset.palette = palette || 'warm'
-}
+/*
+ * 色板（warm/cool/forest…）不再由宿主应用到 documentElement：它是各 wasm-app 的
+ * 样式主题（应用自己设置页持有，作用域限定在应用根容器）。宿主壳固定用默认色板
+ * （:root 的 warm 变量组），只掌握深浅色。
+ */
 
 function setupTheme() {
   const settingsStore = useSettingsStore()
@@ -36,7 +37,6 @@ function setupTheme() {
   }
 
   applyTheme(theme)
-  applyPalette(settingsStore.settings.ui.theme_palette ?? 'warm')
 }
 
 function cleanupTheme() {
@@ -56,14 +56,6 @@ export function useTheme() {
       cleanupTheme()
       applyTheme(newTheme)
       setupTheme()
-    },
-  )
-
-  // 监听色板设置变化
-  watch(
-    () => settingsStore.settings.ui.theme_palette,
-    (newPalette) => {
-      applyPalette(newPalette ?? 'warm')
     },
   )
 

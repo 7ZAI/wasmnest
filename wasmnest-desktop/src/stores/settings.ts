@@ -21,7 +21,11 @@ export interface Settings {
   }
   ui: {
     theme: string
-    // 色板（warm 暖调工作台，未来可扩展）
+    /**
+     * 色板字段已退役（设置归属修正 2026-10-19）：主题色板归各 wasm-app 自持，
+     * 宿主壳固定用默认 warm 变量组。字段保留仅为整表回传时与能力仓 AppConfig
+     * 对齐（Rust 侧仍接受该键）；宿主前端不再读写、不再应用到 documentElement。
+     */
     theme_palette?: string
     // 全局动画效果总开关（关闭时禁用所有页面过渡/动画），默认开启
     animations_enabled?: boolean

@@ -19,8 +19,10 @@
         </button>
       </div>
 
-      <!-- 快捷开关 2×2（主题 / 动画 / 链路加密 / 防休眠）。
-           2026-10-19 自通知中心拆分：通知面板只保留通知内容，这里单独成面。 -->
+      <!-- 快捷开关（深色主题 / 动画 / 防休眠；三项占单列整行）。
+           2026-10-19 自通知中心拆分：通知面板只保留通知内容，这里单独成面。
+           链路加密不在此面：它属 bedcode 的业务设置（应用设置页承载），宿主快捷
+           面只留壳自身的通用开关。 -->
       <div class="panel-in">
         <div class="tiles">
           <button class="tile" :class="{ on: isDark }" @click="toggleTheme">
@@ -36,13 +38,6 @@
             <span class="tt">
               <b>{{ t('shell.quickSettings.tileAnim') }}</b>
               <span>{{ animationsEnabled ? t('shell.quickSettings.on') : t('shell.quickSettings.off') }}</span>
-            </span>
-          </button>
-          <button class="tile" :class="{ on: cryptoEnabled }" @click="toggleCrypto">
-            <ShellIcon name="lock" :size="15" />
-            <span class="tt">
-              <b>{{ t('shell.quickSettings.tileCrypto') }}</b>
-              <span>{{ cryptoEnabled ? t('shell.quickSettings.on') : t('shell.quickSettings.off') }}</span>
             </span>
           </button>
           <button class="tile" :class="{ on: preventSleep }" @click="togglePreventSleep">
@@ -62,14 +57,14 @@
 /**
  * ShellQuickSettings — 快捷设置面板（工具栏锚定下拉；2026-10-19 与通知中心拆分）
  *
- * 快捷开关 2×2：深色主题 / 动画 / 链路加密 / 防止休眠——即改即存（settings store
- * 整表回传，useTheme 即时应用）。原本混在通知中心顶部，拆成独立浏览面，由工具栏
- * 独立图标（sliders）开合，与通知 / 多任务互斥（互斥收口在 useShellState）。
+ * 快捷开关：深色主题 / 动画 / 防止休眠——即改即存（settings store 整表回传，
+ * useTheme 即时应用）。链路加密不在此面（bedcode 业务设置，应用设置页承载）。
+ * 原本混在通知中心顶部，拆成独立浏览面，由工具栏独立图标（sliders）开合，
+ * 与通知 / 多任务互斥（互斥收口在 useShellState）。
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
-import { useLinkCryptoConfig } from '@/shell/settings/useLinkCrypto'
 import { useTheme } from '@/composables/useTheme'
 import { useShellState } from '../composables/useShellState'
 import ShellIcon from './ShellIcon.vue'
@@ -78,7 +73,6 @@ const { t } = useI18n()
 const state = useShellState()
 const settingsStore = useSettingsStore()
 const { isSystemDark } = useTheme()
-const { config: cryptoConfig, loadLinkCryptoConfig, saveLinkCryptoConfig } = useLinkCryptoConfig()
 
 const open = computed(() => state.quickSettingsOpen.value)
 
@@ -90,7 +84,6 @@ const isDark = computed(() =>
       : isSystemDark.value,
 )
 const animationsEnabled = computed(() => settingsStore.settings.ui.animations_enabled !== false)
-const cryptoEnabled = computed(() => cryptoConfig.value?.enabled ?? false)
 const preventSleep = computed(() => settingsStore.settings.network.prevent_sleep ?? false)
 
 function toggleTheme() {
@@ -100,13 +93,6 @@ function toggleTheme() {
 function toggleAnimations() {
   settingsStore.settings.ui.animations_enabled = !animationsEnabled.value
   void settingsStore.saveSettings({ ui: settingsStore.settings.ui })
-}
-async function toggleCrypto() {
-  const cur = cryptoConfig.value
-  if (!cur) await loadLinkCryptoConfig()
-  if (cryptoConfig.value) {
-    await saveLinkCryptoConfig({ ...cryptoConfig.value, enabled: !cryptoConfig.value.enabled })
-  }
 }
 function togglePreventSleep() {
   settingsStore.settings.network.prevent_sleep = !preventSleep.value
@@ -132,16 +118,18 @@ function close() {
   border-radius: var(--radius-sheet);
   box-shadow: var(--shadow-card-hover);
   overflow: hidden;
+  transform-origin: top right;
 }
 .panel-h {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  padding: 10px 12px 0;
+  padding: 12px 12px 0;
 }
 .panel-h .t {
-  font-size: calc(13px * var(--ui-scale));
+  font-size: calc(14px * var(--ui-scale));
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 .panel-h .grow {
@@ -155,49 +143,68 @@ function close() {
   grid-template-columns: 1fr 1fr;
   gap: 7px;
 }
+/* 奇数项时最后一块占整行（当前 3 项：主题 / 动画 / 防休眠） */
+.tiles > :last-child:nth-child(odd) {
+  grid-column: span 2;
+}
 .tile {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 10px;
+  gap: 9px;
+  padding: 10px;
   border-radius: var(--radius-button);
   background: var(--bg-sidebar);
   border: 1px solid var(--border);
   text-align: left;
   cursor: pointer;
   transition:
-    background-color 0.15s,
-    border-color 0.15s;
+    background-color var(--motion-duration-fast) var(--motion-ease),
+    border-color var(--motion-duration-fast) var(--motion-ease);
+}
+.tile svg {
+  color: var(--text-secondary);
+  transition: color var(--motion-duration-fast) var(--motion-ease);
 }
 .tile:hover {
   border-color: var(--border-strong);
+  background: var(--bg-hover);
 }
+/* 「开」的档位：底色提一档 + 主色描边 + 图标回到正文墨色（关态图标是次级灰）。
+   颜色不是唯一线索——副标题写着「开 / 关」，读屏与色觉障碍用户同样可分。 */
 .tile.on {
   background: var(--color-primary-light);
   border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+.tile.on svg {
+  color: var(--text-primary);
 }
 .tile .tt {
   min-width: 0;
 }
 .tile .tt b {
   display: block;
-  font-size: calc(12px * var(--ui-scale));
-  font-weight: 500;
+  font-size: calc(12.5px * var(--ui-scale));
+  font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
+  letter-spacing: -0.005em;
 }
 .tile .tt span {
   display: block;
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(11.5px * var(--ui-scale));
   color: var(--text-tertiary);
   white-space: nowrap;
 }
+/* 面板入场：从触发键方向轻微下压 + 放大到位（只动 transform/opacity） */
 .shell-panel-enter-active,
 .shell-panel-leave-active {
-  transition: opacity 0.15s ease;
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-ease),
+    transform var(--motion-duration-fast) var(--motion-ease);
 }
 .shell-panel-enter-from,
 .shell-panel-leave-to {
   opacity: 0;
+  transform: translateY(-6px) scale(0.98);
 }
 </style>

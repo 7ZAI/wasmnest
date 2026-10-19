@@ -1,7 +1,9 @@
 <template>
-  <!-- ==================== 界面（壳内实现：主题/色板/语言/字号/动画/导航按钮） ==================== -->
+  <!-- ==================== 界面（壳内实现：深浅色/语言/字号/动画/导航按钮） ====================
+       主题色板属各 wasm-app 的样式主题：由应用自己设置页持有（床 desktop 的
+       useAppPalette），宿主只控制壳自身的深浅色，不下发/不覆盖色板。 -->
   <ShellCard :title="t('shell.settings.ui.title')" icon="theme">
-    <!-- 主题：三档分段控件 -->
+    <!-- 深浅色：三档分段控件（宿主壳唯一掌握的主题项） -->
     <div class="row-sw">
       <div class="lb">
         <b>{{ t('settings.appearance.theme') }}</b>
@@ -12,27 +14,6 @@
         :model-value="settingsStore.settings.ui.theme"
         @update:model-value="setTheme"
       />
-    </div>
-
-    <!-- 色板 -->
-    <div class="fld">
-      <span class="lb">{{ t('settings.appearance.palette') }}</span>
-      <div class="pal-grid">
-        <button
-          v-for="p in palettes"
-          :key="p.id"
-          class="pal-card"
-          :class="{ on: settingsStore.settings.ui.theme_palette === p.id }"
-          @click="setPalette(p.id)"
-        >
-          <span class="pal-sw">
-            <i :style="{ background: p.sw[0] }"></i>
-            <i :style="{ background: p.sw[1] }"></i>
-            <i :style="{ background: p.sw[2] }"></i>
-          </span>
-          <span class="nm">{{ p.name }}</span>
-        </button>
-      </div>
     </div>
 
     <!-- 语言 -->
@@ -153,8 +134,9 @@
     </div>
   </ShellCard>
 
-  <!-- ==================== 链路加密 / 系统 / 日志 / 关于（复用既有设置分组组件，零重写） ==================== -->
-  <SettingsLinkCryptoSection />
+  <!-- ==================== 系统 / 日志 / 关于（复用既有设置分组组件，零重写） ====================
+       链路加密属终端的业务设置（加密哪些通道取决于终端数据面），已随设置归属回归
+       bedcode wasm-app，宿主系统页不再承载。 -->
   <SettingsSystemSection />
   <SettingsLoggingSection />
   <SettingsAboutSection />
@@ -177,8 +159,10 @@
 /**
  * SysSettingsView — 系统页「设置」（壳内实现）
  *
- * 界面 / 背景两组是壳专属（含导航按钮显隐、壁纸，纯壳偏好落 useShellSettings）；
- * 链路加密 / 系统 / 日志 / 关于直接复用既有设置分组组件（真实命令面，零重写）。
+ * 界面 / 背景两组是壳专属（含导航按钮显隐、壁纸，纯壳偏好落 useShellSettings）。
+ * 界面组只保留壳自身的**深浅色**；主题色板归各 wasm-app（应用自己的设置页持有，
+ * 宿主不下发也不覆盖）。链路加密属 bedcode 业务设置，随设置归属回归应用。
+ * 系统 / 日志 / 关于直接复用既有设置分组组件（真实命令面，零重写）。
  * 授权管理入口互切到「权限与授权」系统页卡（spec-c §3 同构卡片）。
  */
 import { computed } from 'vue'
@@ -186,7 +170,6 @@ import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { useI18nStore } from '@/stores/i18n'
 import { useFontSize } from '@/composables/useFontSize'
-import SettingsLinkCryptoSection from '@/shell/settings/SettingsLinkCryptoSection.vue'
 import SettingsSystemSection from '@/shell/settings/SettingsSystemSection.vue'
 import SettingsLoggingSection from '@/shell/settings/SettingsLoggingSection.vue'
 import SettingsAboutSection from '@/shell/settings/SettingsAboutSection.vue'
@@ -211,31 +194,6 @@ const themeOptions = computed(() => [
   { value: 'system', label: t('shell.settings.ui.themeSystem') },
 ])
 
-const palettes = computed(() => [
-  { id: 'warm', name: t('settings.appearance.paletteWarm'), sw: ['#f5f4f0', '#fdfcfa', '#1d1a14'] },
-  { id: 'cool', name: t('settings.appearance.paletteCool'), sw: ['#f3f5f7', '#fbfcfd', '#2563eb'] },
-  {
-    id: 'forest',
-    name: t('settings.appearance.paletteForest'),
-    sw: ['#f6f5ef', '#fdfcf7', '#3e6b4f'],
-  },
-  {
-    id: 'ocean',
-    name: t('settings.appearance.paletteOcean'),
-    sw: ['#f2f7f9', '#fafcfd', '#0e7490'],
-  },
-  {
-    id: 'sunset',
-    name: t('settings.appearance.paletteSunset'),
-    sw: ['#fbf5ef', '#fefaf5', '#d9532a'],
-  },
-  {
-    id: 'violet',
-    name: t('settings.appearance.paletteViolet'),
-    sw: ['#f7f5fb', '#fcfbfe', '#6d4fc6'],
-  },
-])
-
 const wallpapers = computed(() => WALLPAPERS.map((w) => ({ ...w, nameKey: w.nameKey })))
 
 const fontSizeLabel = computed(() => {
@@ -250,10 +208,6 @@ const fontSizeLabel = computed(() => {
 
 function setTheme(v: string) {
   settingsStore.settings.ui.theme = v
-  void settingsStore.saveSettings({ ui: settingsStore.settings.ui })
-}
-function setPalette(id: string) {
-  settingsStore.settings.ui.theme_palette = id
   void settingsStore.saveSettings({ ui: settingsStore.settings.ui })
 }
 function setLanguage(e: Event) {
@@ -277,8 +231,8 @@ function toggleAnimations() {
 .row-sw {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 2px;
+  gap: 12px;
+  padding: 9px 2px;
 }
 .row-sw + .row-sw {
   border-top: 1px solid var(--border);
@@ -289,15 +243,17 @@ function toggleAnimations() {
 }
 .row-sw .lb b {
   display: block;
-  font-size: calc(12px * var(--ui-scale));
-  font-weight: 500;
+  font-size: calc(12.5px * var(--ui-scale));
+  font-weight: 600;
+  letter-spacing: -0.005em;
   color: var(--text-primary);
 }
 .row-sw .lb span {
   display: block;
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(11.5px * var(--ui-scale));
   color: var(--text-tertiary);
-  margin-top: 1px;
+  margin-top: 2px;
+  line-height: 1.45;
 }
 .fld {
   display: flex;
@@ -305,11 +261,11 @@ function toggleAnimations() {
   gap: 5px;
 }
 .fld .lb {
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(11.5px * var(--ui-scale));
   color: var(--text-secondary);
 }
 .fld .hint {
-  font-size: calc(10px * var(--ui-scale));
+  font-size: calc(11px * var(--ui-scale));
   color: var(--text-tertiary);
 }
 .shell-inp {
@@ -322,8 +278,8 @@ function toggleAnimations() {
   outline: none;
   font-size: calc(12px * var(--ui-scale));
   transition:
-    border-color 0.2s,
-    box-shadow 0.2s;
+    border-color var(--motion-duration-base) var(--motion-ease),
+    box-shadow var(--motion-duration-base) var(--motion-ease);
 }
 .shell-inp:focus {
   border-color: var(--border-strong);
@@ -340,11 +296,12 @@ function toggleAnimations() {
   cursor: pointer;
 }
 .size-row .val {
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
+  font-family: var(--font-mono);
   font-size: calc(11px * var(--ui-scale));
   color: var(--text-secondary);
   min-width: 34px;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .pal-grid {
   display: grid;
@@ -354,7 +311,7 @@ function toggleAnimations() {
 .pal-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   padding: 8px;
   border-radius: var(--radius-button);
   border: 1px solid var(--border);
@@ -362,8 +319,8 @@ function toggleAnimations() {
   text-align: left;
   cursor: pointer;
   transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+    border-color var(--motion-duration-fast) var(--motion-ease),
+    box-shadow var(--motion-duration-fast) var(--motion-ease);
 }
 .pal-card:hover {
   border-color: var(--border-strong);
@@ -374,7 +331,7 @@ function toggleAnimations() {
 }
 .pal-sw {
   display: flex;
-  height: 22px;
+  height: 24px;
   border-radius: 5px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -386,7 +343,7 @@ function toggleAnimations() {
   border-left: 1px solid var(--border);
 }
 .pal-card .nm {
-  font-size: calc(11px * var(--ui-scale));
+  font-size: calc(11.5px * var(--ui-scale));
   color: var(--text-secondary);
 }
 .pal-card.on .nm {
@@ -394,6 +351,6 @@ function toggleAnimations() {
   font-weight: 500;
 }
 .mono {
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
+  font-family: var(--font-mono);
 }
 </style>
