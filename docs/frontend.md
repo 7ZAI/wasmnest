@@ -56,3 +56,13 @@
 - **注释规则（解释为什么 / 中文 / 禁票号引用 / 同步修正）与命名规则（组件 PascalCase / composable `use` 前缀）的通用部分真源 = `docs/public/commenting.md`**——本端只补充平台特有增量：Vue 组件 / 目录结构跟随既有双端的同构惯例。
 - i18n：桌面 `src/i18n/host-{zh-CN,en}.ts`（+ `index.ts`）、移动 `src/locales/{zh-CN,en}/`；**新增 / 修改 key 必须双语同步**；用户可见文案禁止硬编码。
 - **宿主消息集与 bedcode 应用副本逐字一致**（`i18nDriftLock`）：改任一边必须同批改另一边（锁详情见 `docs/codemap.md` §8）。
+
+## 6. 桌面壳扩展点（状态栏 / 设置项 / 主题皮肤）
+
+真源 = `wasmnest-desktop/src/shell/extensions/`（`types.ts` 契约、`registry.ts` 注册表、`index.ts` 公共入口）。
+
+- **三类贡献**：`registerStatusBarItem`（状态栏项，左右分区 + order + 可选动作）、`registerSettingsEntry`（设置页扩展行）、`registerThemeSkin`（壳 token 皮肤）。全部返回 Disposable，停用 / 卸载时 `dispose()` 摘除；同 id 重复注册覆盖旧项，旧句柄不得误删新项。
+- **注册表只做注册 / 撤销 / 排序 / 查询**：不感知贡献者是谁，不解释 `label` / `hint` / `onSelect` 的业务语义，不替扩展决定默认值。空注册时设置页保留可见的「扩展设置」占位；状态栏只显示宿主机制事实，皮肤区只保留内置默认皮肤。
+- **状态栏是宿主 chrome**：常驻应用面与系统页底部（`bareWindow` 独立窗口除外），只展示宿主机制事实（运行时就绪 / 应用数 / 待审批）与注册项；扩展动作失败只进日志，不拖垮壳。
+- **主题皮肤是纯 token 表**：键必须是 `--` 开头的 CSS 自定义属性，浅色 `tokens` / 深色 `darkTokens` 在壳根（`.shell-root`）合并生效；内置 id `default` 保留且始终排在首位，未知持久化 id 渲染时回落 default。皮肤只覆盖壳 chrome，应用根容器自己声明的 token 优先（应用配色仍归应用）。
+- **设置页顺序是产品裁决**：界面 → 背景 → 皮肤 → 系统 → 日志 → 扩展设置 → 授权入口 → 恢复初始设置 → **关于（固定最后）**；`settingsOrderLock.test.ts` 钉住，插入新分组时不得把关于挤回中间。

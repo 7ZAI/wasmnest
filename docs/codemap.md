@@ -19,7 +19,7 @@ wasmnest/                                   # 平台仓根（本文件所在）
 │   ├─ packages/plugin-{bench-test,sdk-fixtures,system-test}/  # 宿主测试夹具包
 │   ├─ scripts/                             # dev-run / tauri-build / plugin-build / plugin-watch /
 │   │                                       # plugin-dev / package-host / 图标生成 / target 治理
-│   ├─ e2e/ · bench/                        # WDIO E2E（smoke/bench）· 桥接基准工程
+│   ├─ e2e/ · bench/                        # WDIO E2E（smoke/bench）· 基准数据打包（驱动在 wasmnest-test/perf-tests）
 │   └─ resources/ · tailwind/postcss/stylelint/tsconfig/wdio…
 ├─ wasmnest-mobile/                         # 移动宿主（Tauri 2 Android + Vue 3）
 │   ├─ src/                                 # 宿主壳（/mobile/shell：注册表 + 运行面）＋ 少量既有页面，见 §3.1
@@ -74,7 +74,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | --- | --- |
 | `main.ts` | 宿主入口（壳装配 / 路由 / i18n / 权限配置） |
 | `router/index.ts` | 路由真源之一：`/` 主屏、`/sys/:pageId` 系统页、各 app 路由（指向 `AppMountSlot`）、未匹配显性 not-found |
-| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`AppPreviewTile.vue` = 多任务卡的应用自绘预览面装载 / 3s 超时 / 回退品牌卡）；`sys/`（系统页）；`settings/`；`auth/` |
+| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`AppPreviewTile.vue` = 多任务卡的应用自绘预览面装载 / 3s 超时 / 回退品牌卡）；`sys/`（系统页）；`settings/`；`auth/`；`extensions/`（壳扩展点注册表：状态栏项 / 设置项 / 主题皮肤，只注册排序、不解释业务语义） |
 | `shell/composables/useShellApps.ts` | **应用路由真源**：`SURFACE_ROUTES`（新增桌面应用必须同步，见 §6） |
 | `shell/types.ts` · `state.ts` / `useShellState.ts` | 壳状态面（宿主零业务状态：装载即建、卸载即销毁） |
 | `components/` · `composables/` · `stores/` | 宿主公共组件 / 逻辑 / 存储 |
@@ -174,6 +174,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 任务 | 动手前必读 |
 | --- | --- |
 | 改桌面宿主壳 / 挂载槽 / 系统页 | `wasmnest-desktop/src/main.ts` + `src/shell/**`（`src/shell/composables/useShellApps.ts` = 应用路由真源）+ docs/architecture.md §2；跑桌面 `test:run` + 真实 `tauri:dev` 目验 |
+| 改桌面设置页 / 状态栏 / 壳皮肤 | `src/shell/extensions/**`（注册表契约）+ `src/shell/components/ShellStatusBar.vue` + `src/shell/settings/Settings{ThemeSkin,Extensions}Section.vue` + `src/shell/sys/SysSettingsView.vue`（**关于固定最后**）；机制口径见 docs/frontend.md §6；跑桌面 `test:run`（含 `settingsOrderLock` / `shellExtensions` / `shellStatusBar`） |
 | 改多任务卡片 / 应用预览面（`mountPreview`） | `wasmnest-desktop/src/shell/components/ShellTaskSwitcher.vue` + `src/shell/mount/{useAppMount.ts,AppPreviewTile.vue}`（`mountAppPreview(root, env)` = 装载入口，`PREVIEW_MOUNT_TIMEOUT_MS` = 3s）+ `src/shell/mount/appSession.ts`（`lastRoute`）；契约 = `AppPreviewEnv` / `AppPreviewHandle` / `MountPreview`（宿主与四个 app `entry.ts` 同形，L5 锁钉住）；应用侧内容裁决在 `../wasmnest-apps`；跑桌面 `test:run` + 应用仓各 app `test:run` / `build:frontend` + 真实 `tauri:dev` 目验 |
 | 改移动宿主壳 / 运行面 / 注册表 | `wasmnest-mobile/src/shell/registry.ts`（职责边界：只注册不决策）+ 移动 SDK `src/types.ts`（`UIRegistry`）+ docs/architecture.md §4；优先移动 SDK dev-shell 预览 |
 | 改插件机制 / 生命周期 / 能力接线（Rust） | 该端 `src-tauri/src/plugin/**`（每域一个文件，端口 adapter + 白名单条目同处，**先读文件头注释**）+ 能力仓对应 crate；跑该端 `cargo test` |
@@ -204,6 +205,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `i18nDriftLock.test.ts` | 同上 | 宿主 `src/i18n/host-{zh-CN,en}.ts` ↔ `apps/bedcode/desktop/src/i18n/host-{zh-CN,en}.ts` **逐字一致** |
 | `tailwindContentCoverage.test.ts` | 同上 | 宿主 Tailwind content 不得残留 app 路径 |
 | `appBundlePathLock.test.ts` · `appChromeLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 挂载包路径单一来源（`resources/plugins/desktop` 层级）；壳标题栏常驻、应用不得自绘标题栏/窗口控制/拖拽区 |
+| `shellExtensions.test.ts` · `shellStatusBar.test.ts` · `shellExtensionWiring.test.ts` · `settings/settingsOrderLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 壳扩展点注册语义（排序 / 覆盖 / Disposable / 皮肤 token 校验）、状态栏分区与动作失败隔离、ShellHost 装配接线、设置页顺序（**关于固定最后**） |
 | `pluginWatchCopy.test.ts` | `wasmnest-desktop/src/__tests__/scripts/` | 插件 watch 复制闭环 |
 | 移动壳系列锁：`shellConstraintLocks`（含 **L7 壳内自足**）、`retiredHostUIRetirementLocks`、`shellRegistry` / `shellPermissions` / `shellMechanisms` / `shellHostEvents` / `shellAppSurface` / `shellAppRunScreen` / `shellHomeScreen` 等 20+ | `wasmnest-mobile/src/__tests__/shell/` | 壳内自足（不依赖旧界面目录）、退役路由 / 符号不回接、壳迁移面不得缩水、注册表 / 权限 / 机制行为 |
 | `crate-structure-lock.test.mjs` | 根 `scripts/`（`pnpm run test:run`） | 契约 crate 常量保持 node 正则可解析的字面量形状；能力仓（`../wasmnest-lib`）无逃出 crate 目录的 `include!` / `include_str!` / `bindgen!` 路径；双端 `compose.json` 声明的 WIT 路径存在 |
@@ -233,5 +235,5 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 桌面 SDK | `wasmnest-desktop/packages/plugin-sdk-desktop/`（README 有已知漂移，docs/contracts.md §5.2） |
 | 移动 SDK / 运行面类型 | `wasmnest-mobile/packages/plugin-sdk-mobile/`（`src/types.ts` = `UIRegistry` 真源） |
 | 宿主构建 / dev 脚本 | 各端 `scripts/`（头注释自解释）+ 根 `scripts/{app-paths,app-script,adaptive-run}.mjs` |
-| 沙箱 / 基准 | `wasmnest-desktop/bench/`、`e2e/specs/`、`tools/componentize/` |
+| 沙箱 / 基准 | `e2e/specs/`、`../wasmnest-test/perf-tests/`（宿主侧基准驱动）、`tools/componentize/` |
 | 编辑器 / 格式化 | `.editorconfig`、`.prettierrc.json`、根 `eslint.config.js`、两端 `tailwind.config.js` / `.stylelintrc.json` |
