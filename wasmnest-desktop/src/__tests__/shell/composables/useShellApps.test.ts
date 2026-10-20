@@ -100,6 +100,21 @@ describe('注册表投影（plugin_list_loaded 真通道）', () => {
     expect(apps.lastError.value).toBeNull()
   })
 
+  it('清单投影不设人为上限：256 个应用全部保留（宿主无硬编码上限）', async () => {
+    const infos = Array.from({ length: 256 }, (_, i) =>
+      info({ id: `com.wasmnest.scale.manifest${String(i).padStart(3, '0')}` }),
+    )
+    mockedInvoke.mockResolvedValueOnce(infos).mockResolvedValue(false)
+
+    const apps = useShellApps()
+    await apps.load()
+
+    expect(apps.plugins.value).toHaveLength(256)
+    expect(apps.plugins.value[0].id).toBe('com.wasmnest.scale.manifest000')
+    expect(apps.plugins.value[255].id).toBe('com.wasmnest.scale.manifest255')
+    expect(apps.lastError.value).toBeNull()
+  })
+
   it('清单拉取失败：lastError 暴露错误码 + listReady 仍置位（不吞错、不停加载态）', async () => {
     // 非信封形状（普通 Error）→ 落到 host.internal 兜底码（ADR 0030）
     mockedInvoke.mockRejectedValueOnce(new Error('backend down'))
