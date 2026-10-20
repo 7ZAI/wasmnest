@@ -44,6 +44,7 @@
 
 - **宿主壳**（`wasmnest-desktop/src/`）：主屏 + 系统页（`/sys/:pageId`：设置 / 应用管理 / 权限与授权）+ 挂载槽。**宿主零业务状态**——不持有任何 app 内部状态（装载即建、卸载即销毁）。
 - **应用是独立构建的挂载包**：宿主经 `plugin_get_asset_dir` 拿到产物根目录，`useAppMount` 动态 import `<id>/index.js`，入口契约 `mountApp(root, env): Promise<AppMountHandle>`（`AppMountEnv`：`appId` / `invoke` / `appInvoke` / `appStorage*` / `locale` / `theme` / `initialRoute` / `onEvent`；`onEvent` 当前两事件：`'navigate'` 请求壳路由跳转、`'route'` 应用自报内部当前页）。**前端不拼产物路径**（resource 层级差一层就是 404 静默断裂，有锁）。
+- **多任务卡片预览面（可选能力，2026-10-20）**：同一挂载包还可选导出 `mountPreview(root, env): Promise<AppPreviewHandle>`（`AppPreviewEnv`：`appId` / `lastRoute` / `appInvoke` / `appStorageGet` / `locale` / `theme` / `platform`；**无宿主 `invoke` / 写存储 / 事件出口**）。预览面 = 应用在卡片缩略区**自绘**的只读点时刻视图，**不是截图**——后台应用离开应用面即卸载、没有 DOM 可抓（机制 B 不受影响）。宿主只负责容器 / 装载 / 3s 超时 / 卸载；缺失 / 抛错 / 超时 → 回退品牌渐变 + 图标，不白屏。能力声明 = bundle 是否导出 `mountPreview`，宿主不维护预览名单；预览实例与主应用实例生命周期独立（当前前台应用的卡也会挂预览），预览路径**禁止换发通道令牌**（旁路展示不得改主实例身份绑定）。
 - **路由真源**：`src/shell/composables/useShellApps.ts` 的 `SURFACE_ROUTES` + `src/router/index.ts` 逐条路由（应用路由全部指向 `AppMountSlot`；未匹配落显性 not-found，不白屏）。新增桌面应用必须同步（docs/codemap.md §6 任务路由行）。
 - **热更新闭环**：改 app 源码 → vite rebuild → 复制进资源目录 → 宿主 watcher `plugin:dev-reload` 重载前端；`tauri:dev` 自带缺口预建（别在宿主冷构建期间手工往 `src-tauri/` 拷产物，会触发重启风暴，机制见 `scripts/dev-run.js` 头注释）。
 - **壳标题栏常驻**：所有 app 页面共用壳标题栏，应用只占其下区域（`appChromeLock` 钉住）。

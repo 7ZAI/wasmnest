@@ -74,7 +74,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | --- | --- |
 | `main.ts` | 宿主入口（壳装配 / 路由 / i18n / 权限配置） |
 | `router/index.ts` | 路由真源之一：`/` 主屏、`/sys/:pageId` 系统页、各 app 路由（指向 `AppMountSlot`）、未匹配显性 not-found |
-| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制）；`sys/`（系统页）；`settings/`；`auth/` |
+| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`AppPreviewTile.vue` = 多任务卡的应用自绘预览面装载 / 3s 超时 / 回退品牌卡）；`sys/`（系统页）；`settings/`；`auth/` |
 | `shell/composables/useShellApps.ts` | **应用路由真源**：`SURFACE_ROUTES`（新增桌面应用必须同步，见 §6） |
 | `shell/types.ts` · `state.ts` / `useShellState.ts` | 壳状态面（宿主零业务状态：装载即建、卸载即销毁） |
 | `components/` · `composables/` · `stores/` | 宿主公共组件 / 逻辑 / 存储 |
@@ -174,6 +174,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 任务 | 动手前必读 |
 | --- | --- |
 | 改桌面宿主壳 / 挂载槽 / 系统页 | `wasmnest-desktop/src/main.ts` + `src/shell/**`（`src/shell/composables/useShellApps.ts` = 应用路由真源）+ docs/architecture.md §2；跑桌面 `test:run` + 真实 `tauri:dev` 目验 |
+| 改多任务卡片 / 应用预览面（`mountPreview`） | `wasmnest-desktop/src/shell/components/ShellTaskSwitcher.vue` + `src/shell/mount/{useAppMount.ts,AppPreviewTile.vue}` + `src/shell/mount/appSession.ts`（`lastRoute`）；契约 = `AppPreviewEnv` / `AppPreviewHandle` / `MountPreview`（宿主与四个 app `entry.ts` 同形，L5 锁钉住）；应用侧内容裁决在 `../wasmnest-apps`；跑桌面 `test:run` + 应用仓各 app `test:run` / `build:frontend` + 真实 `tauri:dev` 目验 |
 | 改移动宿主壳 / 运行面 / 注册表 | `wasmnest-mobile/src/shell/registry.ts`（职责边界：只注册不决策）+ 移动 SDK `src/types.ts`（`UIRegistry`）+ docs/architecture.md §4；优先移动 SDK dev-shell 预览 |
 | 改插件机制 / 生命周期 / 能力接线（Rust） | 该端 `src-tauri/src/plugin/**`（每域一个文件，端口 adapter + 白名单条目同处，**先读文件头注释**）+ 能力仓对应 crate；跑该端 `cargo test` |
 | 改权限 / 授权闸门 | 本端 SDK `rust/src/permission.rs`（词汇真源）+ docs/contracts.md §4 + docs/security.md §1；生成物重出（桌面 SDK 目录 `pnpm run gen:permissions`）；跑相关锁 |
@@ -199,7 +200,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 | 锁 | 位置（本仓） | 钉住什么 |
 | --- | --- | --- |
-| `hostAppBoundaryLock.test.ts` | `wasmnest-desktop/src/__tests__/` | 宿主零 app 源码 import、零 `__WASMNEST_SHARED__`、零旧贡献面；逐字校验四个桌面 app `src/entry.ts` 的 `mountApp` 契约（**新增 / 改名桌面应用必须同步其 `APP_ENTRIES`**） |
+| `hostAppBoundaryLock.test.ts` | `wasmnest-desktop/src/__tests__/` | 宿主零 app 源码 import、零 `__WASMNEST_SHARED__`、零旧贡献面；逐字校验四个桌面 app `src/entry.ts` 的 `mountApp` 契约；**L5 预览契约锁**：四个 entry 必须导出 `mountPreview` 且带 `appId` / `lastRoute` / `appInvoke` / `appStorageGet` / `locale` / `theme` 关键字段、宿主声明 `AppPreviewEnv` / `AppPreviewHandle` 且 `mountPreview?` 可选、预览路径禁用 `refreshChannelToken` / 写存储（**新增 / 改名桌面应用必须同步其 `APP_ENTRIES`**） |
 | `i18nDriftLock.test.ts` | 同上 | 宿主 `src/i18n/host-{zh-CN,en}.ts` ↔ `apps/bedcode/desktop/src/i18n/host-{zh-CN,en}.ts` **逐字一致** |
 | `tailwindContentCoverage.test.ts` | 同上 | 宿主 Tailwind content 不得残留 app 路径 |
 | `appBundlePathLock.test.ts` · `appChromeLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 挂载包路径单一来源（`resources/plugins/desktop` 层级）；壳标题栏常驻、应用不得自绘标题栏/窗口控制/拖拽区 |
