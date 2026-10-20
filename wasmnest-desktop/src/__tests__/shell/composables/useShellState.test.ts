@@ -172,6 +172,27 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
     })
   })
 
+  describe('应用会话判定（主屏绿点数据源）', () => {
+    it('无卡 = 无会话；打开应用后产卡 = 有会话；真停用摘卡后回到无会话', async () => {
+      const s = useShellState()
+      seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
+      expect(s.hasAppSession(TERMINAL_PLUGIN_ID)).toBe(false)
+
+      await s.openApp(TERMINAL_PLUGIN_ID)
+      expect(s.hasAppSession(TERMINAL_PLUGIN_ID)).toBe(true)
+
+      await s.closeCard(`app:${TERMINAL_PLUGIN_ID}`)
+      expect(s.hasAppSession(TERMINAL_PLUGIN_ID)).toBe(false)
+    })
+
+    it('系统页卡不算应用会话；其他应用卡互不串扰', () => {
+      const s = useShellState()
+      s.openSys('settings')
+      expect(s.hasAppSession('settings')).toBe(false)
+      expect(s.hasAppSession(TERMINAL_PLUGIN_ID)).toBe(false)
+    })
+  })
+
   describe('卡片 MRU 与关闭（真停用）', () => {
     it('activateCard（多任务层点卡）：MRU 置顶 + 切到对应路由', () => {
       const s = useShellState()

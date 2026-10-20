@@ -48,7 +48,13 @@
               <span v-if="appsStore.displayStates.value[app.id] === 'approval'" class="bdg-approval"
                 >!</span
               >
-              <span v-else class="sdot" :class="appsStore.displayStates.value[app.id]"></span>
+              <!-- 绿点 = 真实运行 + 当前会话（或显式自启）；纯后台实例不画点
+                   （判据单表：state.ts#appDotState） -->
+              <span
+                v-else-if="dotStateOf(app)"
+                class="sdot"
+                :class="dotStateOf(app) ?? undefined"
+              ></span>
             </span>
             <span class="nm truncate">{{ app.name }}</span>
           </div>
@@ -98,7 +104,7 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { SYS_PAGES, chipMetaOf } from '../composables/state'
+import { SYS_PAGES, appDotState, chipMetaOf } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
 import { useShellApps } from '../composables/useShellApps'
 import ShellIcon from './ShellIcon.vue'
@@ -128,6 +134,17 @@ const apps = filterApps
 function chipMeta(st: string): { text: string; cls: string } {
   const meta = chipMetaOf(st)
   return meta ? { text: t(meta.textKey), cls: meta.cls } : { text: st, cls: '' }
+}
+
+/**
+ * 图标状态点（绿 / 黄）：真实运行 + 当前会话（或显式自启）才返回状态类，
+ * 否则 null 不渲染。判据在 state.ts#appDotState（纯函数单测覆盖）。
+ */
+function dotStateOf(app: ShellAppEntry): 'running' | 'degraded' | null {
+  return appDotState(appsStore.displayStates.value[app.id] ?? 'dormant', {
+    hasSession: state.hasAppSession(app.id),
+    autostart: app.autostart,
+  })
 }
 
 /** 右键菜单 */

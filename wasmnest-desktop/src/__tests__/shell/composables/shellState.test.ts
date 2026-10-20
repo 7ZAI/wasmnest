@@ -6,6 +6,7 @@ import {
   SYS_PAGES,
   WALLPAPER_DEFAULT,
   appCardKey,
+  appDotState,
   cardId,
   cardKind,
   chipMetaOf,
@@ -95,6 +96,29 @@ describe('展示态 chip 元数据（state.ts 单表真源；主屏卡片 / 应�
       expect(['ok', 'warn', 'danger', '']).toContain(meta.cls)
     }
     expect(chipMetaOf('whatever')).toBeNull()
+  })
+})
+
+describe('主屏图标状态点（运行 + 会话 / 自启；2026-10-20 假绿点修复）', () => {
+  it('非运行态一律不画点（dormant / approval / error）', () => {
+    for (const st of ['dormant', 'approval', 'error'] as const) {
+      expect(appDotState(st, { hasSession: true, autostart: true })).toBeNull()
+    }
+  })
+
+  it('运行但无会话、未自启 → 不画点（角色驱动 / 残留的后台实例不冒充用户会话）', () => {
+    expect(appDotState('running', { hasSession: false, autostart: false })).toBeNull()
+    expect(appDotState('degraded', { hasSession: false, autostart: false })).toBeNull()
+  })
+
+  it('运行 + 会话 → 按真实展示态画点（running 绿 / degraded 黄）', () => {
+    expect(appDotState('running', { hasSession: true, autostart: false })).toBe('running')
+    expect(appDotState('degraded', { hasSession: true, autostart: false })).toBe('degraded')
+  })
+
+  it('显式自启即使无会话也画点（boot 后确实由偏好启动）', () => {
+    expect(appDotState('running', { hasSession: false, autostart: true })).toBe('running')
+    expect(appDotState('degraded', { hasSession: false, autostart: true })).toBe('degraded')
   })
 })
 

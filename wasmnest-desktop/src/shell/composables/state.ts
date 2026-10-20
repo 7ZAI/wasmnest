@@ -4,7 +4,7 @@
  * 全部为确定性纯函数：卡片 MRU 重排 / 关闭、展示态归并、待审批派生、
  * 通知计数、图标色调哈希。业务事实不落这里——应用数据在 useShellApps。
  */
-import type { CardKey, HostNotif, SysPageId } from '../types'
+import type { AppDisplayState, CardKey, HostNotif, SysPageId } from '../types'
 
 /** 系统页清单（宿主自有面；nameKey/descKey 为 i18n key，非直接文案） */
 export const SYS_PAGES: ReadonlyArray<{
@@ -75,6 +75,25 @@ export const CHIP_META: Readonly<Record<string, { textKey: string; cls: string }
 /** 展示态 chip 元数据查询（未知态返回 null，使用方按「原值 + 无样式类」回退） */
 export function chipMetaOf(st: string): { textKey: string; cls: string } | null {
   return CHIP_META[st] ?? null
+}
+
+/**
+ * 主屏应用图标状态点（用户 2026-10-20 裁决：绿点只能表示「这里有正在运行的应用会话」）。
+ *
+ * 判据 = 真实运行态（running / degraded）**且**有当前会话（打开过、卡片未摘）或
+ * 显式自启。两条来源缺一不可：
+ * - 没有运行态 → 不显示（dormant / approval / error 都不画点；审批用 `!` 徽标）；
+ * - 有运行态但无会话、也未自启 → 不显示（角色驱动的后台实例不算「用户打开了应用」，
+ *   否则 boot 后没点过的应用仍带绿点——这正是本次修复的假象）。
+ *
+ * 纯函数，直接单测；`hasSession` 由 useShellState 的卡片清单提供。
+ */
+export function appDotState(
+  displayState: AppDisplayState,
+  opts: { hasSession: boolean; autostart: boolean },
+): 'running' | 'degraded' | null {
+  if (displayState !== 'running' && displayState !== 'degraded') return null
+  return opts.hasSession || opts.autostart ? displayState : null
 }
 
 // ==================== 待审批派生（2026-10-17 复活：真实 NeedsApproval 态） ====================

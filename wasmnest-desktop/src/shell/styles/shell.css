@@ -103,13 +103,8 @@
   .sdot.degraded {
     background: var(--color-warning);
   }
-  .sdot.dormant {
-    background: var(--text-tertiary);
-  }
-  .sdot.approval,
-  .sdot.error {
-    background: var(--color-danger);
-  }
+  /* dormant / approval / error 不再画点（审批用 ! 徽标，错误由 chip / 详情呈现）；
+     状态点只表示「有正在运行的应用会话」。 */
 
   /* ==================== chip（状态徽标） ==================== */
   .shell-chip {

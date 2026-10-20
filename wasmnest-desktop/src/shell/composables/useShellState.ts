@@ -4,8 +4,9 @@
  * 2026-10-17 lifecycle-sync 改造后：
  * - 路由是唯一事实源：'/' = 主屏；'/sys/*' = 系统页全屏；app 路由 = 应用界面全屏；
  * - cards = 打开过的面清单（MRU，路由驱动；主屏不展示，工具栏多任务面板消费）；
- * - **打开 / 关闭走真实生命周期**：openApp = preauthorize → activate（真激活）
- *   + 挂载运行面；closeCard / stopApp = deactivate（**真停用**）成功后才摘面
+ * - **打开 / 关闭走真实生命周期**：openApp = preauthorize → activate（真激活，
+ *   仅当前会话，不写启动复活快照）+ 挂载运行面；closeCard / stopApp = deactivate
+ *   （**真停用**）成功后才摘面
  *   （D2/D5；动作经 useShellApps 收口到宿主命令面）；
  * - 审批：未授权激活落 NeedsApproval → 壳审批弹窗（approval 分支）→ 批准后激活；
  * - 通知：审批通知从待审批应用派生（真实数据源，不再是恒空桩）。
@@ -118,6 +119,16 @@ function faceOfRoute(path: string): CardKey | null {
   return pluginId ? appCardKey(pluginId) : null
 }
 
+/**
+ * 某应用当前是否有壳内会话（打开过且未真停用 = 卡片还在）。
+ *
+ * 主屏绿点的必要条件之一（`state.ts#appDotState`）：角色驱动的后台实例没有卡片，
+ * 不算用户打开过，不画绿点；显式自启的应用另由 autostart 放行。
+ */
+function hasAppSession(appId: string): boolean {
+  return cards.value.some((key) => cardKind(key) === 'app' && cardId(key) === appId)
+}
+
 /** 进入一个面（MRU 置顶 + 切 card 屏；幂等：重复进入只重排不重复产卡） */
 function enterFace(key: CardKey | null): void {
   if (!key) {
@@ -140,8 +151,8 @@ function syncFromRoute(path: string): void {
 }
 
 /**
- * 开应用面：**真实激活**（preauthorize → activate，持久化激活意图）+ 产卡 +
- * 进入应用界面路由。失败时按终态分流：NeedsApproval → 审批弹窗；其余 toast 错误。
+ * 开应用面：**真实激活**（preauthorize → activate，仅当前会话、不写启动快照）+
+ * 产卡 + 进入应用界面路由。失败时按终态分流：NeedsApproval → 审批弹窗；其余 toast 错误。
  * 无宿主运行面的应用（如 ai-chatbox / file-transfer）只激活不产卡——壳诚实呈现
  * 「已运行但无挂载视图」（主屏网格状态 chip 可见）。
  *
@@ -416,6 +427,7 @@ export function useShellState() {
     screen,
     cards,
     activeCard,
+    hasAppSession,
     panelOpen,
     quickSettingsOpen,
     toggleQuickSettings,
