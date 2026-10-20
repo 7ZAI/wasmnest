@@ -563,6 +563,15 @@ pub fn run() {
             // 票 08/P0-2：第一方免弹窗归属清单（产品数据）由 lib 装配时注入——
             // 判定逻辑在 wasm-core（机制），清单真源在本文件即可（first_party_dirs.rs）
             let first_party_dirs = crate::first_party_dirs::first_party_dirs();
+            // **必须在 PluginHost::new 之前**：wasm-core 会按系统分区 `activation_state`
+            // 跑 `auto_activate_from_persisted_state`，把上次运行过的 L3 应用复活。
+            // 桌面「打开」是会话级动作（persist=false），boot 启动唯一来源是
+            // `plugin.autostart.{id}`（见 plugin/lifecycle.rs 模块头契约）；清掉历史
+            // 快照后，升级前留下的「没打开却运行中」状态也不会再出现。
+            let plugin_storage = wasm_core::storage::PluginStorage::new(db.clone());
+            tauri::async_runtime::block_on(
+                plugin::lifecycle::clear_persisted_activation_snapshot(&plugin_storage),
+            )?;
             let plugin_host = tauri::async_runtime::block_on(wasm_core::PluginHost::new(
                 db.clone(),
                 &plugins_dir,
@@ -635,10 +644,10 @@ pub fn run() {
             // 2026-10-17 实机验证 P0-1 的 404 根因。
             app.manage(plugin::assets::AppAssetsDir(plugins_dir.clone()));
             // 宿主侧插件生命周期编排层（2026-10-17 lifecycle-sync）：壳动作经它驱动
-            // 真实启停/审批/卸载 + enabled/autostart 偏好持久化；boot 装配在其后补跑
-            // `apply_autostart`（按 `plugin.autostart.{id}` 偏好补激活；wasm-core
-            // 内部的 `auto_activate_from_persisted_state` 在 `PluginHost::new` 已跑，
-            // 保留——两个驱动都是「按持久化偏好装配」）。
+            // 真实启停/审批/卸载 + enabled/autostart 偏好持久化；boot 装配在其后跑
+            // `apply_autostart`（按 `plugin.autostart.{id}` 偏好激活）。历史
+            // 「上次运行快照」已在上方创建 `PluginHost` 之前清空，故这里是 L3
+            // 业务应用唯一的 boot 启动源（用户 2026-10-20 裁决）。
             let lifecycle = Arc::new(plugin::lifecycle::PluginLifecycleManager::new(plugin_host.clone()));
             app.manage(lifecycle.clone());
             tauri::async_runtime::block_on(lifecycle.apply_autostart());

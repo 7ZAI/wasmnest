@@ -8,12 +8,15 @@
 //! 编排（语义一致、实现各自），机制不再重复。
 //!
 //! 生命周期契约（与移动端逐字一致，`wasmnest-test/cross-end-tests` 门禁覆盖）：
-//! - **打开** = `activate_after_preauth` → wasm-core `activate_plugin(id, persist=true)`
-//!   ——持久化激活意图（下次 boot `auto_activate_from_persisted_state` 复活）；
+//! - **打开** = `activate_after_preauth` → wasm-core `activate_plugin(id, persist=false)`
+//!   ——**只在当前会话运行**：关闭宿主 / 重启后不复活。跨启动启动由显式
+//!   `plugin.autostart.{id}` 偏好决定（用户 2026-10-20 裁决：打开过的应用不能
+//!   在下次启动变成「没打开却显示运行中」）；
 //! - **关闭** = `deactivate` → wasm-core `deactivate_plugin(id, persist=true)`
 //!   ——**真停用**：guest deactivate + 权限 `revoke_all` + 消息总线退订 + 注册表/
 //!   令牌/互调 API 注销 + store 随实例回收（机制已证，见 wasm-core
 //!   `deactivate_plugin_inner` 步骤 ①—统一清理段，D4 只补编排不重复实现）；
+//!   `persist=true` 同时把历史版本留下的「启动复活」快照写成停用；
 //! - **偏好** = `plugin.enabled.{id}`（可用性标记，不驱动启动）/ `plugin.autostart.{id}`
 //!   （boot 自启偏好，缺省即关；只改偏好不触发当前进程启停，与移动端
 //!   `plugin_set_autostart` 语义逐字一致）；
@@ -22,12 +25,15 @@
 //! - **卸载** = `uninstall`（仅未启用插件可卸；停用 → 丢私有库 → 删目录 → 清存储
 //!   → 撤销审批与激活持久化）。
 //!
-//! **boot 装配**：`PluginHost::new` 内部已跑 `auto_activate_from_persisted_state`
-//! （保留，wasm-core 机制）；本模块补 `apply_autostart`（按 `plugin.autostart.{id}`
-//! 偏好补激活未运行的应用）——两个驱动都是「按持久化偏好装配」，不改变
-//! wasm-core 启动路径。旧「前端直连自启常驻」的隐含假设已随壳改造移除：
-//! 前端加载由壳驱动（`useShellApps` 动作 → 本模块命令面）。
+//! **boot 装配**：wasm-core `PluginHost::new` 内部仍会跑
+//! `auto_activate_from_persisted_state`（能力仓机制，桌面不删）；平台在创建
+//! `PluginHost` **之前**调用 [`clear_persisted_activation_snapshot`] 清空历史会话
+//! 快照，保证 L3 业务应用不会因上次运行被复活。唯一允许 boot 启动应用的是
+//! `apply_autostart`（按 `plugin.autostart.{id}` 偏好；用户显式开启）——旧
+//! 「前端直连自启常驻」的隐含假设已随壳改造移除：前端加载由壳驱动
+//! （`useShellApps` 动作 → 本模块命令面）。
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tauri::State;
@@ -50,6 +56,23 @@ pub const ENABLED_KEY_PREFIX: &str = "plugin.enabled.";
 /// 自启偏好 key 前缀（移动端 `PLUGIN_AUTOSTART_KEY_PREFIX` 同款语义与字面：
 /// `plugin.autostart.{plugin_id}`；缺省即关——只有显式打开的才在 boot 自动激活）
 pub const AUTOSTART_KEY_PREFIX: &str = "plugin.autostart.";
+
+/// 清空 wasm-core 的「上次激活快照」（系统分区 `activation_state`）。
+///
+/// **为什么必须在创建 `PluginHost` 之前调用**：wasm-core `PluginHost::new` 会按
+/// 该快照跑 `auto_activate_from_persisted_state`，把上次运行过的 L3 业务应用直接
+/// 复活。桌面壳的「打开」是会话级动作（见模块头契约），宿主要在能力仓机制执行前
+/// 清掉快照；否则用户重启后没打开过的应用会后台运行并显示运行中状态点。
+///
+/// 幂等；只清系统分区的快照行，不触碰插件私有数据 / 启用与自启偏好。
+pub async fn clear_persisted_activation_snapshot(storage: &PluginStorage) -> Result<()> {
+    storage
+        .save_activated_plugins(&HashMap::new())
+        .await
+        .map_err(|e| crate::AppError::Plugin(format!("清理插件激活快照失败: {e}")))?;
+    tracing::info!("[PluginLifecycle] cleared persisted activation snapshot (boot startup is autostart-only)");
+    Ok(())
+}
 
 /// 桌面宿主侧插件生命周期编排层
 ///
@@ -91,7 +114,7 @@ impl PluginLifecycleManager {
         self.host.is_activated(plugin_id).await
     }
 
-    // ==================== 启停（persist 语义：打开即持久化激活 / 停用即持久化停用态） ====================
+    // ==================== 启停（persist 语义：打开仅当前会话 / 停用即持久化停用态） ====================
 
     /// 预授权（启用前置，独立命令供壳先行调用）：收集插件需授权路径单次合并弹窗；
     /// 拒绝直接返回 Err 不进入激活。已授权路径短路无二次弹窗。
@@ -103,11 +126,13 @@ impl PluginLifecycleManager {
     }
 
     /// 壳「打开应用」的激活入口：前端已先行调 `preauthorize`，此处走完整激活
-    /// （`activate_plugin` 内部的预授权兜底对已授权路径短路，无副作用），
-    /// persist=true = 持久化激活意图（boot 复活）。
+    /// （`activate_plugin` 内部的预授权兜底对已授权路径短路，无副作用）。
+    ///
+    /// persist=false：打开是**当前会话**动作，不写「下次 boot 复活」快照；跨启动
+    /// 启动只由 `plugin.autostart.{id}` 偏好决定（见模块头「生命周期契约」）。
     pub async fn activate_after_preauth(&self, plugin_id: &str) -> Result<()> {
         self.host
-            .activate_plugin(plugin_id, true)
+            .activate_plugin(plugin_id, false)
             .await
             .map_err(|e| crate::AppError::Plugin(format!("激活插件 '{plugin_id}' 失败: {e}")))
     }
@@ -171,14 +196,14 @@ impl PluginLifecycleManager {
         write_bool_pref(&self.host.storage(), AUTOSTART_KEY_PREFIX, plugin_id, autostart).await
     }
 
-    // ==================== boot 装配（按 autostart 偏好；补在 wasm-core 持久化激活之后） ====================
+    // ==================== boot 装配（唯一启动源 = autostart 偏好） ====================
 
-    /// boot 后按 `plugin.autostart.{id}` 偏好补激活未运行的应用
+    /// boot 后按 `plugin.autostart.{id}` 偏好激活应用
     ///
-    /// `PluginHost::new` 内部已按持久化激活状态装配（`auto_activate_from_persisted_state`，
-    /// 保留）；本方法补上**显式自启偏好**这一路：autostart=true 且当前未运行的应用
-    /// 激活（persist=false——偏好与「运行中快照」解耦，关掉自启后下次 boot 不再
-    /// 因快照复活；close 动作本身写 persist=false 收口停用意图）。
+    /// 这是 L3 业务应用**唯一**的 boot 启动源：历史「上次运行快照」在
+    /// `PluginHost::new` 之前已由 [`clear_persisted_activation_snapshot`] 清空。
+    /// autostart=true 且当前未运行 → 激活（persist=false——偏好是启动真源，
+    /// 运行快照不再参与下次 boot）。
     ///
     /// 角色驱动层（L1/L2）由 wasm-core boot 无条件激活，不消费偏好；此处幂等
     /// （已运行即跳过）。返回本次实际激活数（供 boot 日志 / 测试断言）。
@@ -353,6 +378,41 @@ mod tests {
             .await
             .expect("write true");
         assert!(read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.b").await);
+    }
+
+    #[tokio::test]
+    async fn clear_activation_snapshot_keeps_preferences() {
+        let storage = storage();
+        // 模拟旧版本留下的「上次运行」快照 + 用户显式自启偏好
+        let mut snapshot = HashMap::new();
+        snapshot.insert("com.wasmnest.test.legacy".to_string(), true);
+        storage
+            .save_activated_plugins(&snapshot)
+            .await
+            .expect("seed legacy snapshot");
+        write_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.legacy", true)
+            .await
+            .expect("seed autostart pref");
+
+        clear_persisted_activation_snapshot(&storage)
+            .await
+            .expect("clear snapshot");
+
+        // 快照清空（boot 不再复活任何历史应用），但显式偏好原样保留
+        assert!(storage
+            .load_activated_plugins()
+            .await
+            .expect("load after clear")
+            .is_empty());
+        assert!(
+            read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.legacy").await,
+            "清理启动快照不得触碰 plugin.autostart 偏好"
+        );
+
+        // 幂等：重复清理不报错
+        clear_persisted_activation_snapshot(&storage)
+            .await
+            .expect("clear snapshot twice");
     }
 
     #[tokio::test]

@@ -4,10 +4,10 @@
 //!
 //! 被测面 = `PluginLifecycleManager`（宿主侧编排）对外行为，只断言外部契约：
 //! - 清单 / 状态查询接回编排层（真实产物目录扫描）；
-//! - 打开 = activate_after_preauth（persist=true）→ 运行中；关闭 = deactivate
-//!   （persist=true）→ 停用 + 持久化意图翻转（机制层的 revoke_all / 总线退订 /
-//!   store 回收由 wasm-core 自身测试覆盖，本层只证「编排把 persist 语义接到
-//!   原语上」）；
+//! - 打开 = activate_after_preauth（persist=false）→ 运行中，但**不写启动快照**
+//!   （下次 boot 不复活）；关闭 = deactivate（persist=true）→ 停用 + 快照写停用
+//!   （机制层的 revoke_all / 总线退订 / store 回收由 wasm-core 自身测试覆盖，
+//!   本层只证「编排把 persist 语义接到原语上」）；
 //! - enabled / autostart 偏好：移动端同款 key 语义（只改偏好、持久化、缺省关）；
 //! - boot 装配补路：apply_autostart 按偏好补激活未运行应用、幂等、无偏好零副作用。
 //!
@@ -47,6 +47,26 @@ async fn bundled_id(manager: &PluginLifecycleManager, suffix: &str) -> String {
     id.to_string()
 }
 
+/// boot 装配顺序锁：清理历史激活快照必须发生在 `PluginHost::new` **之前**。
+///
+/// 顺序反了 = wasm-core 先按旧快照把 L3 应用复活（「没打开却显示运行中」的
+/// 绿点假象回归）。机制行为由 wasm-core 自身测试与本文件生命周期用例覆盖，
+/// 平台侧这里只钉组合根里的调用顺序。
+#[test]
+fn boot_clears_activation_snapshot_before_creating_host() {
+    let lib_rs = include_str!("../src/lib.rs");
+    let clear = lib_rs
+        .find("clear_persisted_activation_snapshot(&plugin_storage)")
+        .expect("lib.rs boot 必须在 PluginHost::new 前调用 clear_persisted_activation_snapshot");
+    let host_new = lib_rs
+        .find("wasm_core::PluginHost::new")
+        .expect("lib.rs 必须创建 PluginHost");
+    assert!(
+        clear < host_new,
+        "清理激活快照必须在 PluginHost::new 之前（否则旧快照会复活 L3 应用）"
+    );
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn list_loaded_projects_real_bundled_apps() {
     let manager = setup_manager().await;
@@ -79,7 +99,7 @@ async fn activate_then_deactivate_toggles_running_state() {
     let manager = setup_manager().await;
     let agent_hub = bundled_id(&manager, AGENT_HUB_ID_SUFFIX).await;
 
-    // 打开（壳 openApp 时序：preauthorize 先行 + activate_after_preauth persist）
+    // 打开（壳 openApp 时序：preauthorize 先行 + activate_after_preauth 会话级激活）
     manager
         .preauthorize(&agent_hub)
         .await
@@ -94,29 +114,32 @@ async fn activate_then_deactivate_toggles_running_state() {
     assert!(!manager.is_activated(&agent_hub).await, "停用后严格 Activated 为假");
 }
 
-/// 打开 = 持久化激活意图（wasm-core `persist_activation_state` 把 map[id]=true
-/// 写进系统分区 `activation_state`；下次 boot `auto_activate_from_persisted_state`
-/// 复活——这是「关闭后不复活」的正反面对照）
+/// 打开是**会话级**动作：`activate_after_preauth` 不得写「下次 boot 复活」快照
+/// （persist=false）；关闭才持久化停用态（persist=true），即使用户先打开再关闭，
+/// 下次 boot 也只会看到 false。用户 2026-10-20 裁决：没打开的应用不能在重启后
+/// 变成运行中（绿点假象）。
 #[tokio::test(flavor = "multi_thread")]
-async fn activate_persists_intent_deactivate_persists_stop() {
+async fn open_is_session_scoped_deactivate_persists_stop() {
     let manager = setup_manager().await;
     let agent_hub = bundled_id(&manager, AGENT_HUB_ID_SUFFIX).await;
     let storage = manager.host().storage();
 
-    // 打开（persist=true）→ 持久化意图 = 运行
+    // 打开（persist=false）→ 运行中，但快照里不得出现 true
     manager.activate_after_preauth(&agent_hub).await.expect("activate");
-    let map = storage.load_activated_plugins().await.expect("load activated map");
-    assert!(
-        map.get(&agent_hub).copied().unwrap_or(false),
-        "激活后持久化意图应为 true（boot 复活）"
-    );
-
-    // 关闭（persist=true）→ 持久化意图 = 停用（boot 不复活 = 停用即持久化停用态）
-    manager.deactivate(&agent_hub).await.expect("deactivate");
+    assert!(manager.is_running(&agent_hub).await, "打开后应运行");
     let map = storage.load_activated_plugins().await.expect("load activated map");
     assert!(
         !map.get(&agent_hub).copied().unwrap_or(false),
-        "停用后持久化意图应为 false（下次 boot 不复活）"
+        "打开不得写启动复活快照（persist=false）"
+    );
+
+    // 关闭（persist=true）→ 快照明确写停用（boot 不复活）
+    manager.deactivate(&agent_hub).await.expect("deactivate");
+    let map = storage.load_activated_plugins().await.expect("load activated map");
+    assert_eq!(
+        map.get(&agent_hub).copied(),
+        Some(false),
+        "停用后快照必须明确写 false（下次 boot 不复活）"
     );
 }
 
