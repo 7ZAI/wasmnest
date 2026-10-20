@@ -596,12 +596,13 @@ button.group-row:active,
 
 /* ==================== 设置二级页面 ==================== */
 
-/* 分组标题 */
+/* 分组标题
+   取宿主字阶的最小一档（sm），不写 uppercase：壳内分组头（ShellSection）用
+   sentence case，设置页也跟随，不再维护第二套全大写小标签体系。 */
 .settings-section-title {
-  font-size: clamp(0.625rem, 0.6875rem + (100vw - 360px) / 840, 0.75rem);
+  font-size: var(--font-size-sm);
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   color: var(--mobile-text-muted);
   padding-left: 0.25rem;
   margin: 0;
@@ -640,19 +641,22 @@ button.settings-row:active {
 }
 
 .settings-label {
-  font-size: clamp(0.8125rem, 0.9375rem + (100vw - 360px) / 840, 1rem);
+  /* 行标题走宿主字阶 base（14px），与壳内列表行同尺寸；不再用独立 clamp 字阶
+     （那套不接受字号偏好，且与 --font-size-* 是两条并行刻度）。 */
+  font-size: var(--font-size-base);
+  font-weight: 500;
   color: var(--mobile-text-primary);
 }
 
 .settings-desc {
-  /* 说明文字：比 settings-label 小一号，手机上 10px 起、平板 11px 封顶 */
-  font-size: clamp(0.5625rem, 0.625rem + (100vw - 360px) / 840, 0.6875rem);
+  /* 说明文字：降一档到 sm（12px），保证可读性又不与主标签争重量 */
+  font-size: var(--font-size-sm);
   color: var(--mobile-text-muted);
   margin-top: 0.125rem;
 }
 
 .settings-value {
-  font-size: clamp(0.75rem, 0.875rem + (100vw - 360px) / 840, 0.9375rem);
+  font-size: var(--font-size-sm);
   color: var(--mobile-text-secondary);
 }
 
@@ -662,7 +666,7 @@ button.settings-row:active {
   -webkit-appearance: none;
   min-width: 7.5rem;
   padding: 0.4375rem 2rem 0.4375rem 0.75rem;
-  font-size: clamp(0.75rem, 0.875rem + (100vw - 360px) / 840, 0.9375rem);
+  font-size: var(--font-size-base);
   color: var(--mobile-text-primary);
   background-color: var(--mobile-input-bg);
   border: 1px solid var(--mobile-input-border);
@@ -683,7 +687,7 @@ button.settings-row:active {
 .settings-number-input {
   width: 4.5rem;
   padding: 0.4375rem 0.5rem;
-  font-size: clamp(0.75rem, 0.875rem + (100vw - 360px) / 840, 0.9375rem);
+  font-size: var(--font-size-base);
   text-align: center;
   color: var(--mobile-text-primary);
   background: var(--mobile-input-bg);

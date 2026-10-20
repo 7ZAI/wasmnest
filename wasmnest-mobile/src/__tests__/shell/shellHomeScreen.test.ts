@@ -12,7 +12,7 @@
  * | C-H5 | 铃铛 | 角标 = 通知 + 待审批；点击开通知栏 | 计数与 toggleShade |
  * | C-H6 | 空态 | 无应用时给出下一步说明 | 渲染 emptyAppsHint |
  * | C-H7 | 快捷卡片轨道 | 横向 scroll-snap 轨道（原型形态），不定宽竖排 | 轨道内 listitem 数 = 卡片数 |
- * | C-H8 | 管理入口 | 图标按钮 + 可访问名（不是文字 chip） | 点击 navigate('apps') |
+ * | C-H8 | 应用分组头 | 计数紧跟标题、行尾不再挂重复的管理图标（管理入口在系统宫格） | 无 manageApps 按钮；说明与标题同一行内 |
  * | C-H9 | 文案纪律 | 不渲染方案期解释（由应用提供 / 平台自带 / 最近使用在前） | 三个退役 key 缺席 |
  * | C-H10 | 自定义壁纸 | custom 档 + 路径 → 壁纸层用 asset URL 铺底 | 图片层 style 含 URL |
  * | C-H11 | 多任务入口 | 运行带分组头带多任务入口（recents 全局可达，不只运行页胶囊） | openSwitcher 被调用 |
@@ -354,18 +354,22 @@ describe('C-H7 快捷卡片轨道（横向轮播）', () => {
   })
 })
 
-describe('C-H8 应用管理入口（图标按钮）', () => {
-  it('should_navigateToApps_when_manageIconTapped', async () => {
+describe('C-H8 应用分组头（不挂重复入口）', () => {
+  it('should_keepCountInline_andDropManageIcon_when_appsSectionRendered', () => {
     apps.value = [app('a', 'stopped', 'AppA')]
     const wrapper = mount(ShellHomeScreen)
 
-    const manage = wrapper.find('button[aria-label="shell.home.manageApps"]')
-    expect(manage.exists(), '管理入口应带可访问名（单图标按钮必须有）').toBe(true)
-    // 图标按钮不再带「管理」文字（旧的文字 chip 观感扁平）
-    expect(manage.text()).toBe('')
+    // 管理入口已在系统宫格「应用管理」占同层位置；分组头再放图标是重复入口，
+    // 且抢标题行视觉重心（用户 2026-10-20 反馈删除）。
+    expect(wrapper.find('button[aria-label="shell.home.manageApps"]').exists()).toBe(false)
 
-    await manage.trigger('click')
-    expect(mockNavigate).toHaveBeenCalledWith('apps')
+    // 计数紧跟标题（同一行内），而不是被推到行尾
+    const note = wrapper.findAll('span').find((s) => s.text().includes('shell.home.appsNote'))
+    expect(note?.exists(), '应用分组头保留「N 个已安装」').toBe(true)
+    const titleRow = note!.element.closest('div')
+    expect(titleRow?.querySelector('h2.shell-type-section')?.textContent).toContain(
+      'shell.home.appsTitle',
+    )
   })
 })
 

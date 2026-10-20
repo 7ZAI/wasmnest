@@ -16,7 +16,9 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>
       </button>
-      <h1 class="flex-1 min-w-0 text-lg font-semibold text-[var(--mobile-text-primary)] tracking-wide truncate">{{ title }}</h1>
+      <!-- 页标题与壳屏同一语义级（shell-type-display）：设置二级页与壳屏都是宿主页面，
+           标题不因走旧 standalone 路由就降成列表行尺寸（原 text-lg 16px 与行标题同大）。 -->
+      <h1 class="shell-type-display flex-1 min-w-0 text-[var(--mobile-text-primary)] truncate">{{ title }}</h1>
     </header>
 
     <!-- Content（页面内容滚动容器：scrollbar-gutter-stable 防滚动条显隐引起整页横向抖动；

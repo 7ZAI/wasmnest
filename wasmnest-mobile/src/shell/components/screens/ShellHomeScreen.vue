@@ -135,26 +135,16 @@
       </template>
 
       <!-- ======== 应用宫格 ======== -->
-      <ShellSection :title="t('shell.home.appsTitle')" :note="t('shell.home.appsNote', { count: apps.length })" class="shell-reveal shell-text-over-wall" :style="{ animationDelay: '160ms' }">
-        <template #action>
-          <!-- 图标按钮（44px 触控目标）：入口语义是「应用管理」，文字 chip 在宫格标题行里
-               抢视觉重心且显得扁平，改用单图标 + 可访问名（ui-ux-pro-max --domain icons：
-               图标控件必须有 accessible name，不能只有一个图形） -->
-          <button
-            type="button"
-            class="shell-icon-action"
-            :aria-label="t('shell.home.manageApps')"
-            @click="nav.navigate('apps')"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M5 6h8M17.5 6H19M5 12h1.5M11 12h8M5 18h8M17.5 18H19" />
-              <circle cx="15" cy="6" r="2" />
-              <circle cx="8.5" cy="12" r="2" />
-              <circle cx="15" cy="18" r="2" />
-            </svg>
-          </button>
-        </template>
-      </ShellSection>
+      <!-- 分组头只留「应用 N 个已安装」：管理入口已在系统宫格「应用管理」占同层位置，
+           行尾再放一个图标是重复入口，且抢掉标题行的视觉重心（用户 2026-10-20 反馈删除）。
+           计数紧跟标题而非推到行尾，读作一条事实而不是两端对齐的表格行。 -->
+      <ShellSection
+        :title="t('shell.home.appsTitle')"
+        :note="t('shell.home.appsNote', { count: apps.length })"
+        inline-note
+        class="shell-reveal shell-text-over-wall"
+        :style="{ animationDelay: '160ms' }"
+      />
       <div class="px-4">
         <!-- gap-3 = 12px：ui-ux-pro-max `--domain ux / Touch Spacing` 要求相邻触控目标
      间距 ≥8px，原 gap-1(4px) 既低于门槛、又让四列图标挤成一团。 -->

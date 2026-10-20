@@ -29,10 +29,8 @@ export default {
       switchTo: '切换到 {name}',
       stopInstance: '停止',
       slotsTitle: '快捷卡片',
-      appsTitle: '我的 WASM 应用',
+      appsTitle: '应用',
       appsNote: '{count} 个已安装',
-      /** 应用宫格分组头的图标按钮（打开应用管理） */
-      manageApps: '应用管理',
       appAria: '{name}，{state}',
       emptyApps: '尚未安装 WASM 应用',
       emptyAppsHint: '在「应用管理」里安装或启用后，入口会出现在这里',

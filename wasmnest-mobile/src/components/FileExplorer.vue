@@ -374,7 +374,9 @@ watch(
 }
 
 .header-filename {
-  font-size: var(--font-size-base);
+  /* 页内上下文标题（当前文件 / 目录）：比页标题低一档，但高于正文——
+     原来与正文同为 14px，在文件浏览页里显得像普通文字 */
+  font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--mobile-text-primary);
   white-space: nowrap;

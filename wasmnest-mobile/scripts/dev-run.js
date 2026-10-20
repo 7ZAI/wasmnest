@@ -41,6 +41,18 @@ function readDevPort() {
 }
 
 /**
+ * HMR WebSocket 独立端口（镜像 vite.config.ts 的 `server.hmr.port`，改那里必须同步改这里）。
+ *
+ * dev-run 固定给 tauri CLI 传 `--host 127.0.0.1`，tauri 据此向 beforeDevCommand 注入
+ * `TAURI_DEV_HOST=127.0.0.1`；vite.config.ts 在该变量存在时把 HMR 指向独立端口 1424
+ * （Vite 8 在该端口另起一个只监听回环的 HTTP/ws 服务器，不并入 dev 端口）。设备侧
+ * Vite client 直连 `ws://127.0.0.1:1424`，故除 devUrl 端口外也必须对该端口做 adb
+ * reverse；否则 HMR 报 `WebSocket closed without opened`（`net::ERR_CONNECTION_REFUSED`）
+ * ——页面能打开，但改宿主前端代码不热更。
+ */
+const HMR_PORT = 1424
+
+/**
  * 宿主 beforeDevCommand（vite dev server）端口预检。
  *
  * tauri dev 启动时自动运行 beforeDevCommand（npm run dev → vite），若端口被残留进程
@@ -134,20 +146,27 @@ function ensureAdbFd0Shim() {
  *
  * WebView 加载 devUrl（http://localhost:<port>）时，设备上的 localhost 指向设备自身，
  * 必须靠 adb reverse 把设备端口转发到宿主机 vite。Tauri CLI 仅在 dev 会话启动时设置
- * 一次，设备拔插重连 / adb kill-server 后隧道丢失且不会自动重建 → 前端改动不热更、
- * 甚至页面静默加载失败（devUrl 不可达命中缓存）。此处幂等重建并提示。
+ * devUrl 一次，HMR ws 独立端口（见 HMR_PORT）不在其覆盖范围，设备拔插重连 /
+ * adb kill-server 后隧道丢失且不会自动重建 → 前端改动不热更、甚至页面静默加载失败
+ * （devUrl 不可达命中缓存）。此处幂等重建并提示。
  * 失败不阻断：设备未连接时 android dev 本身会失败，由宿主报错即可。
  */
 async function precheckAdbReverse() {
   const port = readDevPort()
   if (!port) return
-  try {
-    execFileSync('adb', ['reverse', `tcp:${port}`, `tcp:${port}`], { stdio: 'ignore' })
-    console.log(`[dev-run] adb reverse tcp:${port} 已建立（Android WebView 热更新通道）`)
-  } catch {
-    console.warn(`[dev-run] ⚠ adb reverse tcp:${port} 失败（adb 不可用或设备未连接）`)
-    console.warn('[dev-run]   设备连接后热更新依赖该隧道；如遇“改代码不刷新”请手动执行：')
-    console.warn(`[dev-run]   adb reverse tcp:${port} tcp:${port}`)
+  const targets = [
+    { port, label: 'Android WebView 热更新通道' },
+    { port: HMR_PORT, label: 'Vite HMR WebSocket' },
+  ]
+  for (const { port: target, label } of targets) {
+    try {
+      execFileSync('adb', ['reverse', `tcp:${target}`, `tcp:${target}`], { stdio: 'ignore' })
+      console.log(`[dev-run] adb reverse tcp:${target} 已建立（${label}）`)
+    } catch {
+      console.warn(`[dev-run] ⚠ adb reverse tcp:${target} 失败（adb 不可用或设备未连接）`)
+      console.warn('[dev-run]   设备连接后热更新依赖该隧道；如遇“改代码不刷新”请手动执行：')
+      console.warn(`[dev-run]   adb reverse tcp:${target} tcp:${target}`)
+    }
   }
 }
 

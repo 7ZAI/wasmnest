@@ -144,6 +144,46 @@ function run(cmd, args, cwd) {
   }
 }
 
+/**
+ * 解析 cargo 实际产物目录（`target_directory`）。
+ *
+ * 应用仓根 `.cargo/config.toml` 的 `[build] target-dir = "target/wasm-apps"` 会把
+ * 仓内一切 cargo 调用的产物重定向到共享目录（见该文件注释：避免各 app 重复编译
+ * 同一份依赖图）。因此不能写死 `<插件>/rust/target`——旧硬编码成立于插件住平台仓、
+ * 尚无该 config 的时期；改写后 cargo 在共享目录产出，此处仍找 `rust/target` 就会
+ * 出现「cargo 构建成功但未产出 wasm」的假失败。
+ *
+ * 以 `cargo metadata` 的 target_directory 为准（cargo 自行计算，覆盖仓内 config、
+ * `CARGO_TARGET_DIR` 与 `--target-dir`）；metadata 失败时退回 `<插件>/rust/target`，
+ * 后续「产物缺失」报错仍是显性失败，不静默挑一个存在的目录。
+ */
+function resolveCargoTargetDir(cwd) {
+  const r = spawnSync(
+    'cargo',
+    ['metadata', '--no-deps', '--format-version', '1', '--manifest-path', 'rust/Cargo.toml'],
+    { cwd, encoding: 'utf8' },
+  )
+  if (r.status === 0) {
+    try {
+      const dir = JSON.parse(r.stdout).target_directory
+      if (dir) return dir
+    } catch {
+      // 解析失败：走兜底路径
+    }
+  }
+  return join(cwd, 'rust', 'target')
+}
+
+/** wasm 产物路径（按 cargo 实际 target 目录解析，见 resolveCargoTargetDir） */
+function resolveWasmPath(cwd, rustLibrary) {
+  return join(
+    resolveCargoTargetDir(cwd),
+    'wasm32-unknown-unknown',
+    'release',
+    `${rustLibrary}.wasm`,
+  )
+}
+
 /** dev-shell 的 vite 入口（存在即代表该 dev-shell 目录已装好依赖） */
 const DEV_SHELL_VITE = 'node_modules/vite/bin/vite.js'
 
@@ -500,9 +540,7 @@ function startBuildWatch(cwd, resourcesDir, manifest) {
 
   const dest = join(resolve(cwd, resourcesDir), id)
   const distDir = join(cwd, 'dist')
-  const wasmPath = hasWasm
-    ? join(cwd, 'rust/target/wasm32-unknown-unknown/release', `${rustLibrary}.wasm`)
-    : null
+  const wasmPath = hasWasm ? resolveWasmPath(cwd, rustLibrary) : null
 
   console.log('\n[wasmnest-plugin] ====== watch 前端构建（vite build --watch） ======')
   console.log(`[wasmnest-plugin] 产物自动复制到: ${dest}`)
@@ -597,9 +635,7 @@ function cmdBuild(flags) {
   }
 
   const distMain = join(cwd, 'dist', main || 'index.js')
-  const wasmPath = hasWasm
-    ? join(cwd, 'rust/target/wasm32-unknown-unknown/release', `${rustLibrary}.wasm`)
-    : null
+  const wasmPath = hasWasm ? resolveWasmPath(cwd, rustLibrary) : null
 
   // 1. 前端构建
   if (!rustOnly) {
@@ -700,9 +736,7 @@ function cmdPackage(flags) {
 
   const distDir = join(cwd, 'dist')
   const distMain = join(distDir, main || 'index.js')
-  const wasmPath = hasWasm
-    ? join(cwd, 'rust/target/wasm32-unknown-unknown/release', `${rustLibrary}.wasm`)
-    : null
+  const wasmPath = hasWasm ? resolveWasmPath(cwd, rustLibrary) : null
 
   if (!existsSync(distMain)) {
     console.error(`[wasmnest-plugin] dist/${main || 'index.js'} 缺失 — 先运行 pnpm run build`)

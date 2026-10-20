@@ -29,10 +29,8 @@ export default {
       switchTo: 'Switch to {name}',
       stopInstance: 'Stop',
       slotsTitle: 'Quick cards',
-      appsTitle: 'My WASM apps',
+      appsTitle: 'Apps',
       appsNote: '{count} installed',
-      /** Icon button in the app grid section header (opens app manager) */
-      manageApps: 'Manage apps',
       appAria: '{name}, {state}',
       emptyApps: 'No WASM app installed',
       emptyAppsHint: 'Install or enable an app in "App manager" and its entry shows up here',

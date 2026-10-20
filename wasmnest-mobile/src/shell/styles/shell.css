@@ -18,8 +18,10 @@
   --shell-brand-ink: #16181c;
   --shell-brand-ink-deep: #08090b;
   /* 品牌股线色恒为纸白：编织 W 的股线在 ink 底上 15.9:1，SVG fill 走它
-     （壳内禁硬编码色值；单根琥珀棒料 #FF9E2C 由组件内联，一副标志只出现一处） */
+     （壳内禁硬编码色值；单根琥珀棒料由 --shell-brand-stripe 提供，一副标志只
+     出现一处，与图形同住本 token 块） */
   --shell-brand-glyph: #f5f7f9;
+  --shell-brand-stripe: #ff9e2c;
   /* 壳内结构 token：只定义与平台 token 无关的几何量，避免各处硬编码同一数值 */
   --shell-radius-card: 12px;
   --shell-radius-control: 10px;
@@ -94,50 +96,60 @@
    若在此写死颜色，各处想换别档语义色会被静默忽略。尺寸轴与颜色轴正交，
    调用点用 text-[var(--mobile-text-*)] 自取语义色。
 
-   挂在 .shell-ui 下而非裸类名：style.css 的旧规则 `.mobile-ui h2` 特异度
-   (0,1,1) 高于任何单类名 (0,1,0)，会盖住分组标题字号；`.shell-ui .shell-type-*`
-   为 (0,2,0)，稳定压过它。
+   挂在 .shell-ui / .mobile-ui 下而非裸类名：style.css 的旧规则 `.mobile-ui h2`
+   特异度 (0,1,1) 高于任何单类名 (0,1,0)，会盖住分组标题字号；
+   `:is(.shell-ui, .mobile-ui) .shell-type-*` 为 (0,2,0)，稳定压过它。
+   两个宿主容器都要挂：壳屏与抽屉在 .shell-ui 内（抽屉 Teleport 到 body）,
+   旧路由的设置二级页只在 .mobile-ui 内（App.vue 根容器）——同一套语义级要
+   在两条渲染路径上取到同一尺寸。
    ============================================================================ */
-.shell-ui .shell-type-display {
-  font-size: var(--font-size-2xl);
-  font-weight: 650;
-  letter-spacing: -0.022em;
-  line-height: 1.18;
-}
-/* 主屏品牌 / 屏幕主标题：比 display 低一档 */
-.shell-ui .shell-type-title {
-  font-size: var(--font-size-xl);
-  font-weight: 650;
-  letter-spacing: -0.014em;
+
+/* 页标题（屏主标题）：normal 档 base=14 时为 20px。
+   刻意不用 --font-size-2xl：2xl 是 emoji / 大字号内容的 token，字号偏好
+   （useFontSize 只钉 xs–xl）不会重写它，屏标题会停在视口流式的 24–26px，
+   与 16px 的分组标题拉开 1.5 倍以上——2026-10-20 用户反馈「某些页标题过大」。
+   改用 xl+2px：随字号偏好与视口同步缩放，且与 10/12/14/16/18/20 的
+   宿主字阶连续（ui-ux-pro-max「Consistent Font Size Scale」）。 */
+:is(.shell-ui, .mobile-ui) .shell-type-display {
+  font-size: calc(var(--font-size-xl) + 2px);
+  font-weight: 600;
+  letter-spacing: -0.012em;
   line-height: 1.25;
 }
-/* 分组标题：字距 + 字重区分，在 16px 尺寸下也能与同尺寸的列表标题拉开 */
-.shell-ui .shell-type-section {
-  font-size: var(--font-size-lg);
+/* 主屏品牌 / 卡片主标题：比 display 低一档 */
+:is(.shell-ui, .mobile-ui) .shell-type-title {
+  font-size: var(--font-size-xl);
   font-weight: 600;
-  letter-spacing: 0.035em;
+  letter-spacing: -0.010em;
   line-height: 1.3;
 }
+/* 分组标题：字距 + 字重区分，在 16px 尺寸下也能与同尺寸的列表标题拉开 */
+:is(.shell-ui, .mobile-ui) .shell-type-section {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
 /* 列表行标题：与 body 同尺寸，靠字重建立层级 */
-.shell-ui .shell-type-label {
+:is(.shell-ui, .mobile-ui) .shell-type-label {
   font-size: var(--font-size-base);
   font-weight: 600;
   letter-spacing: -0.004em;
   line-height: 1.35;
 }
-.shell-ui .shell-type-body {
+:is(.shell-ui, .mobile-ui) .shell-type-body {
   font-size: var(--font-size-base);
   font-weight: 400;
   line-height: 1.5;
 }
 /* 元信息行（版本 / 权限数 / 体积）：降一档，让主标题独占视觉重量 */
-.shell-ui .shell-type-caption {
+:is(.shell-ui, .mobile-ui) .shell-type-caption {
   font-size: var(--font-size-sm);
   font-weight: 450;
   line-height: 1.45;
 }
 /* 角标 / 徽章 / 计数：最小档 + 明显字距，读作标签而非正文 */
-.shell-ui .shell-type-micro {
+:is(.shell-ui, .mobile-ui) .shell-type-micro {
   font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.03em;
