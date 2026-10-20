@@ -42,7 +42,7 @@
 | `pnpm run plugins:dev` | 单插件 dev 构建（`scripts/plugin-dev.js`，见 §5.2） |
 | `pnpm run test:run` | vitest（宿主 `src/__tests__` + **桌面 SDK 契约测试** `packages/plugin-sdk-desktop/__tests__`） |
 | `pnpm run test:e2e` | WDIO E2E（需 debug 二进制 + 已构建前端；`e2e/specs/{smoke,bench}.spec.ts`） |
-| `pnpm run bench` / `bench:full` | 桥接基准（`src-tauri` 的 `wasm_bridge_bench`，无参数=冒烟；release 不含 bench channel 面） |
+| `pnpm run bench:zip` | 基准数据打包（宿主侧基准驱动已迁至 `../wasmnest-test/perf-tests`） |
 | `cd src-tauri && cargo test` | 宿主 Rust 全量（含能力层 / CSP 锁、生命周期注册锁、e2e；**部分用例要求先构建随包插件产物** `resources/plugins/desktop`，见各测试头注释） |
 | `pnpm run target:size` | target 治理（§6；`prebuild` 钩子自动跑） |
 

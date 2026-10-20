@@ -15,8 +15,9 @@
 
 - `scripts/audit-rust-tests.mjs`：Rust 测试体量审计。
 - `scripts/split-rust-tests.mjs` + `scripts/run-test-split.sh --crate <子串>`：迁移 / 拆分测试（逐 crate 事务化，红了即回滚该文件）。
-- E2E / 基准：桌面 `pnpm run test:e2e`（WDIO：`e2e/specs/{smoke,bench}.spec.ts`）、`pnpm run bench` / `bench:full`（`src-tauri` 的 `wasm_bridge_bench`）。
+- E2E：桌面 `pnpm run test:e2e`（WDIO：`e2e/specs/{smoke,bench}.spec.ts`）。
 - 跨端真实互连：`../wasmnest-test/cross-end-tests`（同进程 path 依赖两端 `src-tauri`，零 mock）。
+- 性能基准：`../wasmnest-test/perf-tests`（桥接模块 + 真实应用模块，只认 release 构建）。
 
 ## 3. 完成定义与验证
 
