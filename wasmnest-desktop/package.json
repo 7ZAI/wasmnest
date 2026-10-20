@@ -17,8 +17,6 @@
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "test:e2e": "wdio run wdio.conf.ts",
-    "bench": "cd src-tauri && cargo test --test wasm_bridge_bench --",
-    "bench:full": "cd src-tauri && cargo test --test wasm_bridge_bench -- --full",
     "bench:zip": "node bench/scripts/build-bench-zip.mjs",
     "tauri": "tauri",
     "tauri:dev": "node scripts/dev-run.js",
