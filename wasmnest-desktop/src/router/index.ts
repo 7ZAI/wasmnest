@@ -15,6 +15,7 @@
  * - com.wasmnest.agent-hub：/hub
  * - com.wasmnest.ai-chatbox：/chat
  * - com.wasmnest.file-transfer：/transfer
+ * - com.wasmnest.monitor：/monitor
  */
 import { createRouter, createWebHistory } from 'vue-router'
 
@@ -24,6 +25,7 @@ import {
   AGENT_HUB_PLUGIN_ID,
   AI_CHATBOX_PLUGIN_ID,
   FILE_TRANSFER_PLUGIN_ID,
+  MONITOR_PLUGIN_ID,
 } from '@/shell/composables/useShellApps'
 
 const router = createRouter({
@@ -100,7 +102,7 @@ const router = createRouter({
       meta: { bareWindow: true },
     },
 
-    // ==================== 其余三个 wasm app 应用面（独立界面，挂载整包） ====================
+    // ==================== 其余四个 wasm app 应用面（独立界面，挂载整包） ====================
     {
       path: '/hub',
       name: 'app-agent-hub',
@@ -118,6 +120,12 @@ const router = createRouter({
       name: 'app-file-transfer',
       component: AppMountSlot,
       props: { appId: FILE_TRANSFER_PLUGIN_ID, route: '/transfer' },
+    },
+    {
+      path: '/monitor',
+      name: 'app-monitor',
+      component: AppMountSlot,
+      props: { appId: MONITOR_PLUGIN_ID, route: '/monitor' },
     },
 
     // ==================== 兜底 ====================

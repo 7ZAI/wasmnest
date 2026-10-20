@@ -84,3 +84,14 @@
 
 - 主库 schema 单一事实源在能力仓 `../wasmnest-lib/wasmnest-wasm-core`（`db.rs` + `db/schema.sql`）；迁移**必须幂等**；禁止手改生产库；改 schema 必须补幂等测试。
 - 插件存储隔离：插件 KV 走 `plugin_storage` 表（属主分区 / 前缀纵深 / 护栏）；系统空间 `__system__` 只用于宿主机制（如审批记录），不占插件命名空间。
+
+## 8. 运行监控（host-metrics）
+
+- **机制**：能力仓 WIT `host-metrics` 只暴露一个只读原语 `snapshot: func() -> result<string, string>`（JSON 字符串），world core 的 import 数 8 → 9。快照内容 = 内核 `MetricsRegistry::snapshot()`：每插件 Store 线性内存当前 / 峰值、导出调用次数 / 在飞 / 耗时直方图、燃料、生命周期计数与最近时间、trap 原因分布、grow 被拒、激活耗时、授权决策、总线背压、配额上限；另含注册制系统段（当前 `task`）。
+- **不是业务**：指标是宿主机制对自身运行时的观测（B1–B6 均不命中）；宿主只做原子记账与快照拼装，不解释「监控应用要展示什么」。
+- **权限**：单一 `metrics:read`（`PERMISSION_METRICS_READ`），一次授权可读**所有已加载插件**的聚合指标——这是监控用途的必要面，也意味着可据此推断其他应用活跃度（侧信道），权限描述已写明。门禁落点 = 内核 `core_binding.rs` 的 `host-metrics` Host impl 首行 `check_permission`；未声明 / 未批准即 `Err`。
+- **装配**：快照源由装配面注入 `WasmHostContext::set_metrics_snapshot_source(runtime.monitor())`（桌面 `manager/host.rs`、移动 `plugin/manager.rs`）。未装配（无头 / 测试上下文）返回 `Err`，**不返回 `{}`**——否则监控应用会把断链显示成「没有插件」。
+- **应用**：`wasmnest-apps/apps/monitor`（id `com.wasmnest.monitor`）是普通 L3 wasm 应用，仅「随包分发 + 主屏默认在场」，没有 `system: true` / 不可卸载守卫。桌面路由 `/monitor`，移动 `ui.registerSurface`；前端 1s 轮询 `monitor.snapshot`，卸载即清。移动端没有宿主插件清单命令，只显示 plugin_id + 指标，不伪造名称 / 运行态；`task` 段按端裁剪。
+- **诚实边界**：`quota.*` 是配额**上限**不是实时占用（wasmtime 不暴露每 Store 的 memories / tables 实时数量）；当前运行态不在快照里，桌面经既有 `plugin_list_loaded` 合并，不为监控新增宿主业务状态。
+- **fail-visible**：指标命令失败 / 未授权 / 快照源缺失时监控页显示明确错误与重试，保留旧数据时标记「已过期」，不使用空表冒充正常。
+- 规格与决策记录：`.scratch/2026-10-21-monitor-app/spec.md`。

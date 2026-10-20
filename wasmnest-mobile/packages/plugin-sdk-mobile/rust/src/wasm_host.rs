@@ -15,13 +15,14 @@
 
 use crate::host::{
     ConfigKey, HostAuth, HostBus, HostConfig, HostConnection, HostError, HostEvents,
-    HostFs, HostHttp, HostLog, HostMdns, HostNotify, HostNotifyMobile, HostPeer, HostPlatform,
-    HostPluginDatabase, HostStorage, HostTerminalStream, HostWs, NotifyOptions,
+    HostFs, HostHttp, HostLog, HostMdns, HostMetrics, HostNotify, HostNotifyMobile, HostPeer,
+    HostPlatform, HostPluginDatabase, HostStorage, HostTerminalStream, HostWs, NotifyOptions,
 };
 use crate::wasm::wasmnest::plugin::{
     host_auth_client, host_bus, host_config, host_connection_target, host_events, host_fs,
-    host_fs_mobile, host_http, host_log, host_mdns, host_notify, host_notify_mobile, host_peer,
-    host_platform, host_plugin_database, host_storage, host_terminal_stream, host_websocket,
+    host_fs_mobile, host_http, host_log, host_mdns, host_metrics, host_notify, host_notify_mobile,
+    host_peer, host_platform, host_plugin_database, host_storage, host_terminal_stream,
+    host_websocket,
 };
 
 /// 宿主 API 绑定（WASM 插件侧）
@@ -335,6 +336,16 @@ impl HostBus for WasmHost {
 
     fn bus_unsubscribe(&self, topic: &str) -> Result<(), HostError> {
         host_bus::unsubscribe(topic).map_err(|e| host_err("bus_unsubscribe", e))
+    }
+}
+
+// ==================== HostMetrics（运行监控） ====================
+
+impl HostMetrics for WasmHost {
+    fn metrics_snapshot(&self) -> Result<serde_json::Value, HostError> {
+        let raw = host_metrics::snapshot().map_err(|e| host_err("metrics_snapshot", e))?;
+        serde_json::from_str(&raw)
+            .map_err(|e| HostError::custom(-1, format!("metrics_snapshot: invalid JSON from host: {e}")))
     }
 }
 

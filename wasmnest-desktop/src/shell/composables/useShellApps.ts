@@ -88,7 +88,7 @@ export interface ShellAppEntry {
 /**
  * 宿主挂载运行面路由表（桌面 UI 宿主修正 2026-10-17）：应用前端由壳经挂载槽承载
  * 其独立构建的前端整包（机制 B，非贡献面）。每个有前端界面的挂载包都在此登记
- * （现状 4 个：terminal-session / agent-hub / ai-chatbox / file-transfer）；
+ * （现状 5 个：terminal-session / agent-hub / ai-chatbox / file-transfer / monitor）；
  * 无前端界面的应用无挂载路由。registerSurface 契约为多应用扩展预留（防回接锁保持）。
  *
  * 插件 id 家族随 ADR 0056 全改 `com.wasmnest`（bedcode 应用豁免仅显示名 / rust
@@ -99,6 +99,7 @@ export const TERMINAL_PLUGIN_ID = 'com.wasmnest.terminal-session'
 export const AGENT_HUB_PLUGIN_ID = 'com.wasmnest.agent-hub'
 export const AI_CHATBOX_PLUGIN_ID = 'com.wasmnest.ai-chatbox'
 export const FILE_TRANSFER_PLUGIN_ID = 'com.wasmnest.file-transfer'
+export const MONITOR_PLUGIN_ID = 'com.wasmnest.monitor'
 
 /**
  * 宿主挂载运行面路由表（桌面 UI 宿主修正 2026-10-17）：每个有前端界面的 wasm
@@ -116,6 +117,7 @@ export const SURFACE_ROUTES: Readonly<Record<string, string>> = {
   [AGENT_HUB_PLUGIN_ID]: '/hub',
   [AI_CHATBOX_PLUGIN_ID]: '/chat',
   [FILE_TRANSFER_PLUGIN_ID]: '/transfer',
+  [MONITOR_PLUGIN_ID]: '/monitor',
 }
 
 /** 每 app 的路由前缀集（pluginIdOfAppRoute 反向映射用） */
@@ -132,6 +134,7 @@ const APP_ROUTE_PREFIXES: Readonly<Record<string, string[]>> = {
   [AGENT_HUB_PLUGIN_ID]: ['/hub'],
   [AI_CHATBOX_PLUGIN_ID]: ['/chat'],
   [FILE_TRANSFER_PLUGIN_ID]: ['/transfer'],
+  [MONITOR_PLUGIN_ID]: ['/monitor'],
 }
 
 /** 应用 id（= pluginId）→ 挂载路由（landing）；无运行面的应用返回 undefined */

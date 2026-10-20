@@ -45,19 +45,29 @@ describe('Router Configuration（静态表）', () => {
       expect(routeByName('server').path).toBe('/server')
     })
 
-    it('应用面路由挂载槽：bedcode 既有路径 + 其余三 app 单面路由（机制 B）', () => {
+    it('应用面路由挂载槽：bedcode 既有路径 + 其余四 app 单面路由（机制 B）', () => {
       // bedcode 应用面（保持既有路径与深链语义）
       expect(routeByName('pairing').path).toBe('/pairing')
       expect(routeByName('sessions').path).toBe('/sessions')
       expect(routeByName('tasks').path).toBe('/tasks')
       expect(routeByName('settings').path).toBe('/settings')
       expect(routeByName('history').path).toBe('/history')
-      // 其余三 app：独立界面单面路由
+      // 其余四 app：独立界面单面路由
       expect(routeByName('app-agent-hub').path).toBe('/hub')
       expect(routeByName('app-ai-chatbox').path).toBe('/chat')
       expect(routeByName('app-file-transfer').path).toBe('/transfer')
+      expect(routeByName('app-monitor').path).toBe('/monitor')
       // 全部指向 AppMountSlot（机制 B 挂载槽）
-      for (const name of ['pairing', 'sessions', 'tasks', 'history', 'app-agent-hub']) {
+      for (const name of [
+        'pairing',
+        'sessions',
+        'tasks',
+        'history',
+        'app-agent-hub',
+        'app-ai-chatbox',
+        'app-file-transfer',
+        'app-monitor',
+      ]) {
         const comp = routeByName(name).components?.default
         expect(comp?.__name ?? comp?.name, `路由 ${name} 必须挂载 AppMountSlot`).toMatch(
           /AppMountSlot/,

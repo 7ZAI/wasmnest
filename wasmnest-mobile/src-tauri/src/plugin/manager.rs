@@ -331,6 +331,9 @@ impl PluginManager {
             status_reporter,
             Arc::new(crate::plugin::host_ports::HostPorts::new()), // 批次 2b：宿主引擎端口装配
         ));
+        // 运行监控出口（WIT `host-metrics`）：快照源 = 本运行时注册表。
+        // 与桌面 `PluginHost::new` 同一条装配路径（两阶段注入，实例化前写入）。
+        host_ctx.set_metrics_snapshot_source(runtime.monitor());
 
         // 宿主端事实（平台标识 = "mobile" / 无入站服务器）：单形态收口后从 wasm-core
         // 迁出的端差异实现，在插件实例化 / 激活之前注入（file-transfer 激活期探测

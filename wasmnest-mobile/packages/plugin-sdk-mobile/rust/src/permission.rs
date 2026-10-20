@@ -37,6 +37,11 @@ pub const PERMISSION_AUTH: &str = "auth";
 /// 用户打扰面（高频弹通知或狂震会骚扰用户），独立成位、fail-closed。
 /// 无前端 API 面（WASM-only 权限，宿主在 host fn 层仲裁）
 pub const PERMISSION_NOTIFY: &str = "notify";
+/// 运行监控（WIT `host-metrics.snapshot`）：读取所有已加载插件的运行时指标快照
+///
+/// 只读、只含计数与 plugin_id；但可读**全局**插件维度，能推断其他应用活跃度，
+/// 故单独立位、fail-closed（无前端 API 面，宿主在 host fn 层仲裁）。
+pub const PERMISSION_METRICS_READ: &str = "metrics:read";
 
 /// 权限词汇全量表（pub：宿主机制层〔wasm-core-mobile 权限漂移锁〕与生成物
 /// 校验消费；新增权限必须在此登记，否则 grant 静默丢弃）
@@ -59,6 +64,7 @@ pub static VALID_PERMISSIONS: &[&str] = &[
     PERMISSION_WS_CLIENT,
     PERMISSION_AUTH,
     PERMISSION_NOTIFY,
+    PERMISSION_METRICS_READ,
 ];
 
 /// 已退役权限位（票 2026-10-10 批次 C2）
@@ -168,6 +174,8 @@ static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
     // WASM-only 权限（插件经 WasmHost trait 调用，无前端 API 面），
     // 宿主在 host fn 层仲裁；空映射同前端表 peer 先例
     (PERMISSION_NOTIFY, &[]),
+    // 运行监控（WASM-only：宿主 `host-metrics.snapshot`，无前端调用点）
+    (PERMISSION_METRICS_READ, &["metrics.snapshot"]),
 ];
 
 pub struct PermissionManager {

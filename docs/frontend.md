@@ -16,7 +16,7 @@
 
 - 桌面 app 前端：`build.lib` 单文件 `index.js`、CSS inline、**无 externals**（宿主锁禁止 `__WASMNEST_SHARED__`）；各 app 自持 tailwind 配置，类名自编译（宿主 Tailwind 不再扫 app，`tailwindContentCoverage` 锁钉住）。
 - 移动 app 前端：经 SDK `wasmnestPlugin()` 构建（共享 vue / vue-i18n / pinia 外置宿主全局 `__WASMNEST_SHARED__`，经 SDK 代理访问，插件不直接操作全局），入口 `src/index.ts` 导出 `activate(context)` / `deactivate()`；贡献面收拢为运行面 + 少量注册点，退役方法调用即显性报错（fail-visible）。
-- **桌面 app 入口契约（`src/entry.ts`）**：导出 `mountApp(root, env): Promise<AppMountHandle>`；**可选**导出 `mountPreview(root, env): Promise<AppPreviewHandle>`（多任务卡片缩略区的应用自绘只读预览面；缺失 = 不支持预览，宿主回退品牌卡）。`hostAppBoundaryLock` 逐字校验 `mountApp` 契约，**L5** 校验 `mountPreview` 契约（四个内置桌面 app 必须导出；第三方面向契约仍可选）。预览环境是**收窄面**：仅 `appId` / `lastRoute` / `appInvoke` / `appStorageGet` / `locale` / `theme` / `platform`——无宿主 `invoke`、无写 / 删存储、无事件出口；应用侧禁止在预览路径调 `refreshChannelToken`（会作废主实例正在用的令牌），预览 DOM 不得含可聚焦控件、不得启后台轮询 / 全局监听、不得挂主 `App.vue` / 主 router / 主 pinia。入口不是 lib 形态的 `activate(context)`；`src/index.ts` 若存在只作 dev-shell 兼容出口。
+- **桌面 app 入口契约（`src/entry.ts`）**：导出 `mountApp(root, env): Promise<AppMountHandle>`；**可选**导出 `mountPreview(root, env): Promise<AppPreviewHandle>`（多任务卡片缩略区的应用自绘只读预览面；缺失 = 不支持预览，宿主回退品牌卡）。`hostAppBoundaryLock` 逐字校验 `mountApp` 契约，**L5** 校验 `mountPreview` 契约（五个内置桌面 app 必须导出；第三方面向契约仍可选）。预览环境是**收窄面**：仅 `appId` / `lastRoute` / `appInvoke` / `appStorageGet` / `locale` / `theme` / `platform`——无宿主 `invoke`、无写 / 删存储、无事件出口；应用侧禁止在预览路径调 `refreshChannelToken`（会作废主实例正在用的令牌），预览 DOM 不得含可聚焦控件、不得启后台轮询 / 全局监听、不得挂主 `App.vue` / 主 router / 主 pinia。入口不是 lib 形态的 `activate(context)`；`src/index.ts` 若存在只作 dev-shell 兼容出口。
 - 双端 app 均**自足 i18n**；移动端样式经 `?inline` 注入（宿主不加载插件 CSS）。
 - 壳标题栏常驻：所有 app 页面共用壳标题栏，应用只占其下区域（`appChromeLock` 钉住；应用不得自绘标题栏 / 窗口控制 / 拖拽区）。
 
