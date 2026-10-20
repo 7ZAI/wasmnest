@@ -6,6 +6,8 @@
  *   - 各插件 WASM 缺失预检 + 自动补建（watch 只建前端，WASM 需一次性全量构建产出）
  *   - 各插件前端挂载包陈旧预检 + **宿主启动前**预重建（见 ensurePluginFrontends：
  *     启动后再写 resources 会触发 tauri dev 重启 = 前端加载两次）
+ *   - 各插件产物 plugin.json 摘要基线对齐（见 ensurePluginManifests：源清单不带
+ *     wasmHash、产物带，冷启动若按源字节复制会误判成变化 → 启动后重启、窗口闪两次）
  *   - 宿主 dev 进程（tauri dev）——先启动
  *   - 各插件前端 watch：改源码自动重建 + 复制产物（配合宿主 PluginDevWatcher 触发前端热重载）
  *     ——等宿主首次构建完成后启动，见下方「首次构建门控」
@@ -39,6 +41,7 @@ import net from 'node:net'
 import { resolve, basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { appDir, hasAppDir } from '../../scripts/app-paths.mjs'
+import { syncArtifactManifest } from './plugin-watch.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -465,6 +468,41 @@ function ensurePluginFrontends() {
   }
 }
 
+/**
+ * 启动前把产物 `plugin.json` 的 `wasmHash` 基线对齐（内容不变则不写）。
+ *
+ * 为什么需要这一步：源清单按设计不带 `wasmHash`，产物清单带。若只在 watch 的
+ * 首次复制里做「源字节 vs 产物字节」比较，两者永远不相等 → 每次冷启动都重写
+ * `src-tauri/resources/.../plugin.json` → `tauri dev` 重启 app → 窗口出现、消失、
+ * 再出现。`plugin-watch.js` 的 `copyManifestIfChanged` 已按「源清单 + wasm 摘要」
+ * 预计算最终内容；这里在**宿主启动前**再对齐一次，把「摘要确实过期」这类合法写入
+ * 也挪到窗口出现之前，冷启动零重启。
+ *
+ * 缺 wasm / 清单非法时不动文件（not-ready），交给 watch 原有的 fail-visible 预检。
+ */
+function ensurePluginManifests() {
+  for (const { slug, id, skipWatch } of PLUGIN_WATCH_CMDS) {
+    if (skipWatch || !hasAppDir(slug, 'desktop')) continue
+    const artifactDir = resolve(RESOURCES_BASE, id)
+    if (!existsSync(artifactDir)) continue
+    let result
+    try {
+      result = syncArtifactManifest(resolve(appDir(slug, 'desktop'), 'plugin.json'), artifactDir)
+    } catch (e) {
+      // 同步只是把潜在写入提前，失败不该阻断宿主启动；留痕后交给 watch 原有的复制链报错
+      console.warn(`[dev-run] ⚠ 插件清单摘要同步失败（${id}）：${e.message}`)
+      continue
+    }
+    if (result.written) {
+      console.warn(`[dev-run] 启动前同步插件清单摘要（避免启动后重启）：${id}`)
+    } else if (result.reason === 'not-ready') {
+      console.warn(
+        `[dev-run] ⚠ 插件清单摘要暂不可同步（${id}）：产物 wasm 缺失或清单非法，交给 watch 预检报错`,
+      )
+    }
+  }
+}
+
 /** 返回前端产物需要重建的原因（null = 产物最新，无需动作） */
 function frontendStaleReason(pluginRoot, bundleDest) {
   let bundleStat
@@ -571,6 +609,10 @@ ensurePluginWasm()
 // 1a. 插件前端挂载包预重建（陈旧才做）：必须在宿主启动前完成，否则启动后首次
 //     watch 构建写 resources → tauri dev 重启 → 前端加载两次
 ensurePluginFrontends()
+
+// 1a-2. 产物 plugin.json 摘要基线对齐（幂等）：源清单不带 wasmHash、产物带，
+//       若留到 watch 首次复制再做，必然是一次「伪变化」——宿主启动后重启，窗口闪两次。
+ensurePluginManifests()
 
 // 1b. 退役插件产物清理：id 改名（ADR 0056）后旧目录只增不减，扫描面会出现
 // 「主屏有、点必失败」的幽灵应用（2026-10-17 验证 P1-5）。宿主启动前对齐一次。

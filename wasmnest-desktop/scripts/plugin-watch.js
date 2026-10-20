@@ -15,12 +15,12 @@
  * 只 watch 前端：WASM 产物不参与（Rust 改动仍需一次性 `node scripts/build.js` 全量构建）。
  */
 import { spawn } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, watch } from 'node:fs'
-import { basename, resolve } from 'node:path'
+import { cpSync, existsSync, mkdirSync, readFileSync, watch, writeFileSync } from 'node:fs'
+import { basename, join, resolve } from 'node:path'
 // 票 16：与另两个装配点（应用仓 `apps/*/desktop/scripts/build.js`、`sdk/bin/cli.js`）共用同一份
 // 摘要注入实现——此前本文件漏了这一行 import，dev 期每次前端重建都在复制链最后一步
 // 抛 `ReferenceError: injectWasmHash is not defined`，把已注入的 wasmHash 又抹掉。
-import { injectWasmHash } from '../packages/plugin-sdk-desktop/bin/wasm-hash.js'
+import { injectWasmHash, sha256Hex, wasmFileName } from '../packages/plugin-sdk-desktop/bin/wasm-hash.js'
 
 /** dist 写入事件防抖间隔（vite 重建会连续触发多次文件事件） */
 const COPY_DEBOUNCE_MS = 500
@@ -68,6 +68,74 @@ export function copyIfChanged(src, dest) {
   }
   cpSync(src, dest)
   return true
+}
+
+/**
+ * 计算产物目录应得的 `plugin.json` 文本：源清单 + 由产物 wasm 现算的 `wasmHash`。
+ *
+ * 为什么不能直接 `copyIfChanged(源, 产物)`：源清单按设计**不带** `wasmHash`
+ * （见 wasm-hash.js 头注释「只写产物」），而产物清单带。两者字节永远不相等，
+ * 裸字节比较会判成「需要复制」——冷启动的首次 watch 构建于是必定重写
+ * `src-tauri/resources/plugins/desktop/<id>/plugin.json`，`tauri dev` 的 file
+ * watch 看到变化就重启整个 app：窗口先出现、消失、再出现。
+ *
+ * 这里先把「源清单 + 产物 wasm 摘要」拼成 injectWasmHash 会写出的最终文本再比较，
+ * 只有除 `wasmHash` 外的内容真的变了才落盘。
+ *
+ * 返回 null = 无法预计算（清单非法 / 声明了 rustLibrary 但产物缺 wasm）——交给
+ * 原有复制 + `injectWasmHash` 流程按既有 fail-visible 语义处理。
+ */
+export function expectedArtifactManifest(sourcePath, artifactDir) {
+  let sourceText
+  let manifest
+  try {
+    sourceText = readFileSync(sourcePath, 'utf-8')
+    manifest = JSON.parse(sourceText)
+  } catch {
+    return null
+  }
+  const wasmFile = wasmFileName(manifest)
+  // 纯前端插件没有 wasmHash 可注入：预期内容就是源文件原文（保持与旧行为一致）
+  if (!wasmFile) return sourceText
+  const wasmPath = join(artifactDir, wasmFile)
+  if (!existsSync(wasmPath)) return null
+  manifest.wasmHash = sha256Hex(readFileSync(wasmPath))
+  // 必须与 injectWasmHash 的写盘格式逐字一致（2 空格缩进 + 末尾换行）
+  return `${JSON.stringify(manifest, null, 2)}\n`
+}
+
+/**
+ * 把产物 `plugin.json` 同步到「源清单 + 当前 wasm 摘要」的最终形态。
+ *
+ * @returns {{ written: boolean, reason: 'written'|'unchanged'|'not-ready' }}
+ *   written=true 表示真的落盘（mtime 变了，宿主会重启）；
+ *   not-ready = 缺产物 wasm / 清单非法，本次不动文件。
+ */
+export function syncArtifactManifest(sourcePath, artifactDir) {
+  const expected = expectedArtifactManifest(sourcePath, artifactDir)
+  if (expected == null) return { written: false, reason: 'not-ready' }
+  const dest = join(artifactDir, 'plugin.json')
+  try {
+    if (existsSync(dest) && readFileSync(dest, 'utf-8') === expected) {
+      return { written: false, reason: 'unchanged' }
+    }
+  } catch {
+    // 读失败按需要写处理
+  }
+  writeFileSync(dest, expected, 'utf-8')
+  return { written: true, reason: 'written' }
+}
+
+/**
+ * watch 复制链专用的 manifest 复制：幂等，且保留「缺 wasm 时 fail-visible」语义。
+ *
+ * 无法预计算时退回裸字节复制，随后 `injectWasmHash` 会按原逻辑抛错（不要静默
+ * 把带摘要的旧产物留成无摘要状态）。
+ */
+export function copyManifestIfChanged(sourcePath, artifactDir) {
+  const result = syncArtifactManifest(sourcePath, artifactDir)
+  if (result.reason !== 'not-ready') return result.written
+  return copyIfChanged(sourcePath, join(artifactDir, 'plugin.json'))
 }
 
 /**
@@ -199,7 +267,11 @@ export function startPluginWatch({ root, resourcesDir, extraFiles = [], wasmFile
       }
       step('创建产物目录', () => mkdirSync(resourcesDir, { recursive: true }))
       changed += copyStep('复制 index.js', distMain, resolve(resourcesDir, 'index.js'))
-      changed += copyStep('复制 plugin.json', resolve(root, 'plugin.json'), resolve(resourcesDir, 'plugin.json'))
+      // plugin.json 的预期内容 = 源清单 + 产物 wasm 摘要（源清单不带 wasmHash），
+      // 不能按源字节比较——否则每次冷启动都会重写，触发 tauri dev 重启（窗口闪两次）。
+      step('复制 plugin.json', () => {
+        if (copyManifestIfChanged(resolve(root, 'plugin.json'), resourcesDir)) changed += 1
+      })
       for (const f of extraFiles) {
         const src = resolve(root, f)
         if (existsSync(src)) changed += copyStep(`复制 ${f}`, src, resolve(resourcesDir, basename(f)))

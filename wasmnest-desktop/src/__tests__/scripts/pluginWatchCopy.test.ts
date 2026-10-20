@@ -4,7 +4,13 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, wri
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 // 桌面端脚本不是 TS 工程的一部分，这里直接按相对路径引真实实现（只导出纯函数，无副作用）
-import { copyIfChanged } from '../../../scripts/plugin-watch.js'
+import {
+  copyIfChanged,
+  copyManifestIfChanged,
+  expectedArtifactManifest,
+  syncArtifactManifest,
+} from '../../../scripts/plugin-watch.js'
+import { injectWasmHash, sha256Hex } from '../../../packages/plugin-sdk-desktop/bin/wasm-hash.js'
 
 /**
  * 插件产物复制的内容感知契约（dev 只加载一次的根因锁）
@@ -68,6 +74,110 @@ describe('copyIfChanged（插件产物内容感知复制）', () => {
   })
 })
 
+describe('syncArtifactManifest / copyManifestIfChanged（plugin.json 幂等同步）', () => {
+  let artifactDir: string
+  let manifestSrc: string
+  let wasmPath: string
+
+  function writeSourceManifest(name = 'Demo'): void {
+    writeFileSync(
+      manifestSrc,
+      `${JSON.stringify(
+        { id: 'com.example.demo', name, rustLibrary: 'demo_plugin' },
+        null,
+        2,
+      )}\n`,
+    )
+  }
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'wasmnest-watch-manifest-'))
+    artifactDir = join(dir, 'artifact')
+    mkdirSync(artifactDir, { recursive: true })
+    manifestSrc = join(dir, 'plugin.json')
+    wasmPath = join(artifactDir, 'demo_plugin.wasm')
+    writeFileSync(wasmPath, 'wasm-bytes')
+    writeSourceManifest()
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('产物已是「源清单 + 当前摘要」→ 不写文件（冷启动零重启的判据）', () => {
+    const artifactManifest = join(artifactDir, 'plugin.json')
+    expect(syncArtifactManifest(manifestSrc, artifactDir).written).toBe(true)
+    // 把产物 mtime 钉到过去：任何一次多余写入都会把它刷新成「现在」
+    const past = new Date('2001-01-01T00:00:00Z')
+    utimesSync(artifactManifest, past, past)
+    const before = mtimeOf(artifactManifest)
+
+    expect(syncArtifactManifest(manifestSrc, artifactDir)).toEqual({
+      written: false,
+      reason: 'unchanged',
+    })
+    expect(mtimeOf(artifactManifest), '源清单与产物只差 wasmHash，却被当成变化重写了').toBe(before)
+  })
+
+  it('copyManifestIfChanged 同样幂等（watch 首次复制不得重写只差摘要的清单）', () => {
+    const artifactManifest = join(artifactDir, 'plugin.json')
+    writeFileSync(artifactManifest, expectedArtifactManifest(manifestSrc, artifactDir)!)
+    const past = new Date('2001-01-01T00:00:00Z')
+    utimesSync(artifactManifest, past, past)
+    const before = mtimeOf(artifactManifest)
+
+    expect(copyManifestIfChanged(manifestSrc, artifactDir)).toBe(false)
+    expect(mtimeOf(artifactManifest)).toBe(before)
+  })
+
+  it('写出的内容与 injectWasmHash 的最终形态逐字一致（注入端随即 no-op）', () => {
+    syncArtifactManifest(manifestSrc, artifactDir)
+
+    expect(injectWasmHash(artifactDir).reason).toBe('unchanged')
+    const manifest = JSON.parse(readFileSync(join(artifactDir, 'plugin.json'), 'utf-8'))
+    expect(manifest.wasmHash).toBe(sha256Hex(readFileSync(wasmPath)))
+    // 摘要只写产物：源清单不得被反写
+    expect(readFileSync(manifestSrc, 'utf-8')).not.toContain('wasmHash')
+  })
+
+  it('源清单内容真的变了 → 写入并保留正确摘要（真改动必须生效）', () => {
+    syncArtifactManifest(manifestSrc, artifactDir)
+    writeSourceManifest('Demo 2')
+
+    expect(syncArtifactManifest(manifestSrc, artifactDir).written).toBe(true)
+    const manifest = JSON.parse(readFileSync(join(artifactDir, 'plugin.json'), 'utf-8'))
+    expect(manifest.name).toBe('Demo 2')
+    expect(manifest.wasmHash).toBe(sha256Hex('wasm-bytes'))
+  })
+
+  it('产物缺 wasm → not-ready 且不动现有清单（交给 watch fail-visible，不静默降级）', () => {
+    const artifactManifest = join(artifactDir, 'plugin.json')
+    syncArtifactManifest(manifestSrc, artifactDir)
+    const before = readFileSync(artifactManifest, 'utf-8')
+    rmSync(wasmPath)
+
+    expect(syncArtifactManifest(manifestSrc, artifactDir)).toEqual({
+      written: false,
+      reason: 'not-ready',
+    })
+    expect(readFileSync(artifactManifest, 'utf-8')).toBe(before)
+  })
+
+  it('纯前端插件（无 rustLibrary）→ 源字节即预期内容，相同不写', () => {
+    writeFileSync(
+      manifestSrc,
+      `${JSON.stringify({ id: 'com.example.front', name: 'Front' }, null, 2)}\n`,
+    )
+    const artifactManifest = join(artifactDir, 'plugin.json')
+    writeFileSync(artifactManifest, readFileSync(manifestSrc))
+
+    expect(expectedArtifactManifest(manifestSrc, artifactDir)).toBe(
+      readFileSync(manifestSrc, 'utf-8'),
+    )
+    expect(syncArtifactManifest(manifestSrc, artifactDir).written).toBe(false)
+  })
+})
+
 describe('接线（dev 脚本必须真的用上内容感知复制）', () => {
   const WATCH = 'scripts/plugin-watch.js'
   const DEV_RUN = 'scripts/dev-run.js'
@@ -78,6 +188,22 @@ describe('接线（dev 脚本必须真的用上内容感知复制）', () => {
     expect(src).toContain("copyStep('复制 index.js'")
     // 反例：退回 `step('复制 index.js', () => cpSync(...))` 即每次刷新 mtime → 加载两次
     expect(src).not.toMatch(/step\(\s*'复制 index\.js'[^)]*cpSync/)
+  })
+
+  it('watch 的 plugin.json 走摘要感知的 copyManifestIfChanged，不得按源字节直拷', () => {
+    const src = readFileSync(WATCH, 'utf-8')
+    expect(src).toContain("copyManifestIfChanged(resolve(root, 'plugin.json')")
+    // 反例：源清单不带 wasmHash、产物带 → 裸 copyIfChanged 每次冷启动都判成变化
+    expect(src).not.toContain("copyStep('复制 plugin.json'")
+  })
+
+  it('dev-run 在启动宿主之前对齐 plugin.json 摘要（否则窗口出现后仍会重启一次）', () => {
+    const src = readFileSync(DEV_RUN, 'utf-8')
+    // 行首匹配调用点，避开同名函数定义里的 `ensurePluginManifests()`
+    const manifestAt = src.match(/^ensurePluginManifests\(\)$/m)?.index ?? -1
+    const hostAt = src.indexOf('const host = start(')
+    expect(manifestAt, '摘要在启动前对齐必须真的被调用').toBeGreaterThan(-1)
+    expect(hostAt, '宿主启动点在场').toBeGreaterThan(manifestAt)
   })
 
   it('dev-run 在启动宿主之前做前端预重建（顺序错了仍会二次加载）', () => {
