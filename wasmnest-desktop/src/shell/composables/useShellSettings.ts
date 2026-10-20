@@ -1,5 +1,5 @@
 /**
- * 设备壳本地 UI 偏好（wallpaper / wallDim / wallpaperImage）
+ * 设备壳本地 UI 偏好（wallpaper / wallDim / wallpaperImage / skin）
  *
  * 壁纸铺在壳根（ShellHost 的 .shell-wall），主屏 / 系统页 / 兜底面共用；
  * 这些是**壳的 UI 偏好**（纯机制词汇），不是宿主 AppConfig 字段——
@@ -10,7 +10,7 @@
  * 主题 / 色板 / 语言 / 字号 / 动画仍走既有 settings store（已是线上真值）。
  */
 import { ref, watch } from 'vue'
-import { WALL_DIM_DEFAULT, WALLPAPER_DEFAULT } from './state'
+import { SHELL_SKIN_DEFAULT, WALL_DIM_DEFAULT, WALLPAPER_DEFAULT } from './state'
 import { isCustomWallpaperFile } from './wallpaperFile'
 import type { ShellUiPrefs } from '../types'
 
@@ -23,6 +23,7 @@ function load(): ShellUiPrefs {
     wallpaper: WALLPAPER_DEFAULT,
     wallDim: WALL_DIM_DEFAULT,
     wallpaperImage: '',
+    skin: SHELL_SKIN_DEFAULT,
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -43,6 +44,11 @@ function load(): ShellUiPrefs {
           ? parsed.wallDim
           : fallback.wallDim,
       wallpaperImage,
+      // 未知 / 缺失皮肤 id 保留原值，由渲染侧回落默认（扩展可能尚未注册）
+      skin:
+        typeof parsed.skin === 'string' && parsed.skin.trim() !== ''
+          ? parsed.skin
+          : fallback.skin,
     }
   } catch {
     return fallback

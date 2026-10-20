@@ -65,4 +65,9 @@ export interface ShellUiPrefs {
    * 非 custom 壁纸时也保留（用户切回内置壁纸后仍可一键切回已选图片）。
    */
   wallpaperImage: string
+  /**
+   * 主题皮肤 id（壳根 token 覆盖；缺省 = 内置默认皮肤）。
+   * 皮肤只作用于平台外壳，应用仍可自持配色；未知 id 在渲染时回落默认皮肤。
+   */
+  skin: string
 }

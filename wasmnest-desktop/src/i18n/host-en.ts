@@ -68,6 +68,14 @@ export default {
       maximize: 'Maximize',
       close: 'Close window',
     },
+    statusBar: {
+      aria: 'Platform status bar',
+      ready: 'Runtime ready',
+      loading: 'Loading',
+      apps: '{count} apps',
+      approvals: '{count} pending',
+      openPerms: 'Open permissions & authorization',
+    },
     app: {
       stop: 'Stop',
       subCommands: '{count} commands',
@@ -103,7 +111,7 @@ export default {
       },
       settings: {
         name: 'Settings',
-        desc: 'Appearance · background · system · about',
+        desc: 'Appearance · background · skins · system · extensions · about',
       },
     },
     quickSettings: {
@@ -235,6 +243,19 @@ export default {
         desc: 'Policy tiers and auth records',
         hint: 'Security-gate entry; full records live in Permissions & Authorization',
         open: 'Open permissions',
+      },
+      skins: {
+        title: 'Theme skins',
+        desc: 'Color schemes for the platform shell; apps keep their own palettes.',
+        default: 'Default',
+        defaultDesc: 'Follow the platform default palette',
+        hint: 'Skins only override shell CSS variables; palettes declared by an app root take precedence.',
+      },
+      extensions: {
+        title: 'Extension settings',
+        desc: 'Settings slots reserved for platform extensions; app-level settings stay with each app.',
+        empty: 'Reserved area · no extension settings yet',
+        hint: 'Rows appear automatically when an extension registers and are removed when it is disabled.',
       },
     },
     perms: {
@@ -680,11 +701,11 @@ export default {
     },
     reset: {
       title: 'Reset to defaults',
-      desc: 'Restore host configuration and UI preferences to their defaults',
+      desc: 'Clears app authorizations and personal preferences, and restores default settings',
       action: 'Reset to defaults',
       confirmTitle: 'Reset to defaults',
       confirmBody:
-        'This clears all authorization records, deletes copied custom wallpapers, and restores the default configuration. It cannot be undone.',
+        'All app authorization records will be cleared, copied custom wallpapers will be deleted, and all settings will be restored to their defaults. This action cannot be undone.',
       confirmOk: 'Reset',
       done: 'Defaults restored',
       failed: 'Reset failed, please try again',

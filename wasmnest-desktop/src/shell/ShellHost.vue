@@ -6,7 +6,7 @@
   <!-- 壁纸挂在壳根：主屏 / 系统页 / 应用面共用同一背景（宿主页面不再自铺 --bg-page） -->
   <div
     :class="[themeClasses.container, 'shell-root', wallClass ? `shell-wall wall-${wallClass}` : '']"
-    :style="wallStyle"
+    :style="[wallStyle, skinStyle]"
   >
     <!-- ============ 壳态 / 应用态分流（路由为事实源） ============ -->
     <!-- 主屏（'/'）：ShellToolbar + ShellHome + 覆层 -->
@@ -30,6 +30,10 @@
       <ShellToolbar v-if="!isBareWindow" />
       <AppMountSlot :app-id="currentAppId" :route="route.fullPath" />
     </template>
+
+    <!-- ============ 平台状态栏（壳常驻 chrome；独立窗口除外） ============
+         只承载宿主机制事实与扩展注册项，位于路由内容之后、覆层之下。 -->
+    <ShellStatusBar v-if="!isBareWindow" />
 
     <!-- ============ 全局覆层（任何面可用；Esc 逐层收） ============ -->
     <ShellTaskSwitcher />
@@ -90,8 +94,8 @@
  *   装载该 app 独立构建的挂载包（ADR 0057 机制 B），宿主不 import 任何 app 源码。
  *   标题栏在应用态也常驻（wasm-app 只占其下方区域），终端独立窗口（bareWindow）
  *   除外——它由宿主另开窗口，窗口 chrome 归应用自持。
- * - 全局机制：启动画面 / 主题 / 字号 / Toaster / 热区 / 覆层（多任务·通知·右键·弹窗·
- *   启动屏·**授权询问**）/ type-to-search / 键盘（Esc 逐层收 → 返回主屏）。
+ * - 全局机制：启动画面 / 主题与壳皮肤 / 字号 / Toaster / 热区 / 平台状态栏 / 覆层
+ *   （多任务·通知·右键·弹窗·启动屏·**授权询问**）/ type-to-search / 键盘（Esc 逐层收 → 返回主屏）。
  *
  * 路由是唯一事实源：route.path 变化 → useShellState.syncFromRoute 同步面态
  * （主屏 / 系统页卡 / 应用卡 MRU）。
@@ -110,10 +114,12 @@ import { useSettingsStore } from '@/stores/settings'
 import { useShellState } from './composables/useShellState'
 import { useShellApps, pluginIdOfAppRoute } from './composables/useShellApps'
 import { useShellSettings } from './composables/useShellSettings'
+import { useShellThemeSkin } from './composables/useShellThemeSkin'
 import { useCustomWallpaper } from './composables/customWallpaper'
 import ShellView from './views/ShellView.vue'
 import ShellCardScreen from './components/ShellCardScreen.vue'
 import ShellToolbar from './components/ShellToolbar.vue'
+import ShellStatusBar from './components/ShellStatusBar.vue'
 import ShellNotificationPanel from './components/ShellNotificationPanel.vue'
 import ShellQuickSettings from './components/ShellQuickSettings.vue'
 import ShellTaskSwitcher from './components/ShellTaskSwitcher.vue'
@@ -129,6 +135,8 @@ const state = useShellState()
 const appsStore = useShellApps()
 const { prefs: shellPrefs } = useShellSettings()
 const { imageUrl: customWallUrl } = useCustomWallpaper()
+/** 主题皮肤只产出 token 表，与壁纸样式一起机械合并到壳根 */
+const { skinStyle } = useShellThemeSkin()
 
 /** 壁纸类（none → 不铺壁纸）；类挂在壳根，由所有宿主面共享，页面自身保持透明。
  *  custom 在图片 URL 解析完成前先回落 aurora，避免壳根挂空背景下半秒变纯色。 */

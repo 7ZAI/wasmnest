@@ -137,15 +137,15 @@
     </div>
   </ShellCard>
 
-  <!-- ==================== 系统 / 日志 / 关于（复用既有设置分组组件，零重写） ====================
+  <!-- ==================== 主题皮肤（壳 chrome 的 token 覆盖，内置默认 + 扩展注册） ==================== -->
+  <SettingsThemeSkinSection />
+
+  <!-- ==================== 系统 / 日志 / 扩展（复用既有设置分组组件，零重写） ====================
        链路加密属终端的业务设置（加密哪些通道取决于终端数据面），已随设置归属回归
        bedcode wasm-app，宿主系统页不再承载。 -->
   <SettingsSystemSection />
   <SettingsLoggingSection />
-  <SettingsAboutSection />
-
-  <!-- 恢复初始设置（破坏性操作：清授权记录 + 还原默认配置，弹窗确认） -->
-  <SettingsResetSection />
+  <SettingsExtensionsSection />
 
   <!-- 授权管理入口（一级系统页互切，spec-c §3） -->
   <ShellCard :title="t('shell.settings.permsEntry.title')" icon="shield">
@@ -158,6 +158,13 @@
       </button>
     </div>
   </ShellCard>
+
+  <!-- 恢复初始设置（破坏性操作：清授权记录 + 还原默认配置，弹窗确认） -->
+  <SettingsResetSection />
+
+  <!-- 关于固定收尾（用户 2026-10-20 裁决）：版本 / 更新等只读信息放在所有可操作
+       分组之后，避免破坏性复位按钮把「关于」夹在中间。 -->
+  <SettingsAboutSection />
 </template>
 
 <script setup lang="ts">
@@ -167,7 +174,7 @@
  * 界面 / 背景两组是壳专属（含导航按钮显隐、壁纸，纯壳偏好落 useShellSettings）。
  * 界面组只保留壳自身的**深浅色**；主题色板归各 wasm-app（应用自己的设置页持有，
  * 宿主不下发也不覆盖）。链路加密属 bedcode 业务设置，随设置归属回归应用。
- * 系统 / 日志 / 关于直接复用既有设置分组组件（真实命令面，零重写）。
+ * 系统 / 日志 / 皮肤 / 扩展直接复用分组组件（真实命令面，零重写）；关于固定最后。
  * 授权管理入口互切到「权限与授权」系统页卡（spec-c §3 同构卡片）。
  */
 import { computed, ref } from 'vue'
@@ -179,6 +186,8 @@ import { useToast } from '@/composables/useToast'
 import { showUserError } from '@/utils/userError'
 import SettingsSystemSection from '@/shell/settings/SettingsSystemSection.vue'
 import SettingsLoggingSection from '@/shell/settings/SettingsLoggingSection.vue'
+import SettingsThemeSkinSection from '@/shell/settings/SettingsThemeSkinSection.vue'
+import SettingsExtensionsSection from '@/shell/settings/SettingsExtensionsSection.vue'
 import SettingsAboutSection from '@/shell/settings/SettingsAboutSection.vue'
 import SettingsResetSection from '@/shell/settings/SettingsResetSection.vue'
 import { useShellState } from '../composables/useShellState'

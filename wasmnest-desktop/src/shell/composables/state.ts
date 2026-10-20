@@ -153,3 +153,6 @@ export const WALLPAPERS: ReadonlyArray<{ id: string; nameKey: string }> = [
 export const WALLPAPER_DEFAULT = 'aurora'
 export const WALL_DIM_DEFAULT = 30
 export const WALL_DIM_MAX = 70
+
+/** 主题皮肤缺省 id（内置默认皮肤；扩展皮肤走 registerThemeSkin，覆盖同一 token 表） */
+export const SHELL_SKIN_DEFAULT = 'default'

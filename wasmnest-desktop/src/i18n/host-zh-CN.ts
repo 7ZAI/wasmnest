@@ -63,6 +63,14 @@ export default {
       maximize: '最大化',
       close: '关闭窗口',
     },
+    statusBar: {
+      aria: '平台状态栏',
+      ready: '运行时就绪',
+      loading: '正在加载',
+      apps: '{count} 个应用',
+      approvals: '{count} 项待审批',
+      openPerms: '打开权限与授权',
+    },
     app: {
       stop: '停用',
       subCommands: '{count} 个命令',
@@ -98,7 +106,7 @@ export default {
       },
       settings: {
         name: '设置',
-        desc: '界面 · 背景 · 系统 · 关于',
+        desc: '界面 · 背景 · 皮肤 · 系统 · 扩展 · 关于',
       },
     },
     quickSettings: {
@@ -229,6 +237,19 @@ export default {
         desc: '策略档位与授权记录',
         hint: '安全闸门的管理入口，完整记录见「权限与授权」页',
         open: '打开权限与授权',
+      },
+      skins: {
+        title: '主题皮肤',
+        desc: '平台外壳的配色方案；应用仍可自持配色。',
+        default: '默认',
+        defaultDesc: '跟随平台默认色板',
+        hint: '皮肤只覆盖平台外壳的 CSS 变量；应用根容器自己声明的配色优先。',
+      },
+      extensions: {
+        title: '扩展设置',
+        desc: '为平台扩展预留的设置位；应用级设置仍归各应用。',
+        empty: '预留区域 · 暂无扩展设置项',
+        hint: '扩展注册后自动出现；停用或卸载时一并摘除。',
       },
     },
     perms: {
@@ -639,10 +660,11 @@ export default {
     },
     reset: {
       title: '恢复初始设置',
-      desc: '将宿主配置与界面偏好恢复为默认值',
+      desc: '清除应用授权记录与个性化偏好，恢复默认设置',
       action: '恢复初始设置',
       confirmTitle: '恢复初始设置',
-      confirmBody: '包括清除所有授权记录、删除已复制的自定义壁纸，并还原默认配置。此操作不可撤销。',
+      confirmBody:
+        '将清除所有应用的授权记录，删除已复制的自定义壁纸，并把全部设置恢复为默认值。此操作无法撤销。',
       confirmOk: '恢复',
       done: '已恢复初始设置',
       failed: '恢复失败，请稍后重试',

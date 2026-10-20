@@ -32,7 +32,14 @@ const storeMocks = vi.hoisted(() => ({ resetSettings: vi.fn() }))
 vi.mock('@/stores/settings', () => ({ useSettingsStore: () => storeMocks }))
 
 const prefsMocks = vi.hoisted(() => ({
-  prefs: { value: { wallpaper: 'dune', wallDim: 60, wallpaperImage: 'custom-1.png' } },
+  prefs: {
+    value: {
+      wallpaper: 'dune',
+      wallDim: 60,
+      wallpaperImage: 'custom-1.png',
+      skin: 'dusk',
+    },
+  },
 }))
 vi.mock('@/shell/composables/useShellSettings', () => ({
   useShellSettings: () => prefsMocks,
@@ -67,6 +74,7 @@ beforeEach(() => {
   prefsMocks.prefs.value.wallpaper = 'dune'
   prefsMocks.prefs.value.wallDim = 60
   prefsMocks.prefs.value.wallpaperImage = 'custom-1.png'
+  prefsMocks.prefs.value.skin = 'dusk'
   authMocks.overview.mockResolvedValue([
     {
       pluginId: 'com.wasmnest.terminal-session',
@@ -139,6 +147,8 @@ describe('设置页「恢复初始设置」', () => {
     expect(prefsMocks.prefs.value.wallpaper).toBe('aurora')
     expect(prefsMocks.prefs.value.wallDim).toBe(30)
     expect(prefsMocks.prefs.value.wallpaperImage).toBe('')
+    // 主题皮肤也属于壳偏好：复位必须回到内置 default，而不是留着已注册/已卸载的皮肤 id
+    expect(prefsMocks.prefs.value.skin).toBe('default')
   })
 
   it('撤销 allow 后新落的 deny 一并移除（否则恢复初始设置会把应用永久挡在门外）', async () => {

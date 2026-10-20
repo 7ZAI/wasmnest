@@ -59,6 +59,12 @@ export function useTheme() {
     },
   )
 
+  /** 当前生效的暗色状态（system 时跟随系统偏好；主题皮肤据此合并 darkTokens） */
+  const isDark = computed(() => {
+    const theme = settingsStore.settings.ui.theme
+    return theme === 'dark' || (theme === 'system' && isSystemDark.value)
+  })
+
   // 主题切换通过 :root.dark CSS 变量自动生效，无需 dark: 前缀
   const themeClasses = computed(() => ({
     container: 'min-h-screen bg-page text-[var(--text-primary)]',
@@ -66,6 +72,7 @@ export function useTheme() {
 
   return {
     isSystemDark,
+    isDark,
     themeClasses,
     setupTheme,
     cleanupTheme,

@@ -132,6 +132,9 @@ const PATHS: Record<string, string[]> = {
     'M15 10v4',
     'M11 16v4',
   ],
+  /* 恢复初始设置（reset）：逆时针回转箭头（Lucide rotate-ccw 几何），读作「回到初始状态」。
+     线路从 3 起（留出小尺寸内边距），13px 下与返回箭头（back，直线双向）不混淆。 */
+  reset: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
 }
 
 const paths = computed(() => PATHS[props.name] ?? [])
