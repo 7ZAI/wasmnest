@@ -48,8 +48,9 @@ fn compose_manifest_package_version_matches_wit_sources() {
     let m: serde_json::Value = serde_json::from_str(&compose).expect("端清单 JSON 可解析");
     let declared = m["package"].as_str().expect("compose.json 缺 package");
 
-    // 能力仓版本真源（能力仓经 submodule 挂在平台仓 `packages/`；契约常量随 crate
-    // 边界走）：Rust 常量文件，抽取只认 `pub const <NAME>: &str = "<值>";` 形态并
+    // 能力仓版本真源（能力仓经 sibling `../wasmnest-lib` 入图，平台仓已删 `packages/`
+    // submodule 挂载点；契约常量随 crate 边界走）：Rust 常量文件，抽取只认
+    // `pub const <NAME>: &str = "<值>";` 形态并
     // 断言 PACKAGE 自洽。
     let root = mobile_root().join("../..");
     let raw = read(&root.join("../wasmnest-lib/wasmnest-contract/src/lib.rs"));

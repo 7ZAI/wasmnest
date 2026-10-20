@@ -51,7 +51,8 @@ use std::path::{Path, PathBuf};
 /// 「承认它进入语义管辖范围」的一次显式决定。
 const SCANNED_CRATES: &[&str] = &[
     // 契约 crate（2026-10-19 新建）：只装包名 / 版本常量，零依赖、零产品语义。
-    // C-3 反向断言要求 `packages/` 下每个 `wasmnest-*` 目录归桶——新建即入面，
+    // C-3 反向断言要求两个治理根（能力仓 `../wasmnest-lib` + 桌面 `packages/`）
+    // 下每个 `wasmnest-*` 目录归桶——新建即入面，
     // 不留 `PENDING` 窗口（它没有需要先清偿的产品 id 债）。
     "wasmnest-contract",
     "wasmnest-server-base",
@@ -494,8 +495,8 @@ fn placeholder_segments_do_not_mask_real_product_segments() {
     }
 }
 
-/// C-3｜覆盖面完整：登记 crate 真实存在，且 `packages/` 下每个 `wasmnest-*` 目录
-/// 都在「已扫描 ∪ 待扫描」两个桶之一里
+/// C-3｜覆盖面完整：登记 crate 真实存在，且两个治理根（能力仓 `../wasmnest-lib`
+/// + 桌面 `packages/`）下每个 `wasmnest-*` 目录都在「已扫描 ∪ 待扫描」两个桶之一里
 ///
 /// 前半段防「登记了但不存在的 crate」；后半段防更隐蔽的「从登记表里删掉 crate」——
 /// 那是一条零成本后门，锁照样绿而覆盖面少一块。两条合起来登记表无法静默缩水。
@@ -525,7 +526,7 @@ fn every_registered_crate_is_present_and_scan_coverage_is_complete() {
         );
     }
 
-    // 反向：两个 packages/ 下每个 wasmnest-* 目录都必须有归属
+    // 反向：两个治理根下每个 wasmnest-* 目录都必须有归属
     let mut unregistered: Vec<String> = Vec::new();
     for root in governance_roots() {
         let entries =

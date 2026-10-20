@@ -41,7 +41,7 @@ fn repo_root() -> PathBuf {
 
 /// 能力仓 WIT 包版本真源（ADR 0051 D3）——零依赖契约 crate 的常量文件
 ///
-/// 能力仓经 submodule 挂在平台仓 `packages/`；契约常量随 crate 边界走，
+/// 能力仓经 sibling `../wasmnest-lib` 入图（平台仓已删除 `packages/` submodule 挂载点）；契约常量随 crate 边界走，
 /// 不再悬在仓根（`include!` 跨目录形态已退役）。
 const PACKAGE_SOURCE: &str = "../wasmnest-lib/wasmnest-contract/src/lib.rs";
 

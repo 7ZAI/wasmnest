@@ -520,7 +520,7 @@ fn l2_bridge_public_surface_is_pinned() {
 
     // 父模块不得把桥接面转发出去（`pub use auth_center …` / `pub use auth_center::…`）
     // `src/utils/auth.rs` 已随无消费者整体退役（2026-10-10），parent 检查只剩 host_api.rs
-    // （能力仓 wasm-core 的 host_api.rs，平台仓 submodule 挂在 `packages/` 下）
+    // （能力仓 wasm-core 的 host_api.rs，经 sibling `../wasmnest-lib` 入图）
     for parent in ["../wasmnest-lib/wasmnest-wasm-core/src/host_api.rs"] {
         let content = std::fs::read_to_string(abs_of(parent)).expect("read parent module");
         let forwards: Vec<String> = production_code_lines(&content)

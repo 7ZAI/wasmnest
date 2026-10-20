@@ -1,5 +1,5 @@
 # ==================== WIT 分片拼装漂移锁 ====================
-# 端 `rust/wit/` 是生成物（真源 = 能力仓 submodule `packages/wasmnest-wasm-core/wit/core.wit`
+# 端 `rust/wit/` 是生成物（真源 = 能力仓 sibling `../wasmnest-lib/wasmnest-wasm-core/wit/core.wit`
 # + 能力域 / 端 cap 分片，端清单 `compose.json` 驱动）。生成物被手改、或分片真源改了
 # 没重拼，这里即红阻断。修复：`pnpm run check:wit` 看漂移文件，跑
 # `node scripts/compose-wit.mjs --all` 重拼后重新 git add。

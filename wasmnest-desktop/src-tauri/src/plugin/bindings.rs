@@ -66,7 +66,7 @@ mod tests {
     /// 能力仓 WIT 包版本真源（ADR 0051 D3；票 05 版本一致性检查的真源）
     ///
     /// 真源是零依赖契约 crate 的常量文件 `wasmnest-contract/src/lib.rs`（能力仓经
-    /// submodule 挂在 `packages/`；票 03 单点化：能力域 `inventory` 静态自报要求
+    /// sibling `../wasmnest-lib` 入图；票 03 单点化：能力域 `inventory` 静态自报要求
     /// 编译期常量，JSON 真源结构性冲突）；抽取只认
     /// `pub const <NAME>: &str = "<值>";` 形态，并断言 `PACKAGE` 与前后两者自洽。
     fn package_source() -> (String, String) {

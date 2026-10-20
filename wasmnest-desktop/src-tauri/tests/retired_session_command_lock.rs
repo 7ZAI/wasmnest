@@ -2,7 +2,8 @@
 //!
 //! 原住能力仓 `wasm-core/src/manager/host/api_bridge.rs` 的内联测试——它扫描的是
 //! **桌面宿主源码**（外加能力仓 server 侧 crate），主题属平台侧判据；三仓拆分票 08
-//! 批次三迁入桌面宿主测试面后，平台仓装配下宿主与能力仓 submodule 同场可读。
+//! 批次三迁入桌面宿主测试面后，平台仓装配下宿主经 sibling `../wasmnest-lib` 入图，
+//! 能力仓侧 crate 同场可读。
 //!
 //! 注销的是「宿主-会话」这一族命令（`list_sessions` / `get_session` /
 //! `resize_session` / `write_to_session` / `send_special_key`）与
