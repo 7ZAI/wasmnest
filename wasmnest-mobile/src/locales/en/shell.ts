@@ -24,13 +24,8 @@ export default {
     },
     home: {
       localDevice: 'This device',
-      appCount: '{count} apps',
-      runningTitle: 'Running',
-      switchTo: 'Switch to {name}',
-      stopInstance: 'Stop',
       slotsTitle: 'Quick cards',
       appsTitle: 'Apps',
-      appsNote: '{count} installed',
       appAria: '{name}, {state}',
       emptyApps: 'No WASM app installed',
       emptyAppsHint: 'Install or enable an app in "App manager" and its entry shows up here',

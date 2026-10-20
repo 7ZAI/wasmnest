@@ -6,32 +6,31 @@
  * | 契约 | 来源 | 规则 | 预期 |
  * |---|---|---|---|
  * | C-H1 | wallClass / --wall-dim | 壁纸层由壳偏好驱动；none 档不挂壁纸类 | 类名与遮罩变量随偏好变化 |
- * | C-H2 | runningOrdered | 运行卡片带只列运行中，按最近使用排序 | 顺序 = recentIds 序；未运行不入带 |
+ * | C-H2 | 头部快捷入口 | 铃铛左侧是多任务图标，不是运行中应用图标；入口不随运行态变化 | 多任务紧邻铃铛左侧；无 switchTo 图标 |
  * | C-H3 | 应用宫格 | 全部应用在场；待审批有「!」角标与可访问状态 | 未运行也在格内；approval 角标可见 |
  * | C-H4 | 系统宫格 | 三个平台自有面进栈（可返回） | navigate('apps') / openPermissions / navigate('settings') |
  * | C-H5 | 铃铛 | 角标 = 通知 + 待审批；点击开通知栏 | 计数与 toggleShade |
  * | C-H6 | 空态 | 无应用时给出下一步说明 | 渲染 emptyAppsHint |
  * | C-H7 | 快捷卡片轨道 | 横向 scroll-snap 轨道（原型形态），不定宽竖排 | 轨道内 listitem 数 = 卡片数 |
- * | C-H8 | 应用分组头 | 计数紧跟标题、行尾不再挂重复的管理图标（管理入口在系统宫格） | 无 manageApps 按钮；说明与标题同一行内 |
+ * | C-H8 | 应用分组头 | 只留标题：计数与管理图标均已退役（管理入口在系统宫格） | 无 manageApps 按钮、无计数文案 |
  * | C-H9 | 文案纪律 | 不渲染方案期解释（由应用提供 / 平台自带 / 最近使用在前） | 三个退役 key 缺席 |
  * | C-H10 | 自定义壁纸 | custom 档 + 路径 → 壁纸层用 asset URL 铺底 | 图片层 style 含 URL |
- * | C-H11 | 多任务入口 | 运行带分组头带多任务入口（recents 全局可达，不只运行页胶囊） | openSwitcher 被调用 |
+ * | C-H11 | 多任务入口 | 主屏头部图标与铃铛同档，点击进多任务 | openSwitcher 被调用 |
  * | C-H12 | 系统宫格瓦片样式 | 启动器风格：.shell-sys-tile + data-tile=entry.id，SVG 为 24 画框实心块面（fill + evenodd 挖空），不再是 stroke 线稿 | 类名 / data-tile / fill 属性按入口在场 |
- * | C-H13 | 运行卡停止按钮形状 | 圆角矩形危险按钮（不是 capsule chip）——短标签 + 44px 触控高度下 rounded-full 会缩成圆形，读作状态徽标而非按钮 | class 含 rounded-[10px]，不含 rounded-full / 999px |
- * | C-H14 | 壁纸上的浮空文字 | 壁纸上的标题/副标题挂 .shell-text-over-wall（底色描边护对比度）；shell.css 里该类的描边色由 token 派生 | 头部文本框与四个分组头均带类；CSS 含 text-shadow + color-mix |
+ * | C-H13 | 运行带退役 | 主屏不再渲染运行卡片与停止按钮 | 无 article / 无 stopInstance / 无 runningTitle |
+ * | C-H14 | 壁纸上的浮空文字 | 壁纸上的标题挂 .shell-text-over-wall（底色描边护对比度）；shell.css 里该类的描边色由 token 派生 | 头部标题与应用分组头均带类；CSS 含 text-shadow + color-mix |
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { computed, ref } from 'vue'
 import { resetShellNotifications, useShellNotifications } from '@/shell/composables/useShellNotifications'
-import { clearRecent, pushRecent } from '@/shell/composables/useShellRecent'
+import { clearRecent } from '@/shell/composables/useShellRecent'
 import { useShellPreferences } from '@/shell/composables/useShellPreferences'
 import type { ShellApp } from '@/shell/types'
 
 // ==================== 替身 ====================
 
 const apps = ref<ShellApp[]>([])
-const mockStop = vi.fn(async () => true)
 const mockOpen = vi.fn(async () => true)
 const mockToggleShade = vi.fn()
 const mockNavigate = vi.fn()
@@ -56,7 +55,6 @@ vi.mock('@/shell/composables/useShellApps', () => ({
       }),
     ),
     stats: computed(() => ({ installed: apps.value.length, running: 0, totalBytes: 0 })),
-    stop: mockStop,
   }),
 }))
 vi.mock('@/shell/composables/useShellOpen', () => ({
@@ -95,7 +93,6 @@ beforeEach(() => {
   clearRecent()
   localStorage.clear()
   apps.value = []
-  mockStop.mockClear()
   mockOpen.mockClear()
   mockToggleShade.mockClear()
   mockNavigate.mockClear()
@@ -129,44 +126,27 @@ describe('C-H1 壁纸层', () => {
   })
 })
 
-describe('C-H2 运行卡片带', () => {
-  it('should_listRunningByRecency_when_appsRunning', () => {
-    pushRecent('b')
-    pushRecent('a')
-    apps.value = [app('a', 'running', 'AppA'), app('b', 'running', 'AppB'), app('c', 'stopped', 'AppC')]
-
-    const text = mount(ShellHomeScreen).text()
-
-    expect(text).toContain('shell.home.runningTitle')
-    // 未运行的应用不进运行带（宫格里另有它）
-    const strip = mount(ShellHomeScreen).findAll('article')
-    expect(strip.map((c) => c.text()).join('|')).toContain('AppA')
-    expect(strip.map((c) => c.text()).join('|')).not.toContain('AppC')
-  })
-
-  it('should_stopInstance_when_stopChipTapped', async () => {
-    apps.value = [app('a', 'running', 'AppA')]
+describe('C-H2 头部快捷入口（多任务，不是运行应用）', () => {
+  it('should_showMultitaskLeftOfBell_when_appsRunning', () => {
+    apps.value = [app('a', 'running', 'AppA'), app('b', 'running', 'AppB')]
     const wrapper = mount(ShellHomeScreen)
 
-    const stop = wrapper.findAll('button').find((b) => b.text().includes('shell.home.stopInstance'))!
-    await stop.trigger('click')
+    const labels = wrapper.findAll('header button').map((b) => b.attributes('aria-label') ?? '')
+    const bellIndex = labels.findIndex((l) => l.startsWith('shell.notify.open'))
 
-    expect(mockStop).toHaveBeenCalledWith('a')
+    expect(labels[bellIndex - 1], '铃铛左侧紧邻多任务入口').toBe('shell.switcher.title')
+    // 运行中的应用不再占据头部：入口固定为多任务，不随运行态变化
+    expect(wrapper.findAll('header button[aria-label^="shell.home.switchTo"]')).toHaveLength(0)
   })
 
-  it('should_useRectDangerButton_when_stopRendered', () => {
-    apps.value = [app('a', 'running', 'AppA')]
+  it('should_renderIconOnlyLikeBell_when_entryShown', () => {
     const wrapper = mount(ShellHomeScreen)
+    const entry = wrapper.find('header button[aria-label="shell.switcher.title"]')
 
-    const stop = wrapper.findAll('button').find((b) => b.text().includes('shell.home.stopInstance'))!
-    const classes = stop.classes()
-
-    // 形状契约：「停止」两字 + 44px 触控下限下，胶囊（rounded-full）会缩成圆形，
-    // 与壳内其它矩形控件不同族；改用 control 圆角（10px）的描边危险按钮
-    expect(classes).toContain('rounded-[10px]')
-    expect(classes.some((c) => c.includes('rounded-full') || c.includes('999px')), '不得为胶囊/圆形').toBe(false)
-    expect(classes).toContain('border')
-    expect(stop.attributes('style'), '危险色走 token color-mix（不硬编码）').toContain('--mobile-error')
+    // 与铃铛同档：44px 触达区、无卡面、无文字
+    expect(entry.classes()).toContain('rounded-[10px]')
+    expect(entry.classes()).toContain('min-w-[var(--mobile-touch-target-min)]')
+    expect(entry.text()).toBe('')
   })
 })
 
@@ -210,14 +190,18 @@ describe('C-H14 壁纸上的浮空文字', () => {
     const wrapper = mount(ShellHomeScreen)
 
     // 壁纸亮度/色相不可控（含用户自选图片）：直接压在壁纸上的文字必须有底色描边。
-    // 用户反馈的两条就是头部「本机 · N 个应用」与应用宫格分组头的「N 个已安装」。
     const headerText = wrapper.find('header .shell-text-over-wall')
-    expect(headerText.exists(), '头部标题/副标题框挂描边类').toBe(true)
-    expect(headerText.text()).toContain('shell.home.appCount')
+    expect(headerText.exists(), '头部标题框挂描边类').toBe(true)
+    expect(headerText.text()).toContain('WasmNest')
+    expect(headerText.text(), '头部副标题「本机 · N 个应用」已退役').not.toContain(
+      'shell.home.appCount',
+    )
 
-    const appsNote = wrapper.findAll('span').find((s) => s.text().includes('shell.home.appsNote'))
-    expect(appsNote?.exists(), '应用宫格分组头说明在场').toBe(true)
-    expect(appsNote!.element.closest('.shell-text-over-wall'), '分组头说明文字在描边容器内').not.toBeNull()
+    const appsHeader = wrapper
+      .findAll('.shell-text-over-wall')
+      .find((s) => s.text().includes('shell.home.appsTitle'))
+    expect(appsHeader?.exists(), '应用宫格分组头在描边容器内').toBe(true)
+    expect(wrapper.text(), '分组头「N 个已安装」已退役').not.toContain('shell.home.appsNote')
   })
 })
 
@@ -318,10 +302,12 @@ describe('C-H5 通知入口', () => {
 
 describe('C-H6 空态', () => {
   it('should_explainNextStep_when_noAppsInstalled', () => {
-    const text = mount(ShellHomeScreen).text()
+    const wrapper = mount(ShellHomeScreen)
 
-    expect(text).toContain('shell.home.emptyAppsHint')
-    expect(text, '没有应用时不渲染运行卡片带').not.toContain('shell.home.runningTitle')
+    expect(wrapper.text()).toContain('shell.home.emptyAppsHint')
+    // 多任务是平台入口，空态也在场；头部不出现运行应用图标
+    expect(wrapper.find('button[aria-label="shell.switcher.title"]').exists()).toBe(true)
+    expect(wrapper.findAll('header button[aria-label^="shell.home.switchTo"]')).toHaveLength(0)
   })
 })
 
@@ -354,8 +340,8 @@ describe('C-H7 快捷卡片轨道（横向轮播）', () => {
   })
 })
 
-describe('C-H8 应用分组头（不挂重复入口）', () => {
-  it('should_keepCountInline_andDropManageIcon_when_appsSectionRendered', () => {
+describe('C-H8 应用分组头（不挂计数与重复入口）', () => {
+  it('should_keepTitleOnly_when_appsSectionRendered', () => {
     apps.value = [app('a', 'stopped', 'AppA')]
     const wrapper = mount(ShellHomeScreen)
 
@@ -363,13 +349,11 @@ describe('C-H8 应用分组头（不挂重复入口）', () => {
     // 且抢标题行视觉重心（用户 2026-10-20 反馈删除）。
     expect(wrapper.find('button[aria-label="shell.home.manageApps"]').exists()).toBe(false)
 
-    // 计数紧跟标题（同一行内），而不是被推到行尾
+    // 计数同为用户 2026-10-20 反馈删除的内容：分组头只剩标题
     const note = wrapper.findAll('span').find((s) => s.text().includes('shell.home.appsNote'))
-    expect(note?.exists(), '应用分组头保留「N 个已安装」').toBe(true)
-    const titleRow = note!.element.closest('div')
-    expect(titleRow?.querySelector('h2.shell-type-section')?.textContent).toContain(
-      'shell.home.appsTitle',
-    )
+    expect(note, '「N 个已安装」不得回接').toBeUndefined()
+    const title = wrapper.findAll('h2.shell-type-section').find((h) => h.text().includes('shell.home.appsTitle'))
+    expect(title?.exists(), '应用分组标题仍在场').toBe(true)
   })
 })
 
@@ -411,9 +395,7 @@ describe('C-H10 自定义壁纸图片层', () => {
 })
 
 describe('C-H11 多任务入口', () => {
-  it('should_openSwitcher_when_runningStripEntryTapped', async () => {
-    // recents 在业界是全局可达的：底部系统条退役后，主屏运行带要能进多任务
-    apps.value = [app('a', 'running', 'AppA')]
+  it('should_openSwitcher_when_headerEntryTapped', async () => {
     const wrapper = mount(ShellHomeScreen)
 
     const entry = wrapper.find('button[aria-label="shell.switcher.title"]')
@@ -422,13 +404,15 @@ describe('C-H11 多任务入口', () => {
     await entry.trigger('click')
     expect(mockOpenSwitcher).toHaveBeenCalledTimes(1)
   })
+})
 
-  it('should_notRenderEntry_when_noRunningApp', () => {
-    // 没有运行中应用时运行带整段不渲染，入口自然也不在场
-    apps.value = [app('a', 'stopped', 'AppA')]
+describe('C-H13 运行带退役（不留卡片与停止按钮）', () => {
+  it('should_notRenderRunningCards_when_appsRunning', () => {
+    apps.value = [app('a', 'running', 'AppA')]
+    const wrapper = mount(ShellHomeScreen)
 
-    expect(
-      mount(ShellHomeScreen).find('button[aria-label="shell.switcher.title"]').exists(),
-    ).toBe(false)
+    expect(wrapper.findAll('article'), '运行卡片不再是按钮形态').toHaveLength(0)
+    expect(wrapper.text()).not.toContain('shell.home.stopInstance')
+    expect(wrapper.text()).not.toContain('shell.home.runningTitle')
   })
 })

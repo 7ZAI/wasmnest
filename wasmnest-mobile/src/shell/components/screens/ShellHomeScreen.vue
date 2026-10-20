@@ -17,18 +17,27 @@
     <!-- ==================== 头部 ==================== -->
     <header class="relative z-10 flex items-center gap-3 px-4 pt-3 pb-2 flex-shrink-0">
       <ShellBrandTile :size="38" />
-      <!-- shell-text-over-wall：标题与副标题直接压在壁纸上（无卡面），壁纸亮度不可控，
-           靠一层底色描边保证对比度（text-shadow 可继承，包住两条文字即可，
+      <!-- shell-text-over-wall：标题直接压在壁纸上（无卡面），壁纸亮度不可控，
+           靠一层底色描边保证对比度（text-shadow 可继承，包住标题即可，
            不挂到整个 header 上——铃铛角标有自己的实色底，不需要描边） -->
       <div class="shell-text-over-wall flex-1 min-w-0">
         <div class="shell-type-title">
           WasmNest
         </div>
-        <div class="shell-type-caption text-[var(--mobile-text-secondary)] truncate">
-          {{ t('shell.home.localDevice') }} ·
-          {{ t('shell.home.appCount', { count: stats.installed }) }}
-        </div>
       </div>
+      <!-- 多任务入口：与右侧铃铛同档（44px 触达区、无卡面），左邻铃铛；
+           系统底部导航条退役后，主屏从这里进入多任务。 -->
+      <button
+        type="button"
+        class="flex items-center justify-center rounded-[10px] min-w-[var(--mobile-touch-target-min)] min-h-[var(--mobile-touch-target-min)] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)]"
+        :aria-label="t('shell.switcher.title')"
+        @click="nav.openSwitcher()"
+      >
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="7" y="3" width="14" height="14" rx="3" />
+          <path d="M3 7v10a4 4 0 004 4h10" />
+        </svg>
+      </button>
       <!-- 通知入口（主入口，44px）：状态条上还有一条（系统状态栏占位时不渲染） -->
       <button
         type="button"
@@ -53,74 +62,6 @@
 
     <!-- ==================== 内容 ==================== -->
     <div class="relative z-10 flex-1 min-h-0 overflow-y-auto pb-6 shell-content-cap">
-      <!-- ======== 正在运行（MRU 卡片带，桌面同构） ======== -->
-      <template v-if="runningOrdered.length > 0">
-        <ShellSection :title="t('shell.home.runningTitle')" class="shell-reveal shell-text-over-wall">
-          <!-- 多任务入口：recents 在业界是全局可达的（Android / iOS 都能从任意屏进入），
-               底部系统条退役后这里补上，不至于只能从运行页胶囊绕进去 -->
-          <template #action>
-            <button
-              type="button"
-              class="shell-icon-action"
-              :aria-label="t('shell.switcher.title')"
-              @click="nav.openSwitcher()"
-            >
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="7" y="3" width="14" height="14" rx="3" />
-                <path d="M3 7v10a4 4 0 004 4h10" />
-              </svg>
-            </button>
-          </template>
-        </ShellSection>
-        <div class="px-4 flex gap-2.5 overflow-x-auto pb-1 shell-reveal" role="list" :style="{ animationDelay: '50ms' }">
-          <article
-            v-for="app in runningOrdered"
-            :key="app.id"
-            class="flex-shrink-0 w-[150px] rounded-[14px] border border-[var(--mobile-border)] bg-[var(--mobile-bg-card)] p-3"
-            :style="{ boxShadow: 'var(--mobile-card-shadow)' }"
-            role="listitem"
-          >
-            <button
-              type="button"
-              class="flex items-center gap-2 w-full text-left min-h-[var(--mobile-touch-target-min)] active:opacity-70 transition-opacity duration-150"
-              :aria-label="t('shell.home.switchTo', { name: app.name })"
-              @click="open(app.id)"
-            >
-              <ShellAppIcon :app="app" :size="30" />
-              <span class="flex-1 min-w-0">
-                <span class="block shell-type-label text-[var(--mobile-text-primary)] truncate">
-                  {{ app.name }}
-                </span>
-                <span class="flex items-center gap-1 shell-type-caption text-[var(--mobile-text-secondary)] truncate min-w-0">
-                  <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background: var(--mobile-success)" aria-hidden="true" />
-                  <span class="min-w-0 truncate">{{ t('shell.common.running') }}</span>
-                </span>
-              </span>
-            </button>
-            <!-- 关闭 = 停用实例（Android 卡片关闭的同一语义：回收内存，数据保留）。
-                 用圆角矩形危险按钮（与桌面壳 .shell-mini.danger 同构）：胶囊 chip 的
-                 rounded-full 在「停止」两字 + 44px 触控高度下会缩成圆形状，既与壳内其它
-                 矩形控件（--shell-radius-control）不同族，也容易被读成状态徽标而不是按钮。 -->
-            <div class="mt-1.5 flex justify-end">
-              <button
-                type="button"
-                class="inline-flex items-center justify-center gap-1.5 rounded-[10px] border px-3 shell-type-micro transition-colors duration-200 active:bg-[var(--mobile-error-muted)] min-h-[var(--mobile-touch-target-min)]"
-                :style="{
-                  borderColor: 'color-mix(in srgb, var(--mobile-error) 35%, transparent)',
-                  color: 'var(--mobile-error)',
-                }"
-                @click="stopApp(app.id)"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <rect x="6" y="6" width="12" height="12" rx="2" />
-                </svg>
-                <span>{{ t('shell.home.stopInstance') }}</span>
-              </button>
-            </div>
-          </article>
-        </div>
-      </template>
-
       <!-- ======== 快捷卡片（应用贡献，横向轮播） ========
            定宽卡片 + 原生 scroll-snap 横向滚动（原型 .slots 同形态）：拍一屏只露一张，
            滑动切下一张。定宽而非 flex-1 是刻意的——卡片内容由应用自持，等宽拉伸会让
@@ -135,13 +76,11 @@
       </template>
 
       <!-- ======== 应用宫格 ======== -->
-      <!-- 分组头只留「应用 N 个已安装」：管理入口已在系统宫格「应用管理」占同层位置，
-           行尾再放一个图标是重复入口，且抢掉标题行的视觉重心（用户 2026-10-20 反馈删除）。
-           计数紧跟标题而非推到行尾，读作一条事实而不是两端对齐的表格行。 -->
+      <!-- 分组头只留「应用」：管理入口已在系统宫格「应用管理」占同层位置，
+           行尾再放一个图标是重复入口，且抢掉标题行的视觉重心（用户 2026-10-20 反馈删除）；
+           计数文案同为该反馈要求删除的内容，标题行不再承载任何附加信息。 -->
       <ShellSection
         :title="t('shell.home.appsTitle')"
-        :note="t('shell.home.appsNote', { count: apps.length })"
-        inline-note
         class="shell-reveal shell-text-over-wall"
         :style="{ animationDelay: '160ms' }"
       />
@@ -200,7 +139,7 @@
  * 平台主屏
  *
  * 主屏是「应用注册表 + 壳偏好的聚合视图」，自身不含业务：快捷卡片由应用注册组件，
- * 运行卡片带是运行态投影，系统宫格是平台自有面。新增应用不需要改本文件。
+ * 头部多任务入口是平台导航，系统宫格是平台自有面。新增应用不需要改本文件。
  *
  * 壁纸与遮罩来自壳偏好（useShellPreferences）；壁纸只落主屏——应用运行面保持纯色，
  * 业务内容可读性优先（与桌面壳同口径）。
@@ -216,18 +155,14 @@ import { useShellNotifications } from '../../composables/useShellNotifications'
 import { useShellOpen } from '../../composables/useShellOpen'
 import { useShellOverlays } from '../../composables/useShellOverlays'
 import { useShellPreferences } from '../../composables/useShellPreferences'
-import { useShellRecent } from '../../composables/useShellRecent'
 import { toFileAssetUrl } from '@/plugin/assets'
-import type { ShellApp } from '../../types'
 import ShellAppCell from '../ShellAppCell.vue'
-import ShellAppIcon from '../ShellAppIcon.vue'
 import ShellBrandTile from '../ShellBrandTile.vue'
 import ShellSection from '../ShellSection.vue'
 
 const { t } = useI18n()
 const nav = useShellNavigation()
-const { stats, apps, sortedApps, stop } = useShellApps()
-const { recentIds } = useShellRecent()
+const { apps, sortedApps } = useShellApps()
 const { open } = useShellOpen()
 const overlays = useShellOverlays()
 const { notificationCount } = useShellNotifications()
@@ -251,24 +186,6 @@ const wallImageStyle = computed(() => {
 const badgeCount = computed(
   () => notificationCount.value + apps.value.filter((a) => a.state === 'approval').length,
 )
-
-/**
- * 运行中应用按「最近使用」排序（MRU）
- *
- * recentIds 里没有记录的运行中应用排在其后（例如 WebView 重载后后端实例仍在跑），
- * 兜底排序用名称，保证顺序稳定而不是随注册表写入顺序跳动。
- */
-const runningOrdered = computed<ShellApp[]>(() => {
-  const running = apps.value.filter((a) => a.state === 'running')
-  const rank = (app: ShellApp): number => {
-    const index = recentIds.value.indexOf(app.id)
-    return index === -1 ? Number.MAX_SAFE_INTEGER : index
-  }
-  return [...running].sort((a, b) => {
-    const diff = rank(a) - rank(b)
-    return diff !== 0 ? diff : a.name.localeCompare(b.name, 'zh-Hans-CN')
-  })
-})
 
 /** 应用贡献的快捷卡片（按应用顺序展开，排序在 registry 侧完成） */
 const slotCards = computed(() =>
@@ -314,8 +231,4 @@ const sysEntries = computed(() => [
     run: () => nav.navigate('settings'),
   },
 ])
-
-async function stopApp(appId: string): Promise<void> {
-  await stop(appId)
-}
 </script>

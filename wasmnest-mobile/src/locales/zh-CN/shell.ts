@@ -24,13 +24,8 @@ export default {
     },
     home: {
       localDevice: '本机',
-      appCount: '{count} 个应用',
-      runningTitle: '正在运行',
-      switchTo: '切换到 {name}',
-      stopInstance: '停止',
       slotsTitle: '快捷卡片',
       appsTitle: '应用',
-      appsNote: '{count} 个已安装',
       appAria: '{name}，{state}',
       emptyApps: '尚未安装 WASM 应用',
       emptyAppsHint: '在「应用管理」里安装或启用后，入口会出现在这里',
