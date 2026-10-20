@@ -1,12 +1,12 @@
 //! 桥接基准夹具插件（bench 被测端）
 //!
-//! 本 crate 是 `wasmnest-desktop/bench/` 基准工程在 **wasm 侧**的唯一被测对象：
-//! 宿主侧 harness（`src-tauri/tests/wasm_bridge_bench.rs`）把本组件实例化成两个属主
+//! 本 crate 是 `../wasmnest-test/perf-tests` 基准工程在 **wasm 侧**的唯一被测对象：
+//! 宿主侧 harness（`perf-tests` 的 bridge 模块）把本组件实例化成两个属主
 //! （`com.wasmnest.bench` 主实例 + `com.wasmnest.bench.peer` 对端），经**生产同形**的
 //! `PluginHost::invoke_rust_command` 通道下发 `bench.*` 命令，测量
 //! 「前端命令面 → 宿主 → wasm → 宿主原语 → wasm → 宿主」整条桥接链的成本。
 //!
-//! # 场景分组（与 bench/README.md 的场景矩阵一一对应）
+//! # 场景分组（与 `../wasmnest-test/perf-tests/README.md` 的场景矩阵一一对应）
 //!
 //! | 组 | 命令 | 测量对象 |
 //! | --- | --- | --- |

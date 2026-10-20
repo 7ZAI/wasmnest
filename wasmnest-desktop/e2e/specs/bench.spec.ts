@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 /**
  * 桥接基准 · **webview 层**（真实 Tauri webview 里的 wasm ↔ 宿主 ↔ 前端）
  *
- * 与宿主侧 harness（`src-tauri/tests/wasm_bridge_bench/`，`cargo test -- --full`）
+ * 与宿主侧 harness（`../wasmnest-test/perf-tests` 的 bridge 模块）
  * 互补：那边测的是「前端命令面之后的一切」（命令路由 / 实例锁 / guest 调用 /
  * host import / 事件序列化），**不含** Tauri IPC 与前端派发；本文件补的正是那两段——
  *
