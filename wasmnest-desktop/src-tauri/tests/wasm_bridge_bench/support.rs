@@ -11,11 +11,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
+use serde_json::json;
+use std::sync::Mutex;
 use wasmnest_desktop_lib::db::Database;
 use wasmnest_desktop_lib::wasm_core::storage::PluginStorage;
 use wasmnest_desktop_lib::wasm_core::PluginHost;
-use serde_json::json;
-use std::sync::Mutex;
 
 /// bench 夹具的 wasm 目标三元组（与其它 fixture 一致）
 const WASM_TARGET: &str = "wasm32-wasip3";
@@ -151,7 +151,20 @@ pub async fn build_env(full: bool) -> anyhow::Result<BenchEnv> {
     let user_plugins_dir = temp_root.join("user-plugins");
     std::fs::create_dir_all(&user_plugins_dir)?;
 
-    let host = PluginHost::new(db.clone(), &plugins_dir, &user_plugins_dir, None, None, Vec::new(), wasmnest_wasm_core::manager::runtime::AbiPolicy { form: Some(wasmnest_plugin_api::form::FORM_COMPONENT) }, std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts), None).await;
+    let host = PluginHost::new(
+        db.clone(),
+        &plugins_dir,
+        &user_plugins_dir,
+        None,
+        None,
+        Vec::new(),
+        wasmnest_wasm_core::manager::runtime::AbiPolicy {
+            form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
+        },
+        std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
+        None,
+    )
+    .await;
 
     // 消息总线分发器注入（生产由 `lib.rs` 建宿主后调；`PluginHost::new` 自身不调）
     // —— 必须在任何订阅（activate 期订阅）之前完成，否则投递无处可去

@@ -37,15 +37,8 @@ pub fn seed_keyring(host_ctx: &WasmHostContext, center_plugin_id: &str, key: &[u
         "keys": { "1": hex::encode(key) },
     })
     .to_string();
-    crate::plugin::auth::test_seed_plugin_secret(
-        host_ctx,
-        host_ctx,
-        host_ctx,
-        center_plugin_id,
-        "jwt.keyring",
-        &value,
-    )
-    .unwrap_or_else(|e| panic!("seed auth center keyring failed: {e}"));
+    crate::plugin::auth::test_seed_plugin_secret(host_ctx, host_ctx, host_ctx, center_plugin_id, "jwt.keyring", &value)
+        .unwrap_or_else(|e| panic!("seed auth center keyring failed: {e}"));
 }
 
 /// 用上面种下的已知密钥签一枚 token（HS256，claims 形状与生产逐字一致）
@@ -53,12 +46,7 @@ pub fn seed_keyring(host_ctx: &WasmHostContext, center_plugin_id: &str, key: &[u
 /// 用 `jsonwebtoken`（宿主既有依赖）签：它与插件自实现的**字节级**等价由
 /// 插件 `pairing/jwt.rs::legacy_wire_format_is_byte_frozen` 的冻结向量钉住——所以
 /// 中心认它不是「碰巧」，是契约。
-pub fn sign_with_seeded_key(
-    key: &[u8],
-    sub: &str,
-    device_name: Option<&str>,
-    fingerprint: Option<&str>,
-) -> String {
+pub fn sign_with_seeded_key(key: &[u8], sub: &str, device_name: Option<&str>, fingerprint: Option<&str>) -> String {
     use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -89,12 +77,7 @@ pub fn sign_with_seeded_key(
 ///
 /// 失败**直接 panic**：`issue` 是测试前置条件，前置失败时后续断言全无意义，
 /// 与其让 20 个断言都红在一句「token 造不出来」上，不如立刻定位。
-pub fn issue(
-    host_ctx: &WasmHostContext,
-    sub: &str,
-    device_name: Option<&str>,
-    fingerprint: Option<&str>,
-) -> String {
+pub fn issue(host_ctx: &WasmHostContext, sub: &str, device_name: Option<&str>, fingerprint: Option<&str>) -> String {
     let params = serde_json::json!({
         "method": "issue",
         "params": {

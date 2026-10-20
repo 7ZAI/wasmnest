@@ -15,7 +15,7 @@
  */
 
 export default {
-shell: {
+  shell: {
     skipToContent: 'Skip to content',
     home: {
       where: 'Home',
@@ -25,14 +25,14 @@ shell: {
       installed: 'installed',
       noApps: 'No apps match "{q}"',
       sysTitle: 'System',
-      sysHint: 'Global management pages (open from Recent tasks)',
+      sysHint: 'Global management pages (open from Background apps)',
       matches: 'matches',
     },
     // Recent-tasks panel (toolbar entry): opened / background faces switch and close here
     recents: {
-      title: 'Recent tasks',
-      countUnit: 'open',
-      close: 'Close recent tasks',
+      title: 'Background apps',
+      countUnit: 'running',
+      close: 'Hide background apps',
       closeAll: 'Close all',
       empty: 'No apps running in the background',
       open: 'Switch to {name}',
@@ -53,8 +53,8 @@ shell: {
     nav: {
       back: 'Back',
       backTitle: 'Back (Esc)',
-      tasks: 'Recents',
-      tasksTitle: 'Recent tasks: {count} open (switch background apps)',
+      tasks: 'Background',
+      tasksTitle: 'Background apps: {count} running',
       home: 'Home',
       homeTitle: 'Home: apps keep running in the background',
     },
@@ -205,37 +205,29 @@ shell: {
     settings: {
       ui: {
         title: 'Appearance',
-        themeDesc: 'Brightness mode',
         themeLight: 'Light',
         themeDark: 'Dark',
         themeSystem: 'System',
         language: 'Language',
-        languageDesc: 'Interface language (zh-CN / en, kept in sync)',
         fontSize: 'Font size',
-        fontSmall: 'Small',
-        fontNormal: 'Normal',
-        fontLarge: 'Large',
-        fontXl: 'XL',
         animations: 'Animations',
         animationsDesc: 'Screen transitions and overlay effects (disable to degrade)',
-        showNav: 'Nav buttons',
-        showNavDesc: 'Show "Back / Home" in the toolbar (Esc still works when hidden)',
       },
       background: {
         title: 'Background',
-        wallLabel: 'Home wallpaper',
-        wallHint: 'Only on home; fullscreen cards stay solid for readable content',
+        wallLabel: 'Wallpaper',
         dimLabel: 'Dim overlay · {pct}%',
-        dimHint:
-          'Page-color overlay over the wallpaper: higher = clearer text, lower = more visible wallpaper',
-        customHint: 'Custom image goes through fs:pick then host delivery (pending)',
-        custom: 'Custom image…',
-        customPending: 'Custom wallpaper pipeline pending',
+        customReplace: 'Replace image…',
+        customRemove: 'Remove',
+        customHint: 'PNG / JPG / WebP, up to 20 MB. The image is copied into app data.',
+        customSaved: 'Custom wallpaper updated',
+        customRemoved: 'Custom wallpaper removed',
         wall: {
           none: 'None (solid)',
           aurora: 'Aurora',
           dune: 'Dune',
           reef: 'Reef',
+          custom: 'Custom',
         },
       },
       permsEntry: {
@@ -288,10 +280,10 @@ shell: {
       configSaved: 'Configuration saved (written to plugin storage)',
       noSelection: 'Select an app to view details',
       // 2026-10-17 lifecycle-sync: face catalog revived to real lifecycle actions
-      managedByHost: 'Lifecycle orchestrated by host: open = activate, close = real stop; enabled/autostart are persisted preferences',
       // App bundle mount surface (ADR 0057 mechanism B): loading / failure states
       loading: 'Loading app interface…',
-      mountFailed: 'Failed to load the app interface. You can retry; if it keeps failing, check the logs',
+      mountFailed:
+        'Failed to load the app interface. You can retry; if it keeps failing, check the logs',
       errorHint:
         'The app failed to start (no running instance). Start it again, or review Permissions & Authorization and retry',
       enabled: 'Enabled',
@@ -362,6 +354,11 @@ shell: {
     frontend: {
       internal: 'Operation failed, please try again',
     },
+    shell: {
+      wallpaper: {
+        invalid: 'This image cannot be used: choose a PNG / JPG / WebP up to 20 MB',
+      },
+    },
   },
   desktop: {
     splash: {
@@ -398,7 +395,8 @@ shell: {
       portHint: 'Restart required after port change',
       portSave: 'Save',
       portRestartConfirmTitle: 'Save Port',
-      portRestartConfirmBody: 'The port change takes effect after the server restarts. Restart now?',
+      portRestartConfirmBody:
+        'The port change takes effect after the server restarts. Restart now?',
       portRestartNow: 'Restart Now',
       portRestartLater: 'Later',
       portSavedDelayed: 'Port saved. It will take effect the next time the server starts.',
@@ -528,29 +526,21 @@ shell: {
     system: {
       title: 'System Settings',
       preventSleep: 'Prevent System Sleep',
-      preventSleepDesc: 'Block system sleep while the server runs (screen may still turn off)',
-      defaultPort: 'Default Port',
-      defaultPortDesc: 'Port used when the server starts; takes effect after restart',
     },
     log: {
       title: 'Logging',
       level: 'Log Level',
-      levelDesc: 'Runtime log level on disk; applies immediately, no restart needed',
       levelDebug: 'Debug',
       levelInfo: 'Info',
       levelWarn: 'Warning',
       levelError: 'Error',
       levelApplied: 'Log level switched',
       format: 'Log Format',
-      formatDesc: 'Text for direct reading; JSON for scripted field filtering (applies after restart)',
       formatText: 'Text',
       formatJson: 'JSON',
       maxFiles: 'Retained Files',
-      maxFilesDesc: 'Daily-rotated log files to keep; 0 = unlimited',
       capacityMb: 'Capacity Cap (MB)',
-      capacityMbDesc: 'Total log directory size cap; oldest files auto-deleted beyond it; 0 = unlimited',
       persist: 'Persist Config',
-      persistDesc: 'Format / retention / cap saved to the config file; applies after restart',
       openDir: 'Open Log Directory',
       save: 'Save Config',
       saved: 'Log config saved',
@@ -563,7 +553,6 @@ shell: {
     authorization: {
       title: 'App Authorization',
       entry: 'App Authorization Records',
-      entryDesc: 'Per-app file and network authorization records; manage no-ask policies',
       back: 'Back to Settings',
       refresh: 'Refresh',
       appCount: '{count} app(s)',
@@ -580,7 +569,8 @@ shell: {
         revoke: 'Revoke',
         removeDeny: 'Remove Denial',
         revoked: 'Authorization revoked for this directory; subsequent access will be denied',
-        networkRevoked: 'Authorization revoked for this address; subsequent requests will be denied',
+        networkRevoked:
+          'Authorization revoked for this address; subsequent requests will be denied',
         denyRemoved: 'Denial record removed; this directory returns to unauthorized state',
         effect: {
           allow: 'Authorized',
@@ -618,8 +608,7 @@ shell: {
         // Empty state when the app has no built-in no-ask entries (distinct from
         // "has entries": empty is a fact, not missing data)
         firstPartyEmpty: 'This app has no built-in no-ask entries',
-        firstPartyRevoked:
-          'No-ask revoked for this directory; subsequent access will be denied',
+        firstPartyRevoked: 'No-ask revoked for this directory; subsequent access will be denied',
       },
       strategy: {
         always_ask: 'Always Ask',
@@ -640,7 +629,8 @@ shell: {
           // make users think authorized ones pass silently (ticket 06 fix)
           always_ask: 'Ask on every access (already-authorized targets included)',
           default: 'Allow on record hit; ask only when unrecorded',
-          always_allow: 'Unrecorded targets pass without asking and are auto-recorded (unconfirmed)',
+          always_allow:
+            'Unrecorded targets pass without asking and are auto-recorded (unconfirmed)',
         },
         confirmTitle: 'Switch to "Always Allow"?',
         // The semantic boundary (spec §4.3) must appear in the confirmation:
@@ -672,10 +662,6 @@ shell: {
       followSystem: 'Follow System',
       language: 'Language',
       fontSize: 'Font Size',
-      fontSmall: 'Small',
-      fontNormal: 'Normal',
-      fontLarge: 'Large',
-      fontXl: 'Extra Large',
       animations: 'Animations',
       animationsDesc: 'When off, page transitions and interactive animations are disabled globally',
     },
@@ -691,6 +677,17 @@ shell: {
       downloadComplete: 'Download complete, installing...',
       installingUpdate: 'Installing update...',
       downloadUpdate: 'Update Now',
+    },
+    reset: {
+      title: 'Reset to defaults',
+      desc: 'Restore host configuration and UI preferences to their defaults',
+      action: 'Reset to defaults',
+      confirmTitle: 'Reset to defaults',
+      confirmBody:
+        'This clears all authorization records, deletes copied custom wallpapers, and restores the default configuration. It cannot be undone.',
+      confirmOk: 'Reset',
+      done: 'Defaults restored',
+      failed: 'Reset failed, please try again',
     },
   },
 }

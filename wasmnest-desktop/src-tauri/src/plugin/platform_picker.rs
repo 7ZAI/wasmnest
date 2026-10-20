@@ -19,8 +19,8 @@
 //! 与 `host_facts` 同批（实例化 / 激活**之前**，插件激活期若调 `pick-*` 也必须
 //! 拿到宿主实现）。无头 / 测试传 `None`（内核缺省 fail-visible 选择器）。
 
-use wasmnest_wasm_core::host_api::ports::PlatformPickerPort;
 use tauri_plugin_dialog::DialogExt;
+use wasmnest_wasm_core::host_api::ports::PlatformPickerPort;
 
 /// 桌面平台选择器（捕获应用句柄；对话框调用需要它）
 pub struct DesktopPlatformPicker {
@@ -74,13 +74,9 @@ impl PlatformPickerPort for DesktopPlatformPicker {
 /// Dialog FilePath → UTF-8 绝对路径串（非 UTF-8 路径显式报错而非静默丢弃）
 fn path_to_string(file_path: tauri_plugin_dialog::FilePath) -> wasmnest_wasm_core::Result<String> {
     let path = file_path.into_path().map_err(|e| {
-        wasmnest_wasm_core::AppError::InvalidInput(format!(
-            "platform pick: failed to convert selected path: {e}"
-        ))
+        wasmnest_wasm_core::AppError::InvalidInput(format!("platform pick: failed to convert selected path: {e}"))
     })?;
     path.to_str().map(|s| s.to_string()).ok_or_else(|| {
-        wasmnest_wasm_core::AppError::InvalidInput(
-            "platform pick: selected path is not valid UTF-8".to_string(),
-        )
+        wasmnest_wasm_core::AppError::InvalidInput("platform pick: selected path is not valid UTF-8".to_string())
     })
 }

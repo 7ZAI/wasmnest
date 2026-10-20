@@ -162,9 +162,9 @@ pub(crate) fn list_jobs(host_ctx: &WasmHostContext, plugin_id: &str) -> Result<S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use wasmnest_wasm_core::host_api::grant_permissions;
     use wasmnest_wasm_core::test_support::build_host_ctx_at;
-    use std::sync::Arc;
 
     /// 无头（AppHandle=None）宿主上下文——轻量构建器，不建 WasmRuntime
     fn ctx() -> Arc<WasmHostContext> {

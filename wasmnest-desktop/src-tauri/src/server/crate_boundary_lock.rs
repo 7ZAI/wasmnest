@@ -108,7 +108,10 @@ const HOST_CRATE: &str = "wasmnest-desktop";
 const ALLOWED_DOWNWARD_EDGES: &[(&str, &[&str])] = &[
     ("wasmnest-server-base", &[]),
     ("wasmnest-crypto-engine", &["wasmnest-server-base"]),
-    ("wasmnest-server-core", &["wasmnest-server-base", "wasmnest-crypto-engine"]),
+    (
+        "wasmnest-server-core",
+        &["wasmnest-server-base", "wasmnest-crypto-engine"],
+    ),
     (
         "wasmnest-server-http",
         &[
@@ -122,7 +125,10 @@ const ALLOWED_DOWNWARD_EDGES: &[(&str, &[&str])] = &[
         "wasmnest-server-websocket",
         &["wasmnest-server-base", "wasmnest-server-core", "wasmnest-host-kit"],
     ),
-    ("wasmnest-server-peer-net", &["wasmnest-server-base", "wasmnest-host-kit"]),
+    (
+        "wasmnest-server-peer-net",
+        &["wasmnest-server-base", "wasmnest-host-kit"],
+    ),
     // 机制内核：不依赖任何拆分产物（机制面零内部依赖）
     ("wasmnest-host-kit", &[]),
     // 能力域 crate：向下只取机制内核
@@ -245,11 +251,7 @@ fn crate_root() -> PathBuf {
 /// 拆分产物基准目录（能力仓兄弟目录 `../wasmnest-lib`；全部拆分产物同落此处，
 /// 登记表内条目即裸 crate 名）
 fn packages_dir() -> PathBuf {
-    crate_root()
-        .join("..")
-        .join("..")
-        .join("..")
-        .join("wasmnest-lib")
+    crate_root().join("..").join("..").join("..").join("wasmnest-lib")
 }
 
 /// 拆分产物的 `src` 扫描根（供宿主的退役面防回接锁共用）

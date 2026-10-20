@@ -55,8 +55,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn manifest_path() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../packages/plugin-sdk-desktop/compose.json")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../packages/plugin-sdk-desktop/compose.json")
     }
 
     /// 仓根（`wasmnest-desktop/src-tauri` → `../..`）
@@ -76,13 +75,14 @@ mod tests {
             .unwrap_or_else(|e| panic!("能力仓 ../wasmnest-lib/wasmnest-contract/src/lib.rs 缺失: {e}"));
         let const_of = |name: &str| -> String {
             let needle = format!("pub const {name}: &str = \"");
-            let start = raw.find(&needle).unwrap_or_else(|| {
-                panic!("{} 缺常量 {name}", path.display())
-            }) + needle.len();
+            let start = raw
+                .find(&needle)
+                .unwrap_or_else(|| panic!("{} 缺常量 {name}", path.display()))
+                + needle.len();
             let rest = &raw[start..];
-            let end = rest.find('"').unwrap_or_else(|| {
-                panic!("{} 常量 {name} 未闭合", path.display())
-            });
+            let end = rest
+                .find('"')
+                .unwrap_or_else(|| panic!("{} 常量 {name} 未闭合", path.display()));
             rest[..end].to_string()
         };
         let name = const_of("PACKAGE_NAME");
@@ -107,10 +107,9 @@ mod tests {
 
     #[test]
     fn compose_manifest_fields_are_complete() {
-        let raw = std::fs::read_to_string(manifest_path())
-            .unwrap_or_else(|e| panic!("端清单缺失: {e}"));
-        let m: serde_json::Value = serde_json::from_str(&raw)
-            .expect("端清单 JSON 可解析（compose-wit.mjs 的消费前提）");
+        let raw = std::fs::read_to_string(manifest_path()).unwrap_or_else(|e| panic!("端清单缺失: {e}"));
+        let m: serde_json::Value =
+            serde_json::from_str(&raw).expect("端清单 JSON 可解析（compose-wit.mjs 的消费前提）");
 
         assert_eq!(m["world"], "plugin", "主 world 名是组合装配面");
         assert_eq!(
@@ -124,14 +123,31 @@ mod tests {
         assert_eq!(caps, vec!["desktop", "http", "http-endpoint", "mdns", "notify", "peer", "pty", "ws", "ws-server"],
             "caps 键漂移：能力域六片（pty/mdns/peer/http/ws/notify）+ 端扩展三片（http-endpoint/ws-server/desktop）是当前唯一答案（ADR 0052 D2/D4）");
 
-        for key in ["pty", "mdns", "peer", "http", "ws", "notify", "http-endpoint", "ws-server", "desktop"] {
+        for key in [
+            "pty",
+            "mdns",
+            "peer",
+            "http",
+            "ws",
+            "notify",
+            "http-endpoint",
+            "ws-server",
+            "desktop",
+        ] {
             let src = m["caps"][key].as_str().expect("caps 值为字符串路径");
-            let abs = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join(src);
+            let abs = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join(src);
             assert!(abs.exists(), "cap 真源缺失: {src}");
         }
 
-        let mut worlds: Vec<&str> = m["worlds"].as_array().unwrap()
-            .iter().map(|v| v.as_str().unwrap()).collect();
+        let mut worlds: Vec<&str> = m["worlds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
         worlds.sort();
         assert_eq!(worlds, vec!["desktop-compat", "plugin", "plugin-auth-policy", "plugin-binary",
             "plugin-system", "plugin-task", "plugin-ws"],
@@ -178,13 +194,17 @@ mod tests {
     #[test]
     fn cap_desktop_imports_match_host_path_b_modules() {
         let cap = std::fs::read_to_string(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../packages/plugin-sdk-desktop/rust/wit/cap-desktop.wit"),
-        ).unwrap_or_else(|e| panic!("cap-desktop.wit 缺失: {e}"));
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../packages/plugin-sdk-desktop/rust/wit/cap-desktop.wit"),
+        )
+        .unwrap_or_else(|e| panic!("cap-desktop.wit 缺失: {e}"));
 
-        let world_body = cap.split("world cap-desktop {").nth(1)
+        let world_body = cap
+            .split("world cap-desktop {")
+            .nth(1)
             .expect("cap-desktop.wit 含 world cap-desktop")
-            .split('}').next().unwrap();
+            .split('}')
+            .next()
+            .unwrap();
         let mut imports = wit_imports(world_body);
         imports.sort();
         imports.dedup();
@@ -197,12 +217,21 @@ mod tests {
         // 2026-10-13（domain-owned-contracts 票 04）：`host-events-desktop` 退役
         // （notify 进共享域 host-notify，cap `notify` 归能力域分片）。
         let expected = [
-            "host-api-call", "host-app", "host-auth-center", "host-connection-registry",
-            "host-crypto", "host-fs-desktop", "host-platform-desktop",
-            "host-process", "host-task", "host-timer",
+            "host-api-call",
+            "host-app",
+            "host-auth-center",
+            "host-connection-registry",
+            "host-crypto",
+            "host-fs-desktop",
+            "host-platform-desktop",
+            "host-process",
+            "host-task",
+            "host-timer",
         ];
-        assert_eq!(imports, expected,
-            "cap-desktop.wit 的 import 面漂移：与宿主路径 B 域 MODULE_INTERFACES 并集不一致");
+        assert_eq!(
+            imports, expected,
+            "cap-desktop.wit 的 import 面漂移：与宿主路径 B 域 MODULE_INTERFACES 并集不一致"
+        );
     }
 
     // ==================== 票 07 批次 02：组合面 / 装配面动态锁 ====================
@@ -253,22 +282,42 @@ mod tests {
     fn capability_domains_bind_their_own_wit_slices() {
         // (crate 目录, 绑定源文件, 自持分片（可含 `..` 相对路径）, world)
         const DOMAINS: &[(&str, &str, &str, &str)] = &[
-            ("../wasmnest-lib/wasmnest-pty-engine", "src/plugin_binding.rs", "wit/pty.wit", "cap-pty"),
-            ("../wasmnest-lib/wasmnest-server-http", "src/plugin_binding.rs", "wit/http.wit", "cap-http"),
+            (
+                "../wasmnest-lib/wasmnest-pty-engine",
+                "src/plugin_binding.rs",
+                "wit/pty.wit",
+                "cap-pty",
+            ),
+            (
+                "../wasmnest-lib/wasmnest-server-http",
+                "src/plugin_binding.rs",
+                "wit/http.wit",
+                "cap-http",
+            ),
             (
                 "../wasmnest-lib/wasmnest-server-websocket",
                 "src/plugin_binding.rs",
                 "../wasmnest-ws-client-engine/wit/ws.wit",
                 "cap-ws",
             ),
-            ("../wasmnest-lib/wasmnest-server-peer-net", "src/plugin_binding.rs", "wit/peer.wit", "cap-peer"),
-            ("../wasmnest-lib/wasmnest-discovery-engine", "src/lib.rs", "wit/mdns.wit", "cap-mdns"),
+            (
+                "../wasmnest-lib/wasmnest-server-peer-net",
+                "src/plugin_binding.rs",
+                "wit/peer.wit",
+                "cap-peer",
+            ),
+            (
+                "../wasmnest-lib/wasmnest-discovery-engine",
+                "src/lib.rs",
+                "wit/mdns.wit",
+                "cap-mdns",
+            ),
         ];
         let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         for (crate_dir, src_rel, slice_rel, world) in DOMAINS {
             let src_path = repo_root.join(crate_dir).join(src_rel);
-            let source = std::fs::read_to_string(&src_path)
-                .unwrap_or_else(|e| panic!("不可读 {}: {e}", src_path.display()));
+            let source =
+                std::fs::read_to_string(&src_path).unwrap_or_else(|e| panic!("不可读 {}: {e}", src_path.display()));
             // 分片真源本体在场（path 指向不存在的文件同样要红）+ world 声明在分片内
             let slice_path = repo_root.join(crate_dir).join(slice_rel);
             let slice_src = std::fs::read_to_string(&slice_path)
@@ -280,10 +329,7 @@ mod tests {
                 "{crate_dir}/{slice_rel} 未声明 `world {world}`（path/world 至少一侧指错）"
             );
 
-            let code_lines: Vec<&str> = source
-                .lines()
-                .filter(|l| !l.trim_start().starts_with("//"))
-                .collect();
+            let code_lines: Vec<&str> = source.lines().filter(|l| !l.trim_start().starts_with("//")).collect();
             assert!(
                 code_lines.iter().any(|l| l.contains(&format!("path: \"{slice_rel}\""))),
                 "{crate_dir}/{src_rel} 的 bindgen 未指向自持分片 `path: \"{slice_rel}\"`\
@@ -341,15 +387,14 @@ mod tests {
             }
         }
         // ② 组合面：caps 真源 + core.wit
-        let raw =
-            std::fs::read_to_string(manifest_path()).unwrap_or_else(|e| panic!("端清单缺失: {e}"));
+        let raw = std::fs::read_to_string(manifest_path()).unwrap_or_else(|e| panic!("端清单缺失: {e}"));
         let m: serde_json::Value = serde_json::from_str(&raw).expect("端清单 JSON 可解析");
         let caps = m["caps"].as_object().expect("caps 是对象");
         let mut cap_worlds: Vec<(String, String)> = Vec::new(); // (cap key, 真源内容)
         for (key, v) in caps {
             let path = repo_root.join(v.as_str().expect("cap 值为路径"));
-            let src = std::fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("cap 真源不可读 {}: {e}", path.display()));
+            let src =
+                std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cap 真源不可读 {}: {e}", path.display()));
             cap_worlds.push((key.clone(), src));
         }
         let mut defined: Vec<String> = Vec::new();

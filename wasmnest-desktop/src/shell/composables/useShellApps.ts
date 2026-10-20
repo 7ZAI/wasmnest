@@ -20,6 +20,7 @@
 import { computed, ref } from 'vue'
 import { invoke } from '@/utils/invoke'
 import { logger } from '@/utils/frontendLogger'
+import { invalidateChannelToken } from '@/utils/appCommands'
 import { HOST_INTERNAL_CODE, parseInvokeError, showUserError } from '@/utils/userError'
 import { toneOf, type AppTone } from './state'
 import type { AppDisplayState } from '../types'
@@ -328,6 +329,9 @@ async function deactivate(appId: string): Promise<boolean> {
   if (!appOf(appId)) return false
   return runAction(appId, 'deactivate', true, async () => {
     await invoke('plugin_deactivate', { pluginId: appId })
+    // 停用即回收通道令牌（宿主 frontend_channel 同口径）：同步清前端缓存，
+    // 防止同页后续调用带着已作废令牌（挂载路径另有强制换发兜底）
+    invalidateChannelToken(appId)
   })
 }
 
@@ -344,6 +348,8 @@ async function uninstall(appId: string): Promise<boolean> {
   if (!appOf(appId)) return false
   return runAction(appId, 'uninstall', true, async () => {
     await invoke('plugin_uninstall', { pluginId: appId })
+    // 卸载同样回收通道令牌：清前端缓存，防残留死令牌
+    invalidateChannelToken(appId)
   })
 }
 

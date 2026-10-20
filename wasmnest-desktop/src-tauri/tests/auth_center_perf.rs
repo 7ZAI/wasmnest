@@ -38,8 +38,9 @@
 
 use std::sync::Arc;
 
-use wasmnest_desktop_lib::wasm_core::test_support::{setup_wasm_runtime, hold_registry_desk,
-    plugin_db_root, session_plugin_db_guard};
+use wasmnest_desktop_lib::wasm_core::test_support::{
+    hold_registry_desk, plugin_db_root, session_plugin_db_guard, setup_wasm_runtime,
+};
 
 fn perf_rounds() -> usize {
     std::env::var("AUTH_CENTER_PERF_N")
@@ -103,7 +104,11 @@ fn auth_center_hotpath_cost_probe() {
     // （`host-auth secret-get`），链路更短且与被测的热路径无关（热路径是
     // `verify-device-token`，不是签发）。
     const PROBE_KEY: [u8; 32] = [0x5a; 32];
-    wasmnest_desktop_lib::utils::auth::test_tokens::seed_keyring(&host_ctx, "com.wasmnest.terminal-session", &PROBE_KEY);
+    wasmnest_desktop_lib::utils::auth::test_tokens::seed_keyring(
+        &host_ctx,
+        "com.wasmnest.terminal-session",
+        &PROBE_KEY,
+    );
 
     let mut plugin = wasm_runtime
         .load_plugin_from_file(

@@ -20,19 +20,19 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use actix_web::dev::ServerHandle;
+use futures_util::{SinkExt, StreamExt};
+use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite::Message as WsMsg;
+use tokio_tungstenite::WebSocketStream;
 use wasmnest_desktop_lib::db::Database;
-use wasmnest_discovery_engine::advertiser::MdnsAdvertiser;
 use wasmnest_desktop_lib::server::composition::start_http_server;
 use wasmnest_desktop_lib::system::app_context::AppContextBuilder;
 use wasmnest_desktop_lib::system::info::SystemInfo;
 use wasmnest_desktop_lib::wasm_core::PluginHost;
 use wasmnest_desktop_lib::AppConfig;
+use wasmnest_discovery_engine::advertiser::MdnsAdvertiser;
 use wasmnest_server_websocket::registry::WsSessionRegistry;
 use wasmnest_server_websocket::WebSocketManager;
-use futures_util::{SinkExt, StreamExt};
-use tokio::net::TcpStream;
-use tokio_tungstenite::tungstenite::Message as WsMsg;
-use tokio_tungstenite::WebSocketStream;
 
 /// WS 接收流（split 后的读半部）
 type WsRecv = futures_util::stream::SplitStream<WebSocketStream<TcpStream>>;
@@ -113,7 +113,10 @@ async fn init_test_app_context() {
         let db = Arc::new(std::sync::Mutex::new(
             Database::new(Path::new(":memory:")).expect("create in-memory db failed"),
         ));
-        db.lock().expect("db lock").init_schema().expect("init db schema failed");
+        db.lock()
+            .expect("db lock")
+            .init_schema()
+            .expect("init db schema failed");
 
         let plugins_dir = bundled_plugins_dir();
         // 用户插件目录：独立空目录（复用 plugins_dir 会让随包插件被标成
@@ -121,7 +124,20 @@ async fn init_test_app_context() {
         let user_plugins_dir = std::env::temp_dir().join(format!("wasmnest-itest-userplugins-{}", std::process::id()));
         std::fs::create_dir_all(&user_plugins_dir).expect("create temp user plugins dir failed");
 
-        let plugin_host = PluginHost::new(db.clone(), &plugins_dir, &user_plugins_dir, None, None, Vec::new(), wasmnest_wasm_core::manager::runtime::AbiPolicy { form: Some(wasmnest_plugin_api::form::FORM_COMPONENT) }, std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts), None).await;
+        let plugin_host = PluginHost::new(
+            db.clone(),
+            &plugins_dir,
+            &user_plugins_dir,
+            None,
+            None,
+            Vec::new(),
+            wasmnest_wasm_core::manager::runtime::AbiPolicy {
+                form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
+            },
+            std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
+            None,
+        )
+        .await;
         plugin_host.init_message_bus().await;
         // guest 事件派发器（生产同款，GUI bootstrap 在 `lib.rs` 注入同一实现）：
         // 本harness 自建 PluginHost，须自行注入——缺省 `UnwiredGuestEvents` 派发即

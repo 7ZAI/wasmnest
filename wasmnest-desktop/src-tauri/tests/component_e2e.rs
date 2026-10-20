@@ -11,8 +11,8 @@ mod support;
 
 use std::sync::Arc;
 
-use wasmnest_desktop_lib::wasm_core::host_api::context::StorageScope;
 use support::*;
+use wasmnest_desktop_lib::wasm_core::host_api::context::StorageScope;
 
 /// 直连运行时的夹具属主 id。
 ///

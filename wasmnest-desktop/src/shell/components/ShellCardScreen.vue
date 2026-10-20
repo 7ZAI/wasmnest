@@ -65,7 +65,8 @@ const sys = computed(() => SYS_PAGES.find((s) => s.id === sysPageId.value) ?? SY
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--bg-page);
+  /* 背景由 ShellHost 壳根（.shell-wall）统一铺：系统页若再自铺 --bg-page，
+     切到系统页时壁纸会被整面盖住。 */
 }
 .sysframe {
   flex: 1;

@@ -24,7 +24,10 @@ pub struct DesktopGuestEvents;
 
 /// 观察型回调的统一收口：guest 自报失败记 warn 后返回 Ok（不拖垮整条事件分发链），
 /// trap 上抛（那是宿主侧问题）。
-fn settle(outcome: std::result::Result<std::result::Result<(), String>, wasmtime::Error>, export: &str) -> wasmnest_wasm_core::Result<()> {
+fn settle(
+    outcome: std::result::Result<std::result::Result<(), String>, wasmtime::Error>,
+    export: &str,
+) -> wasmnest_wasm_core::Result<()> {
     match outcome {
         Ok(Ok(())) => Ok(()),
         Ok(Err(msg)) => {
@@ -49,16 +52,16 @@ impl GuestEventDispatcher for DesktopGuestEvents {
     ) -> wasmnest_wasm_core::Result<()> {
         // 导出视图打开失败即 fail-visible（不是「拿不到就跳过投递」）
         let exports = bindings::Plugin::new(&mut *store, &instance).map_err(|e| {
-            wasmnest_wasm_core::AppError::Plugin(format!(
-                "WASM component exports access failed: {}",
-                e
-            ))
+            wasmnest_wasm_core::AppError::Plugin(format!("WASM component exports access failed: {}", e))
         })?;
         let events = exports.wasmnest_plugin_events();
         settle(
-            wasmnest_wasm_core::runtime_util::block_on_async(
-                events.call_on_message(&mut *store, topic, sender, payload_json),
-            ),
+            wasmnest_wasm_core::runtime_util::block_on_async(events.call_on_message(
+                &mut *store,
+                topic,
+                sender,
+                payload_json,
+            )),
             "events.on-message",
         )
     }
@@ -71,16 +74,11 @@ impl GuestEventDispatcher for DesktopGuestEvents {
     ) -> wasmnest_wasm_core::Result<()> {
         // 导出视图打开失败即 fail-visible（不是「拿不到就跳过投递」）
         let exports = bindings::Plugin::new(&mut *store, &instance).map_err(|e| {
-            wasmnest_wasm_core::AppError::Plugin(format!(
-                "WASM component exports access failed: {}",
-                e
-            ))
+            wasmnest_wasm_core::AppError::Plugin(format!("WASM component exports access failed: {}", e))
         })?;
         let events = exports.wasmnest_plugin_events();
         settle(
-            wasmnest_wasm_core::runtime_util::block_on_async(
-                events.call_on_process_done(&mut *store, payload_json),
-            ),
+            wasmnest_wasm_core::runtime_util::block_on_async(events.call_on_process_done(&mut *store, payload_json)),
             "events.on-process-done",
         )
     }

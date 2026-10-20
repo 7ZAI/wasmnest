@@ -34,9 +34,10 @@
           </header>
 
           <!-- 卡片带：自适应多行网格（2026-10-19 优化）。
-               卡片列宽随窗口自适应（minmax 200–260px，宽度不够自动换行），
-               卡片过多时超出高度滚动查看；缩略区 = 品牌渐变底 + 应用真实图标
-               （安卓 recents 形态；真实界面快照受跨 Vue 实例 / canvas 内容 / DOM 卸载限制不可行） -->
+               每行最多 3 张卡、整组上下左右居中，卡片过多时纵向滚动。
+               缩略区 = 应用可选导出的 mountPreview 自绘只读预览面；缺失 / 失败 /
+               超时回退品牌渐变 + 图标（机制 B：后台应用离开应用面即被卸载，没有 DOM
+               可截图，预览只能由应用重新画；见 .scratch/2026-10-20-app-preview-contract）。 -->
           <div class="ts-cards" :class="{ 'is-empty': !state.cards.value.length }" role="list">
             <article
               v-for="(key, i) in state.cards.value"
@@ -47,33 +48,55 @@
               role="listitem"
               data-ts-keep
             >
+              <!-- 信息条在卡片顶部（2026-10-20 用户裁决）：图标打头 + 名称；
+                   关闭键压在条右端（.ts-card-x 是 article 的兄弟，按钮不能嵌套按钮）。
+                   「运行中」不再用 chip 重复——后台卡默认就是在跑，只有异常态才提示。 -->
+              <div class="ts-meta">
+                <ShellAppTile
+                  v-if="kindOf(key) === 'app'"
+                  :icon="entryOf(key)?.icon ?? 'grid'"
+                  :plugin-id="idOf(key)"
+                  :icon-file="entryOf(key)?.iconFile"
+                  :tone="toneOf(key)"
+                  :size="30"
+                />
+                <span v-else class="glyph-box tone-system ts-sys-mini">
+                  <ShellIcon :name="sysIconOf(key)" :size="15" :stroke-width="1.7" />
+                </span>
+                <span class="ts-nm truncate">{{ state.cardTitleOf(key) }}</span>
+                <!-- 只有降级 / 待审批 / 错误这类需要用户注意的状态才显示 -->
+                <span v-if="chipTextOf(key)" class="shell-chip" :class="chipOf(key)">
+                  {{ chipTextOf(key) }}
+                </span>
+              </div>
+              <div
+                class="ts-thumb"
+                :class="kindOf(key) === 'app' ? undefined : 'tone-system'"
+                :style="kindOf(key) === 'app' ? undefined : thumbStyle()"
+              >
+                <!-- app 卡：应用自绘只读预览面（未导出 / 失败 / 超时 → 品牌卡 fallback） -->
+                <AppPreviewTile
+                  v-if="kindOf(key) === 'app'"
+                  :app-id="idOf(key)"
+                  :last-route="lastRouteOf(idOf(key))"
+                  :icon="entryOf(key)?.icon ?? 'grid'"
+                  :icon-file="entryOf(key)?.iconFile"
+                  :tone="toneOf(key)"
+                />
+                <!-- 系统页卡：没有 app bundle，保持品牌渐变 + 36px glyph -->
+                <span v-else class="glyph-box tone-system ts-sys-glyph">
+                  <ShellIcon :name="sysIconOf(key)" :size="36" :stroke-width="1.5" />
+                </span>
+              </div>
+              <!-- 唯一打开动作：覆盖整张卡的绝对定位空按钮（视觉层 pointer-events:none）。
+                   预览面可能包含应用自绘的任意 DOM，不能再嵌进 button（嵌套交互元素
+                   会让键盘与读屏出错）；aria-label / aria-current 保持原语义。 -->
               <button
                 class="ts-card-main"
                 :aria-label="t('shell.recents.open', { name: state.cardTitleOf(key) })"
+                :aria-current="key === state.activeCard.value ? 'true' : undefined"
                 @click="switchTo(key)"
-              >
-                <span
-                  class="ts-thumb"
-                  :class="kindOf(key) === 'app' ? 'tone-' + toneOf(key) : 'tone-system'"
-                  :style="thumbStyle(key)"
-                >
-                  <ShellAppTile
-                    v-if="kindOf(key) === 'app'"
-                    :icon="entryOf(key)?.icon ?? 'grid'"
-                    :plugin-id="idOf(key)"
-                    :icon-file="entryOf(key)?.iconFile"
-                    :tone="toneOf(key)"
-                    :size="92"
-                  />
-                  <span v-else class="glyph-box tone-system ts-sys-glyph">
-                    <ShellIcon :name="sysIconOf(key)" :size="36" :stroke-width="1.5" />
-                  </span>
-                </span>
-                <span class="ts-meta">
-                  <span class="ts-nm truncate">{{ state.cardTitleOf(key) }}</span>
-                  <span class="shell-chip" :class="chipOf(key)">{{ chipTextOf(key) }}</span>
-                </span>
-              </button>
+              ></button>
               <!-- 单关：只移除这一张，全屏层留在原处继续处理下一张 -->
               <button
                 class="ts-card-x"
@@ -112,8 +135,11 @@
  *
  * 主屏不铺「正在运行」区（用户裁决 2026-10-17），打开过 / 后台运行的面统一在这个
  * 全屏层里呈现：背景是当前界面的**虚化**快照（backdrop blur），前景是每个应用一张
- * 大卡片（横向 scroll-snap），点卡片切回（应用续接离开时那一页），卡片角上 ✕ 关闭
- * 单个实例，头部「全部关闭」一键清场；点空白 / ✕ / Esc 收起。
+ * 大卡片（自适应多行网格），点卡片切回（应用续接离开时那一页），卡片顶部信息条
+ * （图标 + 名称）右端 ✕ 关闭单个实例，头部「全部关闭」一键清场；点空白 / ✕ / Esc 收起。
+ *
+ * 缩略区：app 卡交给 `AppPreviewTile`（应用可选导出 `mountPreview` 自绘只读预览面；
+ * 未导出 / 失败 / 3s 超时回退品牌渐变 + 图标），系统页卡保持品牌渐变 + 36px glyph。
  *
  * 归属（AGENTS §5.1）：纯注册表投影 + 动作机械转发；卡清单与关闭语义唯一实现在
  * `useShellState`（activateCard 带页面续接、closeCard = 真停用），本组件不复制编排。
@@ -125,6 +151,8 @@ import { useShellState } from '../composables/useShellState'
 import { useShellApps } from '../composables/useShellApps'
 import ShellIcon from './ShellIcon.vue'
 import ShellAppTile from './ShellAppTile.vue'
+import AppPreviewTile from '../mount/AppPreviewTile.vue'
+import { lastRouteOf } from '../mount/appSession'
 import type { CardKey } from '../types'
 import type { ShellAppEntry } from '../composables/useShellApps'
 
@@ -135,22 +163,12 @@ const appsStore = useShellApps()
 const open = computed(() => state.recentsOpen.value)
 const rootEl = ref<HTMLElement | null>(null)
 
-/** 缩略区品牌渐变底：tone 档 → 语义色 token（与 tone-* 类同源） */
-const TONE_ACCENTS: Record<AppTone | 'system', string> = {
-  primary: 'var(--color-primary)',
-  info: 'var(--color-info)',
-  success: 'var(--color-success)',
-  warning: 'var(--color-warning)',
-  mix: 'var(--color-info)',
-  system: 'var(--color-info)',
-}
-
 /**
- * 缩略图区背景：该应用品牌色的对角渐变（模拟安卓 recents 卡片的「界面快照」观感；
- * 真实快照不可行——挂载槽只在当前面实例化、canvas 内容不可克隆）。
+ * 系统页卡缩略区品牌渐变底：tone 固定 system 的语义色（与 tone-system 类同源）。
+ * app 卡的品牌渐变 fallback 由 `AppPreviewTile` 自绘（同一条公式，单一实现）。
  */
-function thumbStyle(key: CardKey): Record<string, string> {
-  const accent = TONE_ACCENTS[kindOf(key) === 'app' ? toneOf(key) : 'system']
+function thumbStyle(): Record<string, string> {
+  const accent = 'var(--color-info)'
   return {
     background: `linear-gradient(160deg, ${accent} 0%, color-mix(in srgb, ${accent} 14%, var(--bg-sidebar)) 55%, var(--bg-sidebar) 100%)`,
   }
@@ -180,10 +198,16 @@ function toneOf(key: CardKey): AppTone | 'system' {
   return appsStore.tones.value[idOf(key)] ?? 'system'
 }
 
-/** 状态 chip（应用取真实 PluginState 归并档；系统页无运行态） */
+/** 状态 chip（应用取真实 PluginState 归并档；系统页无运行态）
+ *
+ * 「运行中」不作为 chip 展示（后台应用卡默认就是在跑，重复一遍是噪声）；
+ * 只保留降级 / 待审批 / 错误这类需要用户注意的状态。
+ */
 function chipTextOf(key: CardKey): string {
-  if (kindOf(key) !== 'app') return t('shell.recents.sysPage')
-  const meta = chipMetaOf(appsStore.displayStates.value[idOf(key)] ?? '')
+  if (kindOf(key) !== 'app') return ''
+  const st = appsStore.displayStates.value[idOf(key)] ?? ''
+  if (!st || st === 'running') return ''
+  const meta = chipMetaOf(st)
   return meta ? t(meta.textKey) : ''
 }
 function chipOf(key: CardKey): string {
@@ -228,6 +252,18 @@ function close(): void {
   display: flex;
   flex-direction: column;
   outline: none;
+}
+/* 全屏层 Teleport 到 body，已不在 .shell-root 内——共享焦点环选择器够不到这里，
+   按钮补一份同形态焦点环（键盘可达的控件必须有可见焦点） */
+.ts-root button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* 覆盖层按钮与卡边同尺寸：默认 2px 外扩的焦点环会被卡片 overflow:hidden 裁掉，
+   改为内缩 3px 画在卡内（环宽 2px 完整可见，形态与上行一致）。 */
+.ts-root .ts-card-main:focus-visible {
+  outline-offset: -3px;
 }
 
 /* 虚化背景：半透明底 + 背景模糊（安卓 recents 的观感）。
@@ -295,10 +331,18 @@ function close(): void {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 260px));
+  /* 每行最多 3 张卡；整组在卡片带里**上下左右都居中**（用户 2026-10-19）：
+     轨道用固定宽 420px（= 卡片高 560 × 3/4）而不是 1fr——1fr 轨道会铺满整行，
+     `justify-content: center` 居中不了任何东西，1 张卡时仍贴在左端；
+     固定宽轨道下，1 张卡 = 单轨道被居中，3 张卡 = 三轨道整体居中。 */
+  grid-template-columns: repeat(3, 420px);
+  max-width: 1320px;
+  margin: 0 auto;
   justify-content: center;
-  gap: 14px;
-  align-content: start;
+  gap: 16px;
+  align-content: center;
+  /* 卡片超高需要滚动时：safe 变体保证第一行不被居中裁掉（不支持的浏览器回落上一行） */
+  align-content: safe center;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 4px 2px 12px;
@@ -309,42 +353,77 @@ function close(): void {
   align-content: center;
 }
 
-/* 卡片：高度由内容决定（缩略区 16/10 + 信息条），宽度随网格列自适应 */
+/* 卡片：竖版 3/4（缩略区 flex 撑满 + 底部信息条） */
 .ts-card {
   position: relative;
+  /* 初始版比例（3/4 竖版）放大一档：固定高 560px → 宽 ≈ 420px。
+     不能用 `min(100%, 560px)`——网格项的高度百分比对着 auto 轨道解析不出来，
+     会被当成 auto，aspect-ratio 随之失效，卡片缩成内容大小（2026-10-19 实测）。 */
+  height: 560px;
+  aspect-ratio: 3 / 4;
+  justify-self: center;
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-sheet);
   background: var(--bg-card);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-card-hover);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
   animation: ts-card-in var(--motion-duration-base) var(--motion-ease) backwards;
   animation-delay: calc(var(--i, 0) * 35ms);
   transition:
     transform var(--motion-duration-base) var(--motion-ease),
-    border-color var(--motion-duration-base) var(--motion-ease);
+    box-shadow var(--motion-duration-base) var(--motion-ease),
+    background-color var(--motion-duration-base) var(--motion-ease);
 }
+/* 悬停只抬升卡片，不再把边框染成主色（warm 色板下主色近黑 = 黑框）。 */
 .ts-card:hover {
   transform: translateY(-3px);
-  border-color: var(--color-primary);
+  box-shadow: var(--shadow-card-hover);
+}
+/* 选中态：信息条用固定黑底 + 反白文字（不随明暗主题反转），
+   不画描边、也不压勾章；缩略图保持完整可见。 */
+.ts-card.active .ts-meta {
+  background: var(--selection-solid);
+  /* 透明边框让黑底铺到边，不再出现一圈主色描边 */
+  border-bottom-color: transparent;
+}
+.ts-card.active .ts-nm {
+  color: var(--selection-solid-ink);
+}
+/* 当前卡信息条是固定黑底：chip 改用固定反白底 + 黑字，避免半透明绿/红在黑底上糊掉。 */
+.ts-card.active .ts-meta .shell-chip {
+  background: var(--selection-solid-ink);
+  color: var(--selection-solid);
 }
 .ts-card.active {
-  border-color: var(--color-primary);
-  box-shadow: var(--shadow-input-focus);
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--text-primary) 16%, transparent);
 }
 
+/* 唯一打开动作：绝对定位覆盖整张卡的空按钮。视觉层（信息条 + 缩略区）全部
+   pointer-events:none，点击只会落在这里；预览面可能含应用自绘 DOM，不能再
+   嵌进 button（嵌套交互元素 = 键盘 / 读屏错误）。层序在关闭键之下。 */
 .ts-card-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 0;
+  border: none;
+  background: none;
   cursor: pointer;
   text-align: left;
 }
-/* 缩略区：固定 16/10（应用窗口比例），品牌渐变底 + 应用真实图标居中 */
+/* 视觉层不承载点击：点击穿透到覆盖层按钮（预览容器本身也 pointer-events:none） */
+.ts-card .ts-meta,
+.ts-card .ts-thumb {
+  pointer-events: none;
+}
+/* 缩略区：app 卡 = 应用自绘只读预览面（AppPreviewTile，尺寸由卡片决定）；
+   系统页卡 = 品牌渐变底 + 图标居中。预览挂载 / 回退切换不改变盒子尺寸，
+   卡片高度与网格位置不跳动。 */
 .ts-thumb {
-  aspect-ratio: 16 / 10;
+  flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -355,13 +434,19 @@ function close(): void {
   height: 72px;
   border-radius: var(--radius-sheet);
 }
+.ts-sys-mini {
+  width: 30px;
+  height: 30px;
+}
+/* 信息条（卡片顶部）：图标打头 + 名称（异常态才追加 chip）。
+   右侧 44px 留给 .ts-card-x：关闭键是 article 的兄弟绝对定位，视觉上落在条内。 */
 .ts-meta {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--border);
+  gap: 10px;
+  padding: 9px 44px 9px 12px;
+  border-bottom: 1px solid var(--border);
   background: var(--bg-card);
 }
 .ts-nm {
@@ -374,8 +459,11 @@ function close(): void {
 
 .ts-card-x {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  /* 垂直居中对齐顶部信息条里的 30px 图标（条高 = 30 + 9×2） */
+  top: 11px;
+  right: 10px;
+  /* 压在覆盖层按钮（z-index:1）之上：关闭键是卡片的第二个独立动作 */
+  z-index: 2;
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -390,7 +478,14 @@ function close(): void {
     background-color var(--motion-duration-fast) var(--motion-ease),
     color var(--motion-duration-fast) var(--motion-ease);
 }
-.ts-card-x:hover {
+/* 当前卡信息条是固定黑底：关闭键跟着反白（悬停仍走红色危险态） */
+.ts-card.active .ts-card-x {
+  color: var(--selection-solid-ink);
+  background: color-mix(in srgb, var(--selection-solid-ink) 12%, transparent);
+  border-color: color-mix(in srgb, var(--selection-solid-ink) 24%, transparent);
+}
+.ts-card-x:hover,
+.ts-card.active .ts-card-x:hover {
   background: var(--color-danger);
   border-color: var(--color-danger);
   color: var(--color-primary-contrast);

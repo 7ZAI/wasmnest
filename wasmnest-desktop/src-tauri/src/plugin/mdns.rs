@@ -167,11 +167,10 @@ fn install(host: Arc<dyn HostPorts>) {
 }
 
 /// 端口装配器静态（与白名单条目 / 强制引用行同处；内核装配链遍历本自报表）
-pub static MDNS_PORTS_INSTALLER: wasmnest_host_kit::DomainPortsInstaller =
-    wasmnest_host_kit::DomainPortsInstaller {
-        name: wasmnest_discovery_engine::MODULE_NAME,
-        install,
-    };
+pub static MDNS_PORTS_INSTALLER: wasmnest_host_kit::DomainPortsInstaller = wasmnest_host_kit::DomainPortsInstaller {
+    name: wasmnest_discovery_engine::MODULE_NAME,
+    install,
+};
 
 wasmnest_host_kit::submit_domain_ports_installer!(MDNS_PORTS_INSTALLER);
 
@@ -233,10 +232,7 @@ mod tests {
             .iter()
             .find(|route| route.capability == wasmnest_discovery_engine::routing::CAPABILITY)
             .expect("宿主二进制里应有本域自报的路由词汇（漏 submit! / 漏强制引用行）");
-        assert_eq!(
-            route.forward_prefix,
-            wasmnest_discovery_engine::routing::FORWARD_PREFIX
-        );
+        assert_eq!(route.forward_prefix, wasmnest_discovery_engine::routing::FORWARD_PREFIX);
         assert_eq!(route.exports, wasmnest_discovery_engine::routing::EXPORTS);
     }
 

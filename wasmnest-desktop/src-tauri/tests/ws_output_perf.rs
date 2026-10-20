@@ -32,14 +32,13 @@ mod support;
 use support::*;
 
 use wasmnest_desktop_lib::wasm_core::test_support::{
-    hold_registry_desk, plugin_db_root, session_plugin_db_guard, setup_wasm_runtime,
-    TestInstanceDispatcher,
+    hold_registry_desk, plugin_db_root, session_plugin_db_guard, setup_wasm_runtime, TestInstanceDispatcher,
 };
 // 会话 api 清单（票 08 批次三：住宿主测试 support，不再经内核 re-export）
-use support::session_apis;
-use wasmnest_server_websocket::endpoint::EndpointAuth;
 use futures_util::SinkExt;
+use support::session_apis;
 use tokio_tungstenite::tungstenite::Message;
+use wasmnest_server_websocket::endpoint::EndpointAuth;
 
 /// 取得环境覆盖的轮数（默认 1；`TERM_PERF_N=3` 取均值）
 fn ws_perf_rounds() -> usize {
@@ -260,7 +259,9 @@ fn perf_ws_terminal_output_throughput() {
             Arc::new(wasmnest_desktop_lib::wasm_core::bus::HostBusPort::new(
                 host_ctx.message_bus.clone(),
                 // 帧投递窄端口：必须与本总线同源（票 02 批次 03 的注入缝）
-                Arc::new(wasmnest_desktop_lib::plugin::ws::HostWsPorts::from_bus(host_ctx.message_bus.clone())),
+                Arc::new(wasmnest_desktop_lib::plugin::ws::HostWsPorts::from_bus(
+                    host_ctx.message_bus.clone(),
+                )),
             )),
         )
         .expect("register declared terminal endpoint");

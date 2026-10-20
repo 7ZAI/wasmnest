@@ -221,8 +221,7 @@ fn system_test_fixture_needs_rebuild(module_path: &Path) -> bool {
 pub fn build_system_test_fixture() -> Vec<u8> {
     let plugin_dir = packages_dir().join("plugin-system-test");
     // 该夹具固定 release profile（见其 Cargo.toml `[profile.release]`），无 debug 分支
-    let module_path =
-        fixture_target::artifact("wasm32-wasip3", "release", "wasmnest_plugin_system_test");
+    let module_path = fixture_target::artifact("wasm32-wasip3", "release", "wasmnest_plugin_system_test");
 
     if module_path.exists() && !system_test_fixture_needs_rebuild(&module_path) {
         return std::fs::read(&module_path).expect("read cached system-test fixture component");
@@ -246,10 +245,7 @@ pub fn build_system_test_fixture() -> Vec<u8> {
         ])
         .status()
         .expect("run cargo build for system-test fixture component");
-    assert!(
-        status.success(),
-        "system-test fixture component WASM build failed"
-    );
+    assert!(status.success(), "system-test fixture component WASM build failed");
 
     std::fs::read(&module_path).expect("read system-test fixture component after build")
 }

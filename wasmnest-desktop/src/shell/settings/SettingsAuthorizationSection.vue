@@ -24,9 +24,6 @@
           <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">
             {{ t('settings.authorization.entry') }}
           </span>
-          <p class="text-xs text-[var(--text-tertiary)] mt-0.5">
-            {{ t('settings.authorization.entryDesc') }}
-          </p>
         </div>
         <svg
           class="w-3.5 h-3.5 text-[var(--text-tertiary)] shrink-0"

@@ -43,8 +43,6 @@ const dialog = ref<ShellDialogKind | null>(null)
 const dialogAppId = ref<string | null>(null)
 /** 策略二次确认的资源（授权策略切换弹窗预留） */
 const dialogResource = ref<string | null>(null)
-/** 启动屏 */
-const boot = ref(true)
 /** 主屏 type-to-search 查询串 */
 const homeQ = ref('')
 
@@ -427,7 +425,6 @@ export function useShellState() {
     dialog,
     dialogAppId,
     dialogResource,
-    boot,
     homeQ,
     notifs,
     notifCountTotal,

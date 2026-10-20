@@ -31,8 +31,7 @@ impl HostFactsPort for DesktopHostFacts {
         // 服务器未启动时显性报错、不回退配置默认端口：回退会让插件拿到一个看似
         // 合法实则连不上的端口，排查成本远高于一次显式失败。
         let supervisor = wasmnest_server_core::supervisor::ServerSupervisor::global();
-        let actual_port =
-            wasmnest_wasm_core::runtime_util::block_on_async(supervisor.get_status_info()).port;
+        let actual_port = wasmnest_wasm_core::runtime_util::block_on_async(supervisor.get_status_info()).port;
         if actual_port > 0 {
             Ok(actual_port.to_string())
         } else {

@@ -1,5 +1,6 @@
 <template>
-  <div class="h-full flex flex-col items-center justify-center gap-4 bg-[var(--bg-page)]">
+  <!-- 宿主兜底面也透出壳根壁纸，不再自铺 --bg-page（背景在宿主所有面生效） -->
+  <div class="h-full flex flex-col items-center justify-center gap-4">
     <p class="text-[calc(13px*var(--ui-scale))] font-semibold text-[var(--text-primary)]">
       {{ t('desktop.notFound.title') }}
     </p>

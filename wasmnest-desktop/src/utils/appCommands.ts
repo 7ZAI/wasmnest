@@ -16,6 +16,7 @@
 
 import { invoke } from './invoke'
 import { logger } from './frontendLogger'
+import { HOST_INTERNAL_CODE, parseInvokeError } from './userError'
 
 // ==================== 凭证与令牌 ====================
 
@@ -39,33 +40,100 @@ export async function ensureHostCredential(): Promise<string> {
  * 某 app 的前端通道令牌（宿主签发；停用即回收，页面加载后重新签发）
  *
  * 令牌决定插件面命令的身份（`plugin_id` 只作目标），按 appId 分别缓存。
- * 取不到命令面显性报错（{@link requireChannelToken}），不做静默无证调用。
+ * 未命中缓存即签发（{@link ensureChannelToken}），签发失败显性上报，不做静默无证调用。
+ *
+ * **缓存不等于有效**：宿主在插件停用 / 页面加载时回收令牌，而本模块的 Map 随页面
+ * 内存存活——挂载路径用 {@link refreshChannelToken} 强制换发，命令失败按
+ * {@link isChannelCredentialError} 判定后重签重试。
  */
 const channelTokens = new Map<string, string>()
 
 /**
- * 取得 app 的前端通道令牌（幂等）：宿主面凭证换签发，AppMountSlot 挂载前调用
+ * 同一 appId 的**签发在途** promise（single-flight）。
  *
- * 需宿主面凭证 + app 处于运行态（Rust 侧由宿主 PluginHost 自启，先于前端加载；
- * 用户经壳停用后令牌取不到 → 挂载槽显性报错）。
+ * 为什么必须有：宿主对同一插件重新签发会**作废旧令牌**（`issue_token` 覆盖回收）。
+ * 并发命令同时失败时，若各自「清缓存 → 重签」，后一张令牌会把前一张作废——拿到
+ * 先签发令牌的调用照样被拒（2026-10-20 实测：进入 BedCode 时会话命令并发重签互踩，
+ * 界面弹「操作未完成，请稍后重试」）。在途共享后，并发调用拿到同一张新令牌。
+ */
+const channelTokenInFlight = new Map<string, Promise<string>>()
+
+/** 清掉某 app 的缓存令牌（停用回收 / 失败重签前调用） */
+export function invalidateChannelToken(appId: string): void {
+  channelTokens.delete(appId)
+}
+
+/** 签发新令牌（single-flight：并发调用共享同一次签发，不互相作废） */
+async function issueChannelToken(appId: string): Promise<string> {
+  const inFlight = channelTokenInFlight.get(appId)
+  if (inFlight) return inFlight
+  const pending = (async () => {
+    const loaderSession = await ensureHostCredential()
+    const token = await invoke<string>('plugin_channel_token', { pluginId: appId, loaderSession })
+    channelTokens.set(appId, token)
+    logger.log(`[HostCmd] channel token issued (${appId})`)
+    return token
+  })()
+  channelTokenInFlight.set(appId, pending)
+  try {
+    return await pending
+  } finally {
+    // 只清在途登记；令牌缓存由成功路径写入（失败时本就没有新值可清）
+    channelTokenInFlight.delete(appId)
+  }
+}
+
+/**
+ * 取得 app 的前端通道令牌（幂等，命中缓存不换发）
+ *
+ * 仅用于「缓存视为有效」的路径；挂载（身份重绑）必须走
+ * {@link refreshChannelToken}。需宿主面凭证 + app 处于运行态（Rust 侧由宿主
+ * PluginHost 自启，先于前端加载；用户经壳停用后令牌取不到 → 显性报错）。
  */
 export async function ensureChannelToken(appId: string): Promise<string> {
   const cached = channelTokens.get(appId)
   if (cached) return cached
-  const loaderSession = await ensureHostCredential()
-  const token = await invoke<string>('plugin_channel_token', { pluginId: appId, loaderSession })
-  channelTokens.set(appId, token)
-  logger.log(`[HostCmd] channel token issued (${appId})`)
-  return token
+  return issueChannelToken(appId)
 }
 
-/** 取通道令牌（未就绪 = 挂载未完成，显性报错而非静默无证调用） */
-export function requireChannelToken(appId: string): string {
-  const token = channelTokens.get(appId)
-  if (!token) {
-    throw new Error(`app command channel token not initialized (appId=${appId})`)
-  }
-  return token
+/**
+ * 强制换发新令牌（AppMountSlot 挂载前调用）
+ *
+ * 令牌缓存跨应用挂载存活，但宿主在停用插件时已回收旧令牌：停用再启用（同一页面
+ * 不刷新）时缓存里是死令牌，直接复用会把「进入应用的第一批命令」全部打成
+ * `host.internal`（2026-10-20：第二次进入 BedCode，会话列表加载被拒）。挂载是身份
+ * 重绑点，一律换发。
+ */
+export async function refreshChannelToken(appId: string): Promise<string> {
+  invalidateChannelToken(appId)
+  return issueChannelToken(appId)
+}
+
+/**
+ * 「通道凭证被拒」判定——失败是否重试的唯一分界。
+ *
+ * 宿主对无效 / 被回收凭证的拒绝走 `AppError::Plugin` → 信封 `host.internal` 且
+ * **不带 params**；业务失败要么是插件注册码，要么是带 `params.plugin` 的兜底码。
+ * 重试只属于前者：业务命令（如 upsert）失败若一并重试，一次提交会执行两遍
+ * （有副作用的命令不可重放）。
+ */
+function isChannelCredentialError(e: unknown): boolean {
+  const ue = parseInvokeError(e)
+  return ue.code === HOST_INTERNAL_CODE && !ue.params
+}
+
+/**
+ * 凭证被拒后的换发（重试前唯一入口）
+ *
+ * 只在缓存里仍是**刚被拒的那张**令牌时才清缓存换发；并发调用已换发过（缓存里已
+ * 是新令牌）→ 直接复用，不再签发——重复签发会作废旧令牌，让先重试的调用再次被拒。
+ * 无缓存（并发窗口内已被别的调用清掉）→ 交 issueChannelToken 的 single-flight 合流。
+ */
+async function reissueAfterRejection(appId: string, rejectedCredential: string): Promise<string> {
+  const cached = channelTokens.get(appId)
+  if (cached && cached !== rejectedCredential) return cached
+  if (cached === rejectedCredential) channelTokens.delete(appId)
+  return issueChannelToken(appId)
 }
 
 // ==================== 插件面命令（按 appId 路由） ====================
@@ -75,44 +143,71 @@ export function requireChannelToken(appId: string): string {
  *
  * 入参形状与旧 `context.commands.execute(id, ...args)` 一致：单参透传参对象、
  * 多参/零参传数组（Rust 侧按同一约定解析，行为不变）。
+ *
+ * 失败处理：凭证被拒（令牌已被宿主回收）→ 换发一次再重试；其余失败不重试，
+ * 信封原样上交（调用方 resolvePluginErrorText 按 code 取文案），原文 / 堆栈只进
+ * 日志，不进用户可见面（ADR 0030）。
  */
 export async function appInvoke<T = unknown>(
   appId: string,
   command: string,
   ...args: unknown[]
 ): Promise<T> {
-  const credential = requireChannelToken(appId)
   const payload = args.length === 1 ? args[0] : args
+  const call = (credential: string) =>
+    invoke<T>('plugin_invoke', { pluginId: appId, command, args: payload ?? null, credential })
+  let used: string | null = null
   try {
-    return await invoke<T>('plugin_invoke', {
-      pluginId: appId,
-      command,
-      args: payload ?? null,
-      credential,
-    })
+    used = await ensureChannelToken(appId)
+    return await call(used)
   } catch (e) {
-    // 信封原样上交（调用方 resolvePluginErrorText 按 code 取文案）；
-    // 原文 / 堆栈只进日志，不进用户可见面（ADR 0030）
-    logger.error(`[HostCmd] command "${command}" failed: appId=${appId}`, e)
-    throw e
+    // used === null = 令牌本身没取到（签发失败），属挂载 / 运行态问题，不重试
+    if (used === null || !isChannelCredentialError(e)) {
+      logger.error(`[HostCmd] command "${command}" failed: appId=${appId}`, e)
+      throw e
+    }
+    // 令牌已被宿主回收（插件停用 / 页面加载）：换发一次再重试（在途共享，并发不互踩）
+    logger.warn(`[HostCmd] channel token rejected, reissuing: appId=${appId} command=${command}`)
+    try {
+      return await call(await reissueAfterRejection(appId, used))
+    } catch (e2) {
+      logger.error(`[HostCmd] command "${command}" failed: appId=${appId}`, e2)
+      throw e2
+    }
+  }
+}
+
+/** 令牌失效自愈（同 appInvoke 口径）：被拒则换发、再试一次；业务失败不重试 */
+async function withAuthRetry<T>(appId: string, run: (credential: string) => Promise<T>): Promise<T> {
+  let used: string | null = null
+  try {
+    used = await ensureChannelToken(appId)
+    return await run(used)
+  } catch (e) {
+    if (used === null || !isChannelCredentialError(e)) throw e
+    logger.warn(`[HostCmd] channel token rejected, reissuing: appId=${appId}`)
+    return run(await reissueAfterRejection(appId, used))
   }
 }
 
 // ==================== 插件存储（host-plugin-database KV，令牌限定 app 命名空间）====================
 
 export async function appStorageGet<T = unknown>(appId: string, key: string): Promise<T | undefined> {
-  const credential = requireChannelToken(appId)
-  return (await invoke('plugin_storage_get', { pluginId: appId, key, credential })) as T | undefined
+  return (await withAuthRetry(appId, (credential) =>
+    invoke('plugin_storage_get', { pluginId: appId, key, credential }),
+  )) as T | undefined
 }
 
 export async function appStorageSet(appId: string, key: string, value: unknown): Promise<void> {
-  const credential = requireChannelToken(appId)
-  return invoke('plugin_storage_set', { pluginId: appId, key, value, credential })
+  return withAuthRetry(appId, (credential) =>
+    invoke('plugin_storage_set', { pluginId: appId, key, value, credential }),
+  )
 }
 
 export async function appStorageDelete(appId: string, key: string): Promise<void> {
-  const credential = requireChannelToken(appId)
-  return invoke('plugin_storage_delete', { pluginId: appId, key, credential })
+  return withAuthRetry(appId, (credential) =>
+    invoke('plugin_storage_delete', { pluginId: appId, key, credential }),
+  )
 }
 
 // ==================== 授权应答（安全闸门，fail-closed）====================

@@ -3,111 +3,163 @@
     <Transition name="splash">
       <div
         v-if="visible"
-        class="splash-root fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden"
+        class="splash-root fixed inset-0 z-[100] flex items-center justify-center overflow-hidden"
         role="status"
-        :aria-label="statusText"
+        :aria-label="t('desktop.splash.status')"
       >
         <!-- 呼吸辉光层（装饰，屏幕阅读器忽略） -->
         <div class="splash-halo" aria-hidden="true"></div>
 
-        <div class="splash-content relative z-[1] flex flex-col items-center">
-          <!-- Logo（品牌标志与应用图标逐字同源：ink 斜向渐变底板 + 编织 W；
-               小尺寸统一走实心态（品牌 spec §2.3 三档降级），不跟主题反色） -->
-          <div class="splash-rise mb-7">
-            <slot name="logo">
-              <div class="splash-logo flex h-[72px] w-[72px] items-center justify-center">
-                <svg class="h-full w-full" viewBox="0 0 100 100" aria-hidden="true">
-                  <defs>
-                    <linearGradient id="splash-logo-bg" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stop-color="#16181C" />
-                      <stop offset="100%" stop-color="#08090B" />
-                    </linearGradient>
-                  </defs>
-                  <rect width="100" height="100" rx="22.5" fill="url(#splash-logo-bg)" />
-                  <!-- 编织 W 实心态：四根棒料，左起第一根为琥珀（当前活跃实例） -->
-                  <g transform="translate(15.855,17.193) scale(0.68289)">
-                    <polygon points="4.54,22.28 26.06,92.71 32.32,59.81 19.46,17.72" fill="#FF9E2C" />
-                    <polygon points="24.22,90.61 51.10,56.86 51.10,34.38 29.84,61.08" fill="#F5F7F9" />
-                    <polygon points="48.90,56.86 75.78,90.61 70.16,61.08 48.90,34.38" fill="#F5F7F9" />
-                    <polygon points="73.94,92.71 95.46,22.28 80.54,17.72 67.68,59.81" fill="#F5F7F9" />
-                  </g>
-                </svg>
-              </div>
-            </slot>
-          </div>
+        <!-- 居中内容：只有 logo。绘画动画即加载进度——真源镂空线框（与应用图标
+             src-tauri/icons/icon.svg 逐字同源：四根圆柱螺旋编织的描边曲线）按源码
+             顺序逐笔描出，全部画完 = 加载完成（宿主随后收起）。视觉上零文字、零进度条。 -->
+        <div ref="logoWrap" class="splash-content relative z-[1]">
+          <slot name="logo">
+            <div class="splash-logo flex items-center justify-center">
+              <svg class="h-full w-full" viewBox="0 0 100 100" aria-hidden="true">
+                <defs>
+                  <linearGradient id="splash-logo-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#16181C" />
+                    <stop offset="100%" stop-color="#08090B" />
+                  </linearGradient>
+                </defs>
 
-          <!-- 品牌名 + 副标语 -->
-          <div
-            class="splash-rise splash-rise-1 mb-1.5 text-xl font-semibold tracking-[0.18em] text-[var(--splash-text)]"
-          >
-            WasmNest
-          </div>
-          <div
-            class="splash-rise splash-rise-2 mb-10 text-xs tracking-wider text-[var(--splash-text-dim)]"
-          >
-            {{ t('desktop.splash.tagline') }}
-          </div>
+                <!-- 底板：渐变底淡入（画布就位） -->
+                <rect class="logo-base" width="100" height="100" rx="22.5" fill="url(#splash-logo-bg)" />
 
-          <!-- 技术内容列：整组以屏幕中线为中心 -->
-          <div class="splash-technical flex flex-col items-center">
-            <!-- 终端启动行：$ 提示符 + 打字机命令 + 块状光标 -->
-            <div
-              class="splash-rise splash-rise-3 wb-mono flex h-5 items-center text-[calc(13px*var(--ui-scale))]"
-            >
-              <span class="text-[var(--splash-text-faint)]">$&nbsp;</span
-              ><span class="splash-typed text-[var(--splash-text)]">wasmnest</span>
+                <!-- 真源线框：124 条描边曲线（四根圆柱同一套螺旋线框；左侧琥珀 = 活跃实例，
+                     其余三根暖白），与 icon.svg 的 g 变换与 points 逐字同源（brandMark 锁钉住）。
+                     动画 = 按 W 笔顺（左肩→左谷→中峰→右谷→右肩）逐条描边
+                     （stroke-dashoffset ±周长 → 0） -->
+                <g transform="translate(19.056,20.269) scale(0.61887)">
+                <polyline class="logo-line" points="8.40,21.10 8.81,21.54 9.81,21.81 11.28,21.92 13.01,21.96 14.73,22.01 15.81,22.10" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="10.32,30.22 10.80,30.59 11.50,30.94 12.36,31.24 13.36,31.51 14.45,31.74 15.61,31.95 16.80,32.16 17.98,32.36 19.11,32.59 20.14,32.84 21.04,33.13 21.77,33.48 22.31,33.88 22.64,34.35 22.75,34.88 22.75,34.90" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="13.46,44.65 13.13,45.20 12.95,45.83 13.01,46.37 13.28,46.86 13.73,47.29 14.36,47.66 15.15,47.99 16.10,48.27 17.17,48.51 18.34,48.72 19.58,48.91 20.85,49.09 22.13,49.26 23.38,49.45 24.56,49.66 25.65,49.89 26.61,50.16 27.43,50.48 28.05,50.86 28.45,51.31 28.65,51.81 28.67,52.38 28.50,52.99 28.17,53.66 28.12,53.73" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="24.23,58.04 23.88,58.38 23.66,58.61" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="20.08,63.17 19.96,63.55 19.92,64.13 20.04,64.66 20.31,65.15 20.73,65.59 21.29,65.98 21.97,66.34 22.75,66.67 23.60,66.98 24.51,67.27 25.46,67.55 26.41,67.83 27.34,68.11 28.23,68.41 29.06,68.72 29.81,69.06 30.46,69.43" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="10.80,26.77 11.98,26.82 14.02,26.76 16.12,26.69 17.30,26.90 18.16,27.20 18.89,27.54 19.48,27.93 19.89,28.38 20.11,28.88 20.13,29.44 20.00,29.89" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="11.76,39.05 11.58,39.43 11.49,40.03 11.63,40.55 12.02,41.00 12.64,41.38 13.49,41.68 14.55,41.93 15.78,42.12 17.16,42.27 18.61,42.39 20.07,42.51 21.49,42.65 22.82,42.81 23.86,43.06 24.78,43.34 25.56,43.68 26.16,44.06 26.59,44.50 26.83,44.99 26.88,45.54 26.75,46.15 26.44,46.81 26.20,47.18" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="17.19,56.97 17.17,57.03 17.05,57.63 17.10,58.18 17.33,58.68 17.73,59.12 18.29,59.52 18.98,59.88 19.81,60.19 20.73,60.48 21.73,60.74 22.77,60.99 23.85,61.23 24.91,61.47 25.95,61.72 26.93,61.99 27.84,62.28 28.64,62.60 29.34,62.96 29.90,63.35 30.33,63.79 30.63,64.27 30.78,64.79 30.80,65.35 30.70,65.95 30.51,66.49" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="25.52,74.91 25.52,74.91" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="9.87,24.41 10.25,24.51 11.79,24.61 13.63,24.61 15.50,24.61 17.09,24.69 17.37,24.75" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="10.88,33.66 10.72,34.02 10.62,34.61 10.75,35.14 11.10,35.60 11.69,35.99 12.50,36.31 13.49,36.57 14.66,36.79 15.94,36.96 17.30,37.11 18.69,37.26 20.06,37.41 21.34,37.58 22.50,37.80 23.48,38.06 24.25,38.40 24.78,38.80 25.03,39.29 24.98,39.88 24.81,40.21" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="19.93,45.15 19.53,45.52 18.72,46.27" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="18.49,54.41 19.47,54.62 20.62,54.83 21.80,55.04 22.98,55.25 24.12,55.47 25.21,55.70 26.22,55.96 27.13,56.25 27.92,56.58 28.57,56.95 29.08,57.36 29.43,57.82 29.64,58.32 29.69,58.88 29.60,59.47 29.40,60.04" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="26.26,64.43 26.22,64.48 25.79,65.00" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="23.05,69.61 23.00,70.00 23.04,70.56 23.19,71.08 23.46,71.56 23.84,72.02 24.31,72.44 24.87,72.84 25.49,73.22 26.17,73.58 26.88,73.93 27.61,74.27" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="17.69,24.56 17.22,25.22 16.30,26.07 15.10,27.00 13.76,27.98 12.44,28.95 11.31,29.86 10.53,30.67 10.23,31.33 10.27,31.88 10.44,32.40 10.76,32.87 11.22,33.29 11.47,33.45" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="16.97,35.23 17.52,35.34 17.89,35.42" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="23.34,37.11 23.77,37.41 24.17,37.85 24.39,38.35 24.44,38.91 24.31,39.52 23.97,40.18 23.45,40.91 22.80,41.68 22.03,42.48 21.19,43.31 20.29,44.15 19.36,45.00 18.44,45.85 17.56,46.69 16.75,47.50 16.03,48.29 15.44,49.04 14.98,49.75 14.69,50.40 14.56,51.01 14.62,51.56 14.90,52.04 15.39,52.46 15.74,52.64" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="28.50,55.50 28.84,55.73 29.23,56.18 29.42,56.69 29.42,57.26 29.24,57.88 28.90,58.55 28.41,59.27 27.80,60.02 27.11,60.80 26.35,61.60 25.57,62.40 24.80,63.21 24.06,64.00 23.39,64.78 22.81,65.52 22.34,66.23 22.01,66.90 21.82,67.52 21.79,68.10 21.91,68.63 22.12,69.01" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="29.65,72.51 29.65,72.51" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="14.28,19.30 13.49,20.11 12.55,20.97 11.53,21.85 10.57,22.71 9.77,23.52 9.22,24.26 9.09,24.66" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="19.44,27.36 19.45,27.37 19.67,27.87 19.43,28.52 18.76,29.29 18.19,30.03 17.62,30.77 16.97,31.54 16.26,32.32 15.51,33.12 14.74,33.92 14.00,34.72 13.29,35.50 12.66,36.26 12.13,36.99 11.72,37.68 11.45,38.33 11.34,38.94 11.40,39.49 11.64,39.98 12.04,40.40" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="24.94,43.43 25.54,43.68 26.15,44.06 26.56,44.50 26.79,45.00 26.81,45.56 26.65,46.18 26.30,46.85 25.79,47.58 25.14,48.34 24.19,49.20 23.14,50.09 22.02,51.00 20.88,51.92 19.77,52.82 18.76,53.70 17.92,54.53 17.26,55.29 16.82,56.00 16.62,56.62 16.67,57.18 16.96,57.66 17.48,58.06 17.67,58.15" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="23.64,59.44 23.97,59.49 24.86,59.62" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="30.12,61.54 30.15,61.58 30.31,62.09 30.27,62.67 30.05,63.31 29.66,64.00 29.12,64.73 28.48,65.49 27.77,66.28 27.02,67.07 26.28,67.87 25.57,68.65 24.94,69.41 24.42,70.14 24.03,70.82 23.79,71.46 23.71,72.06 23.80,72.60 24.05,73.09 24.45,73.53 25.00,73.93 25.66,74.30 26.42,74.64" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="16.50,21.06 16.54,21.45 16.25,22.11 15.63,22.86 14.75,23.70 13.70,24.59 12.58,25.50 11.51,26.40 10.60,27.24 10.12,27.80" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="20.51,31.40 20.76,31.51 21.36,31.90 21.79,32.34 22.05,32.83 22.12,33.37 22.02,33.97 21.73,34.63 21.27,35.33 20.67,36.09 19.93,36.88 19.08,37.71 18.17,38.55 17.21,39.41 16.25,40.27 15.33,41.12 14.47,41.95 13.72,42.75 13.14,43.50 12.76,44.18 12.59,44.80 12.62,45.36 12.86,45.85 13.32,46.28 13.83,46.57" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="19.93,47.86 20.80,47.97 21.75,48.08" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="27.90,49.66 28.01,49.74 28.31,50.21 28.34,50.77 28.11,51.41 27.68,52.11 27.06,52.87 26.30,53.67 25.43,54.50 24.49,55.36 23.51,56.22 22.55,57.08 21.64,57.93 20.82,58.75 20.12,59.53 19.58,60.26 19.21,60.94 19.02,61.57 19.04,62.13 19.25,62.63 19.65,63.08 20.22,63.47 20.76,63.73" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="30.74,67.06 30.75,67.07" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="30.09,71.24 30.09,71.24 29.59,71.96 29.05,72.70 28.51,73.43 27.98,74.16" fill="none" stroke="#FF9E2C" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="49.25,42.70 49.19,43.09 49.48,43.75 50.05,44.62 50.77,45.60 51.48,46.58 51.89,47.21" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="45.19,47.16 45.20,47.56 45.31,48.08 45.52,48.67 45.80,49.33 46.14,50.03 46.53,50.75 46.93,51.50 47.32,52.23 47.68,52.95 47.99,53.61 48.22,54.22 48.35,54.76 48.36,55.21 48.25,55.57 48.02,55.83 48.01,55.84" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="38.80,54.26 38.36,54.28 37.95,54.41 37.69,54.65 37.54,54.98 37.50,55.39 37.57,55.88 37.74,56.44 37.99,57.08 38.32,57.76 38.71,58.49 39.14,59.26 39.59,60.03 40.05,60.81 40.48,61.58 40.87,62.32 41.22,63.01 41.48,63.65 41.66,64.23 41.72,64.71 41.65,65.10 41.47,65.40 41.18,65.62 40.78,65.75 40.27,65.82 40.22,65.82" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="36.24,65.24 35.91,65.17 35.69,65.13" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="31.71,64.82 31.46,64.90 31.13,65.09 30.90,65.35 30.75,65.69 30.69,66.08 30.73,66.54 30.82,67.05 30.98,67.61 31.18,68.20 31.41,68.82 31.67,69.45 31.93,70.09 32.18,70.71 32.40,71.32 32.59,71.90 32.72,72.44 32.81,72.94" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="47.24,46.14 47.72,46.82 48.63,47.94 49.57,49.09 49.96,49.82 50.17,50.42 50.30,50.95 50.34,51.42 50.27,51.82 50.10,52.13 49.81,52.35 49.51,52.44" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="41.07,51.23 40.79,51.27 40.43,51.45 40.21,51.72 40.14,52.10 40.20,52.59 40.41,53.18 40.73,53.86 41.15,54.62 41.66,55.44 42.22,56.30 42.78,57.16 43.31,58.00 43.80,58.81 44.11,59.48 44.35,60.10 44.50,60.66 44.56,61.14 44.51,61.54 44.35,61.86 44.07,62.09 43.69,62.24 43.20,62.31 42.90,62.32" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="33.80,60.91 33.76,60.92 33.38,61.08 33.11,61.31 32.94,61.62 32.88,62.01 32.90,62.47 33.00,62.99 33.19,63.57 33.43,64.19 33.72,64.84 34.03,65.52 34.37,66.21 34.69,66.89 35.00,67.57 35.28,68.21 35.51,68.83 35.69,69.39 35.79,69.92 35.82,70.38 35.77,70.78 35.64,71.13 35.43,71.40 35.14,71.62 34.77,71.79 34.40,71.88" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="27.75,72.21 27.75,72.21" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="48.11,44.75 48.22,45.00 48.82,45.90 49.61,46.93 50.41,47.97 51.05,48.89 51.14,49.07" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="43.58,48.74 43.32,48.79 42.96,48.95 42.74,49.22 42.64,49.59 42.68,50.06 42.86,50.63 43.14,51.28 43.53,52.02 43.98,52.79 44.49,53.61 45.00,54.44 45.51,55.26 45.97,56.04 46.34,56.77 46.63,57.41 46.77,57.97 46.79,58.42 46.63,58.74 46.29,58.93 46.04,58.95" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="41.31,58.06 40.94,57.97 40.19,57.80" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="35.73,60.69 36.03,61.31 36.41,62.03 36.81,62.77 37.20,63.51 37.57,64.23 37.91,64.92 38.21,65.58 38.44,66.20 38.60,66.76 38.68,67.26 38.68,67.70 38.59,68.06 38.41,68.37 38.13,68.60 37.77,68.77 37.38,68.87" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="33.69,68.74 33.64,68.74 33.18,68.69" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="29.53,68.87 29.30,68.99 29.02,69.22 28.81,69.49 28.66,69.82 28.58,70.20 28.56,70.62 28.58,71.08 28.64,71.57 28.74,72.08 28.86,72.61 28.99,73.15" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="51.38,49.18 50.82,49.16 49.97,48.96 48.96,48.63 47.86,48.25 46.78,47.87 45.81,47.58 45.04,47.44 44.56,47.52 44.28,47.74 44.07,48.03 43.96,48.38 43.93,48.80 43.95,49.00" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="45.35,52.73 45.53,53.08 45.65,53.31" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="47.07,56.98 47.10,57.34 47.03,57.72 46.86,58.03 46.58,58.27 46.20,58.42 45.70,58.47 45.09,58.45 44.39,58.38 43.64,58.24 42.83,58.08 42.00,57.89 41.14,57.69 40.29,57.49 39.46,57.31 38.68,57.15 37.95,57.04 37.30,56.99 36.72,57.00 36.25,57.08 35.86,57.23 35.59,57.47 35.46,57.80 35.44,58.23 35.50,58.50" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="39.43,66.68 39.45,66.96 39.38,67.34 39.19,67.64 38.88,67.85 38.47,67.98 37.97,68.04 37.37,68.03 36.71,67.97 35.99,67.87 35.24,67.74 34.48,67.61 33.71,67.48 32.97,67.35 32.27,67.27 31.62,67.22 31.04,67.22 30.54,67.28 30.13,67.41 29.80,67.61 29.57,67.87 29.46,68.13" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="30.81,73.63 30.81,73.63" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="52.74,45.32 51.96,45.18 51.10,44.97 50.19,44.73 49.32,44.51 48.54,44.36 47.91,44.33 47.64,44.41" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="50.63,51.19 50.63,51.20 50.45,51.51 50.00,51.62 49.30,51.53 48.66,51.48 48.02,51.44 47.33,51.36 46.61,51.25 45.86,51.13 45.10,51.00 44.35,50.88 43.63,50.77 42.95,50.70 42.34,50.68 41.79,50.70 41.33,50.79 40.95,50.96 40.68,51.20 40.52,51.51 40.47,51.89" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="44.37,60.22 44.50,60.65 44.55,61.13 44.49,61.52 44.32,61.84 44.03,62.06 43.63,62.20 43.12,62.25 42.51,62.23 41.83,62.15 40.96,61.94 40.03,61.68 39.07,61.40 38.08,61.10 37.13,60.81 36.22,60.58 35.42,60.41 34.73,60.33 34.16,60.34 33.74,60.46 33.46,60.70 33.33,61.04 33.34,61.48 33.37,61.62" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="35.24,65.43 35.35,65.63 35.66,66.18" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="36.89,69.83 36.88,69.86 36.67,70.14 36.35,70.33 35.91,70.45 35.37,70.48 34.75,70.45 34.07,70.38 33.34,70.27 32.60,70.15 31.85,70.03 31.13,69.92 30.45,69.85 29.84,69.83 29.31,69.87 28.86,69.97 28.50,70.15 28.25,70.40 28.10,70.72 28.03,71.11 28.05,71.56 28.14,72.07 28.28,72.62" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="52.75,47.21 52.55,47.38 52.08,47.46 51.41,47.39 50.58,47.21 49.65,46.96 48.69,46.67 47.75,46.40 46.91,46.21 46.40,46.15" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="48.92,53.29 48.97,53.47 49.02,53.95 48.97,54.35 48.82,54.68 48.56,54.92 48.19,55.08 47.71,55.17 47.14,55.17 46.48,55.11 45.74,54.99 44.93,54.83 44.09,54.63 43.22,54.41 42.34,54.19 41.49,54.00 40.68,53.82 39.93,53.70 39.28,53.65 38.75,53.69 38.35,53.83 38.06,54.05 37.90,54.37 37.87,54.79 37.93,55.18" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="39.85,59.06 40.17,59.59 40.51,60.16" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="42.30,64.18 42.31,64.28 42.18,64.62 41.90,64.84 41.46,64.95 40.90,64.97 40.22,64.90 39.47,64.78 38.65,64.60 37.79,64.39 36.91,64.16 36.03,63.95 35.19,63.75 34.40,63.60 33.68,63.50 33.06,63.47 32.53,63.51 32.12,63.64 31.82,63.86 31.65,64.16 31.58,64.55 31.61,65.01 31.70,65.41" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="34.20,72.22 34.19,72.23" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="31.68,73.41 31.68,73.41 31.08,73.40 30.45,73.37 29.83,73.34 29.21,73.31" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="50.75,42.70 50.81,43.09 50.52,43.75 49.95,44.62 49.23,45.60 48.52,46.58 48.11,47.21" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="54.81,47.16 54.80,47.56 54.69,48.08 54.48,48.67 54.20,49.33 53.86,50.03 53.47,50.75 53.07,51.50 52.68,52.23 52.32,52.95 52.01,53.61 51.78,54.22 51.65,54.76 51.64,55.21 51.75,55.57 51.98,55.83 51.99,55.84" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="61.20,54.26 61.64,54.28 62.05,54.41 62.31,54.65 62.46,54.98 62.50,55.39 62.43,55.88 62.26,56.44 62.01,57.08 61.68,57.76 61.29,58.49 60.86,59.26 60.41,60.03 59.95,60.81 59.52,61.58 59.13,62.32 58.78,63.01 58.52,63.65 58.34,64.23 58.28,64.71 58.35,65.10 58.53,65.40 58.82,65.62 59.22,65.75 59.73,65.82 59.78,65.82" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="63.76,65.24 64.09,65.17 64.31,65.13" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="68.29,64.82 68.54,64.90 68.87,65.09 69.10,65.35 69.25,65.69 69.31,66.08 69.27,66.54 69.18,67.05 69.02,67.61 68.82,68.20 68.59,68.82 68.33,69.45 68.07,70.09 67.82,70.71 67.60,71.32 67.41,71.90 67.28,72.44 67.19,72.94" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="52.76,46.14 52.28,46.82 51.37,47.94 50.43,49.09 50.04,49.82 49.83,50.42 49.70,50.95 49.66,51.42 49.73,51.82 49.90,52.13 50.19,52.35 50.49,52.44" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="58.93,51.23 59.21,51.27 59.57,51.45 59.79,51.72 59.86,52.10 59.80,52.59 59.59,53.18 59.27,53.86 58.85,54.62 58.34,55.44 57.78,56.30 57.22,57.16 56.69,58.00 56.20,58.81 55.89,59.48 55.65,60.10 55.50,60.66 55.44,61.14 55.49,61.54 55.65,61.86 55.93,62.09 56.31,62.24 56.80,62.31 57.10,62.32" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="66.20,60.91 66.24,60.92 66.62,61.08 66.89,61.31 67.06,61.62 67.12,62.01 67.10,62.47 67.00,62.99 66.81,63.57 66.57,64.19 66.28,64.84 65.97,65.52 65.63,66.21 65.31,66.89 65.00,67.57 64.72,68.21 64.49,68.83 64.31,69.39 64.21,69.92 64.18,70.38 64.23,70.78 64.36,71.13 64.57,71.40 64.86,71.62 65.23,71.79 65.60,71.88" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="72.25,72.21 72.25,72.21" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="51.89,44.75 51.78,45.00 51.18,45.90 50.39,46.93 49.59,47.97 48.95,48.89 48.86,49.07" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="56.42,48.74 56.68,48.79 57.04,48.95 57.26,49.22 57.36,49.59 57.32,50.06 57.14,50.63 56.86,51.28 56.47,52.02 56.02,52.79 55.51,53.61 55.00,54.44 54.49,55.26 54.03,56.04 53.66,56.77 53.37,57.41 53.23,57.97 53.21,58.42 53.37,58.74 53.71,58.93 53.96,58.95" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="58.69,58.06 59.06,57.97 59.81,57.80" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="64.27,60.69 63.97,61.31 63.59,62.03 63.19,62.77 62.80,63.51 62.43,64.23 62.09,64.92 61.79,65.58 61.56,66.20 61.40,66.76 61.32,67.26 61.32,67.70 61.41,68.06 61.59,68.37 61.87,68.60 62.23,68.77 62.62,68.87" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="66.31,68.74 66.36,68.74 66.82,68.69" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="70.47,68.87 70.70,68.99 70.98,69.22 71.19,69.49 71.34,69.82 71.42,70.20 71.44,70.62 71.42,71.08 71.36,71.57 71.26,72.08 71.14,72.61 71.01,73.15" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="48.62,49.18 49.18,49.16 50.03,48.96 51.04,48.63 52.14,48.25 53.22,47.87 54.19,47.58 54.96,47.44 55.44,47.52 55.72,47.74 55.93,48.03 56.04,48.38 56.07,48.80 56.05,49.00" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="54.65,52.73 54.47,53.08 54.35,53.31" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="52.93,56.98 52.90,57.34 52.97,57.72 53.14,58.03 53.42,58.27 53.80,58.42 54.30,58.47 54.91,58.45 55.61,58.38 56.36,58.24 57.17,58.08 58.00,57.89 58.86,57.69 59.71,57.49 60.54,57.31 61.32,57.15 62.05,57.04 62.70,56.99 63.28,57.00 63.75,57.08 64.14,57.23 64.41,57.47 64.54,57.80 64.56,58.23 64.50,58.50" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="60.57,66.68 60.55,66.96 60.62,67.34 60.81,67.64 61.12,67.85 61.53,67.98 62.03,68.04 62.63,68.03 63.29,67.97 64.01,67.87 64.76,67.74 65.52,67.61 66.29,67.48 67.03,67.35 67.73,67.27 68.38,67.22 68.96,67.22 69.46,67.28 69.87,67.41 70.20,67.61 70.43,67.87 70.54,68.13" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="69.19,73.63 69.19,73.63" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="47.26,45.32 48.04,45.18 48.90,44.97 49.81,44.73 50.68,44.51 51.46,44.36 52.09,44.33 52.36,44.41" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="49.37,51.19 49.37,51.20 49.55,51.51 50.00,51.62 50.70,51.53 51.34,51.48 51.98,51.44 52.67,51.36 53.39,51.25 54.14,51.13 54.90,51.00 55.65,50.88 56.37,50.77 57.05,50.70 57.66,50.68 58.21,50.70 58.67,50.79 59.05,50.96 59.32,51.20 59.48,51.51 59.53,51.89" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="55.63,60.22 55.50,60.65 55.45,61.13 55.51,61.52 55.68,61.84 55.97,62.06 56.37,62.20 56.88,62.25 57.49,62.23 58.17,62.15 59.04,61.94 59.97,61.68 60.93,61.40 61.92,61.10 62.87,60.81 63.78,60.58 64.58,60.41 65.27,60.33 65.84,60.34 66.26,60.46 66.54,60.70 66.67,61.04 66.66,61.48 66.63,61.62" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="64.76,65.43 64.65,65.63 64.34,66.18" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="63.11,69.83 63.12,69.86 63.33,70.14 63.65,70.33 64.09,70.45 64.63,70.48 65.25,70.45 65.93,70.38 66.66,70.27 67.40,70.15 68.15,70.03 68.87,69.92 69.55,69.85 70.16,69.83 70.69,69.87 71.14,69.97 71.50,70.15 71.75,70.40 71.90,70.72 71.97,71.11 71.95,71.56 71.86,72.07 71.72,72.62" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="47.25,47.21 47.45,47.38 47.92,47.46 48.59,47.39 49.42,47.21 50.35,46.96 51.31,46.67 52.25,46.40 53.09,46.21 53.60,46.15" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="51.08,53.29 51.03,53.47 50.98,53.95 51.03,54.35 51.18,54.68 51.44,54.92 51.81,55.08 52.29,55.17 52.86,55.17 53.52,55.11 54.26,54.99 55.07,54.83 55.91,54.63 56.78,54.41 57.66,54.19 58.51,54.00 59.32,53.82 60.07,53.70 60.72,53.65 61.25,53.69 61.65,53.83 61.94,54.05 62.10,54.37 62.13,54.79 62.07,55.18" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="60.15,59.06 59.83,59.59 59.49,60.16" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="57.70,64.18 57.69,64.28 57.82,64.62 58.10,64.84 58.54,64.95 59.10,64.97 59.78,64.90 60.53,64.78 61.35,64.60 62.21,64.39 63.09,64.16 63.97,63.95 64.81,63.75 65.60,63.60 66.32,63.50 66.94,63.47 67.47,63.51 67.88,63.64 68.18,63.86 68.35,64.16 68.42,64.55 68.39,65.01 68.30,65.41" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="65.80,72.22 65.81,72.23" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="68.32,73.41 68.32,73.41 68.92,73.40 69.55,73.37 70.17,73.34 70.79,73.31" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="91.60,21.10 91.19,21.54 90.19,21.81 88.72,21.92 86.99,21.96 85.27,22.01 84.19,22.10" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="89.68,30.22 89.20,30.59 88.50,30.94 87.64,31.24 86.64,31.51 85.55,31.74 84.39,31.95 83.20,32.16 82.02,32.36 80.89,32.59 79.86,32.84 78.96,33.13 78.23,33.48 77.69,33.88 77.36,34.35 77.25,34.88 77.25,34.90" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="86.54,44.65 86.87,45.20 87.05,45.83 86.99,46.37 86.72,46.86 86.27,47.29 85.64,47.66 84.85,47.99 83.90,48.27 82.83,48.51 81.66,48.72 80.42,48.91 79.15,49.09 77.87,49.26 76.62,49.45 75.44,49.66 74.35,49.89 73.39,50.16 72.57,50.48 71.95,50.86 71.55,51.31 71.35,51.81 71.33,52.38 71.50,52.99 71.83,53.66 71.88,53.73" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="75.77,58.04 76.12,58.38 76.34,58.61" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="79.92,63.17 80.04,63.55 80.08,64.13 79.96,64.66 79.69,65.15 79.27,65.59 78.71,65.98 78.03,66.34 77.25,66.67 76.40,66.98 75.49,67.27 74.54,67.55 73.59,67.83 72.66,68.11 71.77,68.41 70.94,68.72 70.19,69.06 69.54,69.43" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="89.20,26.77 88.02,26.82 85.98,26.76 83.88,26.69 82.70,26.90 81.84,27.20 81.11,27.54 80.52,27.93 80.11,28.38 79.89,28.88 79.87,29.44 80.00,29.89" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="88.24,39.05 88.42,39.43 88.51,40.03 88.37,40.55 87.98,41.00 87.36,41.38 86.51,41.68 85.45,41.93 84.22,42.12 82.84,42.27 81.39,42.39 79.93,42.51 78.51,42.65 77.18,42.81 76.14,43.06 75.22,43.34 74.44,43.68 73.84,44.06 73.41,44.50 73.17,44.99 73.12,45.54 73.25,46.15 73.56,46.81 73.80,47.18" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="82.81,56.97 82.83,57.03 82.95,57.63 82.90,58.18 82.67,58.68 82.27,59.12 81.71,59.52 81.02,59.88 80.19,60.19 79.27,60.48 78.27,60.74 77.23,60.99 76.15,61.23 75.09,61.47 74.05,61.72 73.07,61.99 72.16,62.28 71.36,62.60 70.66,62.96 70.10,63.35 69.67,63.79 69.37,64.27 69.22,64.79 69.20,65.35 69.30,65.95 69.49,66.49" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="74.48,74.91 74.48,74.91" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="90.13,24.41 89.75,24.51 88.21,24.61 86.37,24.61 84.50,24.61 82.91,24.69 82.63,24.75" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="89.12,33.66 89.28,34.02 89.38,34.61 89.25,35.14 88.90,35.60 88.31,35.99 87.50,36.31 86.51,36.57 85.34,36.79 84.06,36.96 82.70,37.11 81.31,37.26 79.94,37.41 78.66,37.58 77.50,37.80 76.52,38.06 75.75,38.40 75.22,38.80 74.97,39.29 75.02,39.88 75.19,40.21" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="80.07,45.15 80.47,45.52 81.28,46.27" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="81.51,54.41 80.53,54.62 79.38,54.83 78.20,55.04 77.02,55.25 75.88,55.47 74.79,55.70 73.78,55.96 72.87,56.25 72.08,56.58 71.43,56.95 70.92,57.36 70.57,57.82 70.36,58.32 70.31,58.88 70.40,59.47 70.60,60.04" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="73.74,64.43 73.78,64.48 74.21,65.00" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="76.95,69.61 77.00,70.00 76.96,70.56 76.81,71.08 76.54,71.56 76.16,72.02 75.69,72.44 75.13,72.84 74.51,73.22 73.83,73.58 73.12,73.93 72.39,74.27" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="82.31,24.56 82.78,25.22 83.70,26.07 84.90,27.00 86.24,27.98 87.56,28.95 88.69,29.86 89.47,30.67 89.77,31.33 89.73,31.88 89.56,32.40 89.24,32.87 88.78,33.29 88.53,33.45" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="83.03,35.23 82.48,35.34 82.11,35.42" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="76.66,37.11 76.23,37.41 75.83,37.85 75.61,38.35 75.56,38.91 75.69,39.52 76.03,40.18 76.55,40.91 77.20,41.68 77.97,42.48 78.81,43.31 79.71,44.15 80.64,45.00 81.56,45.85 82.44,46.69 83.25,47.50 83.97,48.29 84.56,49.04 85.02,49.75 85.31,50.40 85.44,51.01 85.38,51.56 85.10,52.04 84.61,52.46 84.26,52.64" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="71.50,55.50 71.16,55.73 70.77,56.18 70.58,56.69 70.58,57.26 70.76,57.88 71.10,58.55 71.59,59.27 72.20,60.02 72.89,60.80 73.65,61.60 74.43,62.40 75.20,63.21 75.94,64.00 76.61,64.78 77.19,65.52 77.66,66.23 77.99,66.90 78.18,67.52 78.21,68.10 78.09,68.63 77.88,69.01" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="70.35,72.51 70.35,72.51" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="85.72,19.30 86.51,20.11 87.45,20.97 88.47,21.85 89.43,22.71 90.23,23.52 90.78,24.26 90.91,24.66" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="80.56,27.36 80.55,27.37 80.33,27.87 80.57,28.52 81.24,29.29 81.81,30.03 82.38,30.77 83.03,31.54 83.74,32.32 84.49,33.12 85.26,33.92 86.00,34.72 86.71,35.50 87.34,36.26 87.87,36.99 88.28,37.68 88.55,38.33 88.66,38.94 88.60,39.49 88.36,39.98 87.96,40.40" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="75.06,43.43 74.46,43.68 73.85,44.06 73.44,44.50 73.21,45.00 73.19,45.56 73.35,46.18 73.70,46.85 74.21,47.58 74.86,48.34 75.81,49.20 76.86,50.09 77.98,51.00 79.12,51.92 80.23,52.82 81.24,53.70 82.08,54.53 82.74,55.29 83.18,56.00 83.38,56.62 83.33,57.18 83.04,57.66 82.52,58.06 82.33,58.15" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="76.36,59.44 76.03,59.49 75.14,59.62" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="69.88,61.54 69.85,61.58 69.69,62.09 69.73,62.67 69.95,63.31 70.34,64.00 70.88,64.73 71.52,65.49 72.23,66.28 72.98,67.07 73.72,67.87 74.43,68.65 75.06,69.41 75.58,70.14 75.97,70.82 76.21,71.46 76.29,72.06 76.20,72.60 75.95,73.09 75.55,73.53 75.00,73.93 74.34,74.30 73.58,74.64" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="83.50,21.06 83.46,21.45 83.75,22.11 84.37,22.86 85.25,23.70 86.30,24.59 87.42,25.50 88.49,26.40 89.40,27.24 89.88,27.80" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="79.49,31.40 79.24,31.51 78.64,31.90 78.21,32.34 77.95,32.83 77.88,33.37 77.98,33.97 78.27,34.63 78.73,35.33 79.33,36.09 80.07,36.88 80.92,37.71 81.83,38.55 82.79,39.41 83.75,40.27 84.67,41.12 85.53,41.95 86.28,42.75 86.86,43.50 87.24,44.18 87.41,44.80 87.38,45.36 87.14,45.85 86.68,46.28 86.17,46.57" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="80.07,47.86 79.20,47.97 78.25,48.08" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="72.10,49.66 71.99,49.74 71.69,50.21 71.66,50.77 71.89,51.41 72.32,52.11 72.94,52.87 73.70,53.67 74.57,54.50 75.51,55.36 76.49,56.22 77.45,57.08 78.36,57.93 79.18,58.75 79.88,59.53 80.42,60.26 80.79,60.94 80.98,61.57 80.96,62.13 80.75,62.63 80.35,63.08 79.78,63.47 79.24,63.73" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="69.26,67.06 69.25,67.07" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline class="logo-line" points="69.91,71.24 69.91,71.24 70.41,71.96 70.95,72.70 71.49,73.43 72.02,74.16" fill="none" stroke="#F5F7F9" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round"/>
+              </g>
+              </svg>
             </div>
-
-            <!-- Boot log 阶段栈（可选，替代状态文本） -->
-            <div v-if="bootLogs.length" class="splash-bootlog wb-mono mt-5 flex flex-col gap-1.5" role="log">
-              <div
-                v-for="(log, i) in bootLogs"
-                :key="i"
-                class="bootlog-row"
-                :data-delay="i + 1"
-              >
-                <span class="mark" aria-hidden="true">✓</span>
-                <span class="text">{{ log }}</span>
-              </div>
-            </div>
-
-            <!-- 状态文本（无 boot log 时显示） -->
-            <p
-              v-if="statusText && !bootLogs.length"
-              class="splash-rise splash-rise-3 mt-4 text-sm text-[var(--splash-text-dim)]"
-            >
-              {{ statusText }}
-            </p>
-
-            <!-- 段式进度指示（可选） -->
-            <div v-if="showSegments" class="splash-progress-track mt-6 flex gap-1 items-center justify-center" aria-hidden="true">
-              <span
-                v-for="i in segmentCount"
-                :key="i"
-                class="seg"
-                :class="{ done: i <= progressSegments }"
-                :data-delay="i"
-              ></span>
-            </div>
-
-            <!-- 进度条（可选，传统方式） -->
-            <template v-if="showProgress">
-              <div class="mt-6 h-1 w-48 overflow-hidden rounded-full bg-[var(--splash-track)]">
-                <div
-                  class="splash-progress h-full rounded-full bg-[var(--splash-text)] opacity-80"
-                  :style="{ width: `${progress}%` }"
-                ></div>
-              </div>
-              <p class="wb-mono mt-2 text-[calc(11px*var(--ui-scale))] text-[var(--splash-text-dim)]">
-                {{ progress }}%
-              </p>
-            </template>
-          </div>
-        </div>
-
-        <!-- 底部系统状态微信息 -->
-        <div class="splash-footer wb-mono" aria-hidden="true">
-          <span class="text">{{ footerText }}</span>
+          </slot>
         </div>
       </div>
     </Transition>
@@ -116,95 +168,192 @@
 
 <script setup lang="ts">
 /**
- * SplashLoading - 桌面端启动画面（终端 Boot 风格）
+ * SplashLoading - 桌面端启动画面（真源镂空线框 · 按源码描边动画）
+ *
+ * 品牌 logo 取高档真源——应用图标 src-tauri/icons/icon.svg 的镂空线框形态
+ * （四根圆柱同一套螺旋线框，124 条 polyline：左侧琥珀、其余三根暖白）。白色
+ * 三根由左侧琥珀母版按各圆柱姿态变换 / 镜像生成，四根线条语言一致、无杂乱描摹。
+ * 视觉上零文字、零进度条，加载进度的唯一表达 = 绘画动画：
+ * 每条 .logo-line 在 onMounted 时用 getTotalLength() 量出实际周长，先写
+ * stroke-dasharray / stroke-dashoffset（offset = ±周长，整段隐藏），随后由
+ * requestAnimationFrame 按 W 笔顺逐帧推进 offset：线框就沿 points 从进入端
+ * （首点或末点）描向另一端。不用 CSS transition / animation / keyframes——
+ * WebKitGTK 对 var() 参与动画属性的解析不稳定，会让开屏退化成静态图。
+ *
+ * 四根圆柱按 icon.svg 源码顺序从左到右；组内沿圆柱轴向按 W 的自然笔顺推进
+ * （左柱上→下、左中下→上、右中上→下、右柱下→上），每条线框从进入端描向
+ * 另一端。排期按「累计路径长度」而不是固定间隔：单笔恒定笔速、首尾相接，
+ * 任意时刻已画长度与时间成正比，从「一笔未画」的空白一路画到右肩，末笔恰好
+ * 落在 SPLASH_DRAW_TOTAL_MS（与 ShellHost 收起开屏的时刻严格对齐）。
+ *
+ * 全部画完 = 加载完成（ShellHost 收起）。
+ *
+ * 降级：
+ * - SVG getTotalLength 不可用（happy-dom / 旧渲染器）→ 直接落 complete 完成态，
+ *   全部线框同时显示（视觉 = 真源 logo 完整态），不卡在「画到一半」。
+ * - prefers-reduced-motion → 同样直接落 complete，跳过绘画过程。
  *
  * 背景随主题切换：浅色为纸面墨色（跟随当前色板 token），深色沿用固定品牌暖白渐变
  * （镜像 src-tauri/icons/icon.svg）。主题 class 由 App.vue onMounted 的 setupTheme()
- * 落定，早于开屏最短 900ms 展示窗口；Vue 挂载前的静态首屏只能跟随系统深浅色，
- * 见 index.html 内的 prefers-color-scheme 分支。
- * 内容为品牌 glyph + 打字机启动行 + boot log 阶段栈 + 可选进度条。
- * 通过 visible 控制显隐；宿主在初始化完成后置 false 触发淡出。
+ * 落定，早于开屏展示窗口；Vue 挂载前的静态首屏只能跟随系统深浅色，
+ * 见 index.html 内的 prefers-color-scheme 分支与 public/splash.css。
  */
-import { computed, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getVersion } from '@tauri-apps/api/app'
+import { SPLASH_DRAW_TOTAL_MS, splashDrawingPlan } from './splashTiming'
 
 interface Props {
   visible: boolean
-  /** 自定义状态文案；缺省回退到 i18n 的 desktop.splash.status */
-  status?: string
-  showProgress?: boolean
-  progress?: number
-  /** Boot log 阶段文案列表；提供时显示 boot log 阶段栈替代状态文本 */
-  bootLogs?: string[]
-  /** 是否显示段式进度指示 */
-  showSegments?: boolean
-  /** 段式进度指示总段数 */
-  segmentCount?: number
-  /** 已完成段数 */
-  progressSegments?: number
-  /** 底部 footer 文案；缺省时组件用运行时应用版本号动态生成（wasmnest v<version> · WASM app runtime） */
-  footerText?: string
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  status: '',
-  showProgress: false,
-  progress: 0,
-  bootLogs: () => [],
-  showSegments: false,
-  segmentCount: 4,
-  progressSegments: 0,
-  // 空串触发组件内部动态生成（运行时应用版本号），见下方 footerText computed
-  footerText: '',
-})
+defineProps<Props>()
 
 const { t } = useI18n()
 
-const statusText = computed(() => props.status || t('desktop.splash.status'))
+const logoWrap = ref<HTMLElement | null>(null)
+let drawRaf = 0
 
-// 版本号动态化：从 Tauri 运行时取应用版本（单一真源 tauri.conf.json / package.json），
-// 禁止在组件里 hard code 版本号。非 Tauri 环境（vitest、浏览器预览）拿不到版本，
-// 降级为不带版本号的 footer，避免启动期报错。
-const appVersion = ref('')
-onMounted(async () => {
-  try {
-    appVersion.value = await getVersion()
-  } catch {
-    // 非 Tauri 运行环境：保留空版本号，footer 自动降级
-  }
+onBeforeUnmount(() => {
+  if (drawRaf) cancelAnimationFrame(drawRaf)
 })
 
-const footerText = computed(() =>
-  props.footerText ||
-  (appVersion.value ? `wasmnest v${appVersion.value} · WASM app runtime` : 'wasmnest · WASM app runtime'),
-)
+// 绘画动画编排（时序真源见 splashTiming.ts）：
+//   底板先淡入（此时 W 一笔未画）；四根圆柱按 icon.svg 源码顺序从左到右，
+//   组内沿圆柱轴向按 W 笔顺推进（左柱上→下、左中下→上、右中上→下、右柱下→上），
+//   每条线框从进入端描向另一端（dashoffset ±周长 → 0）。单笔恒定笔速、首尾相接，
+//   末笔恰好在总时长处落定。
+
+/** 从 SVG points 属性取点（与 icon.svg 同源格式） */
+function parsePoints(raw: string | null): Array<[number, number]> {
+  if (!raw) return []
+  return raw
+    .split(' ')
+    .map((pair) => pair.split(',').map(Number))
+    .filter((pt) => pt.length === 2 && pt.every(Number.isFinite))
+    .map((pt) => [pt[0], pt[1]] as [number, number])
+}
+
+onMounted(() => {
+  if (!logoWrap.value) return
+
+  const prefersReduced =
+    typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true
+
+  const svg = logoWrap.value.querySelector('svg')
+  if (!svg || prefersReduced) {
+    logoWrap.value.classList.add('complete')
+    return
+  }
+
+  const lines = Array.from(svg.querySelectorAll<SVGGeometryElement>('.logo-line'))
+  if (lines.length === 0) {
+    logoWrap.value.classList.add('complete')
+    return
+  }
+
+  // 先量完所有周长与点列，再按 W 笔顺统一排期。DOM 顺序 = icon.svg 的
+  // polyline 源码顺序（四根圆柱从左到右）；组内先后由 splashDrawingPlan 重排。
+  const geometry: Array<{ el: SVGGeometryElement; points: Array<[number, number]>; length: number }> =
+    []
+  try {
+    for (const el of lines) {
+      geometry.push({
+        el,
+        points: parsePoints(el.getAttribute('points')),
+        length: el.getTotalLength(),
+      })
+    }
+  } catch {
+    // getTotalLength 不可用（非 SVG 渲染环境）：放弃测量，走完成态
+    logoWrap.value.classList.add('complete')
+    return
+  }
+
+  const plan = splashDrawingPlan(geometry.map(({ points, length }) => ({ points, length })))
+
+  // 初始隐藏态：每条线写自己的 dash 长度与 ±周长 offset，opacity 0 兜住零长点
+  // 与首帧。之后由 rAF 逐帧推进 offset，不依赖 CSS transition / animation /
+  // keyframes——WebKitGTK 对 var() 参与动画属性的解析不稳定，会让开屏退化成
+  // 「一出现就是完整 W」的静态图。
+  const drawing = plan.map((timing) => {
+    const { el, length } = geometry[timing.index]
+    el.style.strokeDasharray = `${length}px`
+    el.style.strokeDashoffset = `${timing.direction * length}px`
+    el.style.opacity = '0'
+    return {
+      el,
+      length,
+      direction: timing.direction,
+      start: timing.delay,
+      duration: timing.duration,
+      done: false,
+    }
+  })
+
+  logoWrap.value.classList.add('drawing')
+  const startedAt = performance.now()
+
+  const finish = () => {
+    for (const line of drawing) {
+      line.el.style.strokeDashoffset = '0px'
+      line.el.style.opacity = '1'
+      line.done = true
+    }
+  }
+
+  const frame = (now: number) => {
+    const elapsed = Math.max(0, now - startedAt)
+    let pending = false
+
+    for (const line of drawing) {
+      if (line.done) continue
+      if (elapsed < line.start) {
+        pending = true
+        continue
+      }
+
+      const progress = line.duration > 0 ? Math.min(1, (elapsed - line.start) / line.duration) : 1
+      if (progress >= 1) {
+        line.el.style.strokeDashoffset = '0px'
+        line.el.style.opacity = '1'
+        line.done = true
+      } else {
+        // 0 → 1 的进度对应 offset 从 ±周长回到 0：符号决定从首点还是末点描出
+        line.el.style.strokeDashoffset = `${line.direction * line.length * (1 - progress)}px`
+        line.el.style.opacity = '1'
+        pending = true
+      }
+    }
+
+    if (pending && elapsed < SPLASH_DRAW_TOTAL_MS) {
+      drawRaf = requestAnimationFrame(frame)
+    } else {
+      finish()
+    }
+  }
+
+  drawRaf = requestAnimationFrame(frame)
+})
 </script>
 
 <style scoped>
 /* ==================== 开屏色板 ==================== */
 /* 开屏专属变量，仅在本组件内定义一次，避免污染全局 token 命名空间。
-   两套主题的色值全部收敛在这两个变量块，下方规则一律引用变量，不再出现字面色值。
+   两套主题的色值全部收敛在这两个变量块，下方规则一律引用变量，不再出现字面色值
+   （SVG 内的品牌固定色走 attribute，不在此列，见组件头注与 SplashLoadingTheme 锁）。
 
    浅色（默认，即 :root 非 dark）：纸面底 + 墨色字，端点直接取当前色板 token，
    故 warm/cool/forest/… 色板切换时开屏一起跟随。环境高光用卡片白而非暗色光晕，
    霓虹类发光（text-shadow / drop-shadow）整体置 transparent——纸面上低透明度墨色
    既脏又糊，层次改由边框与投影承担（同移动端 SplashScreen 的浅色处理思路）。
-   文字透明度按小字号 AA 反推：墨色 78% 在 #f5f4f0 上约 7:1、65% 约 4.8:1，
-   比深色的 55% / 35% 各提一档（深色底 #15130f 上同样透明度对比度天然更高）。
 
    深色（html.dark）：固定品牌渐变常量，镜像 src-tauri/icons/icon.svg 两端色值
    （品牌 ink #16181C → #08090B），不随色板切换（暖白文字 #ece8dc = 深色 --text-primary）。
-   注：祖先选择器必须裸写 `html.dark`，不能用 `:global(html.dark) .splash-root`——
+   注：祖先选择器必须裸写 `html.dark`，不能用 :global(html.dark) .splash-root——
    scoped 编译器会丢掉 :global() 之后的后代选择器（移动端 SplashScreen 踩过，整页罩层）。 */
 .splash-root {
   --splash-bg-from: var(--bg-page);
   --splash-bg-to: var(--bg-sidebar);
-  --splash-text: var(--text-primary);
-  --splash-text-dim: color-mix(in srgb, var(--text-primary) 78%, transparent);
-  --splash-text-faint: color-mix(in srgb, var(--text-primary) 65%, transparent);
-  --splash-track: color-mix(in srgb, var(--text-primary) 16%, transparent);
-  --splash-success: color-mix(in srgb, var(--color-success) 65%, black);
   --splash-bloom: var(--color-primary-contrast);
   --splash-ambient: var(--text-primary);
   --splash-vignette: color-mix(in srgb, var(--text-primary) 8%, transparent);
@@ -220,15 +369,10 @@ const footerText = computed(() =>
 html.dark .splash-root {
   --splash-bg-from: #16181c;
   --splash-bg-to: #08090b;
-  --splash-text: #ece8dc;
-  --splash-text-dim: rgba(236, 232, 220, 0.55);
-  --splash-text-faint: rgba(236, 232, 220, 0.35);
-  --splash-track: rgba(236, 232, 220, 0.12);
-  --splash-success: rgba(140, 212, 138, 0.92);
   --splash-bloom: #ece8dc;
   --splash-ambient: #ece8dc;
   --splash-vignette: rgba(0, 0, 0, 0.6);
-  /* 深色下的发光色：暖白霓虹，呼应终端荧光（深色文字阴影的唯一来源） */
+  /* 深色下的发光色：暖白霓虹，呼应终端荧光（logo 辉光的唯一来源） */
   --splash-glow: rgba(236, 232, 220, 0.22);
 }
 
@@ -254,10 +398,13 @@ html.dark .splash-root {
   50%      { opacity: 0.55; transform: translate(-50%, -50%) scale(1.03); }
 }
 
-/* 底板由内联 SVG 自绘（品牌 ink 渐变 + 编织 W），因此这里只保留定位与外围氛围层；
-   浅/深主题下标志都是同一个（品牌固定色，不跟主题反色）。 */
+/* Logo 由内联 SVG 自绘（底板渐变 + 真源线框），这里只保留尺寸与氛围层。
+   开屏品牌位跟随窗口短边缩放：最小窗口 800×600 下 144px 仍留边，常见 1300×900
+   下约 192px——比壳内小尺寸位（工具栏实心态降级档）明显更大。 */
 .splash-logo {
   position: relative;
+  width: clamp(144px, 24vmin, 200px);
+  height: clamp(144px, 24vmin, 200px);
 }
 
 /* Logo 外围氛围层：深色读作外发光，浅色下 ambient 为墨色 → 柔影 */
@@ -276,174 +423,32 @@ html.dark .splash-root {
   filter: drop-shadow(0 0 6px var(--splash-glow));
 }
 
-/* ==================== 入场编排 ==================== */
+/* ==================== 绘画动画 ==================== */
 
-@keyframes splash-rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.splash-rise {
-  animation: splash-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.splash-rise-1 {
-  animation-delay: 0.08s;
-}
-
-.splash-rise-2 {
-  animation-delay: 0.14s;
-}
-
-.splash-rise-3 {
-  animation-delay: 0.22s;
-}
-
-/* ==================== 打字机 ==================== */
-
-@keyframes splash-typing {
-  from {
-    width: 0;
-  }
-  to {
-    width: 8ch;
-  }
-}
-
-/* "wasmnest" 共 8ch，等宽字体下按字符步进打出 */
-.splash-typed {
-  display: inline-block;
-  overflow: hidden;
-  white-space: nowrap;
-  vertical-align: bottom;
-  animation: splash-typing 0.6s steps(8, end) 0.45s both;
-  text-shadow: 0 0 10px var(--splash-glow);
-}
-
-/* 提示符 $ 微微发光（浅色下 glow 为 transparent，即不做霓虹处理） */
-.splash-root .text-\[var\(--splash-text-faint\)\] {
-  text-shadow: 0 0 6px var(--splash-glow);
-}
-
-/* ==================== Boot log 阶段栈 ==================== */
-
-.splash-bootlog {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-/* Boot log 行：grid 三列（1fr | auto | 1fr），text 居中列严格居中于屏幕中线；
-   mark 在左列右对齐（靠 text 左侧），作为左装饰不推走 text */
-.bootlog-row {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  font-size: calc(11px * var(--ui-scale));
-  color: var(--splash-text-dim);
-  line-height: 1.4;
+/* 底板先淡入（画布就位）；线框由 JS 测完周长后写入初始隐藏态，再由 rAF 逐帧描出；
+   .complete 是测量失败 / reduced-motion 时的兜底，直接显示完整 logo */
+.logo-base {
   opacity: 0;
-  transform: translateY(4px);
-  animation: bootlog-appear 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: base-in 180ms ease-out 0ms both;
 }
 
-.bootlog-row .mark {
-  grid-column: 1;
-  justify-self: end;
-  display: inline-flex;
-  align-items: center;
-  font-weight: 500;
-  color: var(--splash-success);
-  text-shadow: 0 0 6px color-mix(in srgb, var(--splash-success) 44%, transparent);
-  padding-right: 0.55rem;
-}
-
-.bootlog-row .text {
-  grid-column: 2;
-  color: var(--splash-text-dim);
-  text-align: center;
-}
-
-/* Boot log 分四阶段，形成节奏 */
-.bootlog-row[data-delay='1'] { animation-delay: 0.65s; }
-.bootlog-row[data-delay='2'] { animation-delay: 0.95s; }
-.bootlog-row[data-delay='3'] { animation-delay: 1.25s; }
-.bootlog-row[data-delay='4'] { animation-delay: 1.55s; }
-
-@keyframes bootlog-appear {
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ==================== 段式进度指示 ==================== */
-
-.splash-progress-track {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  justify-content: center;
-}
-
-.splash-progress-track .seg {
-  width: 22px;
-  height: 2px;
-  background: var(--splash-track);
-  border-radius: 1px;
-  opacity: 0;
-  animation: seg-appear 0.35s ease-out both, seg-fill 0.35s ease-out both;
-}
-
-.splash-progress-track .seg.done {
-  background: var(--splash-text);
-  box-shadow: 0 0 4px color-mix(in srgb, var(--splash-text) 35%, transparent);
-}
-
-/* 段与 boot log 同步入场 */
-.splash-progress-track .seg[data-delay='1'] { animation-delay: 0.65s, 0.65s; }
-.splash-progress-track .seg[data-delay='2'] { animation-delay: 0.95s, 0.95s; }
-.splash-progress-track .seg[data-delay='3'] { animation-delay: 1.25s, 1.25s; }
-.splash-progress-track .seg[data-delay='4'] { animation-delay: 1.55s, 1.55s; }
-
-@keyframes seg-appear {
-  from { opacity: 0; }
+@keyframes base-in {
   to { opacity: 1; }
 }
 
-@keyframes seg-fill {
-  from { transform: scaleX(0); transform-origin: left; }
-  to { transform: scaleX(1); transform-origin: left; }
-}
-
-/* ==================== Footer ==================== */
-
-.splash-footer {
-  position: absolute;
-  bottom: 1.5rem;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  color: var(--splash-text-faint);
-  letter-spacing: 0.05em;
+/* 线框默认隐藏：JS 量完周长后写入 inline 起点（±周长），再由 rAF 逐帧推进
+   stroke-dashoffset。opacity: 0 是双保险——既兜住 JS 挂载前那一帧，也保证
+   零长度点在轮到自己之前不露出。 */
+.logo-line {
+  stroke-dasharray: 1000px;
+  stroke-dashoffset: 1000px;
   opacity: 0;
-  animation: bootlog-appear 0.4s ease-out 1.75s both;
 }
 
-.splash-footer .text {
-  text-align: center;
-}
-
-/* ==================== 进度条 ==================== */
-
-.splash-progress {
-  transition: width 300ms ease;
+.splash-content.complete .logo-line {
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+  opacity: 1;
 }
 
 /* ==================== 淡出 ==================== */
@@ -458,27 +463,26 @@ html.dark .splash-root {
 }
 
 /* ==================== 减弱动态效果 ==================== */
-/* 收敛入场与循环动画到首帧终态；光标类停闪并保持可见 */
+/* reduced-motion：JS 直接落 complete（组件头注），这里兜底关掉所有动画；
+   呼吸辉光停掉并保持静态 */
 @media (prefers-reduced-motion: reduce) {
-  .splash-rise,
-  .splash-typed,
-  .bootlog-row,
-  .splash-progress-track .seg,
-  .splash-footer {
-    animation-duration: 0.01ms !important;
-    animation-delay: 0ms !important;
-    animation-iteration-count: 1 !important;
-  }
-
-  .splash-halo {
+  .splash-halo,
+  .logo-base {
     animation: none !important;
   }
 
-  .bootlog-row,
-  .splash-progress-track .seg,
-  .splash-footer {
+  .splash-halo {
+    opacity: 0.5;
+  }
+
+  .logo-base {
     opacity: 1;
-    transform: none;
+  }
+
+  .logo-line {
+    animation: none !important;
+    stroke-dashoffset: 0;
+    opacity: 1;
   }
 }
 </style>

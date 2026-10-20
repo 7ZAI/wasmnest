@@ -33,8 +33,8 @@
 //!
 //! 依赖面零新增：`tauri` / `serde_json` / `wasmnest-server-base` 都是宿主 `[dependencies]` 已有项。
 
-use wasmnest_server_base::error::AppError;
 use serde_json::json;
+use wasmnest_server_base::error::AppError;
 
 /// 模拟整条「命令 Err → IPC rejection 响应体」：信封形状必须直达前端。
 #[test]

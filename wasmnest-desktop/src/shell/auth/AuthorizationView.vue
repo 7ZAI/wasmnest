@@ -5,13 +5,7 @@
          嵌入系统页模式（embedded=true）：系统页的标题与页头由 ShellCardScreen 提供，
          这里退化成一条**内容级操作行**（应用数 + 刷新），不再画第二条带边框的状态栏——
          此前两者叠加，权限页在系统页里长出了第二次页头，「返回」还把用户甩进应用设置。 -->
-    <div
-      :class="
-        embedded
-          ? 'flex items-center gap-3 mb-3'
-          : 'wb-toolbar'
-      "
-    >
+    <div :class="embedded ? 'flex items-center gap-3 mb-3' : 'wb-toolbar'">
       <div v-if="!embedded" class="flex items-center gap-2.5 min-w-0">
         <button
           class="h-7 w-7 rounded-[6px] border border-[var(--border)] flex items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
@@ -79,7 +73,9 @@
           </p>
         </div>
 
-        <!-- 应用列表：始终允许（免询问自动放行）置顶 -->
+        <!-- 应用列表：始终允许（免询问自动放行）置顶。
+             密集安全数据面保持实心（surface ladder）：记录 / 档位 / 状态徽标优先逐字可读，
+             不接玻璃表面，也不让壁纸色相混进状态色。 -->
         <div
           v-else
           class="bg-[var(--bg-card)] border border-[var(--border)] rounded-[10px] divide-y divide-[var(--border)] overflow-hidden"
@@ -87,7 +83,13 @@
           <!-- data-testid：渲染契约测试的行锚点（本页唯一的测试钩子） -->
           <div v-for="app in sortedApps" :key="app.pluginId" data-testid="auth-app-row">
             <div class="flex items-center gap-3 px-4 py-3">
-              <PluginIcon :name="app.name" :plugin-id="app.pluginId" />
+              <ShellAppTile
+                :icon="appIconOf(app.pluginId).icon"
+                :plugin-id="app.pluginId"
+                :icon-file="appIconOf(app.pluginId).iconFile"
+                :tone="appIconOf(app.pluginId).tone"
+                :size="40"
+              />
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
                   <span
@@ -185,10 +187,11 @@
                     :data-tier="tier"
                     :disabled="busyStrategy === strategyKey(app, resource)"
                     :title="$t(`settings.authorization.strategyControl.hint.${tier}`)"
+                    :aria-pressed="tier === strategyOf(app, resource)"
                     class="shrink-0 h-6 px-2 rounded-[6px] border text-[calc(11px*var(--ui-scale))] transition-colors disabled:opacity-50"
                     :class="
                       tier === strategyOf(app, resource)
-                        ? 'border-[var(--color-primary)] bg-[var(--bg-hover)] text-[var(--text-primary)]'
+                        ? 'border-transparent bg-[var(--selection-solid)] text-[var(--selection-solid-ink)]'
                         : 'border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
                     "
                     @click="requestStrategy(app, resource, tier)"
@@ -378,15 +381,11 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/Button.vue'
 import Modal from '@/components/Modal.vue'
-import PluginIcon from '@/components/PluginIcon.vue'
+import ShellAppTile from '@/shell/components/ShellAppTile.vue'
+import { useShellApps } from '@/shell/composables/useShellApps'
 import AuthFirstPartyRow from '@/shell/auth/AuthFirstPartyRow.vue'
 import ShellIcon from '@/shell/components/ShellIcon.vue'
-import {
-  authOverview,
-  authRemoveRecord,
-  authRevoke,
-  authSetStrategy,
-} from '@/utils/appCommands'
+import { authOverview, authRemoveRecord, authRevoke, authSetStrategy } from '@/utils/appCommands'
 import { useToast } from '@/composables/useToast'
 import { showUserError } from '@/utils/userError'
 import {
@@ -436,6 +435,16 @@ const RESOURCE_ICONS: Record<string, string> = {
 
 const router = useRouter()
 const { t } = useI18n()
+// 应用图标与主屏同源（注册表 manifest.icon），避免本页退化成字母头像
+const appsStore = useShellApps()
+function appIconOf(pluginId: string) {
+  const p = appsStore.plugins.value.find((x) => x.id === pluginId)
+  return {
+    icon: p?.icon ?? 'app',
+    iconFile: p?.iconFile,
+    tone: appsStore.tones.value[pluginId] ?? 'system',
+  }
+}
 const toast = useToast()
 
 /** 读模型数据（已按 plugin_id 去重，宿主保证一个应用一条） */

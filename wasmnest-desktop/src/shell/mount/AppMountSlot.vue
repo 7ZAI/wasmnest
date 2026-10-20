@@ -38,7 +38,7 @@ import { useAppMount, type AppMountEnv, type AppMountHandle } from '@/shell/moun
 import { rememberAppRoute } from '@/shell/mount/appSession'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlatform } from '@/composables/usePlatform'
-import { appInvoke, appStorageGet, appStorageSet, appStorageDelete, ensureChannelToken } from '@/utils/appCommands'
+import { appInvoke, appStorageGet, appStorageSet, appStorageDelete, refreshChannelToken } from '@/utils/appCommands'
 import { invoke } from '@/utils/invoke'
 import { logger } from '@/utils/frontendLogger'
 
@@ -65,8 +65,10 @@ let loadSeq = 0
 async function buildEnv(initialRoute: string, appId: string): Promise<AppMountEnv> {
   const settingsStore = useSettingsStore()
   const { platformInfo } = usePlatform()
-  // 插件面令牌（app 未运行 / 未授权时取不到 → 显性报错，不静默降级）
-  await ensureChannelToken(appId)
+  // 插件面令牌（挂载 = 身份重绑点：一律换发，不信任页面内存里的旧缓存——
+  // 插件停用再启用后旧令牌已被宿主回收，复用会让进入应用的第一批命令全被拒）；
+  // app 未运行 / 未授权时取不到 → 显性报错，不静默降级
+  await refreshChannelToken(appId)
   return {
     appId,
     invoke: (command, args) => invoke(command, args ?? {}),

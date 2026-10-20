@@ -6,12 +6,12 @@
 //! 签名并把调用转给引擎实现。拆分前命令壳与引擎同文件，本模块是拆分产物；
 //! 库函数本身不再标注 `#[tauri::command]`。
 
+use std::sync::Arc;
+use tauri::{AppHandle, Manager};
 use wasmnest_server_peer_net::{
     peer_engine_receive::PeerReceiveState, peer_engine_remote::PeerRemoteState,
     peer_engine_transfer::PeerTransferState, PeerCtx, PeerNetState, PeerNodeStatus, TrustedPeerDto,
 };
-use std::sync::Arc;
-use tauri::{AppHandle, Manager};
 
 /// 从 AppHandle 装配 peer-net 操作上下文
 ///

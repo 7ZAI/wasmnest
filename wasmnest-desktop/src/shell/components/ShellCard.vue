@@ -36,6 +36,14 @@ withDefaults(
   border-radius: var(--radius-card);
   padding: 14px 16px;
 }
+/* 壁纸开启时卡片轻透（surface ladder 的「内容面」档）：背后只有壳根壁纸，
+   透出一点色相即可，不加 backdrop-filter——柔和渐变模糊后看不出差异，只多一层合成。
+   无壁纸（.shell-wall 缺席）时保持实心：透出 --bg-page 只会让卡面发灰，没有收益。
+   祖先选择器直接裸写（不用 :global）：scoped 编译器会把属性选择器落在 .shell-card 上；
+   :global() 后面的后代选择器会被丢掉（见 SplashLoading 的踩坑注释）。 */
+.shell-wall .shell-card {
+  background: var(--bg-veil);
+}
 .shell-card-title {
   display: flex;
   align-items: center;

@@ -21,10 +21,10 @@ mod support;
 
 use std::sync::Arc;
 
-use wasmnest_desktop_lib::plugin::lifecycle::{
-    AUTOSTART_KEY_PREFIX, ENABLED_KEY_PREFIX, SYSTEM_PLUGIN_ID, PluginLifecycleManager,
-};
 use support::*;
+use wasmnest_desktop_lib::plugin::lifecycle::{
+    PluginLifecycleManager, AUTOSTART_KEY_PREFIX, ENABLED_KEY_PREFIX, SYSTEM_PLUGIN_ID,
+};
 
 /// 目录名后缀（随包产物；`com.wasmnest.terminal-session` 的实现 id 尾段）
 const TERMINAL_SESSION_ID_SUFFIX: &str = "terminal-session";
@@ -54,7 +54,12 @@ async fn list_loaded_projects_real_bundled_apps() {
     let ids: Vec<&str> = infos.iter().map(|i| i.id.as_str()).collect();
 
     // 随包四应用在册（真实产物目录扫描；缺一个 = 构建/装配断链）
-    for suffix in [TERMINAL_SESSION_ID_SUFFIX, AGENT_HUB_ID_SUFFIX, "ai-chatbox", "file-transfer"] {
+    for suffix in [
+        TERMINAL_SESSION_ID_SUFFIX,
+        AGENT_HUB_ID_SUFFIX,
+        "ai-chatbox",
+        "file-transfer",
+    ] {
         assert!(
             ids.iter().any(|id| id.ends_with(suffix)),
             "随包应用 {suffix} 不在清单: {ids:?}"
@@ -79,10 +84,7 @@ async fn activate_then_deactivate_toggles_running_state() {
         .preauthorize(&agent_hub)
         .await
         .expect("preauthorize (空路径直接放行)");
-    manager
-        .activate_after_preauth(&agent_hub)
-        .await
-        .expect("打开 = 激活");
+    manager.activate_after_preauth(&agent_hub).await.expect("打开 = 激活");
     assert!(manager.is_running(&agent_hub).await, "激活后应运行");
     assert!(manager.is_activated(&agent_hub).await, "严格 Activated");
 
@@ -102,14 +104,8 @@ async fn activate_persists_intent_deactivate_persists_stop() {
     let storage = manager.host().storage();
 
     // 打开（persist=true）→ 持久化意图 = 运行
-    manager
-        .activate_after_preauth(&agent_hub)
-        .await
-        .expect("activate");
-    let map = storage
-        .load_activated_plugins()
-        .await
-        .expect("load activated map");
+    manager.activate_after_preauth(&agent_hub).await.expect("activate");
+    let map = storage.load_activated_plugins().await.expect("load activated map");
     assert!(
         map.get(&agent_hub).copied().unwrap_or(false),
         "激活后持久化意图应为 true（boot 复活）"
@@ -117,10 +113,7 @@ async fn activate_persists_intent_deactivate_persists_stop() {
 
     // 关闭（persist=true）→ 持久化意图 = 停用（boot 不复活 = 停用即持久化停用态）
     manager.deactivate(&agent_hub).await.expect("deactivate");
-    let map = storage
-        .load_activated_plugins()
-        .await
-        .expect("load activated map");
+    let map = storage.load_activated_plugins().await.expect("load activated map");
     assert!(
         !map.get(&agent_hub).copied().unwrap_or(false),
         "停用后持久化意图应为 false（下次 boot 不复活）"
@@ -132,7 +125,10 @@ async fn enabled_pref_roundtrip_and_persisted_in_system_partition() {
     let manager = setup_manager().await;
     let agent_hub = bundled_id(&manager, AGENT_HUB_ID_SUFFIX).await;
 
-    assert!(!manager.is_enabled(&agent_hub).await, "缺省 = 不可用标记不成立（fail-safe）");
+    assert!(
+        !manager.is_enabled(&agent_hub).await,
+        "缺省 = 不可用标记不成立（fail-safe）"
+    );
 
     manager.set_enabled(&agent_hub, true).await.expect("set enabled");
     assert!(manager.is_enabled(&agent_hub).await, "置 true 后生效");
@@ -186,10 +182,7 @@ async fn apply_autostart_is_idempotent_and_activates_marked_apps() {
     assert_eq!(manager.apply_autostart().await, 0, "无偏好不得激活任何应用");
 
     // 给 L3 业务应用标自启 → boot 装配补激活；重复调用幂等
-    manager
-        .set_autostart(&agent_hub, true)
-        .await
-        .expect("set autostart");
+    manager.set_autostart(&agent_hub, true).await.expect("set autostart");
     assert_eq!(manager.apply_autostart().await, 1, "标自启的应用应被补激活");
     assert!(manager.is_running(&agent_hub).await, "自启应用应运行");
     assert_eq!(manager.apply_autostart().await, 0, "已运行再装配 = 幂等零动作");

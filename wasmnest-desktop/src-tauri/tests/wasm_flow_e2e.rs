@@ -20,9 +20,9 @@ mod support;
 
 use std::sync::Arc;
 
-use wasmnest_desktop_lib::wasm_core::manifest::PluginState;
 use serde_json::json;
 use support::*;
+use wasmnest_desktop_lib::wasm_core::manifest::PluginState;
 
 /// 两模型对照列（mutex = 现状回退窗口；event-loop = 新模型）
 const MODELS: [CallModel; 2] = [CallModel::Mutex, CallModel::EventLoop];

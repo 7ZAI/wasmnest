@@ -121,11 +121,10 @@ fn install(host: Arc<dyn HostPorts>) {
 }
 
 /// 端口装配器静态（与白名单条目 / 强制引用行同处；内核装配链遍历本自报表）
-pub static PEER_PORTS_INSTALLER: wasmnest_host_kit::DomainPortsInstaller =
-    wasmnest_host_kit::DomainPortsInstaller {
-        name: wasmnest_server_peer_net::plugin_binding::MODULE_NAME,
-        install,
-    };
+pub static PEER_PORTS_INSTALLER: wasmnest_host_kit::DomainPortsInstaller = wasmnest_host_kit::DomainPortsInstaller {
+    name: wasmnest_server_peer_net::plugin_binding::MODULE_NAME,
+    install,
+};
 
 wasmnest_host_kit::submit_domain_ports_installer!(PEER_PORTS_INSTALLER);
 

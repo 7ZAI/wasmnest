@@ -1,9 +1,5 @@
 <template>
   <div class="flex flex-col gap-2.5">
-    <!-- 生命周期口径说明：说清「运行中」与「启用」是两件事（启用 = 偏好，不驱动启动），
-         否则「运行中但启用未勾选」会被读成自相矛盾 -->
-    <p class="note hint">{{ t('shell.apps.managedByHost') }}</p>
-
     <!-- 已安装应用清单（注册表投影：真实运行态 / 来源 / 启用 / 自启；动作走真实命令面） -->
     <ShellCard
       v-for="app in appsStore.plugins.value"

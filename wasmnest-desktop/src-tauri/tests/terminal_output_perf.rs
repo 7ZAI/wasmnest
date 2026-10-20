@@ -32,9 +32,9 @@ use std::time::Instant;
 
 use tokio::sync::{Mutex, RwLock};
 
-use wasmnest_desktop_lib::wasm_core::host_api::context::PermissionScope;
-use wasmnest_desktop_lib::system::constants::PLUGIN_PTY_RING_MAX_BYTES;
 use support::*;
+use wasmnest_desktop_lib::system::constants::PLUGIN_PTY_RING_MAX_BYTES;
+use wasmnest_desktop_lib::wasm_core::host_api::context::PermissionScope;
 
 use wasmnest_pty_engine::PtyRing;
 

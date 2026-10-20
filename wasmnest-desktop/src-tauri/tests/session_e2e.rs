@@ -24,8 +24,7 @@ use support::{sdk_fixture_artifact_bytes, session_apis};
 use wasmnest_desktop_lib::wasm_core::manager::runtime::LoadedWasmPlugin;
 use wasmnest_desktop_lib::wasm_core::runtime_util::block_on_async;
 use wasmnest_desktop_lib::wasm_core::test_support::{
-    lock_auth_center_desk, plugin_db_root, session_plugin_db_guard, AuthCenterCaptureHandler,
-    TestInstanceDispatcher,
+    lock_auth_center_desk, plugin_db_root, session_plugin_db_guard, AuthCenterCaptureHandler, TestInstanceDispatcher,
 };
 
 /// 经插件命令面向**配置真源**（插件私有库）播种一条配置 → 写入后的配置
@@ -2316,9 +2315,16 @@ fn test_session_create_with_spec_closed_loop() {
         // 不再有 start=false 双态：host-pty 无 create-without-spawn，创建即启动真实进程
         //（bash，cwd=/tmp 存在）；回执即会话 id，无需轮询宿主落库。
         let sid1 = session_id_of(
-            wasmnest_desktop_lib::utils::session_gateway::start(&host_ctx, &seeded["id"].as_str().unwrap(), None, None, true, None)
-                .await
-                .expect("plugin active → 必须编排成功"),
+            wasmnest_desktop_lib::utils::session_gateway::start(
+                &host_ctx,
+                &seeded["id"].as_str().unwrap(),
+                None,
+                None,
+                true,
+                None,
+            )
+            .await
+            .expect("plugin active → 必须编排成功"),
             "创建 sid1",
         );
         assert_eq!(sid1.len(), 36, "插件自产 UUID; got: {sid1}");
@@ -2344,9 +2350,16 @@ fn test_session_create_with_spec_closed_loop() {
 
         // ==================== 4. 命名唯一化：同配置第二次 → 原名(1) ====================
         let sid2 = session_id_of(
-            wasmnest_desktop_lib::utils::session_gateway::start(&host_ctx, &seeded["id"].as_str().unwrap(), None, None, true, None)
-                .await
-                .expect("plugin active → 必须编排成功"),
+            wasmnest_desktop_lib::utils::session_gateway::start(
+                &host_ctx,
+                &seeded["id"].as_str().unwrap(),
+                None,
+                None,
+                true,
+                None,
+            )
+            .await
+            .expect("plugin active → 必须编排成功"),
             "创建 sid2",
         );
         let v2 = wasmnest_desktop_lib::utils::session_gateway::view(&host_ctx, &sid2)
@@ -2506,10 +2519,16 @@ fn test_session_create_with_spec_closed_loop() {
         // 本步注销的是**互调面** → 断言第二道门；第一道门由 host 侧闭环用例
         // （`host/tests/system_component_test.rs`，走 `registry_gate()` 串行）覆盖。
         host_ctx.api_registry().unregister(SESSION_ID);
-        let err =
-            wasmnest_desktop_lib::utils::session_gateway::start(&host_ctx, &seeded["id"].as_str().unwrap(), None, None, true, None)
-                .await
-                .expect_err("插件不可用 → 必须显性报错（host-business-decarriage 收尾：降级轨已删）");
+        let err = wasmnest_desktop_lib::utils::session_gateway::start(
+            &host_ctx,
+            &seeded["id"].as_str().unwrap(),
+            None,
+            None,
+            true,
+            None,
+        )
+        .await
+        .expect_err("插件不可用 → 必须显性报错（host-business-decarriage 收尾：降级轨已删）");
         let text = err.to_string();
         assert!(
             text.contains("not declared by any activated plugin") && text.contains("session-create"),
@@ -2614,9 +2633,16 @@ fn test_session_actions_closed_loop() {
         // working_dir /tmp 必须存在（真实 spawn）；无正统端归属 = 裁决态 1 起点
         let seeded = seed_config_in_plugin_store(&mut *session.lock().await, "动作会话", "/tmp", "bash").await;
         let sid = session_id_of(
-            wasmnest_desktop_lib::utils::session_gateway::start(&host_ctx, &seeded["id"].as_str().unwrap(), None, None, true, None)
-                .await
-                .expect("plugin active → 必须编排成功"),
+            wasmnest_desktop_lib::utils::session_gateway::start(
+                &host_ctx,
+                &seeded["id"].as_str().unwrap(),
+                None,
+                None,
+                true,
+                None,
+            )
+            .await
+            .expect("plugin active → 必须编排成功"),
             "创建",
         );
         let v = wasmnest_desktop_lib::utils::session_gateway::view(&host_ctx, &sid)
@@ -2683,9 +2709,10 @@ fn test_session_actions_closed_loop() {
             }),
             "多端争用 → 需覆盖确认（回执当前正统端）"
         );
-        let still_owner = wasmnest_desktop_lib::utils::session_gateway::resize(&host_ctx, &sid, 90, 30, desktop(), false)
-            .await
-            .expect("original owner resize");
+        let still_owner =
+            wasmnest_desktop_lib::utils::session_gateway::resize(&host_ctx, &sid, 90, 30, desktop(), false)
+                .await
+                .expect("original owner resize");
         assert_eq!(
             still_owner["status"],
             serde_json::json!("applied"),
@@ -2739,9 +2766,10 @@ fn test_session_actions_closed_loop() {
             "重启保持 configId"
         );
         // 正统端回到启动端（Desktop）：重启后 Desktop resize 直通
-        let owner_again = wasmnest_desktop_lib::utils::session_gateway::resize(&host_ctx, &sid, 95, 35, desktop(), false)
-            .await
-            .expect("resize after restart");
+        let owner_again =
+            wasmnest_desktop_lib::utils::session_gateway::resize(&host_ctx, &sid, 95, 35, desktop(), false)
+                .await
+                .expect("resize after restart");
         assert_eq!(
             owner_again["status"],
             serde_json::json!("applied"),
@@ -2872,9 +2900,16 @@ fn test_session_annotate_and_devices_closed_loop() {
         let seeded = seed_config_in_plugin_store(&mut *session.lock().await, "注解会话", "/tmp", "bash").await;
 
         let sid = session_id_of(
-            wasmnest_desktop_lib::utils::session_gateway::start(&host_ctx, &seeded["id"].as_str().unwrap(), None, None, true, None)
-                .await
-                .expect("plugin active → 必须编排成功"),
+            wasmnest_desktop_lib::utils::session_gateway::start(
+                &host_ctx,
+                &seeded["id"].as_str().unwrap(),
+                None,
+                None,
+                true,
+                None,
+            )
+            .await
+            .expect("plugin active → 必须编排成功"),
             "创建",
         );
         // P1-b 创建同步完成：回执即已登记（无需轮询宿主落库）
@@ -3026,9 +3061,7 @@ fn test_filetransfer_consumes_session_center_closed_loop() {
     // 端事实（平台 = desktop）：file-transfer 共享产物在**激活期**经
     // `host-platform.platform()` 探测端值——未注入则返回契约外 "unknown"（激活失败）。
     // 生产同款实现在 `PluginHost::new` 装配时注入（本用例自建运行时，需自行注入）。
-    host_ctx.set_host_facts(Arc::new(
-        wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts,
-    ));
+    host_ctx.set_host_facts(Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts));
     let ft_component = wasm_runtime
         .compile_component(&std::fs::read(&ft_path).expect("read file-transfer artifact"))
         .expect("compile file-transfer artifact");
@@ -3412,9 +3445,16 @@ fn test_session_output_ring_fetch_closed_loop() {
         )
         .await;
         let sid = session_id_of(
-            wasmnest_desktop_lib::utils::session_gateway::start(&host_ctx, &seeded["id"].as_str().unwrap(), None, None, true, None)
-                .await
-                .expect("plugin active → 必须编排成功"),
+            wasmnest_desktop_lib::utils::session_gateway::start(
+                &host_ctx,
+                &seeded["id"].as_str().unwrap(),
+                None,
+                None,
+                true,
+                None,
+            )
+            .await
+            .expect("plugin active → 必须编排成功"),
             "创建",
         );
         // P1-b 创建同步完成：回执即已登记并已启动（无需轮询 / start_existing_session）
@@ -3598,9 +3638,16 @@ fn test_session_input_via_gateway_closed_loop() {
         // ==================== 1. 真实 bash 会话（嵌套交互 shell，可接收输入） ====================
         let seeded = seed_config_in_plugin_store(&mut *session.lock().await, "输入会话", "/tmp", "bash").await;
         let sid = session_id_of(
-            wasmnest_desktop_lib::utils::session_gateway::start(&host_ctx, &seeded["id"].as_str().unwrap(), None, None, true, None)
-                .await
-                .expect("plugin active → 创建必须成功"),
+            wasmnest_desktop_lib::utils::session_gateway::start(
+                &host_ctx,
+                &seeded["id"].as_str().unwrap(),
+                None,
+                None,
+                true,
+                None,
+            )
+            .await
+            .expect("plugin active → 创建必须成功"),
             "创建",
         );
         assert_eq!(

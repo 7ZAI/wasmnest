@@ -13,14 +13,14 @@ mod support;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use wasmnest_plugin_api::host::{pty_event_topic, PTY_EXIT};
 use tokio::sync::{Mutex, RwLock};
+use wasmnest_plugin_api::host::{pty_event_topic, PTY_EXIT};
 
 use wasmnest_desktop_lib::wasm_core::host_api::context::PermissionScope;
 // 宿主环容量上限真源：用常量而不是字面量，上限调整时本用例的「超限拒绝」语义
 // 仍成立（2026-10-15 4 MiB → 10 MiB 时曾因字面量静默失效）
-use wasmnest_desktop_lib::system::constants::PLUGIN_PTY_RING_MAX_BYTES;
 use support::*;
+use wasmnest_desktop_lib::system::constants::PLUGIN_PTY_RING_MAX_BYTES;
 /// 端到端（最高 seam）：WIT 契约 → 宿主实现 → 组件接线 → 权限两域 → SDK → 真 PTY 输出
 ///
 /// 覆盖票 02 主干：spawn 真实命令拿句柄 → `ring-fetch` 拉到输出字节 → 二次按
@@ -47,7 +47,8 @@ fn test_pty_spawn_ring_fetch_roundtrip() {
         // B 只授数据域：跨插件负向断言必须先过权限门才落到属主仲裁；
         // 同时它没有 pty:spawn，正好端到端验证两域独立
         ctx_b
-            .permission().grant_permissions(PLUGIN_B, &["storage".to_string(), "pty:io".to_string()]);
+            .permission()
+            .grant_permissions(PLUGIN_B, &["storage".to_string(), "pty:io".to_string()]);
 
         let component_a = runtime_a
             .compile_component(&build_pty_test_component())
@@ -453,8 +454,8 @@ fn test_pty_exit_event_and_purge_roundtrip() {
             tokio::task::spawn_blocking(move || {
                 wasmnest_pty_engine::plugin_binding::purge_for_plugin_with_ports(&ports, PLUGIN_B)
             })
-                .await
-                .expect("peer purge 任务不得 panic")
+            .await
+            .expect("peer purge 任务不得 panic")
         };
         assert_eq!(purged_peer, 1, "B 的回收同样只清自己那一条");
     }));
@@ -596,7 +597,8 @@ fn test_pty_isolation_and_contract_matrix_roundtrip() {
             &["storage".to_string(), "pty:spawn".to_string(), "pty:io".to_string()],
         );
         ctx_b
-            .permission().grant_permissions(PLUGIN_B, &["storage".to_string(), "pty:io".to_string()]);
+            .permission()
+            .grant_permissions(PLUGIN_B, &["storage".to_string(), "pty:io".to_string()]);
         let plugin_a = pty_activate_fixture(&runtime_a, &ctx_a, PLUGIN_A).await;
         let plugin_b = pty_activate_fixture(&runtime_b, &ctx_b, PLUGIN_B).await;
 
@@ -778,8 +780,8 @@ fn test_pty_isolation_and_contract_matrix_roundtrip() {
         let purged = tokio::task::spawn_blocking(move || {
             wasmnest_pty_engine::plugin_binding::purge_for_plugin_with_ports(&ports, PLUGIN_A)
         })
-                .await
-                .expect("purge 任务不得 panic");
+        .await
+        .expect("purge 任务不得 panic");
         assert_eq!(purged, 1, "收尾回收应只剩 A 的那条常驻 PTY");
     }));
 }

@@ -21,6 +21,8 @@
 //!   经 `submit_unit_executor!` 自报注册——内核装配点（`manager/host.rs` /
 //!   `test_support.rs`）遍历收集，内核不点名本域。
 
+use std::sync::Arc;
+use uuid::Uuid;
 use wasmnest_host_kit::ports::downcast_host;
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
 use wasmnest_plugin_api::permission::PERMISSION_PROCESS;
@@ -29,8 +31,6 @@ use wasmnest_wasm_core::host_api::context::{PermissionScope, ProcessScope, Servi
 use wasmnest_wasm_core::host_api::unit_executor::UnitExecutor;
 use wasmnest_wasm_core::runtime_util::block_on_async;
 use wasmnest_wasm_core::system::error_boundary::spawn_with_error_boundary;
-use std::sync::Arc;
-use uuid::Uuid;
 
 use crate::plugin::bindings::wasmnest;
 

@@ -101,6 +101,14 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  /**
+   * 恢复初始设置：整表回传默认值（`saveSettings` 的合并会被默认值的两个小节
+   * 全量覆盖——network / ui 都传完整默认对象，故等价于重置）。
+   */
+  async function resetSettings() {
+    await saveSettings(structuredClone(defaultSettings))
+  }
+
   /** 当前 store 状态是否与最近一次持久化一致（避免保存回写触发重复保存） */
   function isPersisted(current: Settings): boolean {
     return lastSavedSnapshot !== null && JSON.stringify(current) === lastSavedSnapshot
@@ -123,6 +131,7 @@ export const useSettingsStore = defineStore('settings', () => {
     settings,
     loadSettings,
     saveSettings,
+    resetSettings,
     isPersisted,
   }
 })

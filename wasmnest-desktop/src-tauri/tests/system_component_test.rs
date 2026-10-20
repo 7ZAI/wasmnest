@@ -15,9 +15,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use serde_json::json;
 use wasmnest_desktop_lib::wasm_core::manager::host::PluginHost;
 use wasmnest_desktop_lib::wasm_core::manifest::PluginState;
-use serde_json::json;
 
 /// 实例化系统组件 fixture 并注入宿主（kind=System，探测断言含 host-storage）
 /// 装配闭环：系统组件注册能力 + 应用插件经 Linker 路由消费，
@@ -204,11 +204,16 @@ async fn test_server_auth_policy_closed_loop() {
 
     // ============ 激活会话中心 → 验签 + 策略取中心（注册表） ============
     // token 只能从中心签出（v33）：走生产 `auth-grant` / `jwt` / `issue`
-    let valid_token =
-        wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(&TEST_KEY, "device-1", Some("Pixel 9"), Some("fp-abc"));
+    let valid_token = wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(
+        &TEST_KEY,
+        "device-1",
+        Some("Pixel 9"),
+        Some("fp-abc"),
+    );
 
     // 私有库无配对记录 → 放行（无信任锚点，仅凭验签；搬迁前语义）
-    let decision = bridge::enforce_connection_policy(host.as_ref(), &valid_token).expect("私有库无记录 → 放行（中心验签通过）");
+    let decision =
+        bridge::enforce_connection_policy(host.as_ref(), &valid_token).expect("私有库无记录 → 放行（中心验签通过）");
     assert_eq!(
         decision.device_id, "device-1",
         "放行时必须交回连接身份（ADR 0033：宿主据此建立连接/转发 caller 上下文）"
@@ -271,8 +276,12 @@ async fn test_server_auth_policy_closed_loop() {
     );
 
     // 未撤销记录的其他设备 token → 放行（未命中从宽，搬迁前语义）
-    let other_token =
-        wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(&TEST_KEY, "device-2", Some("Phone 2"), Some("fp-xyz"));
+    let other_token = wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(
+        &TEST_KEY,
+        "device-2",
+        Some("Phone 2"),
+        Some("fp-xyz"),
+    );
     ensure_center();
     assert!(
         bridge::enforce_connection_policy(host.as_ref(), &other_token).is_ok(),
@@ -379,8 +388,12 @@ async fn test_auth_center_multi_candidate_registration_lock() {
     // 验签方只能是 terminal-session；若旧逻辑选中 agent-hub 的默认拒绝实现，
     // 它既没有这把密钥也验不过 → 裁决必错，与本用例要锁的「注册表说了算」同向
     const TEST_KEY: [u8; 32] = [0x5a; 32];
-    let token =
-        wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(&TEST_KEY, "device-t", Some("Phone"), Some("fp-t"));
+    let token = wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(
+        &TEST_KEY,
+        "device-t",
+        Some("Phone"),
+        Some("fp-t"),
+    );
     // 私有库无撤销记录 → 放行（若旧逻辑选中 agent-hub 的默认拒绝，这里会是 Err）
     // 失败信息带裁决原文：三类拒因（no_center / unavailable / policy）排障路径完全不同，
     // 只报「assert is_ok」会把「注册表被并发清台」与「guest 调用超时」混成一个症状
@@ -673,7 +686,20 @@ async fn test_boot_activates_system_components_before_app_plugins() {
 
     // 用户插件目录（dev 合入的第 3 参）：本用例无用户安装插件，指向空临时目录
     let user_plugins_dir = tmp_dir.path().join("user-plugins");
-    let host = PluginHost::new(db, &plugins_dir, &user_plugins_dir, None, None, Vec::new(), wasmnest_wasm_core::manager::runtime::AbiPolicy { form: Some(wasmnest_plugin_api::form::FORM_COMPONENT) }, std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts), None).await;
+    let host = PluginHost::new(
+        db,
+        &plugins_dir,
+        &user_plugins_dir,
+        None,
+        None,
+        Vec::new(),
+        wasmnest_wasm_core::manager::runtime::AbiPolicy {
+            form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
+        },
+        std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
+        None,
+    )
+    .await;
 
     // 终态：两者均 Activated（应用插件的依赖检查在系统组件装配之后执行，
     // 激活成功即顺序成立的语义断言）
@@ -784,7 +810,20 @@ async fn setup_three_layer_host(tmp_dir: &tempfile::TempDir, l2_manifest_extra: 
         .await
         .expect("seed persisted activation state (L3 only)");
 
-    let host = PluginHost::new(db, &plugins_dir, &user_plugins_dir, None, None, Vec::new(), wasmnest_wasm_core::manager::runtime::AbiPolicy { form: Some(wasmnest_plugin_api::form::FORM_COMPONENT) }, std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts), None).await;
+    let host = PluginHost::new(
+        db,
+        &plugins_dir,
+        &user_plugins_dir,
+        None,
+        None,
+        Vec::new(),
+        wasmnest_wasm_core::manager::runtime::AbiPolicy {
+            form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
+        },
+        std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
+        None,
+    )
+    .await;
     host
 }
 

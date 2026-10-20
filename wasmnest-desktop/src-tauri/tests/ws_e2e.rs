@@ -127,8 +127,7 @@ fn test_ws_client_outbound_roundtrip() {
 
         // ==================== 加载 fixture 并接线 dispatcher ====================
         // 单测不走 manifest 授权路径：显式授予（storage 由 SDK 默认授予）
-        host_ctx
-            .grant_permissions(PLUGIN_ID, &["storage".to_string(), "ws:client".to_string()]);
+        host_ctx.grant_permissions(PLUGIN_ID, &["storage".to_string(), "ws:client".to_string()]);
         let component = wasm_runtime
             .compile_component(&sdk_fixture_artifact_bytes("ws"))
             .expect("compile ws fixture component");
@@ -339,8 +338,7 @@ fn test_ws_endpoint_server_domain_roundtrip() {
             (handle, tokio::spawn(server), port)
         };
 
-        host_ctx
-            .grant_permissions(PLUGIN_ID, &["storage".to_string(), "ws:server".to_string()]);
+        host_ctx.grant_permissions(PLUGIN_ID, &["storage".to_string(), "ws:server".to_string()]);
         let component = wasm_runtime
             .compile_component(&sdk_fixture_artifact_bytes("ws"))
             .expect("compile ws fixture component");
@@ -1039,9 +1037,9 @@ fn test_session_control_endpoint_direct_roundtrip() {
     if positive_auth_needs_dedicated_binary("test_session_control_endpoint_direct_roundtrip") {
         return;
     }
-    use wasmnest_server_websocket::endpoint::EndpointAuth;
     use futures_util::SinkExt;
     use tokio_tungstenite::tungstenite::Message;
+    use wasmnest_server_websocket::endpoint::EndpointAuth;
 
     // `setup_wasm_runtime` 内部自建 runtime 并 block_on（建库/建上下文），
     // 必须在 `rt.block_on` **之外**调用：嵌套 block_on 会 panic
@@ -1147,7 +1145,9 @@ fn test_session_control_endpoint_direct_roundtrip() {
             Arc::new(wasmnest_desktop_lib::wasm_core::bus::HostBusPort::new(
                 host_ctx.message_bus.clone(),
                 // 帧投递窄端口：必须与本总线同源（票 02 批次 03 的注入缝）
-                Arc::new(wasmnest_desktop_lib::plugin::ws::HostWsPorts::from_bus(host_ctx.message_bus.clone())),
+                Arc::new(wasmnest_desktop_lib::plugin::ws::HostWsPorts::from_bus(
+                    host_ctx.message_bus.clone(),
+                )),
             )),
         )
         .expect("register declared session/control endpoint");
@@ -1402,9 +1402,9 @@ fn test_terminal_stream_endpoint_closed_loop() {
     if positive_auth_needs_dedicated_binary("test_terminal_stream_endpoint_closed_loop") {
         return;
     }
-    use wasmnest_server_websocket::endpoint::EndpointAuth;
     use futures_util::SinkExt;
     use tokio_tungstenite::tungstenite::Message;
+    use wasmnest_server_websocket::endpoint::EndpointAuth;
 
     let (wasm_runtime, host_ctx) = setup_wasm_runtime();
     let _ws_guard = lock_ws_fixture_e2e();
@@ -1505,7 +1505,9 @@ fn test_terminal_stream_endpoint_closed_loop() {
             Arc::new(wasmnest_desktop_lib::wasm_core::bus::HostBusPort::new(
                 host_ctx.message_bus.clone(),
                 // 帧投递窄端口：必须与本总线同源（票 02 批次 03 的注入缝）
-                Arc::new(wasmnest_desktop_lib::plugin::ws::HostWsPorts::from_bus(host_ctx.message_bus.clone())),
+                Arc::new(wasmnest_desktop_lib::plugin::ws::HostWsPorts::from_bus(
+                    host_ctx.message_bus.clone(),
+                )),
             )),
         )
         .expect("register declared terminal endpoint");
@@ -1720,10 +1722,10 @@ fn test_ws_device_events_and_auth_records_closed_loop() {
     if positive_auth_needs_dedicated_binary("test_ws_device_events_and_auth_records_closed_loop") {
         return;
     }
-    use wasmnest_desktop_lib::wasm_core::intercall::call_api;
-    use wasmnest_server_websocket::endpoint::EndpointAuth;
     use futures_util::SinkExt;
     use tokio_tungstenite::tungstenite::Message;
+    use wasmnest_desktop_lib::wasm_core::intercall::call_api;
+    use wasmnest_server_websocket::endpoint::EndpointAuth;
 
     let (wasm_runtime, host_ctx) = setup_wasm_runtime();
     let _ws_guard = lock_ws_fixture_e2e();
@@ -1826,7 +1828,9 @@ fn test_ws_device_events_and_auth_records_closed_loop() {
             Arc::new(wasmnest_desktop_lib::wasm_core::bus::HostBusPort::new(
                 host_ctx.message_bus.clone(),
                 // 帧投递窄端口：必须与本总线同源（票 02 批次 03 的注入缝）
-                Arc::new(wasmnest_desktop_lib::plugin::ws::HostWsPorts::from_bus(host_ctx.message_bus.clone())),
+                Arc::new(wasmnest_desktop_lib::plugin::ws::HostWsPorts::from_bus(
+                    host_ctx.message_bus.clone(),
+                )),
             )),
         )
         .expect("register declared session/control endpoint");

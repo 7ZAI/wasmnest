@@ -156,7 +156,8 @@ fn lib_dir() -> PathBuf {
         .parent()
         .and_then(Path::parent)
         .expect("wasmnest-desktop 的上级应是平台仓根")
-        .join("..").join("wasmnest-lib")
+        .join("..")
+        .join("wasmnest-lib")
 }
 
 /// 治理面推导所枚举的根目录（**两个**都要：只扫一个 ⇒ 另一半覆盖面静默归零）
@@ -557,10 +558,7 @@ fn governed_crates_have_no_crate_level_integration_test_surfaces() {
     }
     // 反向自检：例外条目不得悬空（删掉文件却留条目 = 新违规被静默放行）
     for (rel, reason) in CRATE_TEST_DIR_EXCEPTIONS {
-        assert!(
-            !reason.trim().is_empty(),
-            "crate 根测试目录例外 {rel} 必须写明理由"
-        );
+        assert!(!reason.trim().is_empty(), "crate 根测试目录例外 {rel} 必须写明理由");
         assert!(
             lib_dir().join(rel).is_file(),
             "crate 根测试目录例外已悬空：{rel} 不存在——核实后删除条目"

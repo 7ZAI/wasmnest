@@ -161,11 +161,7 @@ const L2_CONSUMER_ALLOWLIST: &[&str] = &[
 /// 本锁读 lib 真源钉导出面）；`invoke_auth_method`（WIT 原语实现链）并入
 /// wasm-core `host_api/auth_center.rs`——它是机制面（host-auth 原语），导出变化
 /// 由 lib 调用方编译期依赖天然锁定，不再需要本锁钉它。
-const BRIDGE_PUBLIC_SURFACE: &[&str] = &[
-    "SESSION_PLUGIN_ID",
-    "enforce_connection_policy",
-    "session_active",
-];
+const BRIDGE_PUBLIC_SURFACE: &[&str] = &["SESSION_PLUGIN_ID", "enforce_connection_policy", "session_active"];
 
 /// 宿主源码的「纯代码」视图：剥掉行注释与块注释，跳过 `mod X;` 声明行
 ///

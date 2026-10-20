@@ -29,10 +29,9 @@ use tokio::sync::{Mutex, RwLock};
 // wasm-core re-export 改为**本模块自持**（夹具产物住平台仓 `target/fixtures`，
 // 能力仓不再读平台目录）。
 pub use wasmnest_desktop_lib::wasm_core::test_support::{
-    aot_cache_key, capture, host_owner_cleanup_skipped, instance_call_model, instance_shutdown,
-    owner_queue_cap, plugin_raw_store, runtime_engine, setup_wasm_runtime_with_setup,
-    spawn_test_owner, OwnerFailureSink, OwnerStatsSnapshot, ShutdownReport, TestInstanceDispatcher,
-    TestOwnerHandle,
+    aot_cache_key, capture, host_owner_cleanup_skipped, instance_call_model, instance_shutdown, owner_queue_cap,
+    plugin_raw_store, runtime_engine, setup_wasm_runtime_with_setup, spawn_test_owner, OwnerFailureSink,
+    OwnerStatsSnapshot, ShutdownReport, TestInstanceDispatcher, TestOwnerHandle,
 };
 
 // ==================== 夹具构建器与产物读取（票 08 批次三自能力仓迁入） ====================
@@ -117,12 +116,8 @@ pub fn session_apis() -> Vec<String> {
 /// 供共享产物激活期 `platform()` 探测与 `config_get` 用例使用。
 pub fn setup_wasm_runtime() -> (WasmRuntime, Arc<WasmHostContext>) {
     let (runtime, ctx) = wasmnest_desktop_lib::wasm_core::test_support::setup_wasm_runtime();
-    runtime.set_guest_events(Arc::new(
-        wasmnest_desktop_lib::plugin::guest_events::DesktopGuestEvents,
-    ));
-    ctx.set_host_facts(Arc::new(
-        wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts,
-    ));
+    runtime.set_guest_events(Arc::new(wasmnest_desktop_lib::plugin::guest_events::DesktopGuestEvents));
+    ctx.set_host_facts(Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts));
     (runtime, ctx)
 }
 // 常用类型 re-export（05c 批量迁移文件的公共面；pty 一族见文末 host-pty 段）
@@ -134,9 +129,9 @@ pub use wasmnest_desktop_lib::wasm_core::manager::host::PluginHost;
 pub use wasmnest_desktop_lib::wasm_core::manager::host::{GuestOp, GuestReply};
 pub use wasmnest_desktop_lib::wasm_core::manager::runtime::{LoadedWasmPlugin, WasmRuntime};
 pub use wasmnest_desktop_lib::wasm_core::manager::types::{LoadedPlugin, PluginSource};
+pub use wasmnest_desktop_lib::wasm_core::manifest::{PluginKind, PluginManifest, PluginState, PluginType};
 pub use wasmnest_desktop_lib::wasm_core::storage::PluginStorage;
 pub use wasmnest_desktop_lib::wasm_core::system::config::AppConfig;
-pub use wasmnest_desktop_lib::wasm_core::manifest::{PluginKind, PluginManifest, PluginState, PluginType};
 
 /// 随包内置插件目录（与 pty_session_chain 的 `bundled_plugins_dir` 同规则）
 pub fn bundled_plugins_dir() -> PathBuf {
@@ -180,7 +175,20 @@ pub async fn setup_host() -> Arc<PluginHost> {
     let user_plugins_dir = std::env::temp_dir().join(format!("wasmnest-hosttest-userplugins-{}", std::process::id()));
     std::fs::create_dir_all(&user_plugins_dir).expect("user plugins dir");
 
-    let host = PluginHost::new(db, &plugins_dir, &user_plugins_dir, None, None, Vec::new(), wasmnest_wasm_core::manager::runtime::AbiPolicy { form: Some(wasmnest_plugin_api::form::FORM_COMPONENT) }, std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts), None).await;
+    let host = PluginHost::new(
+        db,
+        &plugins_dir,
+        &user_plugins_dir,
+        None,
+        None,
+        Vec::new(),
+        wasmnest_wasm_core::manager::runtime::AbiPolicy {
+            form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
+        },
+        std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
+        None,
+    )
+    .await;
 
     // 无头私有库根注入（认证中心配对/历史真源在插件私有库，无私有库则无法驱动）
     host.wasm_host_ctx().set_plugin_db_root(Some(

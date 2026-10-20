@@ -11,7 +11,7 @@
  */
 
 export default {
-shell: {
+  shell: {
     skipToContent: '跳到主内容',
     home: {
       where: '主屏',
@@ -21,14 +21,14 @@ shell: {
       installed: '已安装',
       noApps: '没有匹配「{q}」的应用',
       sysTitle: '系统',
-      sysHint: '全局管理页面（从多任务面板打开）',
+      sysHint: '全局管理页面（从后台应用面板打开）',
       matches: '个匹配',
     },
     // 多任务面板（工具栏入口）：打开过 / 后台运行的面在此切换与关闭
     recents: {
-      title: '多任务',
+      title: '后台应用',
       countUnit: '个',
-      close: '收起多任务',
+      close: '收起后台应用',
       closeAll: '全部关闭',
       empty: '没有后台运行的应用',
       open: '切换到 {name}',
@@ -48,8 +48,8 @@ shell: {
     nav: {
       back: '返回',
       backTitle: '返回（Esc）',
-      tasks: '多任务',
-      tasksTitle: '多任务：{count} 个打开（后台应用切换）',
+      tasks: '后台应用',
+      tasksTitle: '后台应用：{count} 个在运行',
       home: '主屏',
       homeTitle: '回到主屏（应用继续在后台运行）',
     },
@@ -199,36 +199,29 @@ shell: {
     settings: {
       ui: {
         title: '界面',
-        themeDesc: '外观亮度模式',
         themeLight: '浅色',
         themeDark: '深色',
         themeSystem: '跟随系统',
         language: '语言',
-        languageDesc: '界面语言（zh-CN / en 双语同步）',
         fontSize: '字号',
-        fontSmall: '较小',
-        fontNormal: '正常',
-        fontLarge: '大',
-        fontXl: '超大',
         animations: '动画',
         animationsDesc: '屏幕切换与覆层动效（关闭即降级）',
-        showNav: '导航按钮',
-        showNavDesc: '在顶部工具栏显示「返回 / 主屏」（隐藏后 Esc 仍可用）',
       },
       background: {
         title: '背景',
-        wallLabel: '主屏壁纸',
-        wallHint: '只落主屏；卡片全屏保持纯色，保证业务内容可读',
+        wallLabel: '壁纸',
         dimLabel: '遮罩强度 · {pct}%',
-        dimHint: '壁纸之上的页面色遮罩：越高文字越清晰，越低壁纸越明显',
-        customHint: '自定义图片走 fs:pick 授权后由宿主下发（待接入）',
-        custom: '自定义图片…',
-        customPending: '自定义壁纸链路待接入',
+        customReplace: '更换图片…',
+        customRemove: '移除',
+        customHint: 'PNG / JPG / WebP，单张不超过 20 MB；图片会复制到应用数据目录。',
+        customSaved: '自定义壁纸已更新',
+        customRemoved: '自定义壁纸已移除',
         wall: {
           none: '无（纯色）',
           aurora: '极光',
           dune: '沙丘',
           reef: '礁湖',
+          custom: '自定义',
         },
       },
       permsEntry: {
@@ -278,7 +271,6 @@ shell: {
       configSaved: '配置已保存（写入插件存储）',
       noSelection: '选择一个应用查看详情',
       // 2026-10-17 壳恢复后（生命周期归宿主，前端无启停）：应用管理收敛为只读面目录
-      managedByHost: '生命周期由宿主编排：打开 = 激活、关闭 = 真停用；启用 / 自启为持久化偏好',
       // 应用整包挂载面（ADR 0057 机制 B）：加载 / 失败两态文案。此前组件直接引用
       // 未注册的 key，界面回显 `shell.apps.loading` 原文。
       loading: '应用界面加载中…',
@@ -348,6 +340,11 @@ shell: {
     },
     frontend: {
       internal: '操作未完成，请稍后重试',
+    },
+    shell: {
+      wallpaper: {
+        invalid: '无法使用这张图片：请选择 PNG / JPG / WebP，且不超过 20 MB',
+      },
     },
   },
   desktop: {
@@ -453,7 +450,8 @@ shell: {
       fsAuthReadWrite: '读写',
       fsAuthRequest: '应用 {plugin} 请求{operation}文件',
       fsAuthPickerRequest: '你刚在系统选择框中选中以下路径，应用 {plugin} 请求{operation}',
-      fsAuthGrantScopeDir: '勾选「记住」将按所在目录授权：该目录下其它文件的{operation}以后不再询问',
+      fsAuthGrantScopeDir:
+        '勾选「记住」将按所在目录授权：该目录下其它文件的{operation}以后不再询问',
       fsAuthPath: '文件路径',
       fsAuthPaths: '文件路径（{count} 个目录）',
       // 「记住」只记这次的操作（读 / 写 / 读写），文案必须跟着说清
@@ -497,29 +495,21 @@ shell: {
     system: {
       title: '系统设置',
       preventSleep: '防止系统休眠',
-      preventSleepDesc: '服务器运行时阻止系统进入休眠状态（允许屏幕熄灭）',
-      defaultPort: '默认端口',
-      defaultPortDesc: '服务器启动时使用的端口，重启后生效',
     },
     log: {
       title: '日志设置',
       level: '日志级别',
-      levelDesc: '切换 runtime 日志的落盘级别，即时生效，无需重启',
       levelDebug: '调试',
       levelInfo: '信息',
       levelWarn: '警告',
       levelError: '错误',
       levelApplied: '日志级别已切换',
       format: '日志格式',
-      formatDesc: '文本便于直接阅读；JSON 供脚本按字段过滤分析（重启后生效）',
       formatText: '文本',
       formatJson: 'JSON',
       maxFiles: '保留文件数',
-      maxFilesDesc: '按天轮转保留的日志文件数量，0 表示不限制',
       capacityMb: '容量上限（MB）',
-      capacityMbDesc: '日志目录总大小上限，超出后自动删除最旧文件；0 表示不限制',
       persist: '持久化配置',
-      persistDesc: '格式 / 保留数量 / 容量上限保存在配置文件，重启后生效',
       openDir: '打开日志目录',
       save: '保存配置',
       saved: '日志配置已保存',
@@ -531,7 +521,6 @@ shell: {
     authorization: {
       title: '应用授权',
       entry: '应用授权记录',
-      entryDesc: '查看每个应用的文件与网络授权记录，管理免询问策略',
       back: '返回设置',
       refresh: '刷新',
       appCount: '{count} 个应用',
@@ -632,10 +621,6 @@ shell: {
       followSystem: '跟随系统',
       language: '语言',
       fontSize: '字体大小',
-      fontSmall: '小',
-      fontNormal: '正常',
-      fontLarge: '大',
-      fontXl: '超大',
       animations: '动画效果',
       animationsDesc: '关闭后全局禁用页面切换与交互过渡动画',
     },
@@ -651,6 +636,16 @@ shell: {
       downloadComplete: '下载完成，正在安装...',
       installingUpdate: '正在安装更新...',
       downloadUpdate: '立即更新',
+    },
+    reset: {
+      title: '恢复初始设置',
+      desc: '将宿主配置与界面偏好恢复为默认值',
+      action: '恢复初始设置',
+      confirmTitle: '恢复初始设置',
+      confirmBody: '包括清除所有授权记录、删除已复制的自定义壁纸，并还原默认配置。此操作不可撤销。',
+      confirmOk: '恢复',
+      done: '已恢复初始设置',
+      failed: '恢复失败，请稍后重试',
     },
   },
 }

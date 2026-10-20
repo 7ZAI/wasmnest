@@ -65,7 +65,7 @@ describe('壳共享样式接线锁', () => {
       'shell-sw',
       'shell-seg',
       'shell-rec',
-      'home-wall',
+      'shell-wall',
       'shell-dlg-in',
       'shell-fade-in',
     ]) {
@@ -86,12 +86,14 @@ describe('壳共享样式接线锁', () => {
       'shell-sw',
       'shell-seg',
       'shell-rec',
-      'home-wall',
+      'shell-wall',
       'shell-dlg-in',
       'shell-fade-in',
     ]
     for (const cls of consumed) {
-      expect(source.includes(cls), `.${cls} 在壳源码里没有消费方（样式或类名有一边过期）`).toBe(true)
+      expect(source.includes(cls), `.${cls} 在壳源码里没有消费方（样式或类名有一边过期）`).toBe(
+        true,
+      )
       expect(classes.has(cls), `.${cls} 在 shell.css 里没有定义`).toBe(true)
     }
   })

@@ -16,7 +16,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import 'vue-sonner/style.css'
 import './style.css'
-// 壳共享样式（`.tone-*` / `.sdot` / `.shell-btn` / `.shell-chip` / `.home-wall` 等，
+// 壳共享样式（`.tone-*` / `.sdot` / `.shell-btn` / `.shell-chip` / `.shell-wall` 等，
 // `src/shell/**` 组件按类名消费）。必须在这里接线：这些类跨 9 个组件复用，只能放全局
 // 样式表；漏掉这行 import 时类名全部无样式（图标无底色、状态点塌成 0×0、壁纸失效），
 // 而组件侧看不出任何异常——2026-10-17 实机验证 P0-2 即如此。

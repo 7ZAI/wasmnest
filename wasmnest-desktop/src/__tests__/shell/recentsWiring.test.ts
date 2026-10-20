@@ -89,12 +89,11 @@ describe('全屏形态（安卓 recents：虚化背景 + 大卡片）', () => {
   it('卡片是应用窗口形态（缩略区 16/10 + 自适应多行网格 + 超高滚动），不是列表行', () => {
     const src = stripComments(read(SWITCHER))
     // 缩略区保持应用窗口比例（16/10），不是一行一个的列表行
-    expect(src).toMatch(/\.ts-thumb\s*\{[^}]*aspect-ratio:\s*16\s*\/\s*10/)
-    // 卡片带 = 自适应多行网格：列宽随窗口自适应（auto-fill + minmax 200–260px），
+    expect(src).toMatch(/\.ts-thumb\s*\{[^}]*flex:\s*1/)
+    // 卡片带 = 每行最多 3 张的多行网格（超 3 张换行、整组居中），
     // 放不下自动换行；卡片过多时超出高度滚动查看
-    expect(src).toMatch(
-      /\.ts-cards\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(200px,\s*260px\)\)/,
-    )
+    // 每行最多 3 张卡（用户 2026-10-19 裁决：超 3 张换行，整组居中）
+    expect(src).toMatch(/\.ts-cards\s*\{[^}]*grid-template-columns:\s*repeat\(3,/)
     expect(src).toMatch(/\.ts-cards\s*\{[^}]*overflow-y:\s*auto/)
     expect(src).toContain('role="listitem"')
   })
@@ -109,6 +108,24 @@ describe('全屏层动作走唯一实现（不复制编排）', () => {
     // 反例：不得自己拼路由或直接调生命周期命令（那是 useShellState 的职责）
     expect(src).not.toContain('router.push')
     expect(src).not.toContain("invoke('plugin_deactivate'")
+  })
+})
+
+describe('后台应用卡片：信息条在顶部（2026-10-20 用户裁决）', () => {
+  it('名称条排在缩略区之前，且以应用图标打头', () => {
+    const src = stripComments(read(SWITCHER))
+    const meta = src.indexOf('class="ts-meta"')
+    const thumb = src.indexOf('class="ts-thumb"')
+    expect(meta, '卡片必须有信息条').toBeGreaterThan(-1)
+    expect(thumb, '缩略区必须还在').toBeGreaterThan(meta)
+    // 信息条的第一个视觉元素是图标（应用走 ShellAppTile，系统页走 glyph-box）
+    expect(src.slice(meta, thumb)).toMatch(/<ShellAppTile|<span v-else class="glyph-box/)
+  })
+
+  it('不再用 chip 重复「运行中」（异常态仍保留提示）', () => {
+    const src = stripComments(read(SWITCHER))
+    expect(src, 'running 态必须跳过 chip').toContain("st === 'running'")
+    expect(src, '不再直接渲染「运行中」文案').not.toContain("t('shell.state.running')")
   })
 })
 

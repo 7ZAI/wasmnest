@@ -1,15 +1,10 @@
 <template>
-  <!-- 主屏：应用网格 + 系统网格；壁纸两层背景 + 可调遮罩（spec-c §5）。
-       打开过 / 后台运行的面不在这里铺开（见工具栏「多任务」面板）。 -->
-  <section
-    class="home-scroll"
-    :class="[{ 'home-wall': wallClass !== '', [`wall-${wallClass}`]: wallClass !== '' }]"
-    :style="{ '--wall-dim': prefs.wallDim / 100 }"
-    :aria-label="t('shell.home.aria')"
-  >
+  <!-- 主屏：应用网格 + 系统网格；壁纸由 ShellHost 壳根统一铺（所有宿主面共用），
+       主屏自身保持透明。打开过 / 后台运行的面不在这里铺开（见工具栏「多任务」面板）。 -->
+  <section class="home-scroll" :aria-label="t('shell.home.aria')">
     <h1 class="sr-only">{{ t('shell.home.aria') }}</h1>
     <!-- type-to-search 提示（spec-c 已知边界：IME 合成中的 CJK 非本路径，由隐藏 input 承接）。
-         悬在主屏顶部居中，与居中的图块列共用同一条中轴。 -->
+         悬在主屏顶部居中（与图块列无关，只是搜索态的高位提示）。 -->
     <div v-if="q.trim() !== ''" class="qhint shell-fade-in" role="status" aria-live="polite">
       <ShellIcon name="search" :size="13" />
       <span class="q font-semibold">{{ q }}</span>
@@ -57,7 +52,7 @@
             </span>
             <span class="nm truncate">{{ app.name }}</span>
           </div>
-          <div v-if="!apps.length" class="note" style="flex: 1 1 100%; padding: 16px 2px">
+          <div v-if="!apps.length" class="note" style="grid-column: 1 / -1; padding: 14px 2px">
             {{ t('shell.home.noApps', { q }) }}
           </div>
         </div>
@@ -106,7 +101,6 @@ import { useI18n } from 'vue-i18n'
 import { SYS_PAGES, chipMetaOf } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
 import { useShellApps } from '../composables/useShellApps'
-import { useShellSettings } from '../composables/useShellSettings'
 import ShellIcon from './ShellIcon.vue'
 import ShellAppTile from './ShellAppTile.vue'
 import type { ShellAppEntry } from '../composables/useShellApps'
@@ -114,14 +108,8 @@ import type { ShellAppEntry } from '../composables/useShellApps'
 const { t } = useI18n()
 const state = useShellState()
 const appsStore = useShellApps()
-const { prefs } = useShellSettings()
 
 const q = computed(() => state.homeQ.value)
-/** 壁纸类（none → 无类不叠加遮罩层背景） */
-const wallClass = computed(() => {
-  const w = prefs.value.wallpaper
-  return w && w !== 'none' ? w : ''
-})
 /** 搜索匹配：名称 / id（均小写包含） */
 const matchQ = (s: string) => s.toLowerCase().includes(q.value.toLowerCase())
 
@@ -149,36 +137,35 @@ function onCtx(app: ShellAppEntry, e: MouseEvent) {
 </script>
 
 <style scoped>
-/* 主屏构图：一屏「巢」——内容块在壁纸上垂直 + 水平居中（auto 外边距在内容溢出时
-   自动归零，长列表照常滚动，不会像 align-items:center 那样把顶部裁掉），
-   分区标题与图块共用同一条中轴。此前内容贴左上角、图块挤在 920px 容器的左端，
-   下方 60% 屏幕是空壁纸——看起来像没铺完的看板，而不是一块桌面。 */
+/* 主屏构图：内容贴顶、左对齐（用户 2026-10-19 裁决：主屏不要垂直/水平居中，
+   还原为「920px 一栏、从左上角铺起」的桌面形态）。容器只做宽度上限，不再用
+   `margin: auto` 把整块推到屏幕正中。 */
 .home-scroll {
   position: absolute;
   inset: 0;
   overflow-y: auto;
-  padding: 24px 20px 28px;
+  padding: 18px 20px 20px;
+  gap: 22px;
   display: flex;
   flex-direction: column;
 }
 .home-col {
-  width: min(720px, 100%);
-  margin: auto;
+  width: min(920px, 100%);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 36px;
+  gap: 22px;
 }
 .home-sec {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 .sec-h {
   display: flex;
-  align-items: baseline;
-  justify-content: center;
+  align-items: center;
   gap: 8px;
+  padding: 0 2px;
 }
 /* 分区标题取显示级字号（15px × ui-scale）：与 12.5px 的图块名拉开 1.2 档，
    标题才像标题。计数跟在标题后、按基线对齐，数字用等宽数位（tabular-nums）。 */
@@ -198,17 +185,17 @@ function onCtx(app: ShellAppEntry, e: MouseEvent) {
   flex: 1;
 }
 
-/* 图标网格：定宽图块 + 换行 + 整行居中（flex 而非 auto-fill 网格——网格的轨道会
-   铺满容器宽度，只有 4 个应用时图块全都靠在左端，右侧留一条等宽空轨道）。 */
+/* 图标网格：自适应多列（auto-fill）+ 从左往右铺，行内不居中——图块从容器左端起排，
+   与阅读方向一致（居中排布会让 4 个应用悬在屏幕正中）。
+   最小列宽 104px（原 88px）：图块已放大到 64px、名称 13px × ui-scale，
+   88px 轨道在 ui-scale > 1 时会把「File Transfer」截成省略号。 */
 .appgrid {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px 6px;
-  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px 4px;
+  align-content: start;
 }
 .appicon {
-  flex: 0 0 104px;
   display: flex;
   flex-direction: column;
   align-items: center;

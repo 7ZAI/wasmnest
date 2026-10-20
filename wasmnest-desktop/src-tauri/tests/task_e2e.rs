@@ -14,8 +14,8 @@ mod support;
 
 use std::sync::Arc;
 
-use wasmnest_desktop_lib::wasm_core::host_api::context::PluginServices;
 use support::*;
+use wasmnest_desktop_lib::wasm_core::host_api::context::PluginServices;
 
 /// task_e2e 全局任务注册表串行锁
 ///
@@ -370,7 +370,11 @@ fn test_task_dual_gate_domain_permission_denied() {
             .instantiate_component(&component, &task_fixture_plugin_id(), host_ctx.clone(), &[], None)
             .expect("instantiate task fixture");
         // 只授 task:run（不授 fs:read / process:run）
-        wasmnest_desktop_lib::wasm_core::host_api::grant_permissions(&host_ctx, &task_fixture_plugin_id(), &["task:run"]);
+        wasmnest_desktop_lib::wasm_core::host_api::grant_permissions(
+            &host_ctx,
+            &task_fixture_plugin_id(),
+            &["task:run"],
+        );
         let tmp = std::env::temp_dir().join(format!("wasmnest_task_dual_{}", std::process::id()));
         std::fs::write(&tmp, b"x").expect("write temp file");
         let plan = serde_json::json!({
@@ -411,8 +415,7 @@ fn test_task_execute_batch_empty_units_rejected() {
     let (_, host_ctx) = setup_wasm_runtime();
     let plugin = task_fixture_plugin_id();
     wasmnest_desktop_lib::wasm_core::host_api::grant_permissions(&host_ctx, &plugin, &["task:run"]);
-    let err =
-        wasmnest_desktop_lib::plugin::task::execute_batch(&host_ctx, &plugin, r#"{"units":[]}"#).unwrap_err();
+    let err = wasmnest_desktop_lib::plugin::task::execute_batch(&host_ctx, &plugin, r#"{"units":[]}"#).unwrap_err();
     assert!(err.contains("no units"), "got: {err}");
 }
 

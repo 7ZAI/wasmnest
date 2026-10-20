@@ -1,5 +1,6 @@
 <template>
-  <div class="flex flex-col flex-1 min-h-0 desktop-ui bg-page text-[var(--text-primary)]">
+  <!-- 主屏容器保持透明：壁纸由 ShellHost 壳根（.shell-wall）统一铺，页面自铺底色会盖住它 -->
+  <div class="flex flex-col flex-1 min-h-0 desktop-ui text-[var(--text-primary)]">
     <!-- 键盘导航跳过链接（ui-ux-pro-max --domain ux：nav-heavy 页需 skip link） -->
     <a
       href="#shell-main"

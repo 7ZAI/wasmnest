@@ -2,7 +2,7 @@
   <Transition name="shell-panel">
     <div
       v-if="open"
-      class="panel shell-notif-panel"
+      class="panel shell-notif-panel shell-glass"
       role="dialog"
       :aria-label="t('shell.notif.title')"
     >
@@ -109,7 +109,7 @@ function onNotifAction(n: HostNotif, actionId: string) {
   max-height: min(480px, calc(100% - 60px));
   display: flex;
   flex-direction: column;
-  background: var(--bg-card);
+  /* 表面色与背景模糊由 .shell-glass 提供（背后是主屏 / 应用内容，玻璃才有意义） */
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sheet);
   box-shadow: var(--shadow-card-hover);

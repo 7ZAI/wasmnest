@@ -13,15 +13,15 @@ use crate::system::app_context::AppContext;
 use crate::AppError;
 use crate::Result;
 use async_trait::async_trait;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tauri::{Emitter, Manager};
 use wasmnest_server_base::config::NetworkConfig;
 use wasmnest_server_base::identity::AuthenticatedIdentity;
 use wasmnest_server_base::ports::{
     AuthCenter, ConfigPort, EventSink, MdnsAdvertiserPort, MdnsPort, MdnsTypeSubscription, PathsPort, PluginInvoker,
     PowerPort, RuntimePort, ServerLifecycleEvent, ServerLifecyclePort, ServerPorts, SystemInfoPort,
 };
-use std::path::PathBuf;
-use std::sync::Arc;
-use tauri::{Emitter, Manager};
 
 // ==================== PluginInvoker ====================
 
@@ -359,9 +359,7 @@ pub fn assemble(app_handle: Option<Arc<tauri::AppHandle>>) -> ServerPorts {
             // 帧投递窄端口工厂（票 02 批次 03）：晚绑形态下按**当下的总线**现造——
             // 端口与总线必须同源（多上下文下错绑会把帧投进别的实例）。
             // 第 4 步 adapter 迁宿主后，此处的构造改由本目录 `src/plugin/ws.rs` 提供。
-            Arc::new(|bus| {
-                Arc::new(crate::plugin::ws::HostWsPorts::from_bus(Arc::clone(bus)))
-            }),
+            Arc::new(|bus| Arc::new(crate::plugin::ws::HostWsPorts::from_bus(Arc::clone(bus)))),
         )),
         event_sink: Arc::new(HostEventSink),
         paths: Arc::new(HostPathsPort::new(app_handle)),
@@ -387,7 +385,9 @@ fn current_bus() -> Arc<crate::wasm_core::bus::MessageBus> {
 /// 占位总线（`AppContext` 注册前的那一小段窗口用；注册后不再被取到）
 fn standby_bus() -> Arc<crate::wasm_core::bus::MessageBus> {
     static STANDBY: std::sync::OnceLock<Arc<crate::wasm_core::bus::MessageBus>> = std::sync::OnceLock::new();
-    STANDBY.get_or_init(|| Arc::new(crate::wasm_core::bus::MessageBus::new())).clone()
+    STANDBY
+        .get_or_init(|| Arc::new(crate::wasm_core::bus::MessageBus::new()))
+        .clone()
 }
 
 #[cfg(test)]
@@ -407,7 +407,10 @@ mod tests {
         let first = standby_bus();
         let second = standby_bus();
         assert!(Arc::ptr_eq(&first, &second), "占位总线必须是进程级单例");
-        assert!(Arc::ptr_eq(&current_bus(), &first), "无 AppContext 时 late-bound 解析面应返回占位总线");
+        assert!(
+            Arc::ptr_eq(&current_bus(), &first),
+            "无 AppContext 时 late-bound 解析面应返回占位总线"
+        );
     }
 
     /// 无 AppContext 时设备名取**真实**采集值，不得回退到硬编码占位名
@@ -419,7 +422,10 @@ mod tests {
         let collected = crate::system::info::SystemInfo::collect().device_name;
         let actual = HostSystemInfoPort.device_name();
         assert!(!actual.is_empty(), "设备名不得为空（空串会让 TXT 记录失去意义）");
-        assert_eq!(actual, collected, "无 AppContext 时设备名应与 bootstrap 同源现采，不得落占位名");
+        assert_eq!(
+            actual, collected,
+            "无 AppContext 时设备名应与 bootstrap 同源现采，不得落占位名"
+        );
     }
 
     /// 无头装配面（无句柄、无 AppContext）：路径面显性报错而非 panic

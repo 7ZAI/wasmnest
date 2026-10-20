@@ -15,10 +15,10 @@ mod support;
 
 use std::sync::Arc;
 
+use tokio::sync::Mutex;
 use wasmnest_desktop_lib::wasm_core::host_api::context::PermissionScope;
 use wasmnest_server_http::registry;
 use wasmnest_server_http::wire::EndpointAuth;
-use tokio::sync::Mutex;
 
 use support::*;
 
@@ -58,11 +58,7 @@ fn test_http_route_registration_server_domain_roundtrip() {
         let internal = format!("/api/plugin/{PLUGIN_ID}/hello");
         let entry = registry::find_by_internal(&internal).expect("内部路径必须已注册");
         assert_eq!(entry.owner, PLUGIN_ID);
-        assert_eq!(
-            entry.auth,
-            EndpointAuth::Jwt,
-            "未声明 auth 落最严档"
-        );
+        assert_eq!(entry.auth, EndpointAuth::Jwt, "未声明 auth 落最严档");
 
         let exact = registry::find_by_host("/api/http-test/hello", "GET").expect("host 别名精确命中");
         assert_eq!(exact.entry.path, "hello");

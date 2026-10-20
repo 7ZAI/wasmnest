@@ -15,8 +15,10 @@
 
 <script setup lang="ts">
 /**
- * ShellSeg — 分段控件（主题三档 / 授权策略三档等）
+ * ShellSeg — 分段控件（主题三档 / 语言等）
  * 形状见 shell.css .shell-seg；risky 变体标红（如「始终允许」档）。
+ * 选中态用固定黑底 + 反白文字（不随明暗主题反转），不用白色药丸、也不加勾章
+ * （2026-10-20 用户裁决：除背景壁纸选择外，选中背景统一为黑色）。
  */
 defineProps<{
   options: Array<{ value: string; label: string }>

@@ -170,8 +170,7 @@ fn collect_empty_dirs(root: &Path) -> Vec<PathBuf> {
 /// 比锁不存在更危险（spec §5-E7 的 fail-visible 要求）。
 fn app_source_roots() -> Vec<PathBuf> {
     let apps_dir = app_paths::apps_root().join("apps");
-    let entries =
-        fs::read_dir(&apps_dir).unwrap_or_else(|e| panic!("读取应用仓 {} 失败：{e}", apps_dir.display()));
+    let entries = fs::read_dir(&apps_dir).unwrap_or_else(|e| panic!("读取应用仓 {} 失败：{e}", apps_dir.display()));
     let mut out = Vec::new();
     for entry in entries.filter_map(|e| e.ok()) {
         let slug_dir = entry.path();

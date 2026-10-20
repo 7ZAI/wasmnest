@@ -1,8 +1,13 @@
 <template>
-  <!-- 启动画面：z-[100] 覆盖一切，壳初始化完成后淡出（壳 BootScreen 承担启动屏步骤） -->
+  <!-- 启动画面：z-[100] 覆盖一切，壳初始化完成后淡出（启动链路唯一加载面，
+       ShellBootScreen 已退役——启动语义并入 SplashLoading 绘画动画版） -->
   <SplashLoading :visible="showSplash" />
 
-  <div :class="[themeClasses.container, 'shell-root']">
+  <!-- 壁纸挂在壳根：主屏 / 系统页 / 应用面共用同一背景（宿主页面不再自铺 --bg-page） -->
+  <div
+    :class="[themeClasses.container, 'shell-root', wallClass ? `shell-wall wall-${wallClass}` : '']"
+    :style="wallStyle"
+  >
     <!-- ============ 壳态 / 应用态分流（路由为事实源） ============ -->
     <!-- 主屏（'/'）：ShellToolbar + ShellHome + 覆层 -->
     <ShellView v-if="isHome" />
@@ -32,7 +37,6 @@
     <ShellQuickSettings />
     <ShellContextMenu />
     <ShellDialogLayer />
-    <ShellBootScreen />
 
     <!-- ============ 安全闸门弹窗（fail-closed 的闭环入口，ADR 0007 / 票 05） ============
          这两条授权询问是宿主事件（plugin:fs-auth-request / plugin:network-auth-request），
@@ -97,6 +101,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Toaster, type ToasterProps } from 'vue-sonner'
 import SplashLoading from '@/components/SplashLoading.vue'
+import { SPLASH_DRAW_TOTAL_MS, SPLASH_HOLD_AFTER_DRAW_MS } from '@/components/splashTiming'
 import AppMountSlot from '@/shell/mount/AppMountSlot.vue'
 import { useTheme } from '@/composables/useTheme'
 import { useFontSize } from '@/composables/useFontSize'
@@ -104,6 +109,8 @@ import { usePlatform } from '@/composables/usePlatform'
 import { useSettingsStore } from '@/stores/settings'
 import { useShellState } from './composables/useShellState'
 import { useShellApps, pluginIdOfAppRoute } from './composables/useShellApps'
+import { useShellSettings } from './composables/useShellSettings'
+import { useCustomWallpaper } from './composables/customWallpaper'
 import ShellView from './views/ShellView.vue'
 import ShellCardScreen from './components/ShellCardScreen.vue'
 import ShellToolbar from './components/ShellToolbar.vue'
@@ -112,7 +119,6 @@ import ShellQuickSettings from './components/ShellQuickSettings.vue'
 import ShellTaskSwitcher from './components/ShellTaskSwitcher.vue'
 import ShellContextMenu from './components/ShellContextMenu.vue'
 import ShellDialogLayer from './components/ShellDialogLayer.vue'
-import ShellBootScreen from './components/ShellBootScreen.vue'
 import FsAuthDialog from '@/shell/auth/FsAuthDialog.vue'
 import NetworkAuthDialog from '@/shell/auth/NetworkAuthDialog.vue'
 import { useHomeSearch } from './composables/useHomeSearch'
@@ -121,6 +127,27 @@ const { t } = useI18n()
 const route = useRoute()
 const state = useShellState()
 const appsStore = useShellApps()
+const { prefs: shellPrefs } = useShellSettings()
+const { imageUrl: customWallUrl } = useCustomWallpaper()
+
+/** 壁纸类（none → 不铺壁纸）；类挂在壳根，由所有宿主面共享，页面自身保持透明。
+ *  custom 在图片 URL 解析完成前先回落 aurora，避免壳根挂空背景下半秒变纯色。 */
+const wallClass = computed(() => {
+  const w = shellPrefs.value.wallpaper
+  if (w === 'custom') return customWallUrl.value ? 'custom' : 'aurora'
+  return w && w !== 'none' ? w : ''
+})
+
+/** 壳根样式：遮罩强度 +（自定义时）图片 URL 经 CSS 变量交给 .shell-wall.wall-custom */
+const wallStyle = computed<Record<string, string>>(() => {
+  const style: Record<string, string> = {
+    '--wall-dim': String(shellPrefs.value.wallDim / 100),
+  }
+  if (wallClass.value === 'custom' && customWallUrl.value) {
+    style['--wall-custom'] = `url("${customWallUrl.value}")`
+  }
+  return style
+})
 
 const settingsStore = useSettingsStore()
 const { platformInfo } = usePlatform()
@@ -144,9 +171,27 @@ const toastOptions: ToasterProps['toastOptions'] = {
   },
 }
 
-// 启动画面：保证最低展示时长避免闪烁（ShellBootScreen 负责步骤屏，这里兜底淡出）
+// 启动画面：唯一加载面 = SplashLoading 绘画动画版（ShellBootScreen 已退役，
+// 2026-10-19 启动链路唯一化）。收起条件 = 应用清单就绪且动画画完（画完即加载完成）。
 const showSplash = ref(true)
+/** 最低展示时长 = 绘画动画总时长 + 末笔停留（画完即加载完成；时序真源见 components/splashTiming.ts） */
+const SPLASH_MIN_MS = SPLASH_DRAW_TOTAL_MS + SPLASH_HOLD_AFTER_DRAW_MS
+/** 清单挂起保底：必须覆盖完整动画并留出余量，否则开屏会在画完前被切掉 */
+const SPLASH_GUARD_MS = SPLASH_MIN_MS + 1500
 let splashTimer: ReturnType<typeof setTimeout> | null = null
+let splashGuard: ReturnType<typeof setTimeout> | null = null
+
+/** 应用清单就绪后落一条驻留通知（运行时就绪；语义自 ShellBootScreen 迁入） */
+function emitReadyNotif() {
+  state.pushNotif({
+    kind: 'info',
+    sticky: true,
+    icon: 'check',
+    source: t('shell.notif.hostSource'),
+    title: t('shell.notif.ready.title'),
+    body: t('shell.notif.ready.body', { count: appsStore.plugins.value.length }),
+  })
+}
 
 // ==================== 路由分流 ====================
 
@@ -200,11 +245,9 @@ function openFirstMatch() {
 function onKeydown(e: KeyboardEvent) {
   const mod = e.ctrlKey || e.metaKey
 
-  // 启动屏：任意键跳过
-  if (state.boot.value) {
-    if (e.key === 'Escape' || e.key === 'Enter') state.boot.value = false
-    return
-  }
+  // 启动画面期间：键盘不动作（无跳过语义，绘画动画短暂自动收起；
+  // 原来 BootScreen 的「任意键跳过」随组件一起退役）
+  if (showSplash.value) return
 
   // 应用态：键盘归应用界面（终端 Esc / 应用内快捷键都由 app 自己处理），壳不抢。
   // 唯一例外是壳覆层开着时的 Esc：通知中心 / 多任务 / 弹窗是壳 chrome，没有别的
@@ -275,20 +318,33 @@ function onWindowClick(e: MouseEvent) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   setupTheme()
   setupFontSize()
-  void appsStore.load()
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('click', onWindowClick)
+
+  // 应用清单就绪后，等到绘画动画画完（SPLASH_MIN_MS）再收起启动面——
+  // 画完即加载完成。清单加载更慢时（remain = 0）按就绪时刻收起，
+  // 动画早已画完。
+  const bootAt = Date.now()
+  await appsStore.load()
+  emitReadyNotif()
+  const remain = Math.max(0, SPLASH_MIN_MS - (Date.now() - bootAt))
   splashTimer = setTimeout(() => {
     showSplash.value = false
     splashTimer = null
-  }, 900)
-  window.addEventListener('keydown', onKeydown)
-  window.addEventListener('click', onWindowClick)
+  }, remain)
+  // 保底：应用清单挂起（load 永不返回）时不永久停留启动面
+  splashGuard = setTimeout(() => {
+    showSplash.value = false
+    splashGuard = null
+  }, SPLASH_GUARD_MS)
 })
 
 onUnmounted(() => {
   if (splashTimer) clearTimeout(splashTimer)
+  if (splashGuard) clearTimeout(splashGuard)
   cleanupTheme()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('click', onWindowClick)

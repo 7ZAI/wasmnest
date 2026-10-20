@@ -834,6 +834,9 @@ pub fn run() {
             commands::get_app_settings,
             commands::save_app_settings,
             commands::set_terminal_bg_image,
+            // 壳自定义壁纸：Rust 侧取图 + 复制到 app_data（前端无 fs 权限）
+            commands::pick_custom_wallpaper,
+            commands::clear_custom_wallpaper,
             // Utility
             commands::ping,
             commands::get_app_version,

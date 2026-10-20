@@ -1,10 +1,17 @@
 /**
- * 桌面品牌标志几何锁（宿主侧；桌面 UI 宿主修正 2026-10-17）
+ * 桌面品牌标志几何锁（宿主侧；桌面 UI 宿主修正 2026-10-17，启动链路唯一化 2026-10-19）
  * -----------------------------------------------------------------------------
- * 品牌位归位后全仓 3 处，都在宿主侧：ShellToolbar / ShellBootScreen / SplashLoading
- * （壳 + 启动画面）。wasm-app 不再有自绘标题栏，故 app 侧没有品牌位（原
+ * 品牌位归位后全仓 2 处，都在宿主侧：ShellToolbar / SplashLoading
+ * （壳 + 启动画面）。ShellBootScreen 已于 2026-10-19 退役——启动链路唯一化后
+ * 启动语义（等应用清单就绪）并入 SplashLoading 绘画动画版，不再有第三个品牌位。
+ *
+ * 品牌两档（icon.svg 真源三档降级的宿主侧两档）：
+ *   · SplashLoading（启动面大尺寸位）＝ 真源高档：icon.svg 镂空线框（124 条描边曲线，
+ *     四根圆柱螺旋编织），与图标逐字同源——L1b 钉住 g 变换 + 每条 points ∈ icon.svg。
+ *   · ShellToolbar（工具栏小尺寸位）＝ 实心态降级档：编织 W 四根棒料——L1a 钉住。
+ * wasm-app 不再有自绘标题栏，故 app 侧没有品牌位（原
  * `bedcode/src/components/TitleBar.vue` 及其 app 侧品牌锁随「标题栏归壳」退役）。
- *   L1 每个品牌位都画当前标志几何（WasmNest 编织 W，与应用图标 icon.svg 逐字同源）
+ *   L1 每个品牌位画其对应档位的当前标志几何（真源 / 降级）
  *   L2 全宿主源码不再出现已退役的旧标志笔画（防回接）
  */
 
@@ -37,10 +44,9 @@ const RETIRED_GEOMETRY = [
   'M 51 60 L 84 62 L 53 65 Z',
 ]
 
-/** 品牌位（宿主侧：壳工具栏 / 启动屏步骤面 / 启动画面） */
+/** 品牌位（宿主侧：壳工具栏 / 启动画面） */
 const BRAND_SOURCES = [
   'src/shell/components/ShellToolbar.vue',
-  'src/shell/components/ShellBootScreen.vue',
   'src/components/SplashLoading.vue',
 ]
 
@@ -58,18 +64,42 @@ function collectVueFiles(dir: string): string[] {
 }
 
 describe('品牌标志几何锁（宿主侧）', () => {
-  it('L1 每个品牌位都画当前标志几何', () => {
-    expect(BRAND_SOURCES.length, '品牌位清单不得为空（否则本锁空转）').toBe(3)
-    for (const file of BRAND_SOURCES) {
-      const source = readFileSync(file, 'utf-8')
-      for (const path of MARK_PATHS) {
-        expect(source, `${file} 缺少当前标志路径 ${path}`).toContain(path)
-      }
+  it('L1 每个品牌位画其对应档位的当前标志几何', () => {
+    expect(BRAND_SOURCES.length, '品牌位清单不得为空（否则本锁空转）').toBe(2)
+
+    // L1b 真源高档（SplashLoading 启动面）：镂空线框与 icon.svg 逐字同源
+    const ICON = readFileSync('src-tauri/icons/icon.svg', 'utf-8')
+    const iconPolys = [...ICON.matchAll(/<polyline points="([^"]+)"/g)].map((m) => m[1])
+    expect(iconPolys.length, 'icon.svg 至少要有四根圆柱的线框曲线（否则本锁空转）').toBeGreaterThan(50)
+
+    const splashSource = readFileSync('src/components/SplashLoading.vue', 'utf-8')
+    // g 变换与真源一致：镂空线框以同一缩放落在底板中央（非实心态降级档）
+    expect(splashSource).toContain('translate(19.056,20.269) scale(0.61887)')
+    const splashPolys = [
+      ...splashSource.matchAll(/<polyline class="logo-line" points="([^"]+)"/g),
+    ].map((m) => m[1])
+    expect(splashPolys.length, 'SplashLoading 线框曲线数须与 icon.svg 一致（一条不缺）').toBe(
+      iconPolys.length,
+    )
+    for (const p of splashPolys) {
+      expect(iconPolys, `SplashLoading 出现真源之外的线框路径 ${p.slice(0, 40)}…`).toContain(p)
+    }
+
+    // L1a 实心态降级档（ShellToolbar 小尺寸位）：编织 W 四根棒料
+    const toolbarSource = readFileSync('src/shell/components/ShellToolbar.vue', 'utf-8')
+    for (const path of MARK_PATHS) {
+      expect(toolbarSource, `ShellToolbar 缺少实心态棒料路径 ${path.slice(0, 24)}…`).toContain(path)
     }
   })
 
-  it('L2 全宿主源码不再出现已退役的旧标志笔画', () => {
-    const files = collectVueFiles(HOST_SRC_DIR)
+  it('L2 除 SplashLoading（icon.svg 真源同源）外，全宿主源码不再出现已退役的旧标志笔画', () => {
+    // SplashLoading 内联的是 icon.svg 真源线框（L1b 逐字同源）：旧 BedCode 笔画坐标
+    // 与真源线框坐标存在数字子串撞车（如 '51.3'），故从本锁扫描中排除。
+    // 防回接由 L1b 承担：任何借道 SplashLoading 回接旧笔画都会被
+    // 「每条 points ∈ icon.svg」拦下。
+    const files = collectVueFiles(HOST_SRC_DIR).filter(
+      (file) => file !== 'src/components/SplashLoading.vue',
+    )
     expect(files.length, '宿主 src 下 .vue 文件数基线').toBeGreaterThanOrEqual(20)
 
     const offenders = files.filter((file) =>

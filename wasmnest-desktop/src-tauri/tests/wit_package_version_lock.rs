@@ -126,7 +126,10 @@ fn package_source() -> (String, String, String) {
     );
     let parts: Vec<&str> = version.split('.').collect();
     assert!(
-        parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())),
+        parts.len() == 3
+            && parts
+                .iter()
+                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())),
         "{} 的 PACKAGE_VERSION 应为三段 semver（0.1.0 形态），实际 {version}",
         path.display()
     );
@@ -165,13 +168,14 @@ fn compose_manifests_declare_package_name_only() {
     let (name, _, _) = package_source();
     for rel in END_MANIFESTS {
         let path = repo_root().join(rel);
-        let m: serde_json::Value = serde_json::from_str(&read(&path))
-            .unwrap_or_else(|e| panic!("{} JSON 不可解析: {e}", path.display()));
+        let m: serde_json::Value =
+            serde_json::from_str(&read(&path)).unwrap_or_else(|e| panic!("{} JSON 不可解析: {e}", path.display()));
         let declared = m["package"]
             .as_str()
             .unwrap_or_else(|| panic!("{} 缺 package 字段", path.display()));
         assert_eq!(
-            declared, name,
+            declared,
+            name,
             "{} 的 package 应等于真源 name（版本由 scripts/compose-wit.mjs 注入）",
             path.display()
         );
@@ -187,10 +191,7 @@ fn compose_manifests_declare_package_name_only() {
 /// ③ 11 个 WIT 源文件的 package 行 == 真源整行
 #[test]
 fn wit_source_package_lines_match_source_of_truth() {
-    assert!(
-        !WIT_SOURCES.is_empty(),
-        "源文件清单为空会让本判据空转"
-    );
+    assert!(!WIT_SOURCES.is_empty(), "源文件清单为空会让本判据空转");
     let expected = expected_package_line();
     for rel in WIT_SOURCES {
         let path = repo_root().join(rel);

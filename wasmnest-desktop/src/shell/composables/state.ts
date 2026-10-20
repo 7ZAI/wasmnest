@@ -123,7 +123,7 @@ export function toneOf(pluginId: string): AppTone {
 
 // ==================== 壁纸 ====================
 
-/** 主屏壁纸清单（渐变真源是 style.css :root 的 --wall-*，这里只列 id 与 i18n key） */
+/** 壁纸清单（宿主所有面共用；渐变真源是 style.css :root 的 --wall-*，这里只列 id 与 i18n key） */
 export const WALLPAPERS: ReadonlyArray<{ id: string; nameKey: string }> = [
   { id: 'none', nameKey: 'shell.settings.background.wall.none' },
   { id: 'aurora', nameKey: 'shell.settings.background.wall.aurora' },

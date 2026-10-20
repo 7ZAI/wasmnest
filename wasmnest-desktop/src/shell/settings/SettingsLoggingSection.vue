@@ -11,9 +11,6 @@
           <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
             t('settings.log.level')
           }}</span>
-          <p class="text-xs text-[var(--text-tertiary)] mt-0.5">
-            {{ t('settings.log.levelDesc') }}
-          </p>
         </div>
         <div
           class="flex border border-[var(--border-strong)] rounded-md overflow-hidden flex-shrink-0"
@@ -40,9 +37,6 @@
           <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
             t('settings.log.format')
           }}</span>
-          <p class="text-xs text-[var(--text-tertiary)] mt-0.5">
-            {{ t('settings.log.formatDesc') }}
-          </p>
         </div>
         <div
           class="flex border border-[var(--border-strong)] rounded-md overflow-hidden flex-shrink-0"
@@ -69,9 +63,6 @@
           <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
             t('settings.log.maxFiles')
           }}</span>
-          <p class="text-xs text-[var(--text-tertiary)] mt-0.5">
-            {{ t('settings.log.maxFilesDesc') }}
-          </p>
         </div>
         <input
           type="number"
@@ -87,9 +78,6 @@
           <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
             t('settings.log.capacityMb')
           }}</span>
-          <p class="text-xs text-[var(--text-tertiary)] mt-0.5">
-            {{ t('settings.log.capacityMbDesc') }}
-          </p>
         </div>
         <input
           type="number"
@@ -105,9 +93,6 @@
           <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
             t('settings.log.persist')
           }}</span>
-          <p class="text-xs text-[var(--text-tertiary)] mt-0.5">
-            {{ t('settings.log.persistDesc') }}
-          </p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <button class="wb-btn-ghost" @click="onOpenLogDir">

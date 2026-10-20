@@ -372,9 +372,7 @@ describe('AuthorizationView 授权记录展开与逐条管理（票 02）', () =
     expect(countInvokes('plugin_auth_overview')).toBe(2)
     expect(mockedToast.success).toHaveBeenCalledTimes(1)
     // 刷新后的可见事实：该目录变成硬拒绝行（可再自行移除）
-    expect(recordRows(wrapper)).toEqual([
-      compact('/home/u/data 硬拒绝 用户拒绝 移除拒绝'),
-    ])
+    expect(recordRows(wrapper)).toEqual([compact('/home/u/data 硬拒绝 用户拒绝 移除拒绝')])
   })
 
   it('「移除拒绝」调宿主命令且不带 revoke（两种意图走两条命令）', async () => {
@@ -539,9 +537,7 @@ describe('AuthorizationView 策略档位控件（票 03 / 04）', () => {
     await tierButton(wrapper, 'fs', 'always_ask').trigger('click')
     await flushPromises()
 
-    expect(
-      mockInvoke.mock.calls.find((c) => c[0] === 'plugin_auth_set_strategy')?.[1],
-    ).toEqual({
+    expect(mockInvoke.mock.calls.find((c) => c[0] === 'plugin_auth_set_strategy')?.[1]).toEqual({
       pluginId: 'com.wasmnest.test',
       resource: 'fs',
       strategy: 'always_ask',
@@ -550,10 +546,9 @@ describe('AuthorizationView 策略档位控件（票 03 / 04）', () => {
     expect(mockedToast.success).toHaveBeenCalledTimes(1)
     expect(countInvokes('plugin_auth_overview')).toBe(2)
     expect(rowOf(wrapper, 'Test App')).toContain(compact('文件 总是询问'))
-    // 选中态落在被点的那一档上（否则用户看不出当前档位）
-    expect(tierButton(wrapper, 'fs', 'always_ask').classes()).toContain(
-      'border-[var(--color-primary)]',
-    )
+    // 选中态落在被点的那一档上（否则用户看不出当前档位）——
+    // 判据用 aria-pressed 而不是描边类：选中不再用深色边框表达（2026-10-20 用户裁决）
+    expect(tierButton(wrapper, 'fs', 'always_ask').attributes('aria-pressed')).toBe('true')
   })
 
   it('切「始终允许」先弹二次确认：确认前不写库，确认后才发命令并刷新', async () => {
@@ -585,9 +580,7 @@ describe('AuthorizationView 策略档位控件（票 03 / 04）', () => {
     confirmOkButton()!.click()
     await flushPromises()
 
-    expect(
-      mockInvoke.mock.calls.find((c) => c[0] === 'plugin_auth_set_strategy')?.[1],
-    ).toEqual({
+    expect(mockInvoke.mock.calls.find((c) => c[0] === 'plugin_auth_set_strategy')?.[1]).toEqual({
       pluginId: 'com.wasmnest.test',
       resource: 'fs',
       strategy: 'always_allow',
@@ -696,9 +689,7 @@ describe('AuthorizationView 两类资源的档位互相独立（票 06）', () =
   }
 
   function tierButton(wrapper: VueWrapper, resource: string, tier: string) {
-    const button = tierButtons(wrapper, resource).find(
-      (b) => b.attributes('data-tier') === tier,
-    )
+    const button = tierButtons(wrapper, resource).find((b) => b.attributes('data-tier') === tier)
     expect(button, `missing ${resource}/${tier} button`).toBeTruthy()
     return button!
   }
@@ -721,9 +712,7 @@ describe('AuthorizationView 两类资源的档位互相独立（票 06）', () =
     await tierButton(wrapper, 'network', 'always_ask').trigger('click')
     await flushPromises()
 
-    expect(
-      mockInvoke.mock.calls.find((c) => c[0] === 'plugin_auth_set_strategy')?.[1],
-    ).toEqual({
+    expect(mockInvoke.mock.calls.find((c) => c[0] === 'plugin_auth_set_strategy')?.[1]).toEqual({
       pluginId: 'com.wasmnest.test',
       resource: 'network',
       strategy: 'always_ask',
@@ -731,15 +720,9 @@ describe('AuthorizationView 两类资源的档位互相独立（票 06）', () =
     })
 
     // 选中态：各自落在自己那一档（若两份控件共用一个选中态，fs 也会被点亮）
-    expect(tierButton(wrapper, 'network', 'always_ask').classes()).toContain(
-      'border-[var(--color-primary)]',
-    )
-    expect(tierButton(wrapper, 'fs', 'default').classes()).toContain(
-      'border-[var(--color-primary)]',
-    )
-    expect(tierButton(wrapper, 'fs', 'always_ask').classes()).not.toContain(
-      'border-[var(--color-primary)]',
-    )
+    expect(tierButton(wrapper, 'network', 'always_ask').attributes('aria-pressed')).toBe('true')
+    expect(tierButton(wrapper, 'fs', 'default').attributes('aria-pressed')).toBe('true')
+    expect(tierButton(wrapper, 'fs', 'always_ask').attributes('aria-pressed')).toBe('false')
 
     // 徽标：两个资源各说各的档位（行文本含「文件 默认」「网络 总是询问」）
     const row = rowOf(wrapper, 'Test App')

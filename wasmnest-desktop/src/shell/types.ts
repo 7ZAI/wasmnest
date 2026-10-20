@@ -55,10 +55,14 @@ export interface ShellCtxMenu {
 
 /** 壳的本地 UI 偏好（纯壳属性，不落宿主 AppConfig——引擎面不加壳词汇） */
 export interface ShellUiPrefs {
-  /** 顶部工具栏显示「返回 / 主屏」导航按钮（隐藏后 Esc 仍全程等效返回） */
-  showNav: boolean
-  /** 主屏壁纸 id：none / aurora / dune / reef */
+  /** 壁纸 id（宿主所有面共用）：none / aurora / dune / reef / custom */
   wallpaper: string
   /** 壁纸遮罩强度 0-70（%），护文字对比度 */
   wallDim: number
+  /**
+   * 自定义壁纸文件名（`custom-<时间戳>.<ext>`，位于 app_data/wallpapers/）。
+   * 只存文件名不存绝对路径：渲染时经 asset 协议拼 appDataDir，数据目录迁移不失效。
+   * 非 custom 壁纸时也保留（用户切回内置壁纸后仍可一键切回已选图片）。
+   */
+  wallpaperImage: string
 }

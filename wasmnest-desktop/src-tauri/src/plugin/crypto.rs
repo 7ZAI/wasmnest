@@ -27,9 +27,7 @@
 use wasmnest_crypto_engine::registry::{resolve_aead, resolve_kdf, resolve_key_agreement};
 use wasmnest_host_kit::ports::downcast_host;
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_plugin_api::permission::{
-    PERMISSION_CRYPTO_AEAD, PERMISSION_CRYPTO_ASYM, PERMISSION_CRYPTO_KDF,
-};
+use wasmnest_plugin_api::permission::{PERMISSION_CRYPTO_AEAD, PERMISSION_CRYPTO_ASYM, PERMISSION_CRYPTO_KDF};
 use wasmnest_wasm_core::host_api::check_permission;
 use wasmnest_wasm_core::host_api::context::{PermissionScope, WasmHostContext};
 
@@ -67,10 +65,7 @@ impl HostModule for CryptoModule {
         DESC
     }
 
-    fn register(
-        &self,
-        linker: &mut wasmtime::component::Linker<WasmPluginState>,
-    ) -> wasmtime::Result<()> {
+    fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
         wasmnest::plugin::host_crypto::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
@@ -166,13 +161,7 @@ impl wasmnest::plugin::host_crypto::Host for WasmPluginState {
         local_private: Vec<u8>,
         peer_public: Vec<u8>,
     ) -> Result<Vec<u8>, String> {
-        key_agreement_shared(
-            ctx_of(self),
-            &self.plugin_id,
-            &algorithm,
-            &local_private,
-            &peer_public,
-        )
+        key_agreement_shared(ctx_of(self), &self.plugin_id, &algorithm, &local_private, &peer_public)
     }
 }
 
@@ -239,11 +228,7 @@ fn aead_decrypt(
 }
 
 /// AEAD 密钥生成（`crypto:aead`）
-fn aead_generate_key(
-    perm: &dyn PermissionScope,
-    plugin_id: &str,
-    algorithm: &str,
-) -> Result<Vec<u8>, String> {
+fn aead_generate_key(perm: &dyn PermissionScope, plugin_id: &str, algorithm: &str) -> Result<Vec<u8>, String> {
     if !check_permission(perm, plugin_id, PERMISSION_CRYPTO_AEAD, "host_crypto_aead_generate_key") {
         return Err("permission denied: crypto:aead".to_string());
     }
@@ -255,11 +240,7 @@ fn aead_generate_key(
 }
 
 /// AEAD nonce 生成（`crypto:aead`）
-fn aead_generate_nonce(
-    perm: &dyn PermissionScope,
-    plugin_id: &str,
-    algorithm: &str,
-) -> Result<Vec<u8>, String> {
+fn aead_generate_nonce(perm: &dyn PermissionScope, plugin_id: &str, algorithm: &str) -> Result<Vec<u8>, String> {
     if !check_permission(
         perm,
         plugin_id,
@@ -305,11 +286,7 @@ fn kdf_derive(
 /// 侧（它知道自己在请求哪个算法）；本原语不做算法特定切分（中性原语）。
 /// **安全警告**：前半段是私钥材料，任何插件代码/日志都不应把它当公开 blob
 /// 输出或打印——日志与错误路径不得携带密钥字节。
-fn key_agreement_generate(
-    perm: &dyn PermissionScope,
-    plugin_id: &str,
-    algorithm: &str,
-) -> Result<Vec<u8>, String> {
+fn key_agreement_generate(perm: &dyn PermissionScope, plugin_id: &str, algorithm: &str) -> Result<Vec<u8>, String> {
     if !check_permission(
         perm,
         plugin_id,
@@ -318,8 +295,7 @@ fn key_agreement_generate(
     ) {
         return Err("permission denied: crypto:asym".to_string());
     }
-    let provider =
-        resolve_key_agreement(algorithm).map_err(|e| crypto_err("key_agreement_generate", algorithm, e))?;
+    let provider = resolve_key_agreement(algorithm).map_err(|e| crypto_err("key_agreement_generate", algorithm, e))?;
     let (private, public) = provider.generate_keypair();
     let mut out = Vec::with_capacity(private.len() + public.len());
     out.extend_from_slice(&private);
@@ -344,8 +320,7 @@ fn key_agreement_shared(
     ) {
         return Err("permission denied: crypto:asym".to_string());
     }
-    let provider =
-        resolve_key_agreement(algorithm).map_err(|e| crypto_err("key_agreement_shared", algorithm, e))?;
+    let provider = resolve_key_agreement(algorithm).map_err(|e| crypto_err("key_agreement_shared", algorithm, e))?;
     let out = provider
         .compute_shared(local_private, peer_public)
         .map_err(|e| crypto_err("key_agreement_shared", algorithm, e))?;
@@ -388,8 +363,7 @@ mod tests {
             Some(b"aad"),
         )
         .expect("encrypt");
-        let pt = aead_decrypt(ctx.as_ref(), "p1", "aes-256-gcm", &key, &nonce, &ct, Some(b"aad"))
-            .expect("decrypt");
+        let pt = aead_decrypt(ctx.as_ref(), "p1", "aes-256-gcm", &key, &nonce, &ct, Some(b"aad")).expect("decrypt");
         assert_eq!(pt, b"payload");
     }
 
@@ -425,8 +399,7 @@ mod tests {
         let ctx = build_host_ctx();
         grant_permissions(&ctx, "p1", &[PERMISSION_CRYPTO_AEAD]);
         // 31 字节密钥（非法），不截断
-        let err =
-            aead_encrypt(ctx.as_ref(), "p1", "aes-256-gcm", &[0u8; 31], &[0u8; 12], b"x", None).unwrap_err();
+        let err = aead_encrypt(ctx.as_ref(), "p1", "aes-256-gcm", &[0u8; 31], &[0u8; 12], b"x", None).unwrap_err();
         assert!(err.contains("密钥"), "长度不足必须显式拒绝: {err}");
     }
 

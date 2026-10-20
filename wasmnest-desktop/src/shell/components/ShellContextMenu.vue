@@ -2,7 +2,7 @@
   <Teleport to="body">
     <div
       v-if="menu"
-      class="shell-ctx-root fixed z-[60] min-w-[168px] p-1.5 bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-[var(--radius-card)] shadow-[var(--shadow-card-hover)]"
+      class="shell-ctx-root shell-glass fixed z-[60] min-w-[168px] p-1.5 border border-[var(--border-strong)] rounded-[var(--radius-card)] shadow-[var(--shadow-card-hover)]"
       :style="{ left: left, top: top }"
       role="menu"
       :aria-label="t('shell.ctx.aria')"

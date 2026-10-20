@@ -16,9 +16,9 @@
 //! （见 `crates_carry_their_own_test_contracts_are_not_silently_skipped` 与
 //! `wasmnest-test/cross-end-tests` 的 `rig_assembles_the_same_server_ports_face_as_gui_boot`）。
 
+use std::sync::Arc;
 use wasmnest_server_base::config::NetworkConfig;
 use wasmnest_server_core::TransportFace;
-use std::sync::Arc;
 
 use crate::db::Database;
 

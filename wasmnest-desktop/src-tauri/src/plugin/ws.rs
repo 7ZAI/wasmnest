@@ -35,9 +35,7 @@ use std::sync::Arc;
 use wasmnest_host_kit::ports::{downcast_host, HostPorts};
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
 use wasmnest_server_base::ports::BusPort;
-use wasmnest_server_websocket::plugin_binding::ports::{
-    BoxedBlocked, FrameDispatch, WsFrameTarget, WsPorts,
-};
+use wasmnest_server_websocket::plugin_binding::ports::{BoxedBlocked, FrameDispatch, WsFrameTarget, WsPorts};
 
 use wasmnest_wasm_core::bus::{HostBusPort, MessageBus, WsFrameDispatch};
 use wasmnest_wasm_core::host_api::check_permission;
@@ -71,9 +69,7 @@ impl HostWsPorts {
     /// 装配回调只拿得到 `Arc<dyn HostPorts>`（host-kit 的类型擦除通道），故总线在构造期
     /// 向下转型取一次，权限判定留给 [`HostWsPorts::check_permission`] 每次调用转型。
     pub fn from_erased(host: Arc<dyn HostPorts>) -> Self {
-        let bus = downcast_host::<WasmHostContext>(host.as_ref())
-            .message_bus()
-            .clone();
+        let bus = downcast_host::<WasmHostContext>(host.as_ref()).message_bus().clone();
         Self { bus, ctx: Some(host) }
     }
 
@@ -158,9 +154,7 @@ impl WsPorts for HostWsPorts {
 ///
 /// `MessageBus::dispatcher` 是 `async` 方法（`RwLock` 读），而能力域的 `dispatch_frame`
 /// 是同步端口方法 ⇒ 走宿主同一个桥读一次。
-fn block_on_dispatcher(
-    bus: &Arc<MessageBus>,
-) -> Option<Arc<dyn wasmnest_wasm_core::bus::MessageDispatcher>> {
+fn block_on_dispatcher(bus: &Arc<MessageBus>) -> Option<Arc<dyn wasmnest_wasm_core::bus::MessageDispatcher>> {
     wasmnest_wasm_core::runtime_util::block_on_async(async move { bus.dispatcher().await })
 }
 
@@ -188,11 +182,10 @@ fn install(host: Arc<dyn HostPorts>) {
 }
 
 /// 端口装配器静态（与白名单条目 / 强制引用行同处；内核装配链遍历本自报表）
-pub static WS_PORTS_INSTALLER: wasmnest_host_kit::DomainPortsInstaller =
-    wasmnest_host_kit::DomainPortsInstaller {
-        name: wasmnest_server_websocket::plugin_binding::MODULE_NAME,
-        install,
-    };
+pub static WS_PORTS_INSTALLER: wasmnest_host_kit::DomainPortsInstaller = wasmnest_host_kit::DomainPortsInstaller {
+    name: wasmnest_server_websocket::plugin_binding::MODULE_NAME,
+    install,
+};
 
 wasmnest_host_kit::submit_domain_ports_installer!(WS_PORTS_INSTALLER);
 

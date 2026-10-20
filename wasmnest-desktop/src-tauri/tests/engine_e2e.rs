@@ -21,15 +21,15 @@ mod support;
 
 use std::sync::Arc;
 
-use wasmnest_desktop_lib::wasm_core::config::{plugin_debug_mode, CoreConfig};
-use wasmnest_desktop_lib::wasm_core::host_api::context::StorageScope;
-use wasmnest_desktop_lib::wasm_core::manifest::ResourceOverrides;
-use wasmnest_desktop_lib::wasm_core::manager::runtime::EngineSetup;
-use wasmnest_desktop_lib::wasm_core::runtime_util::block_on_async;
-use wasmnest_host_kit::limits::StoreLimits;
 use support::capture::{capture, CapturedEvent};
 use support::*;
 use tracing::Level;
+use wasmnest_desktop_lib::wasm_core::config::{plugin_debug_mode, CoreConfig};
+use wasmnest_desktop_lib::wasm_core::host_api::context::StorageScope;
+use wasmnest_desktop_lib::wasm_core::manager::runtime::EngineSetup;
+use wasmnest_desktop_lib::wasm_core::manifest::ResourceOverrides;
+use wasmnest_desktop_lib::wasm_core::runtime_util::block_on_async;
+use wasmnest_host_kit::limits::StoreLimits;
 use wasmtime::ResourceLimiter;
 
 /// 直连运行时的夹具属主 id（`setup_wasm_runtime` 的权限授予面固定按它装配；
@@ -716,25 +716,21 @@ fn customizer_overrides_unlocked_knobs_end_to_end() {
     // 实验组：钩子关掉 backtrace 与并行编译（配置面语义上「诊断地基 / 编译并发」可调）
     // 用 `wasm_backtrace_max_frames(None)` 而非已废弃的 `wasm_backtrace(false)`
     // （上游文档：二者等价，None = trap 错误串不再附带 wasm backtrace）
-    let hooked = setup_wasm_runtime_with_setup(
-        EngineSetup::new(CoreConfig::default()).with_customizer(|config| {
-            config.wasm_backtrace_max_frames(None);
-            config.parallel_compilation(false);
-            Ok(())
-        }),
-    )
+    let hooked = setup_wasm_runtime_with_setup(EngineSetup::new(CoreConfig::default()).with_customizer(|config| {
+        config.wasm_backtrace_max_frames(None);
+        config.parallel_compilation(false);
+        Ok(())
+    }))
     .0;
     assert!(
         !runtime_engine(&hooked).get_parallel_compilation(),
         "逃生舱必须能覆盖非锁定项（parallel_compilation）"
     );
-    let hooked_err = trap_error_with_setup(
-        EngineSetup::new(CoreConfig::default()).with_customizer(|config| {
-            config.wasm_backtrace_max_frames(None);
-            config.parallel_compilation(false);
-            Ok(())
-        }),
-    );
+    let hooked_err = trap_error_with_setup(EngineSetup::new(CoreConfig::default()).with_customizer(|config| {
+        config.wasm_backtrace_max_frames(None);
+        config.parallel_compilation(false);
+        Ok(())
+    }));
     assert!(
         !hooked_err.contains("wasm backtrace:"),
         "逃生舱必须能覆盖非锁定项（wasm_backtrace），且在真实 trap 上生效: {hooked_err}"

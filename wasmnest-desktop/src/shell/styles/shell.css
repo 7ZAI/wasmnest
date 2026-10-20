@@ -239,11 +239,12 @@
   .shell-seg button:hover {
     color: var(--text-primary);
   }
+  /* 选中用固定黑底 + 反白文字：不用白色药丸，也不加勾章，不随明暗主题反转
+     （2026-10-20 用户裁决：除背景壁纸选择外，选中背景统一为黑色）。 */
   .shell-seg button.on {
-    background: var(--bg-card);
-    color: var(--text-primary);
+    background: var(--selection-solid);
+    color: var(--selection-solid-ink);
     font-weight: 500;
-    box-shadow: var(--shadow-card);
   }
   .shell-seg button.on.risky {
     background: var(--color-danger-light);
@@ -416,11 +417,13 @@
     color: var(--color-danger-ink);
   }
 
-  /* ==================== 主屏壁纸（token 派生渐变 + 可调遮罩，spec-c §5） ====================
+  /* ==================== 壳壁纸（token 派生渐变 + 可调遮罩，spec-c §5） ====================
+     壁纸挂在壳根（ShellHost 的 .shell-root）上，主屏 / 系统页 / 应用面共用同一背景；
+     宿主页面不铺自己的不透明底色，背景切换才不会「只在主屏生效」。
      遮罩不是一层平铺色：自上而下由 --wall-dim 的 40% 加深到 130%（封顶 100%），
      上方保持壁纸本色（光源在这里），下方压住亮度给图标名字与计数兜对比度。
      遮罩只在壁纸存在时叠加（无壁纸 → 不叠，直接透出 --bg-page）。 */
-  .home-wall {
+  .shell-wall {
     background-color: var(--bg-page);
     background-image:
       linear-gradient(
@@ -436,14 +439,22 @@
       var(--wall-active);
     background-attachment: scroll, scroll, scroll;
   }
-  .home-wall.wall-aurora {
+  .shell-wall.wall-aurora {
     --wall-active: var(--wall-aurora);
   }
-  .home-wall.wall-dune {
+  .shell-wall.wall-dune {
     --wall-active: var(--wall-dune);
   }
-  .home-wall.wall-reef {
+  .shell-wall.wall-reef {
     --wall-active: var(--wall-reef);
+  }
+  /* 自定义图片：URL 由 ShellHost 以 --wall-custom 内联变量传入（存文件名而非绝对
+     路径，数据目录搬迁后仍可解析）。cover 让 16:9 / 竖图都铺满整屏不变形；
+     回落 --wall-aurora 覆盖「偏好是 custom 但 URL 还没解析完」的一帧。 */
+  .shell-wall.wall-custom {
+    --wall-active: var(--wall-custom, var(--wall-aurora));
+    background-size: cover;
+    background-position: center;
   }
   /* 设置页壁纸预览色块（无遮罩层，直出渐变） */
   .wall-swatch.wall-aurora {
@@ -454,6 +465,29 @@
   }
   .wall-swatch.wall-reef {
     background-image: var(--wall-reef);
+  }
+
+  /* ==================== 浮层玻璃（通知 / 快捷设置 / 右键菜单） ====================
+     只给「浮在内容上」的面用：背后是应用界面或主屏图块，blur 才有可模糊的细节。
+     表面色取 --bg-glass（96%）：透明度不是玻璃感的来源，模糊才是；
+     继续降到 92% 时，面板里 11px 的 tertiary 文字在背后纯黑 / 纯白内容上最低
+     会掉到 4.09:1（6 套色板 × 明暗两档，低于 AA 4.5:1），所以底色留在这个下限。
+     不用 @supports 分支：不支持 backdrop-filter 的 WebView 会忽略模糊声明，
+     96% 的近实底仍能压住下层内容（不透明回退）。 */
+  .shell-glass {
+    background: var(--bg-glass);
+    -webkit-backdrop-filter: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate));
+    backdrop-filter: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate));
+  }
+
+  /* 系统「降低透明度」偏好：去掉模糊并回到实心卡面。WebKitGTK 当前不支持该查询时
+     整块被忽略；支持时按用户偏好回退，不靠透明度传递层级。 */
+  @media (prefers-reduced-transparency: reduce) {
+    .shell-glass {
+      background: var(--bg-card);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
   }
 
   /* ==================== 屏幕切换动效（减速到达，只动 transform/opacity，spec-c §1） ==================== */

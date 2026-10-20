@@ -9,7 +9,8 @@
         <!-- Backdrop -->
         <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
 
-        <!-- Dialog -->
+        <!-- Dialog：决策面保持实心（surface ladder）——授权要逐字读，不做玻璃；
+             背景虚化已由 scrim 承担，弹窗主体不再叠第二层 backdrop-filter -->
         <div
           class="relative w-full max-w-sm rounded-card shadow-2xl border bg-card border-[var(--border)]"
         >

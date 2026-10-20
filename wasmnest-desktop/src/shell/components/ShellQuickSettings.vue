@@ -2,7 +2,7 @@
   <Transition name="shell-panel">
     <div
       v-if="open"
-      class="qs-panel shell-quick-root"
+      class="qs-panel shell-quick-root shell-glass"
       role="dialog"
       :aria-label="t('shell.quickSettings.title')"
     >
@@ -10,11 +10,7 @@
       <div class="panel-h">
         <span class="t">{{ t('shell.quickSettings.title') }}</span>
         <span class="grow"></span>
-        <button
-          class="shell-mini"
-          :aria-label="t('shell.quickSettings.close')"
-          @click="close"
-        >
+        <button class="shell-mini" :aria-label="t('shell.quickSettings.close')" @click="close">
           <ShellIcon name="x" :size="12" />
         </button>
       </div>
@@ -25,7 +21,7 @@
            面只留壳自身的通用开关。 -->
       <div class="panel-in">
         <div class="tiles">
-          <button class="tile" :class="{ on: isDark }" @click="toggleTheme">
+          <button class="tile" :class="{ on: isDark }" :aria-pressed="isDark" @click="toggleTheme">
             <!-- 深浅色切换图标加大一号（用户要求）：区别于其余快捷开关的 15px -->
             <ShellIcon name="theme" :size="20" />
             <span class="tt">
@@ -33,18 +29,32 @@
               <span>{{ isDark ? t('shell.quickSettings.on') : t('shell.quickSettings.off') }}</span>
             </span>
           </button>
-          <button class="tile" :class="{ on: animationsEnabled }" @click="toggleAnimations">
+          <button
+            class="tile"
+            :class="{ on: animationsEnabled }"
+            :aria-pressed="animationsEnabled"
+            @click="toggleAnimations"
+          >
             <ShellIcon name="bolt" :size="15" />
             <span class="tt">
               <b>{{ t('shell.quickSettings.tileAnim') }}</b>
-              <span>{{ animationsEnabled ? t('shell.quickSettings.on') : t('shell.quickSettings.off') }}</span>
+              <span>{{
+                animationsEnabled ? t('shell.quickSettings.on') : t('shell.quickSettings.off')
+              }}</span>
             </span>
           </button>
-          <button class="tile" :class="{ on: preventSleep }" @click="togglePreventSleep">
+          <button
+            class="tile"
+            :class="{ on: preventSleep }"
+            :aria-pressed="preventSleep"
+            @click="togglePreventSleep"
+          >
             <ShellIcon name="sleep" :size="15" />
             <span class="tt">
               <b>{{ t('shell.quickSettings.tileSleep') }}</b>
-              <span>{{ preventSleep ? t('shell.quickSettings.on') : t('shell.quickSettings.off') }}</span>
+              <span>{{
+                preventSleep ? t('shell.quickSettings.on') : t('shell.quickSettings.off')
+              }}</span>
             </span>
           </button>
         </div>
@@ -113,7 +123,7 @@ function close() {
   width: 268px;
   display: flex;
   flex-direction: column;
-  background: var(--bg-card);
+  /* 表面色与背景模糊由 .shell-glass 提供（浮在主屏图块 / 应用内容之上） */
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sheet);
   box-shadow: var(--shadow-card-hover);
@@ -169,14 +179,17 @@ function close() {
   border-color: var(--border-strong);
   background: var(--bg-hover);
 }
-/* 「开」的档位：底色提一档 + 主色描边 + 图标回到正文墨色（关态图标是次级灰）。
-   颜色不是唯一线索——副标题写着「开 / 关」，读屏与色觉障碍用户同样可分。 */
+/* 「开」的档位：固定黑底 + 反白图文（不随明暗主题反转），
+   不画深色描边；颜色不是唯一线索——副标题写着「开 / 关」并由 aria-pressed 宣布。 */
 .tile.on {
-  background: var(--color-primary-light);
-  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  background: var(--selection-solid);
+  /* 透明边框让黑底铺到边，不再出现一圈主色描边 */
+  border-color: transparent;
 }
-.tile.on svg {
-  color: var(--text-primary);
+.tile.on svg,
+.tile.on .tt b,
+.tile.on .tt span {
+  color: var(--selection-solid-ink);
 }
 .tile .tt {
   min-width: 0;

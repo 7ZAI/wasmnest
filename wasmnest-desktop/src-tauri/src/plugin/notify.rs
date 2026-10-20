@@ -16,10 +16,10 @@
 //! 降级成默认值），但取值在桌面**静默忽略**（无震动 / 提示音通道）——契约文档已声明
 //! 「平台不支持的选项静默忽略」；报错会让只想发通知的桌面调用点无谓失败。
 
+use tauri::Emitter;
 use wasmnest_host_kit::ports::downcast_host;
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
 use wasmnest_wasm_core::host_api::context::WasmHostContext;
-use tauri::Emitter;
 
 use crate::plugin::bindings::wasmnest;
 

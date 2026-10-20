@@ -215,10 +215,10 @@ mod linux_logind {
             "Inhibit",
         )?;
         msg.append_all((
-            "sleep",                                                // what：阻止系统休眠（不阻止屏幕熄灭）
+            "sleep",                                                 // what：阻止系统休眠（不阻止屏幕熄灭）
             "WasmNest",                                              // who：应用标识
             "WasmNest 服务器运行中，阻止系统休眠以保持远程终端在线", // why：人类可读原因
-            "block",                                                // mode：强制阻塞
+            "block",                                                 // mode：强制阻塞
         ));
         Ok(msg)
     }

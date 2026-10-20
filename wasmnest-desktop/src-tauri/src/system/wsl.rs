@@ -16,8 +16,8 @@
 //! 消费侧（业务会话 = 插件 `launch.rs::build_argv`，插件私有 PTY = 插件自己）。
 
 use crate::Result;
-use wasmnest_server_base::process::create_command;
 use encoding_rs::UTF_16LE;
+use wasmnest_server_base::process::create_command;
 
 /// WSL 发行版信息
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

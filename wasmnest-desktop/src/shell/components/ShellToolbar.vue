@@ -40,8 +40,8 @@
       </span>
     </div>
 
-    <!-- 导航（可在设置隐藏；Esc 始终等效返回——spec-c §6） -->
-    <nav v-if="prefs.showNav" class="flex items-center gap-0.5 ml-2.5 shrink-0" aria-label="导航">
+    <!-- 导航（桌面端常驻：用户 2026-10-19 裁决取消显隐设置；Esc 仍等效返回） -->
+    <nav class="flex items-center gap-0.5 ml-2.5 shrink-0" aria-label="导航">
       <button
         class="tb-btn"
         :disabled="!canBack"
@@ -159,12 +159,10 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useSettingsStore } from '@/stores/settings'
 import { useTheme } from '@/composables/useTheme'
 import { useShellState } from '../composables/useShellState'
-import { useShellSettings } from '../composables/useShellSettings'
 import ShellIcon from './ShellIcon.vue'
 
 const { t } = useI18n()
 const state = useShellState()
-const { prefs } = useShellSettings()
 const settingsStore = useSettingsStore()
 const { isSystemDark } = useTheme()
 
@@ -284,6 +282,11 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
   position: relative;
   z-index: 30;
   -webkit-app-region: drag;
+}
+/* 壁纸开启时工具栏轻透：它是一行普通 flex chrome，背后只有壳根壁纸，
+   透出色相就够；不加 backdrop-filter——模糊柔和渐变看不出来，只多一层合成。 */
+.shell-wall .shell-toolbar {
+  background: var(--bg-veil);
 }
 .tb-btn,
 .tb-win {

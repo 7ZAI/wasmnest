@@ -18,16 +18,16 @@ use std::time::{Duration, Instant};
 
 use actix_web::dev::ServerHandle;
 use base64::Engine;
+use p256::ecdsa::signature::Signer;
+use p256::ecdsa::SigningKey;
+use p256::pkcs8::EncodePublicKey;
 use wasmnest_desktop_lib::db::Database;
-use wasmnest_discovery_engine::advertiser::MdnsAdvertiser;
 use wasmnest_desktop_lib::server::composition::start_http_server;
 use wasmnest_desktop_lib::system::app_context::AppContextBuilder;
 use wasmnest_desktop_lib::system::info::SystemInfo;
 use wasmnest_desktop_lib::wasm_core::PluginHost;
 use wasmnest_desktop_lib::AppConfig;
-use p256::ecdsa::signature::Signer;
-use p256::ecdsa::SigningKey;
-use p256::pkcs8::EncodePublicKey;
+use wasmnest_discovery_engine::advertiser::MdnsAdvertiser;
 
 /// 构造带 JSON body 的 POST 请求
 ///
@@ -253,7 +253,10 @@ async fn init_test_app_context() {
         let db = Arc::new(std::sync::Mutex::new(
             Database::new(Path::new(":memory:")).expect("create in-memory db failed"),
         ));
-        db.lock().expect("db lock").init_schema().expect("init db schema failed");
+        db.lock()
+            .expect("db lock")
+            .init_schema()
+            .expect("init db schema failed");
 
         let plugins_dir = bundled_plugins_dir();
         // 用户插件目录：独立空目录（复用 plugins_dir 会让随包插件被标成
@@ -267,7 +270,7 @@ async fn init_test_app_context() {
             &plugins_dir,
             &user_plugins_dir, // 用户插件目录：独立空目录（见上方来源标注说明）
             None,
-            None, // 整核抽出 §3.3：无头测试不注入 PeerCtxProvider（HEADLESS_UNAVAILABLE 语义不变）
+            None,       // 整核抽出 §3.3：无头测试不注入 PeerCtxProvider（HEADLESS_UNAVAILABLE 语义不变）
             Vec::new(), // 票 08/P0-2：第一方豁免表宿主注入，无头测试空表（无免弹窗项）
             wasmnest_wasm_core::manager::runtime::AbiPolicy {
                 form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),

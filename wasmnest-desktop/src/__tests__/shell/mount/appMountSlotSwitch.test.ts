@@ -21,14 +21,15 @@ const unmountAppBundle = vi.hoisted(() => vi.fn(async () => {}))
 const mountAppBundle = vi.hoisted(() => vi.fn())
 const notifyAppRoute = vi.hoisted(() => vi.fn(async () => {}))
 const rememberAppRoute = vi.hoisted(() => vi.fn())
-const ensureChannelToken = vi.hoisted(() => vi.fn(async () => {}))
+// 挂载换发令牌（不信任页面内存缓存）：AppMountSlot 挂载前必经
+const refreshChannelToken = vi.hoisted(() => vi.fn(async () => {}))
 
 vi.mock('@/shell/mount/useAppMount', () => ({
   useAppMount: () => ({ mountAppBundle, unmountAppBundle, notifyAppRoute }),
 }))
 vi.mock('@/shell/mount/appSession', () => ({ rememberAppRoute }))
 vi.mock('@/utils/appCommands', () => ({
-  ensureChannelToken,
+  refreshChannelToken,
   appInvoke: vi.fn(async () => null),
   appStorageGet: vi.fn(async () => undefined),
   appStorageSet: vi.fn(async () => {}),
@@ -70,7 +71,7 @@ describe('AppMountSlot 换应用（多任务切换）', () => {
     mountAppBundle.mockReset()
     notifyAppRoute.mockClear()
     rememberAppRoute.mockClear()
-    ensureChannelToken.mockClear()
+    refreshChannelToken.mockClear()
     mountAppBundle.mockImplementation(async () => makeHandle())
   })
 
@@ -88,6 +89,8 @@ describe('AppMountSlot 换应用（多任务切换）', () => {
   it('挂载时按 appId 装载（env.appId 不得串用别的应用）', async () => {
     await mountWith(APP_A, '/sessions')
     expect(mountAppBundle).toHaveBeenCalledTimes(1)
+    // 挂载 = 身份重绑：必须强制换发令牌，不能复用页面内存里的旧缓存
+    expect(refreshChannelToken).toHaveBeenCalledWith(APP_A)
     const env = mountAppBundle.mock.calls[0][1] as { appId: string; initialRoute: string }
     expect(env.appId).toBe(APP_A)
     expect(env.initialRoute).toBe('/sessions')
@@ -131,7 +134,7 @@ describe('AppMountSlot 换应用（多任务切换）', () => {
 
     // B 的令牌获取挂起不返回 —— 模拟"装载慢"，期间再切到 C
     let releaseSecond: (() => void) | null = null
-    ensureChannelToken.mockImplementation(async (appId: string) => {
+    refreshChannelToken.mockImplementation(async (appId: string) => {
       if (appId === APP_B) {
         await new Promise<void>((resolve) => {
           releaseSecond = resolve

@@ -26,7 +26,6 @@ fn test_ai_chatbox_wasip3_artifact_loads() {
         .load_plugin_from_file(&wasm_path, "com.wasmnest.ai-chatbox", host_ctx, &[], None)
         .expect("load wasip3 ai-chatbox: all imports must resolve");
     // manifest 往返（无副作用导出，验证 bindgen 接口工作）
-    let manifest: serde_json::Value =
-        serde_json::from_str(&plugin.get_manifest().expect("manifest")).unwrap();
+    let manifest: serde_json::Value = serde_json::from_str(&plugin.get_manifest().expect("manifest")).unwrap();
     assert_eq!(manifest["id"], "com.wasmnest.ai-chatbox");
 }

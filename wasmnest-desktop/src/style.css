@@ -88,6 +88,22 @@ html.platform-linux {
   --bg-hover: #e7e4dc;
   --bg-input: #fdfcfa;
 
+  /* 透明度阶梯（surface ladder，2026-10-20 用户裁决）
+     原则：越像「浮在内容上的壳层」越透，越像「承载阅读与决策的内容面」越实。
+     - --bg-veil：内容卡片 / 工具栏（背后只有壁纸）。92% 足以透出壁纸色相，
+       又不吃掉 --text-tertiary 的对比度余量（6 套色板 × 明暗两档、壁纸最亮区域
+       实测最低 4.77:1）。
+     - --bg-glass：浮层（通知 / 快捷设置 / 右键菜单，背后是任意应用内容）。
+       96% 不是保守：面板里 11px 的 tertiary 文字在「纯黑 / 纯白」两种极端内容上
+       仍要 ≥4.5:1（同口径实测最低 4.61:1；降到 92% 只剩 4.09:1）；
+       玻璃感交给 blur，不靠继续降透明度。
+     - 决策弹窗（授权 / 退出确认）与授权列表保持实心：那里优先逐字可读，不做氛围。
+     两个表面 token 引用 --bg-card，深浅主题 / 各色板自动跟随，无需在 :root.dark 重定义。 */
+  --bg-veil: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  --bg-glass: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  --ui-glass-blur: 18px;
+  --ui-glass-saturate: 115%;
+
   /* Text
      对比度阶梯（对 page / card / sidebar 三个面取最差值，WCAG AA 4.5:1 为下限）：
      primary ≈14:1 · secondary ≈6:1 · tertiary ≈4.5:1。
@@ -144,7 +160,7 @@ html.platform-linux {
   /* 壳顶部工具栏高度（导航与窗口控制所在行，通知面板以此为锚点定位） */
   --toolbar-h: 44px;
 
-  /* 主屏壁纸：token 派生渐变（color-mix 自既有语义 token，零新 hex，双主题自动适配）。
+  /* 壳壁纸：token 派生渐变（color-mix 自既有语义 token，零新 hex，双主题自动适配）。
      三层结构（自后向前）：基底斜向渐变定色相 → 左上 / 右上两处「光源」径向渐变
      （纯透明边缘，模拟光从画面外打进来）→ 壳叠加的 --wall-dim 遮罩（护文字对比度）。
      只有一层线性渐变的壁纸在任何主题下都是同一条色带子，画面平且没有重心。
@@ -234,6 +250,16 @@ html.platform-linux {
   --focus-ring-color: var(--color-info);
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
+
+  /* 选中态分两套，都不用黑色描边：
+     · 背景壁纸选择（预览类，唯一保留勾章）：表面抬一档选中色阶 + 黑底白勾
+     · 其余选择（分段档位 / 快捷磁贴 / 多任务信息条 / 授权档位）：黑底白字
+     选中填充用固定近黑 + 固定反白，不随明暗主题反转——用户裁决「选中背景为黑色、
+     不是白色」，深色主题下也不能翻成白底（2026-10-20）。 */
+  --selection-solid: #1d1a14;
+  --selection-solid-ink: #fdfcfa;
+  --selection-halo: color-mix(in srgb, var(--text-primary) 22%, transparent);
+  --selection-tint: color-mix(in srgb, var(--selection-solid) 8%, var(--bg-card));
 
   /* Component Sizes */
   --input-height: 36px;

@@ -36,6 +36,8 @@
 //! 「通用注册表」薄壳；迁出会迫使内核启动门重建（内核无法点名宿主类型）。本域经
 //! `wasmnest_wasm_core::host_api::auth_center` 公开面取用，不得复制仲裁判据。
 
+use chrono::Utc;
+use rusqlite::OptionalExtension;
 use wasmnest_host_kit::ports::downcast_host;
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
 use wasmnest_plugin_api::permission::PERMISSION_AUTH;
@@ -43,8 +45,6 @@ use wasmnest_wasm_core::host_api::auth_center;
 use wasmnest_wasm_core::host_api::check_permission;
 use wasmnest_wasm_core::host_api::context::{DbScope, PermissionScope, SecretsScope, WasmHostContext};
 use wasmnest_wasm_core::runtime_util::block_on_async;
-use chrono::Utc;
-use rusqlite::OptionalExtension;
 
 use crate::plugin::bindings::wasmnest;
 
@@ -79,10 +79,7 @@ impl HostModule for AuthModule {
         DESC
     }
 
-    fn register(
-        &self,
-        linker: &mut wasmtime::component::Linker<WasmPluginState>,
-    ) -> wasmtime::Result<()> {
+    fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
         wasmnest::plugin::host_auth_center::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
@@ -383,10 +380,7 @@ pub(crate) fn auth_setting_set(
 // ==================== v19 保留面（v24 修订：公钥托管在 plugin_secrets） ====================
 
 /// 链路身份 Kd 公钥材料读取（`link_crypto::identity_parts` 语义）；未就绪 → None
-pub(crate) fn auth_link_identity_parts(
-    perm: &dyn PermissionScope,
-    plugin_id: &str,
-) -> Result<Option<String>, String> {
+pub(crate) fn auth_link_identity_parts(perm: &dyn PermissionScope, plugin_id: &str) -> Result<Option<String>, String> {
     if !check_permission(perm, plugin_id, PERMISSION_AUTH, "host_auth_link_identity_parts") {
         return Err("permission denied".to_string());
     }
@@ -421,10 +415,7 @@ pub(crate) fn auth_center_register(
 }
 
 /// 注销本插件的认证中心角色（仅属主本人；无中心在册幂等成功）
-pub(crate) fn auth_center_unregister(
-    perm: &dyn PermissionScope,
-    plugin_id: &str,
-) -> Result<(), String> {
+pub(crate) fn auth_center_unregister(perm: &dyn PermissionScope, plugin_id: &str) -> Result<(), String> {
     if !check_permission(perm, plugin_id, PERMISSION_AUTH, "host_auth_center_unregister") {
         return Err("permission denied".to_string());
     }
@@ -432,10 +423,7 @@ pub(crate) fn auth_center_unregister(
 }
 
 /// 列取当前认证中心登记的认证方式（组合式认证的发现端，K6；无中心 fail-closed）
-pub(crate) fn auth_methods_list(
-    perm: &dyn PermissionScope,
-    plugin_id: &str,
-) -> Result<Vec<String>, String> {
+pub(crate) fn auth_methods_list(perm: &dyn PermissionScope, plugin_id: &str) -> Result<Vec<String>, String> {
     if !check_permission(perm, plugin_id, PERMISSION_AUTH, "host_auth_methods_list") {
         return Err("permission denied".to_string());
     }
@@ -468,10 +456,10 @@ pub(crate) fn auth_method_invoke(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wasmnest_wasm_core::host_api::grant_permissions;
-    use wasmnest_wasm_core::test_support::build_host_ctx_at;
     use std::path::Path;
     use std::sync::Arc;
+    use wasmnest_wasm_core::host_api::grant_permissions;
+    use wasmnest_wasm_core::test_support::build_host_ctx_at;
 
     /// 文件后备库宿主上下文（重启持久化测试用；`build_host_ctx_at(Some(path))`）
     fn file_host_ctx(db_path: &Path) -> Arc<WasmHostContext> {

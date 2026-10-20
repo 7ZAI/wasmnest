@@ -33,11 +33,11 @@ pub mod assets;
 pub mod auth;
 pub mod bindings;
 
-/// 桌面 guest 事件派发器（票 03 / ADR 0022）：`events` 导出的调用契约面
-pub mod guest_events;
 pub mod connection;
 pub mod crypto;
 pub mod fs;
+/// 桌面 guest 事件派发器（票 03 / ADR 0022）：`events` 导出的调用契约面
+pub mod guest_events;
 /// 宿主端事实（平台标识 / 入站服务器端口）——wasm-core 单形态收口后从内核迁出的
 /// 端差异实现（内核只持 `HostFactsPort` 端口词汇）
 pub mod host_facts;

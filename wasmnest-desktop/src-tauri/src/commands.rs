@@ -11,13 +11,15 @@ use crate::db::Database;
 use crate::system::config::{AppConfig, NetworkConfig};
 use crate::system::constants::{TERMINAL_BG_EXTENSIONS, TERMINAL_BG_FILE_PREFIX, TERMINAL_BG_MAX_BYTES};
 use crate::Result;
+use serde::Deserialize;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tauri::{Emitter, Manager, State};
+use tauri_plugin_dialog::DialogExt;
+use tracing_subscriber::filter::EnvFilter;
 use wasmnest_server_core::link_crypto::{self, LinkCryptoConfig};
 use wasmnest_server_core::metrics::ServerMetrics;
 use wasmnest_server_core::supervisor::{ServerStatusInfo, ServerSupervisor};
-use serde::Deserialize;
-use std::sync::Arc;
-use tauri::{Emitter, Manager, State};
-use tracing_subscriber::filter::EnvFilter;
 
 // ==================== 会话命令面（票 08 已整体注销） ====================
 
@@ -204,6 +206,186 @@ fn validate_terminal_bg_source(source: &str) -> Result<(std::path::PathBuf, Stri
     }
 
     Ok((src.to_path_buf(), ext))
+}
+
+// ==================== Shell Wallpaper (custom image) ====================
+
+/// 自定义壁纸在应用数据目录下的子目录（asset 协议 scope 已含 `$APPDATA/**/*`）
+const WALLPAPER_DIR: &str = "wallpapers";
+/// 自定义壁纸文件名前缀：清理只认自己写下的文件，不碰目录里的其他内容
+const WALLPAPER_FILE_PREFIX: &str = "custom-";
+/// 允许的图片格式（不含 svg：背景图不需要可外链资源的矢量格式）
+const WALLPAPER_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp"];
+/// 单文件上限：20 MB 足够 4K JPEG/PNG，再大只会拖慢 WebView 解码
+const WALLPAPER_MAX_BYTES: u64 = 20 * 1024 * 1024;
+
+/// 选择一张本地图片作为壳壁纸。
+///
+/// 用户取消 → `Ok(None)`；成功 → 复制到
+/// `app_data/wallpapers/custom-<nanos>.<ext>` 并返回**文件名**（前端只存文件名，
+/// 渲染时经 asset 协议拼 appDataDir；绝对路径不落偏好，避免迁移后失效）。
+///
+/// 复制而非引用源路径：源图被移动 / 删除后壁纸不应失效（与终端背景图同一判据）。
+/// 选新图时清理旧的 custom-* 文件；清理失败只记日志，不回滚本次成功。
+#[tauri::command]
+pub async fn pick_custom_wallpaper(app_handle: tauri::AppHandle) -> Result<Option<String>> {
+    let Some(source) = pick_wallpaper_file(&app_handle).await? else {
+        return Ok(None);
+    };
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e: tauri::Error| crate::AppError::Config(e.to_string()))?;
+    store_custom_wallpaper(&data_dir, &source).map(Some)
+}
+
+/// 清理自定义壁纸文件（「移除图片」与「恢复初始设置」共用）。
+///
+/// 只删 `custom-<数字>.<白名单扩展名>`，目录里其他文件不动；目录不存在视为已清理。
+#[tauri::command]
+pub fn clear_custom_wallpaper(app_handle: tauri::AppHandle) -> Result<()> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e: tauri::Error| crate::AppError::Config(e.to_string()))?;
+    let dir = data_dir.join(WALLPAPER_DIR);
+    let removed = remove_custom_wallpapers(&dir, None)?;
+    // 目录空了再回收（失败只可能是非空 / 已被删，均无需报错）
+    if let Err(e) = std::fs::remove_dir(&dir) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            tracing::debug!("自定义壁纸目录未回收 {}: {e}", dir.display());
+        }
+    }
+    tracing::info!("自定义壁纸文件已清理: {removed} 个");
+    Ok(())
+}
+
+/// 原生取图对话框（Rust 侧发起：前端不持有 fs 权限，也不传任意路径给命令）
+async fn pick_wallpaper_file(app_handle: &tauri::AppHandle) -> Result<Option<PathBuf>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app_handle
+        .dialog()
+        .file()
+        .add_filter("Images", WALLPAPER_EXTENSIONS)
+        .pick_file(move |selection| {
+            if tx.send(selection).is_err() {
+                tracing::debug!("pick_custom_wallpaper: receiver dropped before dialog completed");
+            }
+        });
+    match rx.await {
+        Ok(Some(file_path)) => file_path
+            .into_path()
+            .map(Some)
+            .map_err(|e| crate::AppError::InvalidInput(format!("自定义壁纸路径转换失败: {e}"))),
+        // 用户取消（与失败可区分：None，不回错误）
+        Ok(None) => Ok(None),
+        Err(e) => Err(crate::AppError::Internal(format!(
+            "pick_custom_wallpaper: dialog channel closed: {e}"
+        ))),
+    }
+}
+
+/// 校验源图并复制到壁纸目录；返回新文件名。
+fn store_custom_wallpaper(data_dir: &Path, source: &Path) -> Result<String> {
+    let (src, ext) = validate_wallpaper_source(source)?;
+    let dir = data_dir.join(WALLPAPER_DIR);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| crate::AppError::Config(format!("创建壁纸目录 {} 失败: {e}", dir.display())))?;
+
+    // 纳秒时间戳做文件名：每次选择都换 URL，WebView 不会命中旧图缓存
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| crate::AppError::Internal(format!("系统时间异常: {e}")))?
+        .as_nanos();
+    let file_name = format!("{WALLPAPER_FILE_PREFIX}{stamp}.{ext}");
+    let dest = dir.join(&file_name);
+    std::fs::copy(&src, &dest)
+        .map_err(|e| crate::AppError::Config(format!("复制壁纸 {} 到 {} 失败: {e}", src.display(), dest.display())))?;
+
+    // 新图落盘后再清旧图：复制失败时原壁纸仍可用
+    if let Err(e) = remove_custom_wallpapers(&dir, Some(&file_name)) {
+        tracing::warn!("清理旧自定义壁纸失败: {e}");
+    }
+    tracing::info!("自定义壁纸已更新: {}", dest.display());
+    Ok(file_name)
+}
+
+/// 校验壁纸来源（纯函数，可单测）：绝对路径、白名单扩展名、非空、大小上限。
+fn validate_wallpaper_source(source: &Path) -> Result<(PathBuf, String)> {
+    if !source.is_absolute() {
+        return Err(wallpaper_invalid(format!("壁纸必须是绝对路径: {}", source.display())));
+    }
+    let ext = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .ok_or_else(|| wallpaper_invalid(format!("文件缺少扩展名，无法识别图片格式: {}", source.display())))?;
+    if !WALLPAPER_EXTENSIONS.contains(&ext.as_str()) {
+        return Err(wallpaper_invalid(format!("不支持的壁纸格式: {ext}")));
+    }
+
+    let metadata = std::fs::metadata(source)
+        .map_err(|e| wallpaper_invalid(format!("读取壁纸文件信息失败 {}: {e}", source.display())))?;
+    if !metadata.is_file() {
+        return Err(wallpaper_invalid(format!("壁纸来源不是文件: {}", source.display())));
+    }
+    if metadata.len() == 0 {
+        return Err(wallpaper_invalid(format!("壁纸文件为空: {}", source.display())));
+    }
+    if metadata.len() > WALLPAPER_MAX_BYTES {
+        return Err(wallpaper_invalid(format!(
+            "壁纸文件过大（{} 字节），上限 {} 字节",
+            metadata.len(),
+            WALLPAPER_MAX_BYTES
+        )));
+    }
+    Ok((source.to_path_buf(), ext))
+}
+
+/// 统一用户面错误码：文案在 `errors.shell.wallpaper.invalid`，技术详情只进日志。
+fn wallpaper_invalid(detail: impl Into<String>) -> crate::AppError {
+    crate::AppError::user_facing_simple("shell.wallpaper.invalid", detail)
+}
+
+/// 删除壁纸目录下由本模块写下的文件；`keep` 为刚复制的新文件名（保留）。
+/// 返回删除数量。读目录失败会向上抛（恢复初始设置必须 fail-visible）。
+fn remove_custom_wallpapers(dir: &Path, keep: Option<&str>) -> Result<usize> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(e) => {
+            return Err(crate::AppError::Config(format!(
+                "读取壁纸目录 {} 失败: {e}",
+                dir.display()
+            )))
+        }
+    };
+
+    let mut removed = 0;
+    for entry in entries {
+        let entry = entry.map_err(|e| crate::AppError::Config(format!("遍历壁纸目录 {} 失败: {e}", dir.display())))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if Some(name.as_str()) == keep || !is_custom_wallpaper_file(&name) {
+            continue;
+        }
+        std::fs::remove_file(entry.path())
+            .map_err(|e| crate::AppError::Config(format!("删除旧壁纸 {} 失败: {e}", entry.path().display())))?;
+        removed += 1;
+    }
+    Ok(removed)
+}
+
+/// 是否是本模块写下的壁纸文件（`custom-<数字>.<白名单扩展名>`）。
+fn is_custom_wallpaper_file(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix(WALLPAPER_FILE_PREFIX) else {
+        return false;
+    };
+    let Some((stamp, ext)) = rest.rsplit_once('.') else {
+        return false;
+    };
+    !stamp.is_empty()
+        && stamp.bytes().all(|b| b.is_ascii_digit())
+        && WALLPAPER_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str())
 }
 
 // ==================== Utility Commands ====================
@@ -740,5 +922,90 @@ mod tests {
         assert_eq!(ext, "png");
         assert!(src.is_absolute());
         std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn validate_wallpaper_source_rejects_relative_path() {
+        let err = validate_wallpaper_source(Path::new("images/wall.png")).unwrap_err();
+        assert!(err.to_string().contains("绝对路径"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn validate_wallpaper_source_rejects_unsupported_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wall.svg");
+        std::fs::write(&path, b"<svg/>").unwrap();
+        let err = validate_wallpaper_source(&path).unwrap_err();
+        assert!(err.to_string().contains("不支持的壁纸格式"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn validate_wallpaper_source_rejects_oversized_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("huge.png");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(WALLPAPER_MAX_BYTES + 1).unwrap();
+        let err = validate_wallpaper_source(&path).unwrap_err();
+        assert!(err.to_string().contains("壁纸文件过大"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn validate_wallpaper_source_accepts_supported_image() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wall.JPEG");
+        std::fs::write(&path, b"fake-jpeg-bytes").unwrap();
+        let (src, ext) = validate_wallpaper_source(&path).unwrap();
+        assert_eq!(ext, "jpeg");
+        assert_eq!(src, path);
+    }
+
+    #[test]
+    fn is_custom_wallpaper_file_only_matches_own_output() {
+        assert!(is_custom_wallpaper_file("custom-1700000000000000000.png"));
+        assert!(is_custom_wallpaper_file("custom-1.webp"));
+        assert!(!is_custom_wallpaper_file("custom-.png"));
+        assert!(!is_custom_wallpaper_file("custom-abc.png"));
+        assert!(!is_custom_wallpaper_file("custom-1.svg"));
+        assert!(!is_custom_wallpaper_file("terminal_bg.png"));
+        assert!(!is_custom_wallpaper_file("custom-1.png.bak"));
+    }
+
+    #[test]
+    fn store_custom_wallpaper_copies_new_file_and_prunes_old() {
+        let data = tempfile::tempdir().unwrap();
+        let src_dir = tempfile::tempdir().unwrap();
+        let src = src_dir.path().join("wall.png");
+        std::fs::write(&src, b"wallpaper-bytes").unwrap();
+
+        let first = store_custom_wallpaper(data.path(), &src).unwrap();
+        let first_path = data.path().join(WALLPAPER_DIR).join(&first);
+        assert!(first_path.exists());
+
+        let second = store_custom_wallpaper(data.path(), &src).unwrap();
+        let second_path = data.path().join(WALLPAPER_DIR).join(&second);
+        assert!(second_path.exists());
+        assert_ne!(first, second, "每次选择必须换文件名（避免 WebView 图片缓存）");
+        assert!(!first_path.exists(), "旧壁纸文件必须被清理");
+    }
+
+    #[test]
+    fn remove_custom_wallpapers_spares_unrelated_files_and_keep_target() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("custom-1.png"), b"a").unwrap();
+        std::fs::write(dir.path().join("custom-2.webp"), b"b").unwrap();
+        std::fs::write(dir.path().join("notes.txt"), b"c").unwrap();
+
+        let removed = remove_custom_wallpapers(dir.path(), Some("custom-1.png")).unwrap();
+        assert_eq!(removed, 1);
+        assert!(dir.path().join("custom-1.png").exists());
+        assert!(!dir.path().join("custom-2.webp").exists());
+        assert!(dir.path().join("notes.txt").exists());
+    }
+
+    #[test]
+    fn remove_custom_wallpapers_tolerates_missing_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("not-created");
+        assert_eq!(remove_custom_wallpapers(&missing, None).unwrap(), 0);
     }
 }

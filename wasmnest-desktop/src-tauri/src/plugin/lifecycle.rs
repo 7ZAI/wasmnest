@@ -96,18 +96,20 @@ impl PluginLifecycleManager {
     /// 预授权（启用前置，独立命令供壳先行调用）：收集插件需授权路径单次合并弹窗；
     /// 拒绝直接返回 Err 不进入激活。已授权路径短路无二次弹窗。
     pub async fn preauthorize(&self, plugin_id: &str) -> Result<()> {
-        self.host.preauthorize_plugin(plugin_id).await.map_err(|e| {
-            crate::AppError::Plugin(format!("预授权插件 '{plugin_id}' 失败: {e}"))
-        })
+        self.host
+            .preauthorize_plugin(plugin_id)
+            .await
+            .map_err(|e| crate::AppError::Plugin(format!("预授权插件 '{plugin_id}' 失败: {e}")))
     }
 
     /// 壳「打开应用」的激活入口：前端已先行调 `preauthorize`，此处走完整激活
     /// （`activate_plugin` 内部的预授权兜底对已授权路径短路，无副作用），
     /// persist=true = 持久化激活意图（boot 复活）。
     pub async fn activate_after_preauth(&self, plugin_id: &str) -> Result<()> {
-        self.host.activate_plugin(plugin_id, true).await.map_err(|e| {
-            crate::AppError::Plugin(format!("激活插件 '{plugin_id}' 失败: {e}"))
-        })
+        self.host
+            .activate_plugin(plugin_id, true)
+            .await
+            .map_err(|e| crate::AppError::Plugin(format!("激活插件 '{plugin_id}' 失败: {e}")))
     }
 
     /// 壳「关闭应用」：**真停用**（guest deactivate + revoke_all + 总线退订 +
@@ -238,9 +240,10 @@ async fn read_bool_pref(storage: &PluginStorage, prefix: &str, plugin_id: &str) 
 /// 写布尔偏好（JSON `true` / `false`；错误补操作上下文——§6 禁裸透传）
 async fn write_bool_pref(storage: &PluginStorage, prefix: &str, plugin_id: &str, value: bool) -> Result<()> {
     let key = format!("{prefix}{plugin_id}");
-    storage.set(SYSTEM_PLUGIN_ID, &key, serde_json::json!(value)).await.map_err(|e| {
-        crate::AppError::Plugin(format!("写插件偏好 '{key}' 失败: {e}"))
-    })
+    storage
+        .set(SYSTEM_PLUGIN_ID, &key, serde_json::json!(value))
+        .await
+        .map_err(|e| crate::AppError::Plugin(format!("写插件偏好 '{key}' 失败: {e}")))
 }
 
 /// 回收某插件的启用 / 自启偏好行（卸载时调用；与移动端 `manager.rs` uninstall
@@ -267,10 +270,7 @@ async fn remove_prefs(storage: &PluginStorage, plugin_id: &str) {
 
 /// 查询插件启用状态（应用「已启用 / 可用」偏好，不是启动触发器）
 #[tauri::command]
-pub async fn plugin_is_enabled(
-    plugin_id: String,
-    manager: State<'_, Arc<PluginLifecycleManager>>,
-) -> Result<bool> {
+pub async fn plugin_is_enabled(plugin_id: String, manager: State<'_, Arc<PluginLifecycleManager>>) -> Result<bool> {
     Ok(manager.is_enabled(&plugin_id).await)
 }
 
@@ -286,10 +286,7 @@ pub async fn plugin_set_enabled(
 
 /// 查询插件「启动时自动激活」偏好（缺省 false = 不自动启动）
 #[tauri::command]
-pub async fn plugin_is_autostart(
-    plugin_id: String,
-    manager: State<'_, Arc<PluginLifecycleManager>>,
-) -> Result<bool> {
+pub async fn plugin_is_autostart(plugin_id: String, manager: State<'_, Arc<PluginLifecycleManager>>) -> Result<bool> {
     Ok(manager.is_autostart(&plugin_id).await)
 }
 
@@ -305,19 +302,13 @@ pub async fn plugin_set_autostart(
 
 /// 插件实例是否在运行（`Activated` / `Degraded`；壳主屏状态 chip）
 #[tauri::command]
-pub async fn plugin_is_running(
-    plugin_id: String,
-    manager: State<'_, Arc<PluginLifecycleManager>>,
-) -> Result<bool> {
+pub async fn plugin_is_running(plugin_id: String, manager: State<'_, Arc<PluginLifecycleManager>>) -> Result<bool> {
     Ok(manager.is_running(&plugin_id).await)
 }
 
 /// 插件是否严格 Activated（功能门禁口径）
 #[tauri::command]
-pub async fn plugin_is_activated(
-    plugin_id: String,
-    manager: State<'_, Arc<PluginLifecycleManager>>,
-) -> Result<bool> {
+pub async fn plugin_is_activated(plugin_id: String, manager: State<'_, Arc<PluginLifecycleManager>>) -> Result<bool> {
     Ok(manager.is_activated(&plugin_id).await)
 }
 
