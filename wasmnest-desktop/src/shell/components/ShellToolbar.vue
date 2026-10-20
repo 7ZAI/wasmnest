@@ -90,7 +90,9 @@
         :aria-label="t('shell.toolbar.notifs', { count: state.notifCountTotal.value })"
         @click="toggleNotifs"
       >
-        <ShellIcon name="bell" :size="15" />
+        <span class="bell-ic" :class="{ ring: bellRinging }" aria-hidden="true">
+          <ShellIcon name="bell" :size="15" />
+        </span>
         <span v-if="state.notifCountTotal.value > 0" class="bdg">
           {{ state.notifCountTotal.value }}
         </span>
@@ -153,7 +155,7 @@
  * 结构（spec-c §1 布局）：品牌 · 当前位置 │ 返回/主屏（可隐藏）│ 多任务 · 通知 · 主题 │ 窗口控制。
  * 窗口控制与 TitleBar 同源（getCurrentWindow）；关闭走退出确认弹窗（壳内 dialog）。
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useSettingsStore } from '@/stores/settings'
@@ -235,6 +237,34 @@ function toggleNotifs() {
     state.quickSettingsOpen.value = false
   }
 }
+
+// ==================== 新通知到达：铃铛提醒动效 ====================
+
+/** 摆动时长（ms）——须与 .bell-ic.ring 的 animation 时长对齐（就一局，即停） */
+const BELL_RING_MS = 850
+const bellRinging = ref(false)
+let bellRingTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * 新通知到达（notifPulse 自增）→ 铃铛晃一局有界摆动后自然收停。
+ * 正在晃时再到的通知并入同一局：耗时窗口内的连发合并成一次提醒，不连续狂抖。
+ * 全局「动画」开关（html.anim-disabled）与系统减弱动态（shell.css 降级规则）
+ * 会把动画压成瞬时，此处无需再判。装饰性动效必须有界、连续动效只留给
+ * loading 指示（ui-ux-pro-max · ux · Continuous Animation）。
+ */
+watch(state.notifPulse, () => {
+  if (bellRinging.value) return
+  bellRinging.value = true
+  if (bellRingTimer) clearTimeout(bellRingTimer)
+  bellRingTimer = setTimeout(() => {
+    bellRinging.value = false
+    bellRingTimer = null
+  }, BELL_RING_MS)
+})
+
+onUnmounted(() => {
+  if (bellRingTimer) clearTimeout(bellRingTimer)
+})
 
 async function checkMaximized() {
   if (!appWindow) return
@@ -330,6 +360,42 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
 .tb-btn.on {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+/* 新通知到达的铃铛提醒：一圈带阻尼的摆动（只晃铃铛本体，徽标与按钮稳定不动；
+   transform 合成，无布局抖动）。悬挂轴取铃铛头部（origin 偏上 10%），读作铃铛
+   被敲响而不是整颗被扭动。时长与脚本 BELL_RING_MS 对齐，播完即停不循环。 */
+.bell-ic {
+  display: inline-flex;
+  transform-origin: 50% 10%;
+}
+.bell-ic.ring {
+  animation: bell-ring 0.85s ease-in-out;
+}
+@keyframes bell-ring {
+  0% {
+    transform: rotate(0deg);
+  }
+  14% {
+    transform: rotate(10deg);
+  }
+  30% {
+    transform: rotate(-9deg);
+  }
+  47% {
+    transform: rotate(7deg);
+  }
+  63% {
+    transform: rotate(-5deg);
+  }
+  78% {
+    transform: rotate(3deg);
+  }
+  90% {
+    transform: rotate(-1.5deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
 }
 .tb-btn .bdg {
   position: absolute;

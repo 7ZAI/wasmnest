@@ -181,11 +181,12 @@ const SPLASH_GUARD_MS = SPLASH_MIN_MS + 1500
 let splashTimer: ReturnType<typeof setTimeout> | null = null
 let splashGuard: ReturnType<typeof setTimeout> | null = null
 
-/** 应用清单就绪后落一条驻留通知（运行时就绪；语义自 ShellBootScreen 迁入） */
+/** 应用清单就绪后落一条普通通知（运行时就绪；语义自 ShellBootScreen 迁入。
+ *  非驻留项：用户可单条 × 清除，也参与「清除全部」——驻留语义只留给有自然
+ *  退出路径的派生通知（如审批），避免无退出路径的常驻卡堵死通知中心）。 */
 function emitReadyNotif() {
   state.pushNotif({
     kind: 'info',
-    sticky: true,
     icon: 'check',
     source: t('shell.notif.hostSource'),
     title: t('shell.notif.ready.title'),

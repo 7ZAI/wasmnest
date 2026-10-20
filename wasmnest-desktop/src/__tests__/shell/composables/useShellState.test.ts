@@ -81,6 +81,7 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
     s.dialogAppId.value = null
     s.homeQ.value = ''
     s.notifs.value = []
+    s.notifPulse.value = 0
     apps.plugins.value = []
     apps.displayStates.value = {}
     apps.tones.value = {}
@@ -473,6 +474,17 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       s.pushNotif({ kind: 'event', icon: 'x', source: 's', title: 't3' })
       s.clearNotifs()
       expect(s.notifs.value.map((n) => n.title)).toEqual(['t2'])
+    })
+
+    it('notifPulse：每落一条新通知自增一次（清除/关闭不动脉冲）', () => {
+      const s = useShellState()
+      expect(s.notifPulse.value).toBe(0)
+      s.pushNotif({ kind: 'event', icon: 'x', source: 's', title: 't1' })
+      s.pushNotif({ kind: 'event', icon: 'x', source: 's', title: 't2' })
+      expect(s.notifPulse.value).toBe(2)
+      s.dismissNotif(s.notifs.value[0].id)
+      s.clearNotifs()
+      expect(s.notifPulse.value).toBe(2)
     })
 
     it('铃铛角标 = 通知条数 + 待审批数（审批是真实动作入口）', () => {

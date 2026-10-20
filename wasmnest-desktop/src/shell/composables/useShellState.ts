@@ -52,11 +52,19 @@ const homeQ = ref('')
 const notifs = ref<HostNotif[]>([])
 let notifSeq = 100
 
+/**
+ * 通知到达脉冲：pushNotif 落一条新通知时自增一次（清除 / 关闭不动它）。
+ * 「有新通知」的判定收口在 pushNotif 单点，防滑措施（清除、单条关闭、
+ * 面板开合）都不会误触发；消费方（工具栏铃铛）watch 脉冲做提醒动效。
+ */
+const notifPulse = ref(0)
+
 function pushNotif(
   n: Omit<HostNotif, 'id' | 'mins' | 'sticky'> & { mins?: number; sticky?: boolean },
 ): void {
   const { mins = 0, sticky = false, ...rest } = n
   notifs.value = [{ id: 'n' + ++notifSeq, mins, sticky, ...rest }, ...notifs.value]
+  notifPulse.value++
 }
 
 function dismissNotif(id: string): void {
@@ -439,6 +447,7 @@ export function useShellState() {
     dialogResource,
     homeQ,
     notifs,
+    notifPulse,
     notifCountTotal,
     pushNotif,
     dismissNotif,
