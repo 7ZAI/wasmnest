@@ -10,7 +10,7 @@
  * 动作的成功/失败口径只有一份实现（状态回写 + lastError 暴露），组件只调动作。
  *
  * 与移动端壳 `useShellApps`（launch/stop/approve/remove 动作收口）同构：
- * - 打开 = preauthorize → activate（真激活 + 持久化激活意图）
+ * - 打开 = preauthorize → activate（真激活，仅当前会话；跨启动只认 autostart 偏好）
  * - 关闭 = deactivate（**真停用**：guest deactivate + 权限撤销 + 总线退订 +
  *   store 随实例回收——wasm-core 机制，见宿主 lifecycle.rs 头注释）
  * - 审批 = approve（整单批准 + 内容哈希钉扎）
@@ -308,7 +308,7 @@ async function runAction(
   }
 }
 
-/** 打开应用：preauthorize（预授权/高权限位提示）→ activate（真激活 + 持久化意图） */
+/** 打开应用：preauthorize（预授权/高权限位提示）→ activate（真激活，仅当前会话） */
 async function activate(appId: string): Promise<boolean> {
   const app = appOf(appId)
   if (!app) {
