@@ -129,6 +129,44 @@ describe('后台应用卡片：信息条在顶部（2026-10-20 用户裁决）',
   })
 })
 
+describe('卡片缩略区接线应用预览面（spec 2026-10-20-app-preview-contract）', () => {
+  it('app 卡走 AppPreviewTile，系统页卡保持原 glyph 分支', () => {
+    const src = stripComments(read(SWITCHER))
+    const thumb = src.indexOf('class="ts-thumb"')
+    expect(thumb, '缩略区必须还在').toBeGreaterThan(-1)
+
+    // app 卡：应用自绘预览面（未导出 / 失败 / 超时由组件内部回退品牌卡）
+    const appPreviewIdx = src.indexOf('<AppPreviewTile', thumb)
+    expect(appPreviewIdx, 'app 卡必须在缩略区挂 AppPreviewTile').toBeGreaterThan(thumb)
+    expect(src, '预览面需要 lastRoute 才能续接上次页面').toContain(':last-route="lastRouteOf(')
+    // 系统页卡没有 app bundle：继续用 glyph，不塞预览组件
+    const sysGlyphIdx = src.indexOf('class="glyph-box tone-system ts-sys-glyph"', appPreviewIdx)
+    expect(sysGlyphIdx, '系统页卡必须保留 glyph 分支').toBeGreaterThan(appPreviewIdx)
+  })
+
+  it('预览容器不在打开按钮内部（单一覆盖层动作，避免嵌套交互元素）', () => {
+    const src = stripComments(read(SWITCHER))
+    const buttonStart = src.indexOf('class="ts-card-main"')
+    expect(buttonStart, '唯一打开动作按钮必须在场').toBeGreaterThan(-1)
+    const buttonEnd = src.indexOf('</button>', buttonStart)
+    expect(buttonEnd, '打开按钮必须是自闭合空按钮').toBeGreaterThan(buttonStart)
+
+    const insideButton = src.slice(buttonStart, buttonEnd)
+    expect(insideButton, '预览面不得嵌进 button（应用可能自绘按钮 / 输入框）').not.toContain(
+      'AppPreviewTile',
+    )
+    expect(insideButton, '视觉层不得放进 button').not.toContain('ts-thumb')
+    expect(insideButton, '信息条不得放进 button').not.toContain('ts-meta')
+  })
+
+  it('视觉层不承载点击（pointer-events:none），关闭键层序高于覆盖层', () => {
+    const src = stripComments(read(SWITCHER))
+    expect(src).toMatch(/\.ts-card \.ts-meta,\s*\.ts-card \.ts-thumb\s*\{[^}]*pointer-events:\s*none/)
+    expect(src).toMatch(/\.ts-card-main\s*\{[^}]*position:\s*absolute/)
+    expect(src).toMatch(/\.ts-card-x\s*\{[^}]*z-index:\s*2/)
+  })
+})
+
 describe('命令面板退役（工具栏搜索入口按用户裁决移除）', () => {
   it('组件文件已删，壳内不再挂载 / 不再有开关', () => {
     expect(existsSync('src/shell/components/ShellCommandPalette.vue')).toBe(false)
