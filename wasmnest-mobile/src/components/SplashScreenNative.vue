@@ -11,24 +11,10 @@
       <!-- 氛围层:极淡的琥珀辉光(纯装饰,比叙事版更克制) -->
       <div class="glow" aria-hidden="true" />
 
-      <!-- 品牌区:原生系统开屏同款 —— 居中标志（品牌 ink 底 + 编织 W）+ 字标,无叙事元素 -->
+      <!-- 品牌区:原生系统开屏同款 —— 居中标志（应用图标 icon.svg 真源）+ 字标,无叙事元素 -->
       <div class="brand">
         <span class="brand-inner" :class="{ in: logoIn }">
-          <svg class="logo" viewBox="0 0 100 100" aria-hidden="true">
-            <defs>
-              <linearGradient id="splash-logo-bg" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#16181C" />
-                <stop offset="100%" stop-color="#08090B" />
-              </linearGradient>
-            </defs>
-            <rect width="100" height="100" rx="22.5" fill="url(#splash-logo-bg)" />
-            <g transform="translate(15.855,17.193) scale(0.68289)">
-              <polygon points="4.54,22.28 26.06,92.71 32.32,59.81 19.46,17.72" fill="#FF9E2C" />
-              <polygon points="24.22,90.61 51.10,56.86 51.10,34.38 29.84,61.08" fill="#F5F7F9" />
-              <polygon points="48.90,56.86 75.78,90.61 70.16,61.08 48.90,34.38" fill="#F5F7F9" />
-              <polygon points="73.94,92.71 95.46,22.28 80.54,17.72 67.68,59.81" fill="#F5F7F9" />
-            </g>
-          </svg>
+          <img class="logo" :src="brandLogo" alt="" aria-hidden="true" draggable="false" />
         </span>
         <div class="wordmark" :class="{ in: wordIn }">WASMNEST</div>
       </div>
@@ -57,6 +43,7 @@
  */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import pkg from '../../package.json'
+import brandLogo from '../../src-tauri/icons/icon.svg'
 import { SPLASH_CONFIG } from '@/config/splash'
 import { computeSplashExitAt, readyAt as startupReadyAt, startupReady } from '@/composables/useAppStartup'
 

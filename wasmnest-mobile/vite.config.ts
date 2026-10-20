@@ -66,6 +66,9 @@ export default defineConfig({
     fs: {
       allow: [
         resolve(__dirname, 'src'),
+        // 品牌标志真源：壳内 logo 直接引用应用图标 icon.svg，避免前端再复制一份图形
+        // 后与源文件漂移（只放行只读静态图标目录，不开放 src-tauri 其余内容）。
+        resolve(__dirname, 'src-tauri/icons'),
         // 插件 SDK 源码（@binblink/wasmnest-plugin-sdk-mobile 经 file: symlink 解析为真实路径，
         // 共享 UI 组件如 Select.vue 在 packages/ 下，dev server 需显式放行）
         resolve(__dirname, 'packages'),
