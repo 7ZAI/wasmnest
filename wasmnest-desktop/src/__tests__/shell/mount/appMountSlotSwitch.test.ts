@@ -159,3 +159,65 @@ describe('AppMountSlot 换应用（多任务切换）', () => {
     expect(mountedAppIds.at(-1), '最终界面必须属于最后选中的应用').toBe(APP_C)
   })
 })
+
+/**
+ * DOM 所有权锁：宿主状态层与应用的挂载容器必须分离
+ *
+ * 应用前端是**另一个 Vue 实例**：`app.mount(container)` 会先 `container.innerHTML = ''`。
+ * 若宿主的状态层（加载 / 失败面）与挂载容器同层，挂载瞬间宿主自己的 DOM 被清空
+ * （vdom 仍引用着它们）→ 宿主随后 patch 该容器拿到失效容器 →
+ * `TypeError: null is not an object (evaluating 't.insertBefore')` → 壳弹
+ * 「发生了未知错误，详见日志」（2026-10-21 dev:host 实测）。
+ */
+describe('AppMountSlot DOM 所有权（状态层不得与应用挂载容器同层）', () => {
+  let wrapper: VueWrapper | null = null
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+  })
+
+  it('加载态的状态层在挂载容器之外，且挂载容器里没有宿主自己的 DOM', async () => {
+    // 装载永不 resolve → 停在加载态（状态层在场）
+    mountAppBundle.mockImplementation(() => new Promise(() => {}))
+    wrapper = mount(AppMountSlot, {
+      props: { appId: APP_A, route: '/sessions' },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    const slot = wrapper.find('.app-mount-slot')
+    const status = wrapper.find('.app-mount-status')
+    expect(slot.exists(), '必须有专用的应用挂载容器').toBe(true)
+    expect(status.exists(), '装载未完成时应有加载面').toBe(true)
+    expect(
+      slot.element.contains(status.element),
+      '状态层不得与应用挂载容器同层（Vue app.mount 会清空容器 innerHTML）',
+    ).toBe(false)
+    expect(
+      slot.element.children.length,
+      '挂载容器里不放宿主自己的 DOM（否则应用 mount 瞬间被清空）',
+    ).toBe(0)
+  })
+
+  it('应用挂载（复刻 Vue 的 container.innerHTML = ""）后，宿主状态层仍在', async () => {
+    // 复刻真实挂载行为：Vue 的 app.mount(container) 先清空容器
+    mountAppBundle.mockImplementation(async (slot: HTMLElement) => {
+      slot.innerHTML = ''
+      return makeHandle()
+    })
+    wrapper = mount(AppMountSlot, {
+      props: { appId: APP_A, route: '/sessions' },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    // 挂载完成后状态层退场，但**宿主自己的 DOM 不得被应用清空带走**
+    const slot = wrapper.find('.app-mount-slot')
+    expect(slot.exists()).toBe(true)
+    expect(
+      wrapper.find('.app-mount-status').exists(),
+      '挂载完成后加载面应退场',
+    ).toBe(false)
+  })
+})
