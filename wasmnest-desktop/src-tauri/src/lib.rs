@@ -486,6 +486,49 @@ pub fn run() {
                 }
             };
 
+            // ==================== 应用整包目录进 asset protocol 作用域 ====================
+            //
+            // 壳前端装载应用前端（ADR 0057 机制 B）经 asset 协议取件，两处同源：
+            //   - 挂载包：动态 `import(convertFileSrc(<plugins_dir>/<appId>/index.js))`
+            //   - 应用图标：`<img src=convertFileSrc(<plugins_dir>/<appId>/icon.svg)>`
+            // 路径不在 asset 协议的允许作用域内 → 一律 403，且两种表现都很隐蔽：
+            //   动态 import 失败 → 挂载槽转错误面（「应用界面加载失败，可重试」）；
+            //   图片加载失败   → 图标回退成壳内通用 glyph（BedCode 落到 transfer 图形）。
+            //
+            // `tauri.conf.json` 的静态作用域只有 `$RESOURCE` / `$APPCONFIG` / `$APPDATA`
+            // 三族，覆盖的是「插件目录在 resource 基目录之下」那一种形态（平台仓 dev 的
+            // `target/debug/resources/plugins/desktop`、打包安装后的 `resources/plugins`）。
+            // 而 `WASMNEST_PLUGINS_DIR` 允许把插件目录指到**任意**路径（应用仓
+            // `apps/<slug>/desktop/.dev-host/plugins` 就是这种），那类路径落在静态作用域
+            // 之外 → 403（2026-10-21 实测：dev:host 起宿主后点 app 即报
+            // 「Importing a module script failed.」+ 图标回退）。
+            //
+            // 故这里按解析出的**真源目录**动态放行：scope 的 pattern 集合是 Arc 共享，
+            // 运行时追加对已创建的 webview 同样生效（asset 处理器持的是同一份 Scope 的
+            // 克隆）。放行范围 = 插件目录子树 = 应用整包（index.js / icon.svg / 随包资源），
+            // 不扩大到宿主其它资源面。
+            //
+            // 目录先 canonicalize：作用域匹配时请求路径也会被 canonicalize（解符号链接），
+            // 模式串必须用同一形态才匹配得上（路径含符号链接时不 canonicalize 会 403）。
+            let asset_scope_dir = plugins_dir
+                .canonicalize()
+                .unwrap_or_else(|_| plugins_dir.clone());
+            if let Err(e) = app
+                .asset_protocol_scope()
+                .allow_directory(&asset_scope_dir, true)
+            {
+                // fail-visible：放行失败 = 应用前端与图标必然 403，必须喊出来
+                tracing::error!(
+                    "asset protocol scope: failed to allow plugins dir {:?}: {e}",
+                    asset_scope_dir
+                );
+            } else {
+                tracing::info!(
+                    "asset protocol scope: plugins dir allowed {:?}",
+                    asset_scope_dir
+                );
+            }
+
             let ws_port = app_config.network.port;
 
             // 检查端口可用性

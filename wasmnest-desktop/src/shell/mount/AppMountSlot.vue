@@ -2,8 +2,17 @@
   <!-- 应用挂载槽（机制 B：同窗口挂载独立构建的 app 整包）：
        槽只占壳标题栏（ShellToolbar，固定常驻）以下的区域——wasm-app 不入侵标题栏；
        装载失败 / 契约不匹配 → 显性报错面（fail-visible，不白屏）；
-       挂载中 → 加载面（壳主屏同款骨架，不闪烁）。 -->
-  <div ref="slotEl" class="app-mount-slot">
+       挂载中 → 加载面（壳主屏同款骨架，不闪烁）。
+
+       **DOM 所有权分层（2026-10-21 修）**：应用的挂载容器与宿主的状态层必须分开。
+       Vue 的 `app.mount(container)` 会先 `container.innerHTML = ''`——若状态层也在
+       同一个容器里，挂载瞬间宿主自己的 DOM 会被清空（vdom 仍引用着它们），宿主随后
+       patch 该容器时拿到失效容器 → `TypeError: null is not an object (evaluating
+       't.insertBefore')` → 壳弹「发生了未知错误，详见日志」（dev:host 实测）。
+       故：容器只放应用自己的 DOM，状态层是它的兄弟节点（覆在其上）。 -->
+  <div class="app-mount-wrap">
+    <!-- 应用整包的专用挂载容器（宿主不在里面放任何自己的 DOM） -->
+    <div ref="slotEl" class="app-mount-slot"></div>
     <div v-if="status === 'loading'" class="app-mount-status" role="status">
       <span class="app-mount-spinner"></span>
       <span>{{ t('shell.apps.loading') }}</span>
@@ -30,6 +39,12 @@
  *
  * 布局：壳标题栏是常驻 chrome，槽只吃它以下的剩余高度（见 style 注释）；应用包
  * 的根元素由槽拉满，app 侧不应再按 100vh 定高，也不应自绘标题栏 / 窗口控制。
+ *
+ * DOM 所有权：应用前端由**另一个 Vue 实例**挂进来（`app.mount(container)`），而
+ * Vue 的 mount 会先 `container.innerHTML = ''`。故挂载容器（`.app-mount-slot`）里
+ * 只放应用自己的 DOM，宿主的状态层（加载 / 失败）是它的兄弟节点——两者同层时，
+ * 挂载瞬间宿主 DOM 会被清空而 vdom 仍引用着它们，宿主随后 patch 拿到失效容器 →
+ * TypeError（2026-10-21 dev:host 实测）。
  */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -175,7 +190,8 @@ defineExpose({ status })
 </script>
 
 <style scoped>
-.app-mount-slot {
+/* 槽的外壳：壳根 flex 里的那一个可伸缩项（槽本体降为它的子项，状态层是槽的兄弟） */
+.app-mount-wrap {
   position: relative;
   width: 100%;
   /* 壳根是定高纵向 flex（.shell-root），上方还有一行常驻标题栏（height = --toolbar-h）：
@@ -190,6 +206,16 @@ defineExpose({ status })
   user-select: text;
 }
 
+.app-mount-slot {
+  position: relative;
+  width: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 /* 应用包根元素是另一个 Vue 实例挂进来的（不带本组件的 scoped 属性），必须显式拉满
    槽高：app 侧的 height: 100% / h-full 才有确定参照，不必各自写 100vh（写了就
    溢出到标题栏下方的窗口外）。 */
@@ -197,8 +223,11 @@ defineExpose({ status })
   flex: 1 1 auto;
   min-height: 0;
 }
+/* 状态层（加载 / 失败）：覆在槽之上而非占布局（占了就与应用容器抢高度）。
+   绝对定位的父级是 .app-mount-wrap（position: relative）。 */
 .app-mount-status {
-  height: 100%;
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
