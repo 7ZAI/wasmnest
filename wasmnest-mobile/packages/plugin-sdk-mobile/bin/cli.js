@@ -46,24 +46,36 @@ import { generateManifest } from './manifest-gen.js'
 const SDK_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const TEMPLATE_DIR = join(SDK_ROOT, 'template')
 
-/** 组件化工具 manifest 的仓内相对路径（工具为平台仓级 crate `tools/componentize`，非 SDK 自带） */
-const COMPONENTIZE_REL = join('tools', 'componentize', 'Cargo.toml')
+/**
+ * 组件化工具 manifest 的相对定位链（按优先级，逐级向上查找时依次尝试）：
+ *
+ * 1. 桌面 SDK 自带 `tools/componentize`（P1 起的发布落点：平台仓内为
+ *    `wasmnest-desktop/packages/plugin-sdk-desktop/tools/…`，npm 安装后同相对形状）；
+ * 2. `node_modules/@binblink/wasmnest-plugin-sdk-desktop/tools/…`（应用工程只装了 npm 包）；
+ * 3. 旧平台仓级 `tools/componentize`（P1 前的落点，兼容兜底）；
+ * 4. 三仓兄弟布局 `wasmnest/tools/componentize`（旧布局，兼容兜底）。
+ */
+const COMPONENTIZE_CANDIDATES = [
+  join('wasmnest-desktop', 'packages', 'plugin-sdk-desktop', 'tools', 'componentize', 'Cargo.toml'),
+  join('node_modules', '@binblink', 'wasmnest-plugin-sdk-desktop', 'tools', 'componentize', 'Cargo.toml'),
+  join('tools', 'componentize', 'Cargo.toml'),
+  join('wasmnest', 'tools', 'componentize', 'Cargo.toml'),
+]
 
 // ==================== 工具函数 ====================
 
 /**
- * 定位平台仓组件化工具 `tools/componentize/Cargo.toml`。
+ * 定位组件化工具 `tools/componentize/Cargo.toml`。
  *
- * 工具原住仓库级 `packages/wasmnest-componentize`，三仓拆分后迁平台仓 `tools/componentize`。
+ * 工具原住仓库级 `packages/wasmnest-componentize`，三仓拆分后迁平台仓 `tools/componentize`，
+ * 随后（P1）收进桌面 SDK 的 `tools/` 随 npm 包发布——应用侧不再依赖平台仓工作树。
  * 不能按固定深度从 SDK 根拼绝对路径：SDK 作为依赖安装时（pnpm 把 `file:` 依赖**复制**进
  * `node_modules/.pnpm/…`，node 解析入口脚本不会回落到源码目录），那个深度指向包仓库内部
  * ⇒ manifest 找不到，`cargo run --manifest-path` 直接失败。故按下列顺序定位：
  *
  * 1. `WASMNEST_COMPONENTIZE_MANIFEST`（显式覆盖；已设但不存在则直接报错，不静默回退）；
- * 2. 自 SDK 根与插件工作目录向上逐级查找 `tools/componentize/Cargo.toml`
- *    （SDK 与工具同在平台仓时的开发布局）；
- * 3. 每一级同时试 `wasmnest/tools/componentize/Cargo.toml`——L1 三仓兄弟布局下
- *    应用仓在 `${WASMNESTX}/wasmnest-apps`、平台仓在 `${WASMNESTX}/wasmnest`。
+ * 2. 自 SDK 根与插件工作目录向上逐级查找 `COMPONENTIZE_CANDIDATES`
+ *    （桌面 SDK 落点优先，旧平台仓落点仅作兼容兜底）。
  *
  * 全部未命中时报错并给出获取方式（此时通常意味着插件工程不在三仓布局内）。
  *
@@ -80,11 +92,10 @@ function resolveComponentizeManifest(cwd) {
     }
     return override
   }
-  const candidates = [COMPONENTIZE_REL, join('wasmnest', COMPONENTIZE_REL)]
   for (const start of [SDK_ROOT, resolve(cwd)]) {
     let dir = start
     for (;;) {
-      for (const rel of candidates) {
+      for (const rel of COMPONENTIZE_CANDIDATES) {
         const candidate = join(dir, rel)
         if (existsSync(candidate)) return candidate
       }
@@ -94,10 +105,10 @@ function resolveComponentizeManifest(cwd) {
     }
   }
   throw new Error(
-    `找不到组件化工具 ${COMPONENTIZE_REL}（已按 WASMNEST_COMPONENTIZE_MANIFEST、SDK 目录与插件目录 ` +
-      `${cwd} 向上查找 tools/componentize 与 wasmnest/tools/componentize）。` +
-      '该工具是平台仓级 crate：插件工程需位于 WasmNest 三仓布局内，' +
-      '或用 WASMNEST_COMPONENTIZE_MANIFEST 指向其 Cargo.toml。',
+    `找不到组件化工具（已按 WASMNEST_COMPONENTIZE_MANIFEST、SDK 目录与插件目录 ` +
+      `${cwd} 向上查找桌面 SDK 的 tools/componentize 与旧平台仓落点）。` +
+      '该工具随 @binblink/wasmnest-plugin-sdk-desktop 发布（tools/componentize）：' +
+      '插件工程需安装该 SDK，或用 WASMNEST_COMPONENTIZE_MANIFEST 指向其 Cargo.toml。',
   )
 }
 
@@ -680,8 +691,8 @@ function cmdBuild(flags) {
     // 编码为 Component Model 组件（等价 wasm-tools component new）。
     // 工具幂等——产物已是组件（0d 00 01 00）时直接复制，支持增量构建。
     // 迁移 spec §4 S2：产物字节形态 `00 61 73 6d 0d 00 01 00`（模块段在组件头前）
-    // 工具住平台仓级 `tools/componentize`（三仓拆分后从 `packages/wasmnest-componentize` 迁来；file-transfer 单产物后双端
-    // 共用同一编码路径，2026-10-13 自 SDK rust/tools/ 提升）
+    // 工具随桌面 SDK 发布（`tools/componentize`；P1 起从平台仓级 `tools/` 迁入；file-transfer
+    // 单产物后双端共用同一编码路径，2026-10-13 自 SDK rust/tools/ 提升）
     console.log('\n[wasmnest-plugin] ====== 组件化 WASM (Component Model) ======')
     const componentizeManifest = resolveComponentizeManifest(cwd)
     run(

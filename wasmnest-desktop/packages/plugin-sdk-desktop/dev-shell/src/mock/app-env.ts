@@ -64,6 +64,7 @@ export function createMockEnv(options: MockEnvOptions): AppMountEnv {
   const { appId, locale, theme, initialRoute } = options
   return {
     appId,
+    mountContract: '1',
     invoke: (command, args) => invokeHostCommand(appId, command, args) as Promise<never>,
     appInvoke: (command, ...args) =>
       dispatchCommand(appId, command, args) as Promise<never>,

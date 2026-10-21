@@ -140,8 +140,9 @@ function copySharedWasm(manifest, wasmPath) {
  *   `wasmnest-desktop/target/wasm-apps` 同构）——**不得**用插件目录下的
  *   `rust/target/`：那会重建已退役的 `apps/file-transfer/mobile/rust/` 目录，
  *   触发 wiring_lock 的「移动端产物源不得重建」判据；
- * - 组件化工具 = 平台仓级 `tools/componentize`（双端同一编码路径；三仓拆分后从
- *   能力仓原 `wasmnest-componentize` crate 迁来，旧路径不再存在）。
+ * - 组件化工具 = 桌面 SDK 自带 `packages/plugin-sdk-desktop/tools/componentize`
+ *   （随 npm 包发布，应用侧无需平台仓源码；三仓拆分后从能力仓原
+ *   `wasmnest-componentize` crate 迁来，P1 再收进 SDK 的 `tools/`）。
  * 返回组件化后的 wasm 路径。
  */
 function buildSharedRust(cwd, manifest, sharedRustManifest) {
@@ -166,7 +167,11 @@ function buildSharedRust(cwd, manifest, sharedRustManifest) {
   }
 
   // 组件化（core module → Component；工具幂等，已是组件时直通）
-  const componentizeManifest = resolve(REPO_ROOT, 'tools/componentize/Cargo.toml')
+  // P1：工具随桌面 SDK 发布，落在 SDK `tools/`；平台仓内直接按相对路径取
+  const componentizeManifest = resolve(
+    REPO_ROOT,
+    'wasmnest-desktop/packages/plugin-sdk-desktop/tools/componentize/Cargo.toml',
+  )
   console.log('[plugin-build] 组件化共享 wasm (Component Model)')
   execSync(
     `cargo run --release --manifest-path "${componentizeManifest}" -- "${wasmPath}" -o "${wasmPath}"`,

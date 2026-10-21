@@ -12,12 +12,17 @@
  *      - 每端再聚合为一个 zip（npm + crates + README + WIT 契约 + SHA256 清单），
  *        作为 release 单文件附件下载。
  *
- * 产物即 release 的独立附件（见 .github/workflows/release.yml 的 package-sdks job），
+ * 产物即 release 的独立附件（与 .github/workflows/sdk-publish.yml 发布同一条链；
+ * 发布 workflow 只认本脚本产出的 tarball / .crate，不另行构建），
  * 与 scripts/package-plugins.mjs 输出的插件 zip 平级，按端分目录：
  *   dist/sdk-packages/<target>/<sdk>-<sdk-version>.zip + 原始 .tgz / .crate + SHA256SUMS
  *
  * 版本约定：产物以各 SDK 自身版本命名（package.json version，CI 强制与 Cargo.toml 一致），
  * 与应用版本无关（sdk-publish.yml 的 verify job 同样做 npm/cargo 一致性校验）。
+ *
+ * 发布内容断言（P1）：npm tarball 必须含应用构建链需要的 dev 工具（plugin-watch /
+ * wasm-hash / componentize），Rust crate 必须含随包 WIT（`wit/` / `wit-src/`）；
+ * 缺任一条目直接退出非零（见 scripts/sdk-package-contents.mjs）。
  *
  * 用法：
  *   node scripts/package-sdks.mjs [options]
@@ -56,7 +61,13 @@ import { createHash } from 'node:crypto'
 import { deflateRawSync } from 'node:zlib'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { platform } from 'node:os'
+import { platform, tmpdir } from 'node:os'
+import {
+  assertPrefixesPresent,
+  assertTarballContains,
+  listTarballEntries,
+  writeSiblingPatchConfig,
+} from './sdk-package-contents.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -65,20 +76,45 @@ const MOBILE_ROOT = resolve(ROOT, 'wasmnest-mobile')
 const IS_WIN = platform() === 'win32'
 
 // 两端 SDK 元信息：目录（相对对应端根）+ npm 包名 + 参与的 crate（manifest 相对 rust 根）
+// `packageDirs` = 该 crate 必须随发布包携带的目录（P1 断言；proc-macro 无 WIT）
 const SDK_TARGETS = {
   desktop: {
     dir: 'packages/plugin-sdk-desktop',
     npmName: '@binblink/wasmnest-plugin-sdk-desktop',
     crates: [
-      { manifest: 'rust/Cargo.toml', name: 'wasmnest-plugin-api' },
-      { manifest: 'rust-macros/Cargo.toml', name: 'wasmnest-plugin-api-macros' },
+      { manifest: 'rust/Cargo.toml', name: 'wasmnest-plugin-api', packageDirs: ['wit/', 'wit-src/'] },
+      {
+        manifest: 'rust-macros/Cargo.toml',
+        name: 'wasmnest-plugin-api-macros',
+        packageDirs: [],
+      },
     ],
   },
   mobile: {
     dir: 'packages/plugin-sdk-mobile',
     npmName: '@binblink/wasmnest-plugin-sdk-mobile',
-    crates: [{ manifest: 'rust/Cargo.toml', name: 'wasmnest-plugin-api-mobile' }],
+    crates: [
+      { manifest: 'rust/Cargo.toml', name: 'wasmnest-plugin-api-mobile', packageDirs: ['wit/', 'wit-src/'] },
+    ],
   },
+}
+
+/**
+ * npm 包必含条目（P1：应用仓只装 SDK 就能构建的自足面）。
+ *
+ * `plugin-watch.js` / `wasm-hash.js` 是应用 `build.js` 的导入目标；
+ * `tools/componentize` 是 file-transfer / 移动端组件化工具的发布落点。
+ * 少一条 = 应用侧安装后构建断链，故在打包阶段 fail-fast。
+ */
+const REQUIRED_NPM_CONTENTS = {
+  desktop: [
+    'package/dist/index.js',
+    'package/bin/wasm-hash.js',
+    'package/bin/plugin-watch.js',
+    'package/tools/componentize/Cargo.toml',
+    'package/tools/componentize/src/main.rs',
+  ],
+  mobile: ['package/dist/index.js', 'package/bin/cli.js'],
 }
 
 // ==================== 参数解析 ====================
@@ -189,6 +225,24 @@ function run(cmdArray, { cwd, label }) {
     console.error(`[package-sdks] 命令失败（${label || cmd.join(' ')}）: ${e.message}`)
     process.exit(1)
   }
+}
+
+/** 执行命令并捕获 stdout（`cargo package --list` 这类需要解析输出的步骤），失败即终止 */
+function runCapture(cmdArray, { cwd, label }) {
+  const cmd = cmdArray.map(toExecutable)
+  console.log(`\n[package-sdks] ${label || cmd.join(' ')}\n  $ ${cmd.join(' ')}  (cwd=${cwd})`)
+  try {
+    return execSync(cmd.join(' '), { cwd, encoding: 'utf-8' })
+  } catch (e) {
+    console.error(`[package-sdks] 命令失败（${label || cmd.join(' ')}）: ${e.message}`)
+    process.exit(1)
+  }
+}
+
+/** 发布内容断言失败 = 发布物不可用：点名并退出非零（不降级成警告） */
+function failContents(message) {
+  console.error(`[package-sdks] 发布内容断言失败：${message}`)
+  process.exit(1)
 }
 
 /** 递归收集目录下所有文件（绝对路径） */
@@ -316,7 +370,16 @@ function npmTarball(t, packDest) {
     console.error(`[package-sdks] ${t} SDK pnpm pack 未产生 .tgz（packDest=${packDest}）`)
     process.exit(1)
   }
-  return join(packDest, created)
+  const tgz = join(packDest, created)
+  // P1：应用仓只装 SDK 即可构建——发布包必须自带 dev 工具（Node 解 tar，跨平台一致）
+  try {
+    assertTarballContains(tgz, REQUIRED_NPM_CONTENTS[t], `${t} SDK npm 包 ${created}`)
+  } catch (e) {
+    failContents(e.message)
+  }
+  const entryCount = listTarballEntries(tgz).length
+  console.log(`  [assert] npm 包内容齐全（${entryCount} 个条目，必需 ${REQUIRED_NPM_CONTENTS[t].length} 个）`)
+  return tgz
 }
 
 /** cargo package --no-verify 输出 .crate；crate 版本从 Cargo.toml 读取（与 package.json 一致性校验） */
@@ -335,13 +398,48 @@ function crateTarball(t, c, expectedVersion) {
     )
     process.exit(1)
   }
-  run(['cargo', 'package', '--no-verify', '--manifest-path', manifest], { cwd: ROOT, label: `${t} SDK ${c.name} cargo package` })
+  // 兄弟 crate（`path` + `version`）未发布时 cargo 只认 registry 版本：用临时 config
+  // 把它们 patch 回仓内路径，只影响本次打包解析（写进 .crate 的清单仍是 registry 依赖）。
+  const patchFile = join(tmpdir(), `wasmnest-sdk-patch-${process.pid}-${c.name}.toml`)
+  const patched = writeSiblingPatchConfig({ manifest, outFile: patchFile })
+  try {
+    run(
+      [
+        'cargo',
+        'package',
+        '--no-verify',
+        ...(patched ? ['--config', patched] : []),
+        '--manifest-path',
+        manifest,
+      ],
+      {
+        cwd: ROOT,
+        label: `${t} SDK ${c.name} cargo package${patched ? '（兄弟 crate 走仓内路径）' : ''}`,
+      },
+    )
+  } finally {
+    if (patched) rmSync(patched, { force: true })
+  }
   // cargo 的 target 目录相对 manifest 所在目录（rust/ 或 rust-macros/），不是 SDK 根
   const crateFile = join(dirname(manifest), 'target', 'package', `${c.name}-${crateVersion}.crate`)
   if (!existsSync(crateFile)) {
     console.error(`[package-sdks] cargo package 产物缺失: ${crateFile}`)
     process.exit(1)
   }
+  // P1：Rust SDK 依赖随包 WIT（应用侧 cargo 只拿 crate 也得能生成绑定）
+  const listed = runCapture(['cargo', 'package', '--list', '--manifest-path', manifest], {
+    cwd: ROOT,
+    label: `${t} SDK ${c.name} cargo package --list（发布内容断言）`,
+  })
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  try {
+    assertPrefixesPresent(listed, ['src/', ...c.packageDirs], `${c.name} crate`)
+  } catch (e) {
+    failContents(e.message)
+  }
+  console.log(`  [assert] ${c.name} 内容齐全（${listed.length} 个条目）`)
   return crateFile
 }
 

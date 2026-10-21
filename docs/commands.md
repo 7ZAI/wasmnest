@@ -22,8 +22,10 @@
 | `pnpm run test:run` | 根脚本自测（`node --test "scripts/*.test.mjs"`：adaptive-run / build-profile） |
 | `pnpm run check:wit` | WIT 拼装漂移锁（== husky 判据；改了契约真源后必跑） |
 | `node scripts/compose-wit.mjs --all` | 双端重拼 WIT 生成物（bump / 改真源后） |
-| `pnpm run check:manifest` | `release-manifest.json` 一致性（判据见 docs/contracts.md §1） |
+| `pnpm run check:manifest` | `release-manifest.json` 一致性（判据见 docs/contracts.md §1；含 `hostRuntime` 段） |
 | `node scripts/check-release-manifest.mjs --print-hash` | 打印当前双端 WIT 指纹（更新 manifest 用） |
+| `node scripts/set-host-version.mjs <x.y.z>` | **发布时**同步宿主运行时版本三处（manifest `hostRuntime.version` / `tauri.conf.json` / `src-tauri/Cargo.toml`）；只写文件，不发布、不提交 |
+| `node scripts/update-host-runtime-artifacts.mjs --dir <资产目录>` | **发布后**把三平台真实 sha256 与 sourceCommit 写回 manifest（host-release workflow 用） |
 | `node scripts/bump-version.mjs --patch\|--minor\|--major\|-v X.Y.Z [--desktop\|--mobile\|--both] [--commit] [--tag]` | 双端版本号（各 3 处） |
 | `node scripts/package-sdks.mjs --list \| --target <desktop\|mobile\|all>` | 两端 SDK 构建 + 打包（npm tarball + crates + zip + SHA256 清单） |
 | `node scripts/app-script.mjs <slug> <desktop\|mobile> <script>` | 转发到应用仓单 app 脚本（见 §5.3） |
@@ -37,7 +39,7 @@
 | `pnpm install` | 本端依赖（独立 workspace，`packages/*`） |
 | `pnpm run tauri:dev` | 宿主 dev（`scripts/dev-run.js`：端口预检 → 插件 wasm / 前端缺失预建 → tauri dev → 前端 watch；**bedcode 前端不参与 watch**，改了它单独重建 §5.2）。宿主启动的 file watch 覆盖整个 `src-tauri/`——**别在宿主冷构建期间手工往 `src-tauri/` 拷产物**，会触发重启风暴（机制见 `scripts/dev-run.js` 头注释） |
 | `pnpm run tauri:build` | 生产构建（`scripts/tauri-build.js` 解析 updater 签名；无密钥时自动关闭更新包产物） |
-| `pnpm run host:pack` | 产出「可运行宿主产物」（`scripts/package-host.mjs`，供 wasm-app 工程 dev 使用，不需平台仓源码）——宿主构建产物分发面：产物目录可用环境变量 `WASMNEST_PLUGINS_DIR` 覆盖（未设置时行为与源码构建一致；发布链路不受影响）。例子：`node scripts/package-host.mjs --out dist/host-desktop` |
+| `pnpm run host:pack` | 产出「可运行宿主产物 + 分发资产」（`scripts/package-host.mjs`；产物契约 = 应用仓 `.scratch/2026-10-21-host-runtime-distribution/CONTRACT.md` §1）。默认写 `dist-host/host-desktop/`（**不在 `dist/` 下**，避免被 `vite build` 清空）并产出 `dist-host/host-desktop-<version>-<platform>-<arch>.tar.gz` + `.sha256`；`host-version.json` 的版本事实来自 `release-manifest.json` 的 `hostRuntime`。`--skip-build` 复用 `src-tauri/target/debug/<bin>` 重打资产；`--out` / `--asset-dir` 覆盖落点；`--via-cargo` 绕开 tauri CLI 版本一致性检查。应用侧以 env `WASMNEST_PLUGINS_DIR` 指定 plugins 目录 |
 | `pnpm run plugins:build` | 全量应用构建（`scripts/plugin-build.js --all`，注册表 = 5 个应用名单单一真源，见 §5.1） |
 | `pnpm run plugins:dev` | 单插件 dev 构建（`scripts/plugin-dev.js`，见 §5.2） |
 | `pnpm run test:run` | vitest（宿主 `src/__tests__` + **桌面 SDK 契约测试** `packages/plugin-sdk-desktop/__tests__`） |
@@ -45,6 +47,33 @@
 | `pnpm run bench:zip` | 基准数据打包（宿主侧基准驱动已迁至 `../wasmnest-test/perf-tests`） |
 | `cd src-tauri && cargo test` | 宿主 Rust 全量（含能力层 / CSP 锁、生命周期注册锁、e2e；**部分用例要求先构建随包插件产物** `resources/plugins/desktop`，见各测试头注释） |
 | `pnpm run target:size` | target 治理（§6；`prebuild` 钩子自动跑） |
+
+### 3.1 通用宿主 runtime crate（L2，可选增强）
+
+`src-tauri` 的 lib 角色同时是**唯一**可发布的通用 runtime crate（票据
+`wasmnest-apps/.scratch/2026-10-21-host-runtime-distribution/` D4 / CONTRACT §5）：
+
+| 项 | 值 / 命令 |
+| --- | --- |
+| crate 名 | `wasmnest-desktop-runtime`（`[package].name`；`[lib].name` 仍 `wasmnest_desktop_lib`） |
+| 二进制名 | `wasmnest-desktop`（显式 `[[bin]]`，`host:pack` / E2E / 安装入口名不变） |
+| 壳随包 | `src-tauri/shell-dist/`（**签入**），`tauri.conf.json` 的 `frontendDist` 指它 |
+| 壳同步 / 漂移锁 | `node scripts/sync-shell-dist.mjs` / `node scripts/sync-shell-dist.mjs --check`（源 `dist/` 缺失时 fail-visible） |
+| 发布门禁 | `node scripts/check-runtime-crate.mjs`（`cargo package --list` 必备条目 + crate 身份 + `cargo metadata --no-deps` + 壳漂移） |
+| 本地安装 | `cargo install --path wasmnest-desktop/src-tauri --root <dir>` |
+| 发布安装 | `cargo install wasmnest-desktop-runtime --version =0.0.1 --root <dir>`（SDK `wasmnest-plugin-api =0.0.1` 必须已上 crates.io） |
+
+**安装通道偏离 CONTRACT §5.4（owner 裁决留档）**：CONTRACT 默认写「git tag 安装」，
+但平台仓**刻意没有根 workspace**（30+ 独立 Cargo.toml / 8 个 target 落点，见根
+`.cargo/config.toml` 头注），`cargo install --git <平台仓> wasmnest-desktop-runtime`
+无法定位 crate。故 L2 的安装通道取 **crates.io**；能力仓依赖仍用 git tag
+（`lib-v0.0.2`）固定编译期版本。**不要**为 cargo git 安装新增根 workspace（会改变
+平台仓全部 target / lock 布局）。
+
+依赖图与本地开发：12 条 `wasmnest-lib` 依赖 = git tag；桌面 SDK = crates.io 精确
+版本；同场开发由平台仓根 `.cargo/config.toml` 的 `[patch."https://github.com/7ZAI/wasmnest-lib"]`
+与 `[patch.crates-io]` 指回兄弟目录 / 工作树 SDK（patch 不进发布包，`Cargo.toml`
+内不得出现 `[patch]`——门禁脚本会转红）。
 
 ## 4. 移动端（`wasmnest-mobile/`）
 
@@ -66,7 +95,7 @@
 
 - **桌面**：应用名单单一真源 = `scripts/plugin-build.js` 的 `PLUGINS`（5 个：agent-hub / ai-chatbox / bedcode(terminal-session) / file-transfer / monitor）；`pnpm run plugins:build`（= `--all`，CI/release 走这条）遍历它。
 - **移动**：无宿主侧注册表，`scripts/plugin-build.js` 自动扫描 `apps/*/mobile`。
-- 桌面一般应用走 `wasm32-wasip3`（cdylib 直出 Component）；**file-transfer 例外**：双端单产物，走 `wasm32-unknown-unknown` + 平台仓 `tools/componentize`（产物落应用仓共享 target `<appsRoot>/target/wasm-apps/…`）。
+- 桌面一般应用走 `wasm32-wasip3`（cdylib 直出 Component）；**file-transfer 例外**：双端单产物，走 `wasm32-unknown-unknown` + 桌面 SDK 的 `tools/componentize`（随 npm 包发布；产物落应用仓共享 target `<appsRoot>/target/wasm-apps/…`）。
 
 ### 5.2 单应用（单插件）调试命令
 
@@ -87,7 +116,7 @@
 ### 5.4 产物落点与排查
 
 - 产物目录：`<end>/src-tauri/resources/plugins/<end>/<id>/`（`resources/plugins/**` **不入库**，只由构建 / watch 脚本写入，勿手工拷）。
-- 桌面 dev 运行时的资源副本在 `target/debug/resources/plugins/desktop/`——源目录删除后副本**不会**自动同步（幽灵目录只在那里活着）；排查「改了没生效」先查这条，再看 `scripts/{dev-run,plugin-watch,plugin-build}.js` 与根 `scripts/app-paths.mjs`。
+- 桌面 dev 运行时的资源副本在 `target/debug/resources/plugins/desktop/`——源目录删除后副本**不会**自动同步（幽灵目录只在那里活着）；排查「改了没生效」先查这条，再看 `scripts/{dev-run,plugin-build}.js`、`packages/plugin-sdk-desktop/bin/plugin-watch.js` 与根 `scripts/app-paths.mjs`。
 - 每次 `tauri:dev` 的插件前端改动闭环：改 app 源码 → vite rebuild → 复制进 resources → 宿主 `PluginDevWatcher` emit `plugin:dev-reload` → 前端 reloadPlugin 重载。
 
 ## 6. 构建资源与 target 治理

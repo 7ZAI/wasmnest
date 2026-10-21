@@ -15,10 +15,10 @@ wasmnest/                                   # 平台仓根（本文件所在）
 ├─ wasmnest-desktop/                        # 桌面宿主（Tauri 2 + Vue 3）
 │   ├─ src/                                 # 宿主壳（ShellHost：主屏 + 系统页 + 挂载槽），见 §2.1
 │   ├─ src-tauri/                           # 桌面 Rust 宿主（插件机制接线 / 安全闸门 / 服务器），见 §2.2
-│   ├─ packages/plugin-sdk-desktop/         # 桌面端内 SDK（npm + crates：wasmnest-plugin-api）
+│   ├─ packages/plugin-sdk-desktop/         # 桌面端内 SDK（npm + crates；bin/ dev 工具与 tools/componentize 随包发布）
 │   ├─ packages/plugin-{bench-test,sdk-fixtures,system-test}/  # 宿主测试夹具包
-│   ├─ scripts/                             # dev-run / tauri-build / plugin-build / plugin-watch /
-│   │                                       # plugin-dev / package-host / 图标生成 / target 治理
+│   ├─ scripts/                             # dev-run / tauri-build / plugin-build / plugin-dev /
+│   │                                       # package-host / 图标生成 / target 治理
 │   ├─ e2e/ · bench/                        # WDIO E2E（smoke/bench）· 基准数据打包（驱动在 wasmnest-test/perf-tests）
 │   └─ resources/ · tailwind/postcss/stylelint/tsconfig/wdio…
 ├─ wasmnest-mobile/                         # 移动宿主（Tauri 2 Android + Vue 3）
@@ -29,7 +29,6 @@ wasmnest/                                   # 平台仓根（本文件所在）
 │   └─ scripts/                             # dev-run / plugin-build / android-dev-log / target 治理
 ├─ scripts/                                 # 根工具（见 §5）：compose-wit / app-paths / lib-paths / app-script /
 │                                           # adaptive-run / bump-version / package-sdks / target 治理 / wasip3-toolchain
-├─ tools/componentize/                      # 组件化工具（wasm32-unknown-unknown core module → Component）
 ├─ release-manifest.json                    # 跨仓版本唯一表达（判据见 docs/contracts.md §2.1）
 ├─ .cargo/config.toml                       # sccache 强制前置 + 并发兜底（未装 sccache 直接失败，显性设计）
 ├─ .husky/pre-commit                        # WIT 漂移锁 + 暂存前端文件 eslint（见 docs/commands.md §7）
@@ -56,7 +55,7 @@ wasmnest/                                   # 平台仓根（本文件所在）
 ../wasmnest-apps/apps/<slug>/<end>/            源码（前端 + rust/）
    │ 前端：desktop = vite 单文件包（全依赖打包，无 externals）
    │       mobile  = SDK vite 插件（vue/vue-i18n/pinia 外置宿主全局 __WASMNEST_SHARED__）
-   │ 后端：desktop = wasm32-wasip3 直出 Component；mobile / file-transfer = wasm32-unknown-unknown + tools/componentize
+   │ 后端：desktop = wasm32-wasip3 直出 Component；mobile / file-transfer = wasm32-unknown-unknown + 桌面 SDK 的 tools/componentize
    ▼
 wasmnest-desktop/src-tauri/resources/plugins/desktop/<id>/   { index.js, plugin.json, icon.svg, <rustLibrary>.wasm }
 wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
@@ -109,7 +108,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 ### 2.4 桌面脚本（`scripts/`）
 
-`dev-run.js`（宿主 dev：端口预检 → WASM/前端缺失预建 → tauri dev → `PLUGIN_WATCH_CMDS` 起前端 watch；bedcode 前端不参与 watch）、`plugin-build.js`（`PLUGINS` 注册表 = 5 个应用名单单一真源）、`plugin-dev.js`（单插件 dev）、`plugin-watch.js`（前端重载闭环）、`tauri-build.js`（updater 签名）、`package-host.mjs`（`host:pack` 宿主产物分发，见 docs/commands.md §3）、`check-target-size.js`（target 治理）、`generate-*.js`（图标生成）、`install-tauri-deps.sh`。**每个脚本头注释自解释。**
+`dev-run.js`（宿主 dev：端口预检 → WASM/前端缺失预建 → tauri dev → `PLUGIN_WATCH_CMDS` 起前端 watch；bedcode 前端不参与 watch）、`plugin-build.js`（`PLUGINS` 注册表 = 5 个应用名单单一真源）、`plugin-dev.js`（单插件 dev）、`tauri-build.js`（updater 签名）、`package-host.mjs`（`host:pack` 宿主产物分发，见 docs/commands.md §3）、`check-target-size.js`（target 治理）、`generate-*.js`（图标生成）、`install-tauri-deps.sh`。**每个脚本头注释自解释。**插件前端 watch 闭环（`plugin-watch.js`）已随桌面 SDK 发布（`packages/plugin-sdk-desktop/bin/`），`dev-run.js` 反向引 SDK 内同一份实现。
 
 ## 3. 移动端导览（`wasmnest-mobile/`）
 
@@ -159,7 +158,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `package-sdks.mjs` | 双端 SDK 构建 + 打包（npm tarball + crates + zip，校验 npm/Cargo 版本一致） |
 | `audit-rust-tests.mjs` · `split-rust-tests.mjs` · `run-test-split.sh` | Rust 测试体量审计 / 拆分 / 批量跑（见 docs/testing.md §3） |
 | `wasip3-toolchain.sh` | wasip3 工具链 pinned nightly 单一事实源（`WASIP3_NIGHTLY`；切换点写在该脚本头注） |
-| `tools/componentize/` | Component 化工具（wasm32-unknown-unknown → Component；file-transfer 与移动产物用） |
+| `packages/plugin-sdk-desktop/tools/componentize/` | Component 化工具（wasm32-unknown-unknown → Component；file-transfer 与移动产物用；随 npm 包发布） |
 
 ## 5. 能力仓（`../wasmnest-lib`）——记住边界
 
@@ -188,7 +187,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 新增 / 停用移动应用 | 移动构建自动扫描 `apps/*/mobile`（无注册表）；只需同步 `release-manifest.json`；机制差异读 docs/architecture.md §4 |
 | 改跨端传输 / 认证 / 配对面 | docs/architecture.md §6（跨端协议）；改完去 `../wasmnest-test/cross-end-tests` 跑真实互连（零 mock） |
 | 改 Android 原生（Kotlin / manifest / gradle） | `wasmnest-mobile/src-tauri/gen/android/**`；改 Kotlin 必须 gradlew 验证；`tauri android init` 重建后手工恢复手写面 |
-| 排查「改了没生效」/ 产物路径 | 桌面 `scripts/{dev-run,plugin-watch,plugin-build}.js`、移动 `scripts/plugin-build.js`、根 `scripts/app-paths.mjs`；先确认产物是否真写进 `src-tauri/resources/plugins/<end>/<id>/`；再确认宿主扫描目录（桌面 dev 是 `target/debug/resources/…` 运行时副本——源目录删除不会自动同步，幽灵目录只在这里活着） |
+| 排查「改了没生效」/ 产物路径 | 桌面 `scripts/{dev-run,plugin-build}.js` 与 `packages/plugin-sdk-desktop/bin/plugin-watch.js`、移动 `scripts/plugin-build.js`、根 `scripts/app-paths.mjs`；先确认产物是否真写进 `src-tauri/resources/plugins/<end>/<id>/`；再确认宿主扫描目录（桌面 dev 是 `target/debug/resources/…` 运行时副本——源目录删除不会自动同步，幽灵目录只在这里活着） |
 | 发布 / 版本 | docs/contracts.md §2.1（manifest 判据）+ `scripts/bump-version.mjs` + `scripts/package-sdks.mjs`；三仓 tag 规则见 docs/git.md §3 |
 | 定位代码 | 本文 §7（代码查找纪律） |
 
@@ -208,7 +207,6 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `tailwindContentCoverage.test.ts` | 同上 | 宿主 Tailwind content 不得残留 app 路径 |
 | `appBundlePathLock.test.ts` · `appChromeLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 挂载包路径单一来源（`resources/plugins/desktop` 层级）；壳标题栏常驻、应用不得自绘标题栏/窗口控制/拖拽区 |
 | `shellExtensions.test.ts` · `shellStatusBar.test.ts` · `shellExtensionWiring.test.ts` · `settings/settingsOrderLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 壳扩展点注册语义（排序 / 覆盖 / Disposable / 皮肤 token 校验）、状态栏分区与动作失败隔离、ShellHost 装配接线、设置页顺序（**关于固定最后**） |
-| `appPreviewScale.test.ts` · `composables/useShellApps.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 宿主前端不设人为上限：256 条清单全量保留（不截断）；32 张多任务卡各自挂载预览、超时只回退自己、卸载时句柄逐一回收（上限 = 并发挂载能力，不是常量） |
 | `pluginWatchCopy.test.ts` | `wasmnest-desktop/src/__tests__/scripts/` | 插件 watch 复制闭环 |
 | 移动壳系列锁：`shellConstraintLocks`（含 **L7 壳内自足**）、`retiredHostUIRetirementLocks`、`shellRegistry` / `shellPermissions` / `shellMechanisms` / `shellHostEvents` / `shellAppSurface` / `shellAppRunScreen` / `shellHomeScreen` 等 20+ | `wasmnest-mobile/src/__tests__/shell/` | 壳内自足（不依赖旧界面目录）、退役路由 / 符号不回接、壳迁移面不得缩水、注册表 / 权限 / 机制行为 |
 | `crate-structure-lock.test.mjs` | 根 `scripts/`（`pnpm run test:run`） | 契约 crate 常量保持 node 正则可解析的字面量形状；能力仓（`../wasmnest-lib`）无逃出 crate 目录的 `include!` / `include_str!` / `bindgen!` 路径；双端 `compose.json` 声明的 WIT 路径存在 |
@@ -238,5 +236,5 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 桌面 SDK | `wasmnest-desktop/packages/plugin-sdk-desktop/`（README 有已知漂移，docs/contracts.md §5.2） |
 | 移动 SDK / 运行面类型 | `wasmnest-mobile/packages/plugin-sdk-mobile/`（`src/types.ts` = `UIRegistry` 真源） |
 | 宿主构建 / dev 脚本 | 各端 `scripts/`（头注释自解释）+ 根 `scripts/{app-paths,app-script,adaptive-run}.mjs` |
-| 沙箱 / 基准 | `e2e/specs/`、`../wasmnest-test/perf-tests/`（宿主侧基准驱动）、`tools/componentize/` |
+| 沙箱 / 基准 | `e2e/specs/`、`../wasmnest-test/perf-tests/`（宿主侧基准驱动）、`packages/plugin-sdk-desktop/tools/componentize/` |
 | 编辑器 / 格式化 | `.editorconfig`、`.prettierrc.json`、根 `eslint.config.js`、两端 `tailwind.config.js` / `.stylelintrc.json` |

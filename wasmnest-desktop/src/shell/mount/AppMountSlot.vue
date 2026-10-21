@@ -49,7 +49,12 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { useAppMount, type AppMountEnv, type AppMountHandle } from '@/shell/mount/useAppMount'
+import {
+  useAppMount,
+  MOUNT_CONTRACT,
+  type AppMountEnv,
+  type AppMountHandle,
+} from '@/shell/mount/useAppMount'
 import { rememberAppRoute } from '@/shell/mount/appSession'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlatform } from '@/composables/usePlatform'
@@ -86,6 +91,7 @@ async function buildEnv(initialRoute: string, appId: string): Promise<AppMountEn
   await refreshChannelToken(appId)
   return {
     appId,
+    mountContract: MOUNT_CONTRACT,
     invoke: (command, args) => invoke(command, args ?? {}),
     appInvoke: (command, ...args) => appInvoke(appId, command, ...args),
     appStorageGet: (key) => appStorageGet(appId, key),

@@ -3,13 +3,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-// 桌面端脚本不是 TS 工程的一部分，这里直接按相对路径引真实实现（只导出纯函数，无副作用）
+// 桌面端脚本不是 TS 工程的一部分，这里直接按相对路径引真实实现（只导出纯函数，无副作用）；
+// 实现已收进桌面 SDK（`bin/`），应用侧从包名导入——平台仓内按相对路径直引同一文件。
 import {
   copyIfChanged,
   copyManifestIfChanged,
   expectedArtifactManifest,
   syncArtifactManifest,
-} from '../../../scripts/plugin-watch.js'
+} from '../../../packages/plugin-sdk-desktop/bin/plugin-watch.js'
 import { injectWasmHash, sha256Hex } from '../../../packages/plugin-sdk-desktop/bin/wasm-hash.js'
 
 /**
@@ -179,7 +180,8 @@ describe('syncArtifactManifest / copyManifestIfChanged（plugin.json 幂等同�
 })
 
 describe('接线（dev 脚本必须真的用上内容感知复制）', () => {
-  const WATCH = 'scripts/plugin-watch.js'
+  // 实现住桌面 SDK（发布物），dev-run 反向引它；应用侧从包名导入同一份文件
+  const WATCH = 'packages/plugin-sdk-desktop/bin/plugin-watch.js'
   const DEV_RUN = 'scripts/dev-run.js'
 
   it('watch 的产物复制走 copyStep(copyIfChanged)，不得退回无条件 cpSync', () => {
