@@ -11,7 +11,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
@@ -20,8 +20,10 @@ import {
   assertEntriesPresent,
   assertPrefixesPresent,
   assertTarballContains,
+  collectSiblingCrateDeps,
   listTarEntries,
   listTarballEntries,
+  writeSiblingPatchConfig,
 } from './sdk-package-contents.mjs'
 
 const BLOCK = 512
@@ -131,4 +133,58 @@ test('assertPrefixesPresent：按目录前缀判定 WIT 是否随包（--list �
     () => assertPrefixesPresent(noWitSrc, ['wit/', 'wit-src/'], 'crate'),
     /crate 内容不完整：缺少 wit-src\//,
   )
+})
+
+test('collectSiblingCrateDeps：只认 path + version 同时出现的兄弟 crate', () => {
+  const toml = [
+    '[dependencies]',
+    'serde = { version = "1", features = ["derive"] }',
+    'wasmnest-plugin-api-macros = { path = "../rust-macros", version = "0.0.1", optional = true }',
+    'wasmnest-lib-core = { path = "../../../wasmnest-lib/core", version = "0.0.1" }',
+    'local-only = { path = "../no-version" }',
+  ].join('\n')
+  const exists = (p) => p !== '/abs/no-version/Cargo.toml'
+  const got = collectSiblingCrateDeps(toml, '/abs/rust', exists)
+  assert.deepEqual(
+    got.map((d) => `${d.name}@${d.version}:${d.path}`),
+    [
+      'wasmnest-plugin-api-macros@0.0.1:/abs/rust-macros',
+      'wasmnest-lib-core@0.0.1:/wasmnest-lib/core',
+    ],
+  )
+})
+
+test('collectSiblingCrateDeps：仓内路径不存在（exists=false）不产出 patch', () => {
+  const toml = 'wasmnest-plugin-api-macros = { path = "../rust-macros", version = "0.0.1" }'
+  assert.deepEqual(collectSiblingCrateDeps(toml, '/abs/rust', () => false), [])
+})
+
+test('writeSiblingPatchConfig：有兄弟依赖才落文件，无则返回 null（不静默放宽）', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sdk-patch-'))
+  try {
+    const crateDir = join(dir, 'rust')
+    mkdirSync(crateDir, { recursive: true })
+    mkdirSync(join(dir, 'rust-macros'), { recursive: true })
+    writeFileSync(join(dir, 'rust-macros', 'Cargo.toml'), '[package]\nname = "x"\n')
+    const manifest = join(crateDir, 'Cargo.toml')
+    writeFileSync(
+      manifest,
+      '[package]\nname = "wasmnest-plugin-api"\n\n[dependencies]\nwasmnest-plugin-api-macros = { path = "../rust-macros", version = "0.0.1" }\n',
+    )
+    const out = join(dir, 'patch.toml')
+    const wrote = writeSiblingPatchConfig({ manifest, outFile: out })
+    assert.equal(wrote, out)
+    const text = readFileSync(out, 'utf-8')
+    assert.match(text, /\[patch\.crates-io\]/)
+    assert.match(text, new RegExp(`wasmnest-plugin-api-macros = \{ path = "${dir}/rust-macros"`))
+
+    const bareDir = join(dir, 'bare')
+    mkdirSync(bareDir, { recursive: true })
+    const bareManifest = join(bareDir, 'Cargo.toml')
+    writeFileSync(bareManifest, '[dependencies]\nserde = { version = "1" }\n')
+    assert.equal(writeSiblingPatchConfig({ manifest: bareManifest, outFile: join(dir, 'none.toml') }), null)
+    assert.equal(existsSync(join(dir, 'none.toml')), false)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

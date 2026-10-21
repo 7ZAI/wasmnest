@@ -61,11 +61,12 @@ import { createHash } from 'node:crypto'
 import { deflateRawSync } from 'node:zlib'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { platform } from 'node:os'
+import { platform, tmpdir } from 'node:os'
 import {
   assertPrefixesPresent,
   assertTarballContains,
   listTarballEntries,
+  writeSiblingPatchConfig,
 } from './sdk-package-contents.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -397,7 +398,28 @@ function crateTarball(t, c, expectedVersion) {
     )
     process.exit(1)
   }
-  run(['cargo', 'package', '--no-verify', '--manifest-path', manifest], { cwd: ROOT, label: `${t} SDK ${c.name} cargo package` })
+  // 兄弟 crate（`path` + `version`）未发布时 cargo 只认 registry 版本：用临时 config
+  // 把它们 patch 回仓内路径，只影响本次打包解析（写进 .crate 的清单仍是 registry 依赖）。
+  const patchFile = join(tmpdir(), `wasmnest-sdk-patch-${process.pid}-${c.name}.toml`)
+  const patched = writeSiblingPatchConfig({ manifest, outFile: patchFile })
+  try {
+    run(
+      [
+        'cargo',
+        'package',
+        '--no-verify',
+        ...(patched ? ['--config', patched] : []),
+        '--manifest-path',
+        manifest,
+      ],
+      {
+        cwd: ROOT,
+        label: `${t} SDK ${c.name} cargo package${patched ? '（兄弟 crate 走仓内路径）' : ''}`,
+      },
+    )
+  } finally {
+    if (patched) rmSync(patched, { force: true })
+  }
   // cargo 的 target 目录相对 manifest 所在目录（rust/ 或 rust-macros/），不是 SDK 根
   const crateFile = join(dirname(manifest), 'target', 'package', `${c.name}-${crateVersion}.crate`)
   if (!existsSync(crateFile)) {

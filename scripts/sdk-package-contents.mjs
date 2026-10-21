@@ -11,7 +11,8 @@
  * 支持：ustar（`prefix` 字段）/ GNU tar 头 / 跳过 pax 扩展头（只按头部名比较，足够锁
  * 住 npm tarball 的 `package/**` 与 cargo `.crate` 的 `crate-name-version/**` 路径）。
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 
 const BLOCK = 512
@@ -98,4 +99,52 @@ export function assertPrefixesPresent(entries, prefixes, label) {
         'Rust SDK 依赖随包的 WIT 契约，漏打即应用侧构建失败。',
     )
   }
+}
+
+/**
+ * 同仓兄弟 crate 依赖清单（`path` + `version` 同时出现）。
+ *
+ * `cargo package` 会剥掉这类依赖的 path，只留 crates.io 版本；crate 未发布时直接
+ * `no matching package named ... found`（桌面 SDK：api → rust-macros，发布顺序必然
+ * 先 macros 后 api）。本机与 CI 在未发布状态下也要能跑发布内容断言，因此把这些兄弟
+ * crate patch 回仓内路径。只影响本次打包的解析——写进 .crate 的清单仍是 registry 依赖。
+ *
+ * @param {string} manifestText crate 的 Cargo.toml 文本
+ * @param {string} manifestDir Cargo.toml 所在目录（path 依赖的相对基准）
+ * @param {(p: string) => boolean} exists 目录内是否有 Cargo.toml（注入以便测试）
+ * @returns {{name: string, path: string, version: string}[]}
+ */
+export function collectSiblingCrateDeps(manifestText, manifestDir, exists) {
+  const found = []
+  for (const line of manifestText.split(/\r?\n/)) {
+    const entry = /^([A-Za-z0-9_-]+)\s*=\s*\{([^}]*)\}$/.exec(line.trim())
+    if (!entry) continue
+    const body = entry[2]
+    const pathM = /path\s*=\s*"([^"]+)"/.exec(body)
+    const versionM = /version\s*=\s*"([^"]+)"/.exec(body)
+    if (!pathM || !versionM) continue
+    const abs = resolve(manifestDir, pathM[1])
+    if (!exists(join(abs, 'Cargo.toml'))) continue
+    found.push({ name: entry[1], path: abs, version: versionM[1] })
+  }
+  return found
+}
+
+/**
+ * 写出 `[patch.crates-io]` 配置文件并返回其路径；无兄弟依赖时不落文件、返回 null。
+ *
+ * 输出路径由调用方给（放临时目录，不进 crate 目录——cargo 会把 crate 目录里的未跟踪
+ * 文件判成 dirty）。
+ */
+export function writeSiblingPatchConfig({ manifest, outFile }) {
+  const deps = collectSiblingCrateDeps(
+    readFileSync(manifest, 'utf-8'),
+    dirname(manifest),
+    (p) => existsSync(p),
+  )
+  if (deps.length === 0) return null
+  const lines = ['[patch.crates-io]']
+  for (const d of deps) lines.push(`${d.name} = { path = "${d.path}", version = "${d.version}" }`)
+  writeFileSync(outFile, lines.join('\n') + '\n')
+  return outFile
 }
