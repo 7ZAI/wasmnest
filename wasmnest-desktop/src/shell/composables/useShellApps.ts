@@ -37,6 +37,8 @@ export interface HostPluginInfo {
   author: string
   main: string
   pluginType: string
+  /** 装配角色（manifest `type`；business-app / internal-business / basic-service） */
+  kind?: string
   rustLibrary: string
   permissions: string[]
   state: { state: string; error?: string }
