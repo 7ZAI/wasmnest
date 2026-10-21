@@ -9,7 +9,7 @@
  * 任一子进程退出（Ctrl+C / 宿主崩溃）时统一回收全部。
  *
  * 用法：
- *   node scripts/dev-run.js              # 默认：三个插件 watch + tauri android dev
+ *   node scripts/dev-run.js              # 默认：四个插件 watch + tauri android dev
  *   node scripts/dev-run.js --host-cmd "<命令>"   # 覆盖宿主命令（按空格拆分）
  */
 
@@ -219,6 +219,20 @@ const PLUGIN_WATCH_CMDS = [
       '--resources-dir', resolve(ROOT, 'src-tauri/resources/plugins/mobile'),
     ],
     wasmFile: 'rust/target/wasm32-unknown-unknown/release/wasmnest_plugin_file_transfer.wasm',
+  },
+  {
+    // Monitor：只读运行指标看板，自有 rust（非共享 crate），走与其他移动插件同一条
+    // watch 闭环（前端改动 → SDK CLI 重建 → resources；WASM 走 ensurePluginWasm()
+    // 的缺失 / 陈旧补建，补建经 scripts/plugin-build.js 委派 SDK CLI --rust-only）。
+    // 与桌面 dev-run.js 的 PLUGIN_WATCH_CMDS 同构（两端同构纪律）。
+    slug: 'monitor',
+    id: 'com.wasmnest.monitor',
+    args: [
+      resolve(ROOT, 'packages/plugin-sdk-mobile/bin/cli.js'),
+      'build', '--watch',
+      '--resources-dir', resolve(ROOT, 'src-tauri/resources/plugins/mobile'),
+    ],
+    wasmFile: 'rust/target/wasm32-unknown-unknown/release/wasmnest_plugin_monitor.wasm',
   },
 ]
 
