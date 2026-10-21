@@ -1,19 +1,20 @@
 /**
  * File Transfer 插件领域 mock（dev-shell 专用，纯通用接线）
  *
- * 浏览器中 Rust WASM 后端不可用，dev-shell 的 commands.execute 只执行前端注册的
- * handler。本模块注册 file-transfer 领域的命令 handler 骨架，并模拟事件推送
+ * 浏览器中 Rust WASM 后端不可用，app 经 `env.appInvoke` 发的命令只能由前端
+ * mock 顶上。本模块注册 file-transfer 领域的命令 handler 骨架（经
+ * `DomainContext` 落到全局命令表），并模拟事件推送
  * （mdns-found / connection-changed / tasks-changed 等，Phase 3 自持版 wire
- * 形状），使插件在 dev-shell 中展示「有数据」的完整形态。
+ * 形状），使 app 在 dev-shell 中展示「有数据」的完整形态。
  *
  * 本模块不包含任何具体业务 mock 数据：全部演示种子由插件工程持有
  * （入口导出 devMock：peer.deviceSeeds 为 mdns:found 载荷形状、transfer.tasks
  * 为引擎 PeerTransferDto camelCase 形状），注入时按 pluginId 经 getDevMock
  * 取种子驱动命令返回值与事件；未导出对应种子的插件不受影响（各子域回退空态）。
  */
-import { emitDevEvent } from './session'
+import { emitDevEvent } from './events'
 import { getDevMock } from '../registry'
-import type { PluginContext } from '../../../src/types'
+import type { DomainContext } from './domain-context'
 
 // ==================== 种子派生状态 ====================
 
@@ -132,10 +133,29 @@ function initPeerState(pluginId: string): void {
 
 // ==================== 命令 handler ====================
 
-function registerCommands(context: PluginContext): void {
+function registerCommands(context: DomainContext): void {
   // ==================== 设备缓存自持（Phase 3 步骤 1） ====================
-  context.commands.register('file-transfer.get-device-snapshot', () => ({ devices: [] }))
+  // 快照 = 种子设备派生（app 首屏经 get-device-snapshot 恢复「最近可见」条目）。
+  // 此前返回空数组：app 首屏设备列表空着，只能等 mdns-found 事件流补齐。
+  context.commands.register('file-transfer.get-device-snapshot', () => ({
+    devices: deviceSeeds.map((d) => ({
+      nodeId: d.found.txtRecords.id,
+      deviceName: d.found.txtRecords.name ?? '',
+      addr: d.found.addresses[0] ?? '',
+      port: d.found.port,
+      capabilitiesHex: d.found.txtRecords.cap ?? '',
+      instanceName: d.found.instanceName,
+      // 刚可见（TTL 恢复窗口内）：app 据此判定「最近可见」并允许首屏拨号
+      lastSeenMs: Date.now(),
+    })),
+  }))
   context.commands.register('file-transfer.save-device-snapshot', () => ({ ok: true }))
+  // 宿主发现刷新：真机上是宿主重新扫 mDNS 并推 mdns-found；浏览器里没有真实
+  // 发现，故重推种子设备的发现事件（app 侧语义同形：设备列表刷新）
+  context.commands.register('file-transfer.refresh-devices', () => {
+    pushDeviceFound()
+    return { ok: true }
+  })
   // 对等拨号：入参携带显式 endpoint；按种子 dialBehavior 返回终态，
   // connected 时同步推连接态事件（错误以 rejected promise 携带字样供行内文案分流）
   context.commands.register('file-transfer.dial-peer', (args: any) => {
@@ -244,6 +264,35 @@ function registerCommands(context: PluginContext): void {
     pushSnapshot()
     return Promise.resolve({ ...t })
   })
+  // 暂停 / 继续：app 侧判据是「返回 true 即成功」（r === true），故这里返回布尔
+  context.commands.register('file-transfer.pause', (args: any) => {
+    const t = tasks.find((x) => x.batchId === args?.taskId && x.status === 'running')
+    if (!t) return false
+    t.status = 'paused'
+    t.updatedAtMs = Date.now()
+    pushSnapshot()
+    return true
+  })
+  context.commands.register('file-transfer.resume', (args: any) => {
+    const t = tasks.find((x) => x.batchId === args?.taskId && x.status === 'paused')
+    if (!t) return false
+    t.status = 'running'
+    t.updatedAtMs = Date.now()
+    pushSnapshot()
+    return true
+  })
+  // 批量继续：app 侧读 `resumed` 计数（typeof r?.resumed === 'number'）
+  context.commands.register('file-transfer.resume-all', () => {
+    let resumed = 0
+    for (const t of tasks) {
+      if (t.status !== 'paused') continue
+      t.status = 'running'
+      t.updatedAtMs = Date.now()
+      resumed += 1
+    }
+    if (resumed > 0) pushSnapshot()
+    return { resumed }
+  })
 
   // ==================== 接收应答 ====================
   context.commands.register('file-transfer.approve-batch', () => ({ ok: true }))
@@ -320,9 +369,24 @@ function registerCommands(context: PluginContext): void {
     'C:/demo/演示报告.pdf',
     'C:/demo/数据表.xlsx',
   ])
+  // 在文件管理器中显示：内核原语（浏览器无文件管理器）→ no-op
+  context.commands.register('file-transfer.reveal-in-dir', () => ({ ok: false }))
 }
 
 // ==================== 事件推送 ====================
+
+/**
+ * 推送全部种子设备的发现事件（mdns-found 载荷形状）
+ *
+ * 真机上由宿主的 mDNS 发现驱动；浏览器里没有真实发现，故由种子代偿。
+ * app 的 `parseFoundPayload` 按 mDNS 载荷解析（instanceName / addresses / port /
+ * txtRecords），所以推的必须是**载荷形状**而不是快照条目形状。
+ */
+function pushDeviceFound(): void {
+  for (const seed of deviceSeeds) {
+    emitDevEvent('plugin:file-transfer:mdns-found', { ...seed.found })
+  }
+}
 
 /** WS 控制面在线信号（connOnline pill 展示） */
 function pushControlPlaneOnline(): void {
@@ -404,7 +468,7 @@ function startProgressSimulation(): number {
  *
  * @returns Disposable：清理模拟定时器（插件 deactivate 时调用）
  */
-export function registerFileTransferMock(context: PluginContext, pluginId: string): {
+export function registerFileTransferMock(context: DomainContext, pluginId: string): {
   dispose(): void
 } {
   initPeerState(pluginId)

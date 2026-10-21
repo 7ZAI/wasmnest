@@ -180,7 +180,8 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 改插件机制 / 生命周期 / 能力接线（Rust） | 该端 `src-tauri/src/plugin/**`（每域一个文件，端口 adapter + 白名单条目同处，**先读文件头注释**）+ 能力仓对应 crate；跑该端 `cargo test` |
 | 改权限 / 授权闸门 | 本端 SDK `rust/src/permission.rs`（词汇真源）+ docs/contracts.md §4 + docs/security.md §1；生成物重出（桌面 SDK 目录 `pnpm run gen:permissions`）；跑相关锁 |
 | 改 WIT / ABI / 契约 | docs/contracts.md §2/§3 全链 + `scripts/compose-wit.mjs`；**不在端生成物里改**；改完重拼、重建受影响 app 产物、同步 manifest |
-| 改 SDK（TS / Rust 面） | 该端 `packages/plugin-sdk-*/`（README + `src/types.ts` / `rust/src/lib.rs`）；跑 SDK `test:run`；发布走 `package-sdks.mjs`。**桌面 SDK 的 README / template / dev-shell 仍是旧贡献面形态（已知漂移，docs/contracts.md §5.2）——写新代码以应用仓现有 app 为形态基准** |
+| 改 SDK（TS / Rust 面） | 该端 `packages/plugin-sdk-*/`（README + `src/types.ts` / `rust/src/lib.rs`）；跑 SDK `test:run`；发布走 `package-sdks.mjs`。**桌面 SDK 的 README / template 仍是旧贡献面形态（已知漂移，docs/contracts.md §5.2）——写新代码以应用仓现有 app 为形态基准** |
+| 改桌面 dev-shell（浏览器预览） | `packages/plugin-sdk-desktop/dev-shell/`（`src/shell/types.ts` = 挂载契约声明 + `src/shell/mount/devAppMount.ts` = 装载 + `src/shell/components/**` = 宿主 chrome + `src/mock/**` = 命令 / 事件 mock）；**改宿主 `src/shell/mount/useAppMount.ts` 的契约或 `src/style.css` / `src/shell/styles/shell.css` 的 token 时必须同步 dev-shell 侧**（两道锁：`dev-shell/__tests__/shell/contractDrift.test.ts` + `dev-shell/__tests__/visualParity.test.ts`）；跑 SDK `test:run` |
 | 改构建 / dev 脚本 | 对应脚本头注释（自解释）+ 根 `scripts/app-paths.mjs`；桌面还有 `src/__tests__/scripts/pluginWatchCopy.test.ts` 等脚本锁 |
 | 新增 / 改名 / 停用桌面应用 | 应用仓先按 `../wasmnest-apps/AGENTS.md` §5 清单走；本仓四处注册表 + 一处路由 + 两处锁必须同步：`scripts/plugin-build.js` `PLUGINS`、`scripts/plugin-dev.js` `PLUGINS`、`scripts/dev-run.js` `PLUGIN_WATCH_CMDS`、`src/shell/composables/useShellApps.ts` `SURFACE_ROUTES`（+ `src/router/index.ts` 路由条目）、`hostAppBoundaryLock.test.ts` 的 `APP_ENTRIES` + `release-manifest.json` |
 | 新增 / 停用移动应用 | 移动构建自动扫描 `apps/*/mobile`（无注册表）；只需同步 `release-manifest.json`；机制差异读 docs/architecture.md §4 |

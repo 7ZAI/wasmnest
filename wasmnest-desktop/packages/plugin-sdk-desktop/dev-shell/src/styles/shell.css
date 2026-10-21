@@ -1,0 +1,546 @@
+/**
+ * 设备壳共享样式（src/shell/** 全组件可用）
+ *
+ * 设计真源：`.scratch/2026-10-08-desktop-shell-redesign/shell-preview-c.html`
+ * 铁律（frontend-styles token-bound）：颜色 / 圆角 / 阴影全部走 style.css token
+ * 或 color-mix 自 token 派生；零新增 hex、零新字体族。
+ *
+ * 跨组件复用才放这里（3+ 组件）；单组件私有样式放 scoped。
+ */
+  /* ==================== 壳根容器 ====================
+     固定视口高度 + 纵向 flex：全屏面（系统页 / 应用挂载槽）自己成为滚动容器，
+     页头与 tab 条不再随内容滚走。2026-10-17 实机验证 P2-10 的根因就在这里——
+     `.sys-body` 早已是 `overflow-y: auto`，但父链没有确定高度，滚的是整页，
+     系统页 tab 一滚就够不着。
+
+     壳文本默认不可选中（P2-12）：一次误拖就把主屏整片文字染成蓝底，且跨页面
+     导航后高亮仍在。应用挂载槽内部自己恢复可选（AppMountSlot 的
+     `user-select: text`），业务内容不受影响。 */
+  .shell-root {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ==================== 键盘焦点环（壳内所有自绘控件统一形态） ====================
+     壳里的按钮 / 图块 / 分段项 / 卡片都是 div、span 或裸 button，没有浏览器默认外观，
+     此前只有 .shell-sw 一处画了焦点环 —— 键盘 Tab 走一遍主屏与工具栏，焦点位置
+     完全看不出来（WCAG 2.4.7 可见焦点：键盘可达的每个控件都必须有可见指示）。
+     这里统一收口：`:focus-visible` 只在键盘路径触发（鼠标点击不出现），
+     2px 实色 + 2px 间隙；色取各色板 info（对 6 套色板的浅/深底都 ≥ 3:1）。
+     控件自己已定义 outline 的（.shell-sw 把环画在 track 上）保持自身声明。 */
+  .shell-root :is(button, a, [tabindex], input, select, textarea, summary):focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  /* ==================== 图标图块（系统页图标 / 应用图标 / 多任务系统卡共用） ====================
+     这个类此前**只**定义在 ShellAppTile 的 scoped 样式里，而 scoped 样式不外泄：
+     ShellCardScreen（系统页页头 34px）/ ShellHome（系统网格 52px）/ ShellTaskSwitcher
+     （多任务系统卡 96px）里的 `.glyph-box` 因此没有任何样式——span 退化成行内元素，
+     图标按文字基线排布（整体偏下、水平不居中，大尺寸时像溢出/被裁），这就是用户反馈的
+     「系统页图标显示不全」。基规则上移到壳共享样式（4 个组件复用），尺寸仍由调用方用
+     内联 width/height 决定；`ShellAppTile` 只保留「应用自带图标」的裁剪规则。 */
+  .glyph-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: var(--radius-app-icon);
+    transition:
+      transform var(--motion-duration-base) var(--motion-ease),
+      box-shadow var(--motion-duration-base) var(--motion-ease);
+  }
+
+  /* ==================== 应用图标底色（tone 档：color-mix 自语义 token，双主题自动适配） ==================== */
+  .tone-primary {
+    background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-card));
+    color: var(--color-primary);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+  }
+  .tone-info {
+    background: var(--color-info-light);
+    color: var(--color-info-ink);
+    border: 1px solid color-mix(in srgb, var(--color-info) 25%, transparent);
+  }
+  .tone-success {
+    background: var(--color-success-light);
+    color: var(--color-success-ink);
+    border: 1px solid color-mix(in srgb, var(--color-success) 25%, transparent);
+  }
+  .tone-warning {
+    background: var(--color-warning-light);
+    color: var(--color-warning-ink);
+    border: 1px solid color-mix(in srgb, var(--color-warning) 28%, transparent);
+  }
+  .tone-mix {
+    background: color-mix(in srgb, var(--color-info) 10%, var(--color-success-light));
+    color: color-mix(in srgb, var(--color-info) 55%, var(--color-success));
+    border: 1px solid color-mix(in srgb, var(--color-info) 22%, transparent);
+  }
+  :root.dark .tone-primary {
+    color: var(--text-primary);
+  }
+  .tone-system {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+  }
+
+  /* ==================== 状态点 ==================== */
+  .sdot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .sdot.running {
+    background: var(--color-success);
+  }
+  .sdot.degraded {
+    background: var(--color-warning);
+  }
+  /* dormant / approval / error 不再画点（审批用 ! 徽标，错误由 chip / 详情呈现）；
+     状态点只表示「有正在运行的应用会话」。 */
+
+  /* ==================== chip（状态徽标） ==================== */
+  .shell-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: calc(11px * var(--ui-scale));
+    padding: 2px 8px;
+    border-radius: var(--radius-tag);
+    background: var(--color-primary-light);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    flex-shrink: 0;
+    line-height: 1.4;
+  }
+  .shell-chip.ok {
+    background: var(--color-success-light);
+    color: var(--color-success-ink);
+  }
+  .shell-chip.warn {
+    background: var(--color-warning-light);
+    color: var(--color-warning-ink);
+  }
+  .shell-chip.danger {
+    background: var(--color-danger-light);
+    color: var(--color-danger-ink);
+  }
+  .shell-chip.info {
+    background: var(--color-info-light);
+    color: var(--color-info-ink);
+  }
+
+  /* ==================== pill（权限位等技术标识） ==================== */
+  .shell-pill {
+    font-family: var(--font-mono);
+    font-size: calc(11px * var(--ui-scale));
+    padding: 2px 7px;
+    border-radius: var(--radius-tag);
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .shell-pill.risk {
+    background: var(--color-danger-light);
+    border-color: transparent;
+    color: var(--color-danger-ink);
+  }
+
+  /* ==================== 开关（原生 checkbox + token 外观，键盘可达） ====================
+     「开」用色板主色，不用成功绿：这是个通用开关（深浅色 / 自启 / 防休眠 / 链路加密），
+     不是「操作成功」的结果态——绿色留给真正表达成功与健康度的 chip / 状态点，
+     否则整页开关都在喊「成功」，语义被稀释。
+     尺寸 34×20：滑块 16px、行程 14px，指针与触控板都够用。 */
+  .shell-sw {
+    position: relative;
+    width: 34px;
+    height: 20px;
+    flex-shrink: 0;
+    display: inline-block;
+  }
+  .shell-sw input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    margin: 0;
+    cursor: pointer;
+  }
+  .shell-sw .track {
+    position: absolute;
+    inset: 0;
+    border-radius: 10px;
+    background: var(--border-strong);
+    transition: background-color var(--motion-duration-fast) var(--motion-ease);
+    pointer-events: none;
+  }
+  .shell-sw .knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    transition: transform var(--motion-duration-base) var(--motion-ease);
+    pointer-events: none;
+  }
+  .shell-sw input:checked ~ .track {
+    background: var(--color-primary);
+  }
+  .shell-sw input:checked ~ .knob {
+    transform: translateX(14px);
+  }
+  .shell-sw input:focus-visible ~ .track {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+  }
+  .shell-sw.risk input:checked ~ .track {
+    background: var(--color-danger);
+  }
+  .shell-sw input:disabled ~ .track,
+  .shell-sw input:disabled ~ .knob {
+    opacity: 0.5;
+  }
+
+  /* ==================== 分段控件 ==================== */
+  .shell-seg {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-button);
+  }
+  .shell-seg button {
+    min-width: 62px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 6px;
+    font-size: calc(11px * var(--ui-scale));
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    transition:
+      background-color var(--motion-duration-fast) var(--motion-ease),
+      color var(--motion-duration-fast) var(--motion-ease);
+  }
+  .shell-seg button:hover {
+    color: var(--text-primary);
+  }
+  /* 选中用固定黑底 + 反白文字：不用白色药丸，也不加勾章，不随明暗主题反转
+     （2026-10-20 用户裁决：除背景壁纸选择外，选中背景统一为黑色）。 */
+  .shell-seg button.on {
+    background: var(--selection-solid);
+    color: var(--selection-solid-ink);
+    font-weight: 500;
+  }
+  .shell-seg button.on.risky {
+    background: var(--color-danger-light);
+    color: var(--color-danger-ink);
+    box-shadow: none;
+  }
+
+  /* ==================== 按钮（壳内 mini / ghost / danger 形态） ==================== */
+  .shell-btn {
+    height: 28px;
+    padding: 0 12px;
+    border-radius: var(--radius-button);
+    background: var(--color-primary);
+    color: var(--color-primary-contrast);
+    font-size: calc(12px * var(--ui-scale));
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition:
+      background-color var(--motion-duration-fast) var(--motion-ease),
+      filter var(--motion-duration-fast) var(--motion-ease),
+      transform var(--motion-duration-fast) var(--motion-ease);
+  }
+  .shell-btn:hover {
+    background: var(--color-primary-hover);
+  }
+  /* 按压反馈：1px 下沉（按下即回弹，不带布局位移——只动 transform） */
+  .shell-btn:active {
+    transform: translateY(1px);
+  }
+  .shell-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+  }
+  .shell-btn.ghost {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+  }
+  .shell-btn.ghost:hover {
+    background: var(--bg-hover);
+  }
+  .shell-btn.danger-outline {
+    background: var(--bg-card);
+    color: var(--color-danger-ink);
+    border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+  }
+  .shell-btn.danger-outline:hover {
+    background: var(--color-danger-light);
+  }
+  .shell-btn.danger-fill {
+    background: var(--color-danger);
+    color: var(--color-primary-contrast);
+  }
+  .shell-btn.danger-fill:hover {
+    filter: brightness(0.92);
+  }
+  .shell-mini {
+    height: 24px;
+    padding: 0 10px;
+    border-radius: var(--radius-button);
+    font-size: calc(11px * var(--ui-scale));
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    white-space: nowrap;
+    transition:
+      background-color var(--motion-duration-fast) var(--motion-ease),
+      color var(--motion-duration-fast) var(--motion-ease);
+  }
+  .shell-mini:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  .shell-mini.danger {
+    color: var(--color-danger-ink);
+    border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+  }
+  .shell-mini.danger:hover {
+    background: var(--color-danger-light);
+  }
+  .shell-mini:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  /* ==================== 提示块 ==================== */
+  .shell-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 9px 11px;
+    font-size: calc(11px * var(--ui-scale));
+    line-height: 1.55;
+    border-radius: var(--radius-button);
+  }
+  .shell-callout svg {
+    margin-top: 1px;
+    flex-shrink: 0;
+  }
+  .shell-callout.warn {
+    background: var(--color-warning-light);
+    color: var(--color-warning-ink);
+    border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
+  }
+  .shell-callout.danger {
+    background: var(--color-danger-light);
+    color: var(--color-danger-ink);
+    border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+  }
+
+  /* ==================== kv / 记录行 ==================== */
+  .shell-kv {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: calc(12px * var(--ui-scale));
+    padding: 3px 0;
+  }
+  .shell-kv b {
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  .shell-kv span {
+    color: var(--text-secondary);
+    text-align: right;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: calc(11px * var(--ui-scale));
+  }
+  .shell-rec {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    border-radius: var(--radius-button);
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border);
+  }
+  .shell-rec + .shell-rec {
+    margin-top: 5px;
+  }
+  .shell-rec .tg {
+    font-family: var(--font-mono);
+    font-size: calc(11px * var(--ui-scale));
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .shell-rec.deny {
+    border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+  }
+  .shell-rec.deny .tg {
+    color: var(--color-danger-ink);
+  }
+
+  /* ==================== 壳壁纸（token 派生渐变 + 可调遮罩，spec-c §5） ====================
+     壁纸挂在壳根（ShellHost 的 .shell-root）上，主屏 / 系统页 / 应用面共用同一背景；
+     宿主页面不铺自己的不透明底色，背景切换才不会「只在主屏生效」。
+     遮罩不是一层平铺色：自上而下由 --wall-dim 的 40% 加深到 130%（封顶 100%），
+     上方保持壁纸本色（光源在这里），下方压住亮度给图标名字与计数兜对比度。
+     遮罩只在壁纸存在时叠加（无壁纸 → 不叠，直接透出 --bg-page）。 */
+  .shell-wall {
+    background-color: var(--bg-page);
+    background-image:
+      linear-gradient(
+        color-mix(in srgb, var(--bg-page) calc(var(--wall-dim, 0.3) * 40%), transparent) 0%,
+        color-mix(in srgb, var(--bg-page) min(100%, calc(var(--wall-dim, 0.3) * 130%)), transparent)
+          100%
+      ),
+      radial-gradient(
+        115% 90% at 50% 38%,
+        transparent 42%,
+        color-mix(in srgb, var(--bg-page) 55%, transparent) 100%
+      ),
+      var(--wall-active);
+    background-attachment: scroll, scroll, scroll;
+  }
+  .shell-wall.wall-aurora {
+    --wall-active: var(--wall-aurora);
+  }
+  .shell-wall.wall-dune {
+    --wall-active: var(--wall-dune);
+  }
+  .shell-wall.wall-reef {
+    --wall-active: var(--wall-reef);
+  }
+  /* 自定义图片：URL 由 ShellHost 以 --wall-custom 内联变量传入（存文件名而非绝对
+     路径，数据目录搬迁后仍可解析）。cover 让 16:9 / 竖图都铺满整屏不变形；
+     回落 --wall-aurora 覆盖「偏好是 custom 但 URL 还没解析完」的一帧。 */
+  .shell-wall.wall-custom {
+    --wall-active: var(--wall-custom, var(--wall-aurora));
+    background-size: cover;
+    background-position: center;
+  }
+  /* 设置页壁纸预览色块（无遮罩层，直出渐变） */
+  .wall-swatch.wall-aurora {
+    background-image: var(--wall-aurora);
+  }
+  .wall-swatch.wall-dune {
+    background-image: var(--wall-dune);
+  }
+  .wall-swatch.wall-reef {
+    background-image: var(--wall-reef);
+  }
+
+  /* ==================== 浮层玻璃（通知 / 快捷设置 / 右键菜单） ====================
+     只给「浮在内容上」的面用：背后是应用界面或主屏图块，blur 才有可模糊的细节。
+     表面色取 --bg-glass（96%）：透明度不是玻璃感的来源，模糊才是；
+     继续降到 92% 时，面板里 11px 的 tertiary 文字在背后纯黑 / 纯白内容上最低
+     会掉到 4.09:1（6 套色板 × 明暗两档，低于 AA 4.5:1），所以底色留在这个下限。
+     不用 @supports 分支：不支持 backdrop-filter 的 WebView 会忽略模糊声明，
+     96% 的近实底仍能压住下层内容（不透明回退）。 */
+  .shell-glass {
+    background: var(--bg-glass);
+    -webkit-backdrop-filter: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate));
+    backdrop-filter: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate));
+  }
+
+  /* 系统「降低透明度」偏好：去掉模糊并回到实心卡面。WebKitGTK 当前不支持该查询时
+     整块被忽略；支持时按用户偏好回退，不靠透明度传递层级。 */
+  @media (prefers-reduced-transparency: reduce) {
+    .shell-glass {
+      background: var(--bg-card);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+
+  /* ==================== 屏幕切换动效（减速到达，只动 transform/opacity，spec-c §1） ==================== */
+  .screen-entering {
+    animation: shell-scr-in var(--motion-duration-base) var(--motion-ease);
+  }
+  @keyframes shell-scr-in {
+    from {
+      opacity: 0;
+      transform: scale(0.97) translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* ==================== 弹窗进入动效 ==================== */
+  .shell-dlg-in {
+    animation: shell-dlg-in var(--motion-duration-base) var(--motion-ease);
+  }
+  @keyframes shell-dlg-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* ==================== 覆层淡入 ==================== */
+  .shell-fade-in {
+    animation: shell-fade-in var(--motion-duration-fast) var(--motion-ease);
+  }
+  @keyframes shell-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* ==================== 系统级「减弱动态」降级 ====================
+     与 style.css 的页面过渡降级同一条口径，但覆盖壳内所有自绘动效（系统页入场 /
+     图块交错 / 面板缩放 / 图块悬停抬升）。用 0.01ms 而不是 `animation: none`：
+     带 `both` 填充模式的入场动画若被整条移除，元素会停在 `from`（透明度 0）——
+     内容消失比动效更糟。动效只是被压成瞬时，终态一定到位。 */
+  @media (prefers-reduced-motion: reduce) {
+    .shell-root *,
+    .shell-root *::before,
+    .shell-root *::after {
+      animation-duration: 0.01ms !important;
+      animation-delay: 0ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      transition-delay: 0ms !important;
+    }
+  }

@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==================== Platform Scales ==================== */
+
+/*
+ * Linux 桌面端默认 UI 缩放 1.15（font-size: 115% 放大 rem 间距/控件 + --ui-scale
+ * 放大 px token 字号），修正 WebKitGTK 下 Web 默认 16px 字号偏小的观感。
+ * 为什么不用 zoom：CSS zoom 会把 xterm.js 鼠标 hit-test（getBoundingClientRect 含
+ * zoom）与字符测量（OffscreenCanvas measureText 无视 zoom）放进不同坐标系，导致
+ * opencode 等 TUI 鼠标高亮错位（issue 06）。font-size + --ui-scale 等效放大 rem/px
+ * 却不破坏坐标。
+ * 仅 Linux 生效：macOS 2x Retina 与 Windows DPI-aware 天然更大，不需要额外缩放。
+ * main.ts 中 initPlatform() 完成后向 <html> 加 platform-linux class（只在 isLinux 时）。
+ * --ui-scale 此处是 JS 生效前的 CSS 默认（splash 期），useFontSize 就绪后覆盖一致。
+ * 用户仍可用 Ctrl+= / Ctrl+- 手动微调（index.html 已去掉 maximum-scale 限制）。
+ */
+html.platform-linux {
+  font-size: 115%;
+  --ui-scale: 1.15;
+}
+
 /* ==================== Design Tokens ==================== */
 
 /*
@@ -14,8 +33,23 @@
 :root {
   color-scheme: light;
 
-  /* 基础排版 */
-  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Display', Inter, system-ui, sans-serif;
+  /* 基础排版：拉丁字形在前、CJK 字形在后（逐字回退）——不写 CJK 家族时，
+     Linux 的 system-ui 落到 DejaVu/Liberation，中文由 fontconfig 兜底，
+     不同发行版会换脸（同一界面两种字形）。显式列出三平台常见的 CJK 无衬线体，
+     命中的第一项即用，观感在三端一致。 */
+  font-family:
+    'Segoe UI',
+    -apple-system,
+    BlinkMacSystemFont,
+    'SF Pro Display',
+    Inter,
+    system-ui,
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    'Noto Sans CJK SC',
+    'Source Han Sans SC',
+    sans-serif;
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -36,6 +70,10 @@
   /* 界面文字缩放比例（由 useFontSize composable 动态更新，1 = "正常"档位，12px 基准） */
   --ui-scale: 1;
 
+  /* 等宽族（技术值 / 权限位 / 端口路径）：shell.css 的 .shell-pill / .shell-kv /
+     .shell-rec 以 var(--font-mono) 取用，宿主侧单一来源（此前各处各写一串回退） */
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+
   /* 动态字体大小：各档以"正常"档位实际像素为基准，随 --ui-scale 等比缩放 */
   --font-size-xs: calc(9px * var(--ui-scale));
   --font-size-sm: calc(10px * var(--ui-scale));
@@ -44,33 +82,68 @@
   --font-size-xl: calc(16px * var(--ui-scale));
 
   /* Backgrounds */
-  --bg-page: #F5F4F0;
-  --bg-sidebar: #EFEDE7;
-  --bg-card: #FDFCFA;
-  --bg-hover: #E7E4DC;
-  --bg-input: #FDFCFA;
+  --bg-page: #f5f4f0;
+  --bg-sidebar: #efede7;
+  --bg-card: #fdfcfa;
+  --bg-hover: #e7e4dc;
+  --bg-input: #fdfcfa;
 
-  /* Text */
-  --text-primary: #26231B;
-  --text-secondary: #7C7565;
-  --text-tertiary: #ABA492;
+  /* 透明度阶梯（surface ladder，2026-10-20 用户裁决）
+     原则：越像「浮在内容上的壳层」越透，越像「承载阅读与决策的内容面」越实。
+     - --bg-veil：内容卡片 / 工具栏（背后只有壁纸）。92% 足以透出壁纸色相，
+       又不吃掉 --text-tertiary 的对比度余量（6 套色板 × 明暗两档、壁纸最亮区域
+       实测最低 4.77:1）。
+     - --bg-glass：浮层（通知 / 快捷设置 / 右键菜单，背后是任意应用内容）。
+       96% 不是保守：面板里 11px 的 tertiary 文字在「纯黑 / 纯白」两种极端内容上
+       仍要 ≥4.5:1（同口径实测最低 4.61:1；降到 92% 只剩 4.09:1）；
+       玻璃感交给 blur，不靠继续降透明度。
+     - 决策弹窗（授权 / 退出确认）与授权列表保持实心：那里优先逐字可读，不做氛围。
+     两个表面 token 引用 --bg-card，深浅主题 / 各色板自动跟随，无需在 :root.dark 重定义。 */
+  --bg-veil: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  --bg-glass: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  --ui-glass-blur: 18px;
+  --ui-glass-saturate: 115%;
+
+  /* Text
+     对比度阶梯（对 page / card / sidebar 三个面取最差值，WCAG AA 4.5:1 为下限）：
+     primary ≈14:1 · secondary ≈6:1 · tertiary ≈4.5:1。
+     之前 tertiary 只有 2.1–2.3:1（浅色）/ 2.6–3.2:1（深色）——它承载的是设置项说明、
+     分区计数、面板副标题这类 11px 正文，属于「读得出的内容」而非装饰，
+     低于 AA 在暖色板下几乎不可读；secondary 在 --bg-sidebar 上也只到 3.9:1。 */
+  --text-primary: #26231b;
+  --text-secondary: #5e584c;
+  --text-tertiary: #736b58;
 
   /* Border */
-  --border: #E4E1D8;
-  --border-strong: #D6D2C4;
-  --border-input: #D6D2C4;
+  --border: #e4e1d8;
+  --border-strong: #d6d2c4;
+  --border-input: #d6d2c4;
 
   /* Brand Colors（强调色只用于主按钮/选中态/链接） */
-  --color-primary: #1D1A14;
-  --color-primary-hover: #0F0D09;
-  --color-primary-light: #EFEDE5;
-  --color-primary-contrast: #FDFCFA;
-  --color-success: #22C55E;
+  --color-primary: #1d1a14;
+  --color-primary-hover: #0f0d09;
+  --color-primary-light: #efede5;
+  --color-primary-contrast: #fdfcfa;
+  --color-success: #22c55e;
   --color-success-light: rgba(34, 197, 94, 0.14);
-  --color-warning: #F59E0B;
+  --color-warning: #f59e0b;
   --color-warning-light: rgba(245, 158, 11, 0.16);
-  --color-danger: #EF4444;
+  --color-danger: #ef4444;
   --color-danger-light: rgba(239, 68, 68, 0.12);
+  --color-info: #2563eb;
+  --color-info-light: rgba(37, 99, 235, 0.12);
+
+  /* 状态色「文字」档（*-ink）：只用于 tinted 底上的文字（chip / callout / 记录行标记）
+     与图标井里的字形。
+     --color-success/warning/danger 是**非文字**色（状态点 / 左侧状态条 / 实心按钮，
+     门槛 3:1）；把它们直接当 11px 徽标文字用会掉到 1.9:1（浅色主题下绿 1.97、
+     琥珀 1.86、成功色 1.97），低于 WCAG AA 4.5:1。ink 取值 = 对各自 *-light 底、
+     card、page 三面取最差仍 ≥4.5 的最近色（深浅主题各一套，深色不能沿用浅色值——
+     同一色相在深底上需要更高的亮度才够对比）。 */
+  --color-success-ink: #166534;
+  --color-warning-ink: #92400e;
+  --color-danger-ink: #b91c1c;
+  --color-info-ink: #1d4ed8;
 
   /* Radius */
   --radius-card: 10px;
@@ -78,6 +151,69 @@
   --radius-input: 8px;
   --radius-tag: 6px;
   --radius-nav: 8px;
+  /* 壳（设备壳 / 主屏+卡片）新增圆角 token：3+ 组件复用才升级为 token
+     （frontend-styles promote-at-3 规则，.scratch/2026-10-08-desktop-shell-redesign/spec-c.md §4）
+     --radius-app-icon：应用图标 squircle 圆角（主屏图标网格 / 列表行图标 / 卡片头部 / 启动屏图标）
+     --radius-sheet：大圆角面（多任务 / 通知 / 命令面板 / 全局弹窗） */
+  --radius-app-icon: 28%;
+  --radius-sheet: 16px;
+  /* 壳顶部工具栏高度（导航与窗口控制所在行，通知面板以此为锚点定位） */
+  --toolbar-h: 44px;
+
+  /* 壳壁纸：token 派生渐变（color-mix 自既有语义 token，零新 hex，双主题自动适配）。
+     三层结构（自后向前）：基底斜向渐变定色相 → 左上 / 右上两处「光源」径向渐变
+     （纯透明边缘，模拟光从画面外打进来）→ 壳叠加的 --wall-dim 遮罩（护文字对比度）。
+     只有一层线性渐变的壁纸在任何主题下都是同一条色带子，画面平且没有重心。
+     浓度按主题分档：同一组百分比在深色底上混出的亮度远高于浅色底（深色主题下
+     40% 的信息蓝会糊成一块墨绿），深色档在 :root.dark 里单独降档。 */
+  --wall-aurora: radial-gradient(
+      120% 85% at 6% -14%,
+      color-mix(in srgb, var(--color-info) 30%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 4%,
+      color-mix(in srgb, var(--color-success) 22%, transparent) 0%,
+      transparent 58%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-info) 18%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-success) 13%, var(--bg-page)) 52%,
+      var(--bg-page) 100%
+    );
+  --wall-dune: radial-gradient(
+      120% 85% at 8% -14%,
+      color-mix(in srgb, var(--color-warning) 34%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 6%,
+      color-mix(in srgb, var(--color-primary) 16%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-warning) 17%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-primary) 8%, var(--bg-page)) 55%,
+      var(--bg-page) 100%
+    );
+  --wall-reef: radial-gradient(
+      120% 85% at 6% -14%,
+      color-mix(in srgb, var(--color-info) 32%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 6%,
+      color-mix(in srgb, var(--color-primary) 18%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-info) 14%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-primary) 10%, var(--bg-page)) 60%,
+      var(--bg-page) 100%
+    );
 
   /* Shadow（卡片无阴影，最多 hover 微阴影） */
   --shadow-card: 0 1px 2px rgba(38, 35, 27, 0.04);
@@ -90,12 +226,40 @@
   --page-padding-x: 24px;
   --page-padding-y: 24px;
 
-  /* Typography */
+  /* Typography
+     --font-size-h1/h2 是「显示级」字号（系统页标题 / 主屏分区标题）：与正文 13px 拉开
+     1.4× 以上的层级差，标题才有分量——全部字号在同一档位附近会让界面看起来扁平。 */
   --font-size-title: calc(14px * var(--ui-scale));
   --font-size-card-title: calc(14px * var(--ui-scale));
   --font-size-body: calc(13px * var(--ui-scale));
   --font-size-label: calc(12px * var(--ui-scale));
   --font-size-tag: calc(11px * var(--ui-scale));
+  --font-size-h1: calc(19px * var(--ui-scale));
+  --font-size-h2: calc(15px * var(--ui-scale));
+
+  /* 交互动效：壳与挂载面共用同一组节奏（时长按距离 / 复杂度分档，缓动统一减速到达）。
+     组件 scoped 样式里不再各写一份 0.15s/0.2s —— 见 ui-ux-pro-max ux 域
+     Duration Timing：用共享 token，别把同一组数字抄进每个过渡。 */
+  --motion-duration-fast: 130ms;
+  --motion-duration-base: 200ms;
+  --motion-duration-slow: 320ms;
+  --motion-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* 键盘焦点环（所有自绘控件共用）：实色 2px + 2px 间隙，任何底色上都可辨 */
+  --focus-ring-color: var(--color-info);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* 选中态分两套，都不用黑色描边：
+     · 背景壁纸选择（预览类，唯一保留勾章）：表面抬一档选中色阶 + 黑底白勾
+     · 其余选择（分段档位 / 快捷磁贴 / 多任务信息条 / 授权档位）：黑底白字
+     选中填充用固定近黑 + 固定反白，不随明暗主题反转——用户裁决「选中背景为黑色、
+     不是白色」，深色主题下也不能翻成白底（2026-10-20）。 */
+  --selection-solid: #1d1a14;
+  --selection-solid-ink: #fdfcfa;
+  --selection-halo: color-mix(in srgb, var(--text-primary) 22%, transparent);
+  --selection-tint: color-mix(in srgb, var(--selection-solid) 8%, var(--bg-card));
 
   /* Component Sizes */
   --input-height: 36px;
@@ -109,51 +273,109 @@
 :root.dark {
   color-scheme: dark;
 
-  --bg-page: #15130F;
+  --bg-page: #15130f;
   --bg-sidebar: #191712;
-  --bg-card: #1D1A15;
-  --bg-hover: #2A261E;
-  --bg-input: #1D1A15;
-  --text-primary: #ECE8DC;
-  --text-secondary: #9C9482;
-  --text-tertiary: #6B6455;
-  --border: #2E2A22;
-  --border-strong: #3C372B;
-  --border-input: #3C372B;
-  --color-primary: #ECE8DC;
-  --color-primary-hover: #F5F2EA;
+  --bg-card: #1d1a15;
+  --bg-hover: #2a261e;
+  --bg-input: #1d1a15;
+  --text-primary: #ece8dc;
+  --text-secondary: #aaa393;
+  --text-tertiary: #948c79;
+  --border: #2e2a22;
+  --border-strong: #3c372b;
+  --border-input: #3c372b;
+  --color-primary: #ece8dc;
+  --color-primary-hover: #f5f2ea;
   --color-primary-light: rgba(236, 232, 220, 0.12);
-  --color-primary-contrast: #15130F;
+  --color-primary-contrast: #15130f;
   --color-success-light: rgba(34, 197, 94, 0.15);
   --color-warning-light: rgba(245, 158, 11, 0.15);
   --color-danger-light: rgba(239, 68, 68, 0.15);
+  --color-info: #60a5fa;
+  --color-info-light: rgba(96, 165, 250, 0.14);
+  /* 状态色文字档（深色）：同一色相在深底上要更亮才够 4.5:1（见浅色档注释） */
+  --color-success-ink: #4ade80;
+  --color-warning-ink: #fbbf24;
+  --color-danger-ink: #f87171;
+  --color-info-ink: #93c5fd;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.35);
   --shadow-input-focus: 0 0 0 3px rgba(236, 232, 220, 0.12);
+
+  /* 深色档壁纸：同一套构图，浓度整体降一档（浅色语义色在深底上混合后的亮度
+     远高于浅色主题，照搬浅色百分比会糊成一块高饱和墨色）。 */
+  --wall-aurora: radial-gradient(
+      120% 85% at 6% -14%,
+      color-mix(in srgb, var(--color-info) 24%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 4%,
+      color-mix(in srgb, var(--color-success) 12%, transparent) 0%,
+      transparent 58%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-info) 10%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-success) 5%, var(--bg-page)) 52%,
+      var(--bg-page) 100%
+    );
+  --wall-dune: radial-gradient(
+      120% 85% at 8% -14%,
+      color-mix(in srgb, var(--color-warning) 26%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 6%,
+      color-mix(in srgb, var(--color-primary) 10%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-warning) 11%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-primary) 5%, var(--bg-page)) 55%,
+      var(--bg-page) 100%
+    );
+  --wall-reef: radial-gradient(
+      120% 85% at 6% -14%,
+      color-mix(in srgb, var(--color-info) 26%, transparent) 0%,
+      transparent 56%
+    ),
+    radial-gradient(
+      95% 75% at 98% 6%,
+      color-mix(in srgb, var(--color-primary) 11%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--color-info) 8%, var(--bg-page)) 0%,
+      color-mix(in srgb, var(--color-primary) 6%, var(--bg-page)) 60%,
+      var(--bg-page) 100%
+    );
 }
 
 /* ==================== 色板：cool（冷灰调） ==================== */
 /* 新增色板 = 在此加一组 [data-palette='xxx'] 变量覆盖 + 设置页调色台选项 */
 
 :root[data-palette='cool'] {
-  --bg-page: #F3F5F7;
-  --bg-sidebar: #ECEEF2;
-  --bg-card: #FBFCFD;
-  --bg-hover: #E4E8EE;
-  --bg-input: #FBFCFD;
+  --bg-page: #f3f5f7;
+  --bg-sidebar: #eceef2;
+  --bg-card: #fbfcfd;
+  --bg-hover: #e4e8ee;
+  --bg-input: #fbfcfd;
 
-  --text-primary: #1F2937;
-  --text-secondary: #6B7280;
-  --text-tertiary: #9CA3AF;
+  --text-primary: #1f2937;
+  --text-secondary: #545964;
+  --text-tertiary: #646c7b;
 
-  --border: #E2E6EC;
-  --border-strong: #C9D1DC;
-  --border-input: #C9D1DC;
+  --border: #e2e6ec;
+  --border-strong: #c9d1dc;
+  --border-input: #c9d1dc;
 
-  --color-primary: #2563EB;
-  --color-primary-hover: #1D4ED8;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
   --color-primary-light: rgba(37, 99, 235, 0.1);
-  --color-primary-contrast: #FFFFFF;
+  --color-primary-contrast: #ffffff;
 
   --shadow-card: 0 1px 2px rgba(31, 41, 55, 0.04);
   --shadow-card-hover: 0 4px 16px rgba(31, 41, 55, 0.08);
@@ -161,52 +383,54 @@
 }
 
 :root.dark[data-palette='cool'] {
-  --bg-page: #0F172A;
-  --bg-sidebar: #131C2E;
-  --bg-card: #1A2438;
-  --bg-hover: #26334D;
-  --bg-input: #1A2438;
+  --bg-page: #0f172a;
+  --bg-sidebar: #131c2e;
+  --bg-card: #1a2438;
+  --bg-hover: #26334d;
+  --bg-input: #1a2438;
 
-  --text-primary: #E2E8F0;
-  --text-secondary: #94A3B8;
-  --text-tertiary: #64748B;
+  --text-primary: #e2e8f0;
+  --text-secondary: #a8b4c5;
+  --text-tertiary: #8f9cae;
 
   --border: #283548;
-  --border-strong: #3B4A63;
-  --border-input: #3B4A63;
+  --border-strong: #3b4a63;
+  --border-input: #3b4a63;
 
-  --color-primary: #93C5FD;
-  --color-primary-hover: #BFDBFE;
+  --color-primary: #93c5fd;
+  --color-primary-hover: #bfdbfe;
   --color-primary-light: rgba(147, 197, 253, 0.12);
-  --color-primary-contrast: #0F172A;
+  --color-primary-contrast: #0f172a;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-input-focus: 0 0 0 3px rgba(147, 197, 253, 0.15);
 }
 
-/* ==================== 色板：forest（森野绿） ==================== */
-/* 注意：色板变量组与宿主 src/style.css 镜像同步（改色需双端同改） */
+/* 默认色板 warm 已直接写入 :root / :root.dark，无需重复块 */
+
+/* ==================== 色板：forest（森野绿 · 自然沉稳） ==================== */
+/* 注意：色板变量组与 dev-shell 的 styles/style.css 镜像同步（改色需双端同改） */
 
 :root[data-palette='forest'] {
-  --bg-page: #F6F5EF;
-  --bg-sidebar: #EFEEE6;
-  --bg-card: #FDFCF7;
-  --bg-hover: #E8E6DB;
-  --bg-input: #FDFCF7;
+  --bg-page: #f6f5ef;
+  --bg-sidebar: #efeee6;
+  --bg-card: #fdfcf7;
+  --bg-hover: #e8e6db;
+  --bg-input: #fdfcf7;
 
-  --text-primary: #23281F;
-  --text-secondary: #6E7367;
-  --text-tertiary: #9CA092;
+  --text-primary: #23281f;
+  --text-secondary: #565a51;
+  --text-tertiary: #6a6e5f;
 
-  --border: #E2E1D6;
-  --border-strong: #CFD0C0;
-  --border-input: #CFD0C0;
+  --border: #e2e1d6;
+  --border-strong: #cfd0c0;
+  --border-input: #cfd0c0;
 
-  --color-primary: #3E6B4F;
-  --color-primary-hover: #32583F;
+  --color-primary: #3e6b4f;
+  --color-primary-hover: #32583f;
   --color-primary-light: rgba(62, 107, 79, 0.1);
-  --color-primary-contrast: #FDFCF7;
+  --color-primary-contrast: #fdfcf7;
 
   --shadow-card: 0 1px 2px rgba(35, 40, 31, 0.04);
   --shadow-card-hover: 0 4px 16px rgba(35, 40, 31, 0.08);
@@ -215,21 +439,21 @@
 
 :root.dark[data-palette='forest'] {
   --bg-page: #101713;
-  --bg-sidebar: #141D18;
-  --bg-card: #1A241F;
+  --bg-sidebar: #141d18;
+  --bg-card: #1a241f;
   --bg-hover: #243128;
-  --bg-input: #1A241F;
+  --bg-input: #1a241f;
 
-  --text-primary: #E6EDE4;
-  --text-secondary: #93A29A;
-  --text-tertiary: #66756D;
+  --text-primary: #e6ede4;
+  --text-secondary: #a3b0a9;
+  --text-tertiary: #899890;
 
-  --border: #27332C;
-  --border-strong: #37463D;
-  --border-input: #37463D;
+  --border: #27332c;
+  --border-strong: #37463d;
+  --border-input: #37463d;
 
-  --color-primary: #86C49B;
-  --color-primary-hover: #A3D6B4;
+  --color-primary: #86c49b;
+  --color-primary-hover: #a3d6b4;
   --color-primary-light: rgba(134, 196, 155, 0.12);
   --color-primary-contrast: #101713;
 
@@ -238,27 +462,27 @@
   --shadow-input-focus: 0 0 0 3px rgba(134, 196, 155, 0.15);
 }
 
-/* ==================== 色板：ocean（海洋青） ==================== */
+/* ==================== 色板：ocean（海洋青 · 清爽通透） ==================== */
 
 :root[data-palette='ocean'] {
-  --bg-page: #F2F7F9;
-  --bg-sidebar: #E9F0F4;
-  --bg-card: #FAFCFD;
-  --bg-hover: #DFEAEF;
-  --bg-input: #FAFCFD;
+  --bg-page: #f2f7f9;
+  --bg-sidebar: #e9f0f4;
+  --bg-card: #fafcfd;
+  --bg-hover: #dfeaef;
+  --bg-input: #fafcfd;
 
-  --text-primary: #1B2B33;
-  --text-secondary: #5E747F;
-  --text-tertiary: #8FA2AC;
+  --text-primary: #1b2b33;
+  --text-secondary: #4b5c65;
+  --text-tertiary: #5b707b;
 
-  --border: #DDE6EB;
-  --border-strong: #C4D3DB;
-  --border-input: #C4D3DB;
+  --border: #dde6eb;
+  --border-strong: #c4d3db;
+  --border-input: #c4d3db;
 
-  --color-primary: #0E7490;
-  --color-primary-hover: #0B5E75;
+  --color-primary: #0e7490;
+  --color-primary-hover: #0b5e75;
   --color-primary-light: rgba(14, 116, 144, 0.1);
-  --color-primary-contrast: #FFFFFF;
+  --color-primary-contrast: #ffffff;
 
   --shadow-card: 0 1px 2px rgba(27, 43, 51, 0.04);
   --shadow-card-hover: 0 4px 16px rgba(27, 43, 51, 0.08);
@@ -266,51 +490,51 @@
 }
 
 :root.dark[data-palette='ocean'] {
-  --bg-page: #0B1620;
-  --bg-sidebar: #0F1D29;
+  --bg-page: #0b1620;
+  --bg-sidebar: #0f1d29;
   --bg-card: #152430;
-  --bg-hover: #1E303F;
+  --bg-hover: #1e303f;
   --bg-input: #152430;
 
-  --text-primary: #E2EEF4;
-  --text-secondary: #8FA7B5;
-  --text-tertiary: #5E7686;
+  --text-primary: #e2eef4;
+  --text-secondary: #9ab0bc;
+  --text-tertiary: #8198a7;
 
-  --border: #1F323F;
-  --border-strong: #2E4556;
-  --border-input: #2E4556;
+  --border: #1f323f;
+  --border-strong: #2e4556;
+  --border-input: #2e4556;
 
-  --color-primary: #5FD0E8;
-  --color-primary-hover: #8ADFF0;
+  --color-primary: #5fd0e8;
+  --color-primary-hover: #8adff0;
   --color-primary-light: rgba(95, 208, 232, 0.12);
-  --color-primary-contrast: #0B1620;
+  --color-primary-contrast: #0b1620;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-input-focus: 0 0 0 3px rgba(95, 208, 232, 0.15);
 }
 
-/* ==================== 色板：sunset（落日晚霞） ==================== */
+/* ==================== 色板：sunset（落日晚霞 · 温暖活力） ==================== */
 
 :root[data-palette='sunset'] {
-  --bg-page: #FBF5EF;
-  --bg-sidebar: #F6ECE2;
-  --bg-card: #FEFAF5;
-  --bg-hover: #F0E2D4;
-  --bg-input: #FEFAF5;
+  --bg-page: #fbf5ef;
+  --bg-sidebar: #f6ece2;
+  --bg-card: #fefaf5;
+  --bg-hover: #f0e2d4;
+  --bg-input: #fefaf5;
 
-  --text-primary: #33281F;
-  --text-secondary: #8A7565;
-  --text-tertiary: #B3A08D;
+  --text-primary: #33281f;
+  --text-secondary: #66564a;
+  --text-tertiary: #7d6854;
 
-  --border: #EDE2D6;
-  --border-strong: #DFCBB8;
-  --border-input: #DFCBB8;
+  --border: #ede2d6;
+  --border-strong: #dfcbb8;
+  --border-input: #dfcbb8;
 
-  --color-primary: #D9532A;
-  --color-primary-hover: #BC4520;
+  --color-primary: #d9532a;
+  --color-primary-hover: #bc4520;
   --color-primary-light: rgba(217, 83, 42, 0.1);
-  --color-primary-contrast: #FEFAF5;
+  --color-primary-contrast: #fefaf5;
 
   --shadow-card: 0 1px 2px rgba(51, 40, 31, 0.04);
   --shadow-card-hover: 0 4px 16px rgba(51, 40, 31, 0.08);
@@ -318,51 +542,51 @@
 }
 
 :root.dark[data-palette='sunset'] {
-  --bg-page: #1B1210;
+  --bg-page: #1b1210;
   --bg-sidebar: #211613;
-  --bg-card: #2A1D18;
+  --bg-card: #2a1d18;
   --bg-hover: #382722;
-  --bg-input: #2A1D18;
+  --bg-input: #2a1d18;
 
-  --text-primary: #F5E9E2;
-  --text-secondary: #B0958A;
-  --text-tertiary: #7D6458;
+  --text-primary: #f5e9e2;
+  --text-secondary: #bba49a;
+  --text-tertiary: #a68c80;
 
-  --border: #3A2B26;
-  --border-strong: #4E3A32;
-  --border-input: #4E3A32;
+  --border: #3a2b26;
+  --border-strong: #4e3a32;
+  --border-input: #4e3a32;
 
-  --color-primary: #F5A383;
-  --color-primary-hover: #F8BBA2;
+  --color-primary: #f5a383;
+  --color-primary-hover: #f8bba2;
   --color-primary-light: rgba(245, 163, 131, 0.12);
-  --color-primary-contrast: #1B1210;
+  --color-primary-contrast: #1b1210;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-input-focus: 0 0 0 3px rgba(245, 163, 131, 0.15);
 }
 
-/* ==================== 色板：violet（星空紫） ==================== */
+/* ==================== 色板：violet（星空紫 · 静谧优雅） ==================== */
 
 :root[data-palette='violet'] {
-  --bg-page: #F7F5FB;
-  --bg-sidebar: #F0EDF7;
-  --bg-card: #FCFBFE;
-  --bg-hover: #E9E4F4;
-  --bg-input: #FCFBFE;
+  --bg-page: #f7f5fb;
+  --bg-sidebar: #f0edf7;
+  --bg-card: #fcfbfe;
+  --bg-hover: #e9e4f4;
+  --bg-input: #fcfbfe;
 
-  --text-primary: #2A2533;
-  --text-secondary: #6F687D;
-  --text-tertiary: #A29AB2;
+  --text-primary: #2a2533;
+  --text-secondary: #5c5768;
+  --text-tertiary: #726788;
 
-  --border: #E5E0EE;
-  --border-strong: #D3CCE2;
-  --border-input: #D3CCE2;
+  --border: #e5e0ee;
+  --border-strong: #d3cce2;
+  --border-input: #d3cce2;
 
-  --color-primary: #6D4FC6;
-  --color-primary-hover: #5B3FAE;
+  --color-primary: #6d4fc6;
+  --color-primary-hover: #5b3fae;
   --color-primary-light: rgba(109, 79, 198, 0.1);
-  --color-primary-contrast: #FCFBFE;
+  --color-primary-contrast: #fcfbfe;
 
   --shadow-card: 0 1px 2px rgba(42, 37, 51, 0.04);
   --shadow-card-hover: 0 4px 16px rgba(42, 37, 51, 0.08);
@@ -371,21 +595,21 @@
 
 :root.dark[data-palette='violet'] {
   --bg-page: #141020;
-  --bg-sidebar: #19132A;
+  --bg-sidebar: #19132a;
   --bg-card: #201936;
-  --bg-hover: #2C2247;
+  --bg-hover: #2c2247;
   --bg-input: #201936;
 
-  --text-primary: #ECE8F6;
-  --text-secondary: #A69BC2;
-  --text-tertiary: #756B8F;
+  --text-primary: #ece8f6;
+  --text-secondary: #aba0c5;
+  --text-tertiary: #928aa8;
 
-  --border: #2E2647;
-  --border-strong: #3E3560;
-  --border-input: #3E3560;
+  --border: #2e2647;
+  --border-strong: #3e3560;
+  --border-input: #3e3560;
 
-  --color-primary: #B9A6F7;
-  --color-primary-hover: #CDBFFA;
+  --color-primary: #b9a6f7;
+  --color-primary-hover: #cdbffa;
   --color-primary-light: rgba(185, 166, 247, 0.12);
   --color-primary-contrast: #141020;
 
@@ -393,8 +617,6 @@
   --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-input-focus: 0 0 0 3px rgba(185, 166, 247, 0.15);
 }
-
-/* 默认色板 warm 已直接写入 :root / :root.dark，无需重复块 */
 
 /* ==================== 桌面端字体大小 ==================== */
 
@@ -578,7 +800,9 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: background 150ms ease, opacity 150ms ease;
+  transition:
+    background 150ms ease,
+    opacity 150ms ease;
 }
 
 .wb-btn-ghost:hover {
@@ -638,7 +862,8 @@ html.anim-disabled *::after {
 /* ==================== Animation ==================== */
 
 @keyframes pulse-slow {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -650,20 +875,138 @@ html.anim-disabled *::after {
   animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* 页面切换过渡动画 */
-.page-enter-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+/* ==================== 页面过渡动效（全端单一事实源） ====================
+ * 宿主路由 + 四个 wasm 应用的「整视图 / 分区切换」共用这一套，三条硬约定：
+ *   1. transition 名字恒为 `page`（不得再出现 ah-page / ft-page / page-fade /
+ *      view-slide / tab-fade 等各自为政的页面级过渡）；
+ *   2. 过渡容器必须带 `page-swap`（定位上下文，见下）；
+ *   3. 效果由 <html data-page-fx> 选择，唯一切换点是
+ *      `src/utils/pageTransition.ts` 的 PAGE_TRANSITION_EFFECT（代码级，无设置项）。
+ *
+ * 为什么是「两层重叠交叉」而不是 `mode="out-in"`：out-in 先播完出场、再挂载入场，
+ * 两者之间存在一帧以上「容器里什么都没有」的窗口，露出的是 --bg-page —— 五套暗色
+ * 主题下它分别是 #15130f / #0f172a / #101713 / #0b1620 / #1b1210，全是近黑，
+ * 于是切页表现为「黑屏 + 闪烁」（历史上同一机制还在插件视图上触发过永久白屏）。
+ * 现在出场层 `position: absolute` 脱离文档流、新元素从第一帧就占位，两层同屏叠加，
+ * 容器永不断层。
+ */
+
+/* 动效 token：所有页面过渡的时长 / 缓动 / 幅度只从这里取，不允许把同一组数字
+   抄进各组件的 scoped 样式（参考：ui-ux-pro-max ux 域 Animation·Duration Timing
+   —— use shared motion tokens，而非 one duration copied to every transition）。 */
+:root {
+  --motion-page-duration-in: 220ms;
+  --motion-page-duration-out: 160ms;
+  --motion-page-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --motion-page-shift: 10px;
+  --motion-page-scale: 0.985;
 }
+
+/*
+ * 过渡容器（`.page-swap`）：出场的绝对定位层以它为定位上下文。
+ * `--page-swap-pad-*` 是内边距补偿——绝对定位按 padding box 解析，容器有内边距时
+ * 出场层会整体偏移（横向滑走），用负偏移抵消回 content box，与入场层严丝合缝。
+ * 两个变量同时充当「内边距真值」与「补偿量」，同一处声明，不会漂移。
+ */
+.page-swap {
+  position: relative;
+  --page-swap-pad-x: 0px;
+  --page-swap-pad-y: 0px;
+}
+
+/* 带内边距的过渡容器（替代原先散落的 Tailwind p-*，保证补偿量与内边距同源）。
+   等价 Tailwind `px-6 py-5`；新增带内边距的过渡容器时按需加一档，别把裸 px-* / py-*
+   写回容器上——那样补偿量与内边距就变成两个来源。 */
+.page-swap-pad-lg {
+  --page-swap-pad-x: 1.5rem;
+  --page-swap-pad-y: 1.25rem;
+  padding: var(--page-swap-pad-y) var(--page-swap-pad-x);
+}
+
+.page-enter-active,
 .page-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity var(--motion-page-duration-in) var(--motion-page-ease),
+    transform var(--motion-page-duration-in) var(--motion-page-ease);
+  will-change: opacity, transform;
 }
-.page-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
+
+.page-leave-active {
+  /* 出场层脱离文档流 → 新元素立即占位，容器无空帧。top/left 用减法写法抵消
+     内边距（CSS Values-4 的 `calc(-1 * var())` 乘法要 Chromium 111+ 才支持，
+     WebView2/WKWebView 老内核会在解析期整条丢弃，见 2026-10-04 OCR D-02）；
+     width 扣掉两侧内边距；**不写 bottom、不设 height** —— 高度保持自然值，
+     否则长内容会被容器可视高度拉伸变形。
+     pointer-events: none：重叠过渡期间点按落在正在淡出的旧页上会重复触发
+     切页/双击（D-04）——160ms 里旧页只是残影，不该再接事件。 */
+  position: absolute;
+  top: calc(0px - var(--page-swap-pad-y));
+  left: calc(0px - var(--page-swap-pad-x));
+  /* width 同样不用乘法（老内核整条丢弃）：扣两次即可 */
+  width: calc(100% - var(--page-swap-pad-x) - var(--page-swap-pad-x));
+  /* 高度上限 = 容器可视高：出场层是旧页的残影，长表单/长会话淡出时若保持自然
+     高度会画出容器可视区（被 main{overflow:hidden} 裁掉的部分仍参与绘制，
+     短内容时则露底下入场页；见 2026-10-04 OCR D-05）。max-height 只截超长，
+     不强制拉满——短内容仍是自然高度。 */
+  max-height: 100%;
+  overflow: hidden;
+  transition-duration: var(--motion-page-duration-out);
+  /* 绝对定位层本就绘制在静态流内容之上，显式写出 z-index：将来入场元素自带定位 /
+     z-index 时次序不会翻转（旧页压在新页下面 = 新页纹丝不动，读不出交叉淡入）。 */
+  z-index: 1;
+  pointer-events: none;
 }
-.page-leave-to {
+
+/* 效果变体：入场起点 / 出场终点。无 data-page-fx（首帧、JS 未生效）默认 slide-up。 */
+.page-enter-from,
+html[data-page-fx='slide-up'] .page-enter-from {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(var(--motion-page-shift));
+}
+.page-leave-to,
+html[data-page-fx='slide-up'] .page-leave-to {
+  opacity: 0;
+  transform: translateY(calc(0px - var(--motion-page-shift) / 2));
+}
+
+/* fade：纯透明度交叉，无位移 */
+html[data-page-fx='fade'] .page-enter-from,
+html[data-page-fx='fade'] .page-leave-to {
+  transform: none;
+}
+
+/* slide-left：横向推移（前进 / 后退的方向感） */
+html[data-page-fx='slide-left'] .page-enter-from {
+  opacity: 0;
+  transform: translateX(var(--motion-page-shift));
+}
+html[data-page-fx='slide-left'] .page-leave-to {
+  opacity: 0;
+  transform: translateX(calc(0px - var(--motion-page-shift) / 2));
+}
+
+/* zoom：轻微缩放，transform-origin 默认居中 */
+html[data-page-fx='zoom'] .page-enter-from {
+  opacity: 0;
+  transform: scale(var(--motion-page-scale));
+}
+html[data-page-fx='zoom'] .page-leave-to {
+  opacity: 0;
+  transform: scale(var(--motion-page-scale));
+}
+
+/* 减弱动态：过渡压到近乎瞬时后，入场起点若仍是 opacity:0，容器仍会闪一帧全透明
+   （近黑背景一闪）——故连起点/终点一并强制为完全可见、无位移。 */
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active,
+  .page-leave-active {
+    transition-duration: 0.01ms !important;
+  }
+  .page-enter-from,
+  .page-leave-to {
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 /* 数据卡片交错淡入动画 */
@@ -683,8 +1026,9 @@ html.anim-disabled *::after {
 }
 
 /* ==================== Toast 等级配色（vue-sonner richColors 变量覆盖） ====================
- * 覆盖 sonner 默认 HSL 色板，改用主题语义 token（与宿主 src/style.css 镜像同步）：
- * 成功绿 --color-success / 警告黄 --color-warning / 错误红 --color-danger / info 用 --color-primary。
+ * 覆盖 sonner 默认 HSL 色板，改用主题语义 token：
+ * 成功绿 --color-success / 警告黄 --color-warning / 错误红 --color-danger / 信息蓝 --color-info
+ * （info 用独立蓝而非 --color-primary：默认主题主色是中性近黑，会呈现黑白观感）。
  * 背景取 -light 淡色、边框用 color-mix 淡化语义色、浅色模式文字加深 35% 保证对比度；
  * 深色模式文字直接用亮色语义色。default/loading 类通知保持卡片统一风格。 */
 [data-sonner-toaster][data-sonner-theme='light'] {
@@ -700,9 +1044,9 @@ html.anim-disabled *::after {
   --error-border: color-mix(in srgb, var(--color-danger) 35%, transparent) !important;
   --error-text: color-mix(in srgb, var(--color-danger) 65%, black) !important;
 
-  --info-bg: var(--color-primary-light) !important;
-  --info-border: color-mix(in srgb, var(--color-primary) 30%, transparent) !important;
-  --info-text: color-mix(in srgb, var(--color-primary) 65%, black) !important;
+  --info-bg: var(--color-info-light) !important;
+  --info-border: color-mix(in srgb, var(--color-info) 30%, transparent) !important;
+  --info-text: color-mix(in srgb, var(--color-info) 65%, black) !important;
 }
 
 [data-sonner-toaster][data-sonner-theme='dark'] {
@@ -718,9 +1062,9 @@ html.anim-disabled *::after {
   --error-border: color-mix(in srgb, var(--color-danger) 25%, transparent) !important;
   --error-text: var(--color-danger) !important;
 
-  --info-bg: var(--color-primary-light) !important;
-  --info-border: color-mix(in srgb, var(--color-primary) 20%, transparent) !important;
-  --info-text: var(--color-primary) !important;
+  --info-bg: var(--color-info-light) !important;
+  --info-border: color-mix(in srgb, var(--color-info) 20%, transparent) !important;
+  --info-text: var(--color-info) !important;
 }
 
 /* default/loading 类通知：卡片统一风格，随主题 token（bg-card / border / text）联动 */
@@ -743,4 +1087,46 @@ html.anim-disabled *::after {
       height 400ms,
       box-shadow 200ms !important;
   }
+}
+
+/* ==================== Window Resize Handles ==================== */
+
+/*
+ * 无边框窗口的边缘 resize 热区（App.vue 中 data-tauri-resize-handle 元素的样式）。
+ * 仅在桌面端渲染（template 中 v-if="isDesktop"）；移动端窗口不可 resize 无需此规则。
+ * 视觉完全透明，仅靠 pointer-events: auto 接住边缘鼠标事件。
+ */
+.resize-handle {
+  position: fixed;
+  background: transparent;
+  pointer-events: auto;
+  z-index: 9999;
+}
+
+.resize-top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+}
+
+.resize-bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+}
+
+.resize-left {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+}
+
+.resize-right {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 6px;
 }

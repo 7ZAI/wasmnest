@@ -4,7 +4,7 @@
   "license": "MIT",
   "private": true,
   "type": "module",
-  "description": "WasmNest 桌面端插件浏览器开发环境（空壳宿主 + 桌面端页面骨架 + mock PluginContext）",
+  "description": "WasmNest 桌面端应用浏览器开发环境（宿主 chrome 骨架 + 机制 B 挂载包装载 + 命令 / 事件 mock）",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -67,7 +67,8 @@
 - 桌面：`@binblink/wasmnest-plugin-sdk-desktop`（bin `wasmnest-plugin-desktop`；crate `wasmnest-plugin-api` + 宏 crate `rust-macros`）+ manifest / wasm-hash 工具面（`bin/manifest-gen.js` / `manifest-validate.js` / `wasm-hash.js`）。
 - 移动：`@binblink/wasmnest-plugin-sdk-mobile`（bin `wasmnest-plugin`；crate `wasmnest-plugin-api-mobile`；含 `UIRegistry` 类型真源（`src/types.ts`）与 dev-shell）。
 - SDK 版本一致性：npm `package.json` 与 `Cargo.toml` 必须一致（`scripts/package-sdks.mjs` 校验）；发布产物 = npm tarball + crates + zip + SHA256 清单。
-- **已知漂移（写明责任）**：桌面 SDK 的 `README.md` / `template/` / `dev-shell/` 仍是旧贡献面形态（`activate(context)` + `__WASMNEST_SHARED__` 外置），与 ADR 0057 后的挂载包形态（`mountApp` + 自足打包）不一致——写新代码以应用仓现有 app 为准；该漂移的修复在**平台仓侧**（docs/codemap.md §6 任务路由「改 SDK」行）。
+- **桌面 dev-shell（2026-10-21 已对齐宿主）**：dev-shell 走**与宿主同一条装载路径**——加载 app 的 `src/entry.ts` 源码并调用 `mountApp(root, env)`，外围复刻宿主 chrome（标题栏 / 状态栏 / 挂载槽）。设计 token 走单一真源（alias 指向宿主 `src/style.css` + `src/shell/styles/shell.css`；npm 包内用自带副本，由 `dev-shell/__tests__/visualParity.test.ts` 钉住），挂载契约由 `dev-shell/__tests__/shell/contractDrift.test.ts` 与宿主 `src/shell/mount/useAppMount.ts` 逐字段比对。**改宿主挂载契约时必须同步改 dev-shell 侧声明，否则该锁测红**。
+- **已知漂移（写明责任）**：桌面 SDK 的 `README.md` / `template/` 仍是旧贡献面形态（`activate(context)` + `__WASMNEST_SHARED__` 外置），与 ADR 0057 后的挂载包形态（`mountApp` + 自足打包）不一致——写新代码以应用仓现有 app 为准；该漂移的修复在**平台仓侧**（docs/codemap.md §6 任务路由「改 SDK」行）。
 
 ## 6. 生成物与产物治理（能改 vs 不能改）
 

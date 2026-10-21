@@ -14,7 +14,8 @@
  *          --registry 时引用已发布的 SDK 版本，否则引用本地 SDK 相对路径
  * build   串联 vite build → cargo wasm32（rust-ts 插件）；--resources-dir 时复制产物到宿主资源目录，
  *          并把 wasm 字节的 SHA-256 注入**产物** plugin.json 的 wasmHash（源清单不带该键，见 bin/wasm-hash.js）
- * dev     启动浏览器开发环境（dev-shell）：vite dev server + HMR（Rust 后端不在浏览器运行）
+ * dev     启动浏览器开发环境（dev-shell）：vite dev server + HMR；加载应用的挂载包入口
+ *          （src/entry.ts，导出 mountApp）源码，Rust 后端不在浏览器运行
  * manifest 按插件源码自动填充 plugin.json 的 contributes/permissions；--check 只检查（CI 用）
  * validate 校验 plugin.json 结构与字段合法性（CI 用，exit 1 表示不合法）
  * doctor   环境自检：Node / Rust / wasm32 target / dev-shell 依赖 / SDK 构建产物
@@ -324,15 +325,45 @@ function cmdBuild(flags) {
 
 // ==================== 命令：dev（浏览器开发环境） ====================
 
+/**
+ * 解析被调试应用的挂载包入口
+ *
+ * 桌面 app 是**独立构建的挂载包**（机制 B）：入口 = `src/entry.ts`，导出
+ * `mountApp(root, env)`，由 dev-shell 的挂载槽装载。`src/index.ts` 是
+ * 「dev-shell 兼容出口」（只导出 `devMock`），**不是**挂载入口。
+ *
+ * 优先取 `src/entry.ts`；没有则回落 `src/index.ts`（老形态工程），并由
+ * dev-shell 显性报错「未导出 mountApp」——不静默加载一个空模块。
+ */
+function resolveDevEntry(pluginDir) {
+  const mount = join(pluginDir, 'src/entry.ts')
+  if (existsSync(mount)) return mount
+  const compat = join(pluginDir, 'src/index.ts')
+  if (existsSync(compat)) return compat
+  return null
+}
+
 /** 启动 dev-shell：缺依赖时自动安装，然后以长驻 vite 进程运行 */
 function cmdDev(positional, flags) {
   const cwd = process.cwd()
   const pluginDir = resolve(cwd, positional[0] || '.')
-  const entry = flags.entry ? resolve(cwd, flags.entry) : resolve(pluginDir, 'src/index.ts')
+  const entry = flags.entry ? resolve(cwd, flags.entry) : resolveDevEntry(pluginDir)
 
+  if (!entry) {
+    console.error(
+      `[wasmnest-plugin-desktop] 目标不是应用工程（缺少 plugin.json 与 src/entry.ts）: ${pluginDir}`,
+    )
+    console.error(
+      '桌面应用是独立挂载包：入口须为 src/entry.ts（导出 mountApp(root, env)）',
+    )
+    console.error(
+      '用法: wasmnest-plugin-desktop dev [pluginDir] [--entry <file>] [--port <port>] [--host] [--open]',
+    )
+    process.exit(1)
+  }
   if (!existsSync(join(pluginDir, 'plugin.json')) && !existsSync(entry)) {
     console.error(
-      `[wasmnest-plugin-desktop] 目标不是插件工程（缺少 plugin.json 与 ${entry}）: ${pluginDir}`,
+      `[wasmnest-plugin-desktop] 目标不是应用工程（缺少 plugin.json 与 ${entry}）: ${pluginDir}`,
     )
     console.error(
       '用法: wasmnest-plugin-desktop dev [pluginDir] [--entry <file>] [--port <port>] [--host] [--open]',
@@ -365,7 +396,7 @@ function cmdDev(positional, flags) {
   if (flags.host) args.push('--host', typeof flags.host === 'string' ? flags.host : '0.0.0.0')
   if (flags.open) args.push('--open')
 
-  console.log(`[wasmnest-plugin-desktop] 启动 dev-shell（插件: ${pluginDir}）`)
+  console.log(`[wasmnest-plugin-desktop] 启动 dev-shell（应用: ${pluginDir}）`)
   if (flags.host) {
     console.log(
       `[wasmnest-plugin-desktop] 已监听局域网 — 手机/平板与电脑同一 WiFi 时，浏览器打开 http://<电脑IP>:${flags.port || 5173}/ 查看`,

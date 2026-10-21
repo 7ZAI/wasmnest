@@ -1,134 +1,109 @@
 /**
- * 插件加载器（dev-shell 版，桌面端）
+ * 调试对象加载器（桌面端 dev-shell · 挂载包形态）
+ * -----------------------------------------------------------------------------
+ * 加载的是**桌面宿主同一种对象**：独立构建的 app 挂载包（机制 B）。dev-shell 与
+ * 宿主的差别只有「拿的是源码还是产物」：
  *
- * 从 virtual:dev-plugins 取插件说明，依次创建 mock context → activate()，
- * 失败时置 Error 状态并记日志。
+ * - 宿主：动态 import 产物整包（`convertFileSrc(<plugins>/<appId>/index.js)`）
+ * - dev-shell：vite 直接把 app 的 `src/entry.ts` 解析进构建图（改代码即 HMR）
+ *
+ * 每个 app 的挂载包模块与其领域种子（`src/index.ts` 导出的 `devMock`）**分开取**：
+ * 前者是界面，后者是演示数据。app 只导出 `src/entry.ts`（无 `src/index.ts`）时
+ * 种子缺省——不影响挂载。
+ *
+ * 领域 mock（命令 handler + 事件推送）**在挂载时**才注册（不是加载时）：app 的
+ * 事件订阅发生在挂载后的组件里，提前推送的种子事件会被错过（表现为「设备列表
+ * 空着」这种像坏了的现象）。
  */
-import { reactive, ref } from 'vue'
-import type { PluginContext, PluginManifest, PluginModule } from '../../src/types'
-import { createMockContext } from './mock-context'
-import {
-  getPluginRecord,
-  plugins,
-  pushLog,
-  registerDevMock,
-  type DevPluginRecord,
-} from './registry'
-
-// 领域命令 mock（纯通用接线）：浏览器中 WASM 后端不可用，按插件 devMock
-// 种子子域判断是否注入，不感知具体插件身份
+import { markRaw, reactive, ref } from 'vue'
+import type { PluginDevMock } from '../../src/types'
+import type { AppBundleModule } from './shell/types'
+import { apps, getDevMock, pushLog, registerDevMock, type DevAppState } from './registry'
+import { createDomainContext } from './mock/domain-context'
 import { registerFileTransferMock } from './mock/file-transfer'
 import { registerAgentHubMock } from './mock/agent-hub'
 
 export const ready = ref(false)
 
-/** 激活所有被调试插件（幂等） */
-export async function loadPlugins(): Promise<void> {
+/** vite 虚拟模块给出的一个被调试 app 的说明 */
+interface DevSpec {
+  /** app 工程目录 */
+  dir: string
+  /** 源清单（plugin.json） */
+  manifest: Record<string, unknown>
+  /** 挂载包模块（app 的 `src/entry.ts`；缺失 = null） */
+  entry: AppBundleModule | null
+  /** 领域种子模块（app 的 `src/index.ts` 导出的 devMock；缺失 = null） */
+  devMock: PluginDevMock | null
+}
+
+/** 发现全部被调试 app（幂等） */
+export async function loadApps(): Promise<void> {
   if (ready.value) return
   try {
-    const records = (await import('virtual:dev-plugins')).default as Array<{
-      dir: string
-      manifest: Partial<PluginManifest>
-      entry: any
-    }>
-    for (const spec of records) {
-      const manifest: Partial<PluginManifest> =
-        spec.manifest && spec.manifest.id ? spec.manifest : {}
-      const pluginId: string = manifest.id || `dev-plugin-${plugins.value.length}`
-      const pluginName: string = manifest.name || pluginId
-      const record: DevPluginRecord = reactive({
-        id: pluginId,
-        name: pluginName,
-        manifest: spec.manifest || {},
-        entry: spec.entry,
-        dir: spec.dir,
-        state: 'loaded',
-        context: null,
-      })
-      plugins.value.push(record)
-      pushLog('info', pluginId, `开始加载（${spec.dir}）`)
+    const specs = (await import('virtual:dev-plugins')).default as DevSpec[]
+    for (const [index, spec] of specs.entries()) {
+      const manifest = spec.manifest ?? {}
+      const id =
+        typeof manifest.id === 'string' && manifest.id ? manifest.id : `dev-app-${index}`
+      const name = typeof manifest.name === 'string' && manifest.name ? manifest.name : id
 
-      try {
-        // 领域种子数据（devMock）先注册：mock 命令实现按 pluginId 消费（与移动端同构）
-        const module = spec.entry as PluginModule
-        if (module.devMock) {
-          record.devMockDisposable = registerDevMock(pluginId, module.devMock)
-          pushLog('info', pluginId, '已注册 devMock（领域种子数据）')
-        }
-        const context: PluginContext = createMockContext(pluginId, spec.dir)
-        record.context = context
-        // mock 命令先于 activate() 注册：插件 activate/首帧即会拉设置与设备，
-        // 后注册会错过首轮命令（空态假象）；与移动端 loader 同构。
-        // 是否注入由插件 devMock 的领域种子子域决定，dev-shell 不写死插件清单
-        if (module.devMock?.peer || module.devMock?.transfer) {
-          record.mockDisposable = registerFileTransferMock(context, pluginId)
-          pushLog('info', pluginId, '已注册领域命令 mock（通用接线，种子来自插件 devMock）')
-        }
-        if (
-          module.devMock?.detection ||
-          module.devMock?.install ||
-          module.devMock?.skills ||
-          module.devMock?.providers ||
-          module.devMock?.usage
-        ) {
-          record.mockDisposable = registerAgentHubMock(context, pluginId)
-          pushLog('info', pluginId, '已注册领域命令 mock（通用接线，种子来自插件 devMock）')
-        }
-        if (typeof module.activate === 'function') {
-          await module.activate(context)
-          record.state = 'activated'
-          pushLog('info', pluginId, 'activate() 成功')
-        } else {
-          record.state = 'loaded'
-          pushLog('warn', pluginId, '入口模块未导出 activate()，仅完成加载')
-        }
-      } catch (e: any) {
-        record.state = 'error'
-        record.error = e?.message || String(e)
-        pushLog('error', pluginId, `activate() 失败: ${record.error}`)
+      // 挂载包模块不经响应式代理（模块命名空间对象被代理后身份会变）
+      const module = spec.entry ? markRaw(spec.entry) : null
+      const record = reactive({
+        id,
+        name,
+        manifest,
+        module,
+        dir: spec.dir,
+        state: 'loaded' as DevAppState,
+        error: undefined as string | undefined,
+      })
+
+      if (spec.devMock) {
+        registerDevMock(id, spec.devMock)
+        pushLog('info', id, '已注册 devMock（领域种子数据）')
       }
+
+      if (!module || typeof module.mountApp !== 'function') {
+        record.state = 'error'
+        record.error = '挂载包未导出 mountApp（契约不匹配）'
+        pushLog('error', id, '挂载包未导出 mountApp —— 入口应为 src/entry.ts（机制 B 挂载包）')
+      } else {
+        pushLog('info', id, `已发现挂载包（${spec.dir}）`)
+      }
+
+      apps.value.push(record)
     }
   } catch (e: any) {
-    pushLog('error', 'dev-shell', `加载插件失败: ${e?.message || e}`)
+    pushLog('error', 'dev-shell', `加载调试对象失败：${e?.message || e}`)
   }
   ready.value = true
 }
 
-/** 停用单个插件（dispose 全部资源 + 调用 deactivate） */
-export async function deactivatePlugin(pluginId: string): Promise<void> {
-  const record = getPluginRecord(pluginId)
-  if (!record || record.state === 'deactivated') return
-  record.devMockDisposable?.dispose()
-  record.devMockDisposable = undefined
-  // 清理领域命令 mock（停止进度模拟等定时器）
-  record.mockDisposable?.dispose()
-  record.mockDisposable = undefined
-  const context = record.context as PluginContext | null
-  if (context) {
-    for (const d of [...context._disposables]) {
-      try {
-        d.dispose()
-      } catch (e) {
-        pushLog('warn', pluginId, `dispose 资源失败: ${e}`)
-      }
-    }
-    context._disposables.length = 0
+/**
+ * 为即将挂载的 app 准备领域 mock（命令 handler + 事件推送）
+ *
+ * 每次挂载**重新注册**：领域 mock 的状态是模块级的（种子派生），换 app 或重新
+ * 挂载时必须回到种子初始态，否则上一个 app 的残留状态会串进下一个。
+ */
+export function prepareAppMocks(appId: string): { dispose(): void } {
+  const seed = getDevMock(appId)
+  if (!seed) return { dispose() {} }
+  const context = createDomainContext()
+  const disposers: Array<{ dispose(): void }> = []
+  // 是否注入由 app 的 devMock 种子子域决定，dev-shell 不写死 app 身份
+  if (seed.peer || seed.transfer) {
+    disposers.push(registerFileTransferMock(context, appId))
+    pushLog('info', appId, '已注册领域命令 mock（通用接线，种子来自 app devMock）')
   }
-  const module = record.entry as PluginModule
-  if (typeof module.deactivate === 'function') {
-    try {
-      await module.deactivate()
-    } catch (e) {
-      pushLog('warn', pluginId, `deactivate() 失败: ${e}`)
-    }
+  if (seed.detection || seed.install || seed.skills || seed.providers || seed.usage) {
+    disposers.push(registerAgentHubMock(context, appId))
+    pushLog('info', appId, '已注册领域命令 mock（通用接线，种子来自 app devMock）')
   }
-  record.state = 'deactivated'
-  pushLog('info', pluginId, '已停用')
-}
-
-/** 停用全部插件（页面卸载前调用） */
-export async function deactivateAll(): Promise<void> {
-  for (const record of [...plugins.value]) {
-    await deactivatePlugin(record.id)
+  return {
+    dispose() {
+      for (const d of disposers) d.dispose()
+    },
   }
 }

@@ -1,32 +1,64 @@
 /**
- * 宿主界面设置管理（与宿主 useTheme / useFontSize 同语义）
+ * 宿主界面设置（桌面端 dev-shell）——与宿主 `useTheme` / `useFontSize` 同语义
+ * -----------------------------------------------------------------------------
+ * - 主题模式：light / dark / system，切换 <html> 的 .dark 类（style.css 的
+ *   :root.dark 变量组生效）。
+ * - 字体大小：以 px 存储（12 = "正常"档位），实际生效为 :root 的 `--ui-scale`
+ *   缩放因子（所有界面文字尺寸都写成 calc(基准px * var(--ui-scale))，等比缩放）。
+ * - 全部持久化到 localStorage，启动时由 initHostUi() 恢复，避免刷新回退。
  *
- * - 主题模式：light / dark / system，切换 <html> 的 .dark 类（style.css 中 :root.dark 变量组生效）
- * - 主题色板：warm / cool / forest / ocean / sunset / violet，切换 <html> 的 data-palette 属性
- * - 字体大小：以 px 存储（12 = "正常"档位），实际生效为 :root 的 --ui-scale 缩放因子
- *   （所有界面文字尺寸均写成 calc(基准px * var(--ui-scale))，等比缩放）
- * - 全部持久化到 localStorage，启动时由 initHostUi() 恢复，避免刷新回退
+ * 与宿主的两处**刻意一致**（不是简化）：
+ * - **色板不再落到 documentElement**：宿主 `useTheme` 已明确「色板是各 wasm-app
+ *   自己的样式主题，宿主壳固定用默认色板」，dev-shell 曾自行给 <html> 写
+ *   data-palette —— 那会让预览与真机呈现两套配色，故一并退役。
+ * - **Linux 基线缩放**：`--ui-scale` 的换算与宿主 `computeUiScale` 逐字同式
+ *   （Linux 额外 ×1.15），且给 <html> 加 `platform-linux` 类（宿主 style.css 的
+ *   `html.platform-linux` 规则需要它：根字号 115% + rem 间距同比例放大）。
  */
 import { ref } from 'vue'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
-export type PaletteId = 'warm' | 'cool' | 'forest' | 'ocean' | 'sunset' | 'violet'
 
 /** "正常"档位对应的基准字号（px），即默认界面文字大小 */
 export const NORMAL_FONT_SIZE = 12
 /** 滑杆档位范围：小(10) / 正常(12) / 大(14) / 超大(16) */
 export const MIN_FONT_SIZE = 10
 export const MAX_FONT_SIZE = 16
+/** Linux 平台基线 UI 缩放因子（与宿主 useFontSize.PLATFORM_UI_SCALE 同值） */
+export const PLATFORM_UI_SCALE = 1.15
 
 const THEME_KEY = 'wasmnest-dev-shell:theme'
-const PALETTE_KEY = 'wasmnest-dev-shell:palette'
 const FONT_SIZE_KEY = 'wasmnest-dev-shell:font-size'
 
 const theme = ref<ThemeMode>('system')
-const palette = ref<PaletteId>('warm')
 const fontSize = ref<number>(NORMAL_FONT_SIZE)
 
 let systemQuery: MediaQueryList | null = null
+
+/**
+ * 是否 Linux 桌面（宿主经 Tauri 平台信息判定；dev-shell 在浏览器里只能看 UA）
+ *
+ * Android 的 UA 同样含 "Linux"，需排除——宿主那边 Android 走移动端路径，
+ * 不叠这层基线缩放。
+ */
+export function isLinuxDesktop(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  if (/Android/i.test(ua)) return false
+  return /Linux|X11/i.test(ua)
+}
+
+/**
+ * 档位字号 → --ui-scale 换算（纯函数，与宿主 `computeUiScale` 同式）
+ *
+ * scale = 设置档位 / 正常档位 × (Linux ? PLATFORM_UI_SCALE : 1)。
+ * Linux 基线因子只对 Linux 生效——Windows/macOS 必须返回 1.0，
+ * 否则为 Linux 调整的字号会泄漏到其他平台。
+ */
+export function computeUiScale(size: number, isLinux: boolean): number {
+  const clamped = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size))
+  return (clamped / NORMAL_FONT_SIZE) * (isLinux ? PLATFORM_UI_SCALE : 1)
+}
 
 /** 按当前模式 + 系统偏好应用 .dark 类（与宿主 useTheme.applyTheme 同逻辑） */
 function applyTheme(): void {
@@ -34,15 +66,10 @@ function applyTheme(): void {
   document.documentElement.classList.toggle('dark', isDark)
 }
 
-/** 应用色板：data-palette 属性驱动 CSS 变量组切换 */
-function applyPalette(): void {
-  document.documentElement.dataset.palette = palette.value
-}
-
-/** 应用字体大小：字号 / 基准 得到 --ui-scale 缩放因子 */
+/** 应用字体大小：字号 / 基准 得 --ui-scale 缩放因子（与宿主 applyFontSize 同式） */
 function applyFontSize(): void {
-  const clamped = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, fontSize.value))
-  document.documentElement.style.setProperty('--ui-scale', String(clamped / NORMAL_FONT_SIZE))
+  const scale = computeUiScale(fontSize.value, isLinuxDesktop())
+  document.documentElement.style.setProperty('--ui-scale', String(scale), 'important')
 }
 
 function setupSystemListener(): void {
@@ -56,23 +83,12 @@ function teardownSystemListener(): void {
   systemQuery = null
 }
 
-/** 启动时调用（main.ts）：恢复持久化的主题模式 / 色板 / 字体大小并应用 */
+/** 启动时调用（main.ts）：恢复持久化的主题模式 / 字体大小并应用 */
 export function initHostUi(): void {
   try {
     const savedTheme = localStorage.getItem(THEME_KEY)
     if (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system') {
       theme.value = savedTheme
-    }
-    const savedPalette = localStorage.getItem(PALETTE_KEY)
-    if (
-      savedPalette === 'warm' ||
-      savedPalette === 'cool' ||
-      savedPalette === 'forest' ||
-      savedPalette === 'ocean' ||
-      savedPalette === 'sunset' ||
-      savedPalette === 'violet'
-    ) {
-      palette.value = savedPalette
     }
     const savedSize = Number(localStorage.getItem(FONT_SIZE_KEY))
     if (Number.isFinite(savedSize) && savedSize >= MIN_FONT_SIZE && savedSize <= MAX_FONT_SIZE) {
@@ -81,9 +97,13 @@ export function initHostUi(): void {
   } catch {
     // 隐私模式等场景使用默认值
   }
+  // Linux 基线：宿主 main.ts 的 initPlatform() 之后给 <html> 加同名类，
+  // style.css 的 `html.platform-linux` 规则（根字号 115%）据此生效
+  if (isLinuxDesktop()) {
+    document.documentElement.classList.add('platform-linux')
+  }
   if (theme.value === 'system') setupSystemListener()
   applyTheme()
-  applyPalette()
   applyFontSize()
 }
 
@@ -103,17 +123,6 @@ export function setTheme(mode: ThemeMode): void {
   applyTheme()
 }
 
-/** 切换主题色板（持久化，即时生效） */
-export function setPalette(next: PaletteId): void {
-  palette.value = next
-  try {
-    localStorage.setItem(PALETTE_KEY, next)
-  } catch {
-    // 忽略持久化失败
-  }
-  applyPalette()
-}
-
 /** 切换字体大小（px，持久化，即时生效） */
 export function setFontSize(size: number): void {
   fontSize.value = size
@@ -127,5 +136,5 @@ export function setFontSize(size: number): void {
 
 /** 供设置页读取/切换（响应式） */
 export function useHostUi() {
-  return { theme, palette, fontSize, setTheme, setPalette, setFontSize }
+  return { theme, fontSize, setTheme, setFontSize }
 }

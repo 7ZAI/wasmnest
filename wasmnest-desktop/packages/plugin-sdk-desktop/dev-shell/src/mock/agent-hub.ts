@@ -1,9 +1,10 @@
 /**
  * Agent Hub 插件领域 mock（dev-shell 专用，纯通用接线）
  *
- * 浏览器中 Rust WASM 后端不可用，dev-shell 的 commands.execute 只执行前端注册的
- * handler。本模块注册 agent-hub 五个领域（探测/安装/Skills/供应商/使用统计）
- * 的命令 handler 骨架，并模拟事件回流（`plugin:agent-hub:*` 全量状态推送），
+ * 浏览器中 Rust WASM 后端不可用，app 经 `env.appInvoke` 发的命令只能由前端
+ * mock 顶上。本模块注册 agent-hub 五个领域（探测/安装/Skills/供应商/使用统计）
+ * 的命令 handler 骨架（经 `DomainContext` 落到全局命令表），并模拟事件回流
+ * （`plugin:agent-hub:*` 全量状态推送，经 Tauri 事件垫片送达 app 的 listen），
  * 使插件在 dev-shell 中展示「有数据」的完整形态：
  * - 探测：detect 逐 CLI 延时推进 detecting → 终态（种子为终态目标）
  * - 安装：run 剧本逐行回显输出、测速/检查更新延时出结果、换源改写 npmrc 状态
@@ -17,7 +18,7 @@
  * 子域的插件不受影响（各子域命令不注册）。
  */
 import { getDevMock } from '../registry'
-import type { PluginContext } from '../../../src/types'
+import type { DomainContext } from './domain-context'
 
 // ==================== 种子派生状态（最小本地形状，插件自有扩展字段见插件 devMockTypes） ====================
 
@@ -91,6 +92,8 @@ interface MirrorSeed extends Seed {
     appliedAt?: number
     restoredAt?: number
   }
+  /** 用户自定义源（add-custom-source / remove-custom-source 维护；条目 = { id, url, addedAt }） */
+  customSources?: Array<{ id: string; url: string; addedAt?: number | null }>
 }
 
 /** 运行中安装/卸载（ActiveRun 子集） */
@@ -291,7 +294,7 @@ interface RunSpec {
 
 /** run 模拟：每 tick 回放一行剧本输出，播完置终态并推送
  * @returns 新 run 的 runId（启动失败时返回 null） */
-function startRunWith(context: PluginContext, spec: RunSpec): string | null {
+function startRunWith(context: DomainContext, spec: RunSpec): string | null {
   runState = {
     runId: `mock-run-${++runSeq}`,
     cli: spec.cli,
@@ -346,7 +349,7 @@ function startRunWith(context: PluginContext, spec: RunSpec): string | null {
 }
 
 /** 安装/更新 run（剧本来自种子 runScripts；action 按 outdated 判定） */
-function startRun(context: PluginContext, cli: string, useMirror: boolean): string | null {
+function startRun(context: DomainContext, cli: string, useMirror: boolean): string | null {
   const script = install?.runScripts?.[cli]
   if (!script) return null
   const updates = (install?.updates ?? {}) as Record<string, { outdated: boolean | null }>
@@ -361,7 +364,7 @@ function startRun(context: PluginContext, cli: string, useMirror: boolean): stri
 
 /** 卸载 run：剧本固定（无用户输入），播完翻转探测为未安装（与 guest 完成
  * 后自动重探测同效） */
-function startUninstallRun(context: PluginContext, cli: string): string | null {
+function startUninstallRun(context: DomainContext, cli: string): string | null {
   const script = UNINSTALL_SCRIPTS[cli]
   if (!script) return null
   return startRunWith(context, {
@@ -387,7 +390,7 @@ function startUninstallRun(context: PluginContext, cli: string): string | null {
   })
 }
 
-function cancelRun(context: PluginContext): void {
+function cancelRun(context: DomainContext): void {
   if (!runState || !install) return
   stopRunTimer()
   install.last = {
@@ -409,22 +412,22 @@ function cancelRun(context: PluginContext): void {
 
 // ==================== 事件推送（全量状态，与 guest emit 同形） ====================
 
-function emitDetection(context: PluginContext): void {
+function emitDetection(context: DomainContext): void {
   if (detection) context.events.emit('plugin:agent-hub:detection', clone(detection))
 }
-function emitInstall(context: PluginContext): void {
+function emitInstall(context: DomainContext): void {
   if (install) {
     const { runScripts: _scripts, ...state } = install
     context.events.emit('plugin:agent-hub:install', clone(state))
   }
 }
-function emitSkills(context: PluginContext): void {
+function emitSkills(context: DomainContext): void {
   if (skills) {
     const { skillContents: _c, localImport: _l, ...state } = skills
     context.events.emit('plugin:agent-hub:skills', clone(state))
   }
 }
-function emitProviders(context: PluginContext): void {
+function emitProviders(context: DomainContext): void {
   if (providers) {
     const {
       importDiscoveries: _d,
@@ -436,13 +439,13 @@ function emitProviders(context: PluginContext): void {
     context.events.emit('plugin:agent-hub:providers', clone(state))
   }
 }
-function emitUsage(context: PluginContext): void {
+function emitUsage(context: DomainContext): void {
   if (usage) context.events.emit('plugin:agent-hub:usage', clone(usage.state))
 }
 
 // ==================== 命令 handler ====================
 
-function registerCommands(context: PluginContext): void {
+function registerCommands(context: DomainContext): void {
   // ==================== 探测域 ====================
   if (detection) {
     context.commands.register('agent-hub.get-state', () => ({ state: clone(detection) }))
@@ -542,6 +545,32 @@ function registerCommands(context: PluginContext): void {
       }
       emitInstall(context)
       return { ok: true }
+    })
+    // 自定义源增删（mirror.customSources；条目 = { id, url, addedAt }）
+    context.commands.register('agent-hub.add-custom-source', (args: any) => {
+      const url: string = String(args?.url ?? '').trim()
+      if (!url) return Promise.reject(new Error('add-custom-source: url required'))
+      const list = install!.mirror.customSources ?? (install!.mirror.customSources = [])
+      if (!list.some((s) => s.url === url)) {
+        list.push({ id: `custom-${list.length + 1}`, url, addedAt: Date.now() })
+      }
+      emitInstall(context)
+      return { ok: true }
+    })
+    context.commands.register('agent-hub.remove-custom-source', (args: any) => {
+      const url: string = String(args?.url ?? '')
+      const list = install!.mirror.customSources ?? []
+      const before = list.length
+      install!.mirror.customSources = list.filter((s) => s.url !== url)
+      emitInstall(context)
+      return { removed: before - install!.mirror.customSources.length }
+    })
+    // 模型列表查询：真机由 guest 代发 GET（浏览器无外网）→ 回演示模型列表，
+    // 形状与 guest 的 FetchModelsResult 同构（models[] 非空，否则 app 判失败）
+    context.commands.register('agent-hub.fetch-models', (args: any) => {
+      const url: string = String(args?.url ?? '')
+      const models = ['gpt-4o', 'gpt-4o-mini', 'claude-sonnet-4']
+      return { models, url, count: models.length }
     })
     context.commands.register('agent-hub.check-updates', () => {
       return new Promise((resolve) => {
@@ -870,6 +899,16 @@ function registerCommands(context: PluginContext): void {
       })
     })
     context.commands.register('agent-hub.get-usage-stats', () => clone(usage!.stats))
+    // 清空使用数据：会话明细与统计归零，来源清单保留（来源是用户登记的资产，
+    // 不是「使用数据」）；app 侧读回执里的 state 重绘看板
+    context.commands.register('agent-hub.clear-usage-data', () => {
+      usage!.sessions = []
+      usage!.sessionDetails = {}
+      usage!.stats = {}
+      usage!.state = { ...usage!.state, status: 'ok', syncedAt: Date.now() }
+      emitUsage(context)
+      return { state: clone(usage!.state) }
+    })
     // 多条件查询：adapter / 关键词 / 时间范围（与 guest list_sessions 语义对齐）
     context.commands.register('agent-hub.list-usage-sessions', (args: any) => {
       const offset = Math.max(0, Number(args?.offset) || 0)
@@ -1017,7 +1056,7 @@ let timers: number[] = []
  *
  * 仅注册种子中存在的子域命令；返回 Disposable 供插件 deactivate 清理定时器
  */
-export function registerAgentHubMock(context: PluginContext, pluginId: string): {
+export function registerAgentHubMock(context: DomainContext, pluginId: string): {
   dispose(): void
 } {
   // SAFETY: dev-shell 刻意不收录插件包类型（SDK 不依赖插件），种子形状按

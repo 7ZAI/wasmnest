@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
-// 语义别名与宿主 wasmnest-desktop/tailwind.config.js 保持一致；
-// content 追加 SDK ui 组件（../src）与被调试插件目录（env WASMNEST_DEV_PLUGINS）。
+// 语义别名与宿主 wasmnest-desktop/tailwind.config.js 保持一致（theme 整段由
+// dev-shell/__tests__/visualParity.test.ts 深比对锁定）；
+// content 追加 SDK ui 组件（../src）与被调试应用目录（env WASMNEST_DEV_PLUGINS）。
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 
@@ -9,7 +10,6 @@ const CONFIG_DIR = fileURLToPath(new URL('.', import.meta.url))
 // fast-glob 不支持 `..`（无论相对还是绝对路径），先 resolve 展开为纯绝对路径；
 // glob pattern 分隔符必须是正斜杠（micromatch），Windows 反斜杠需转换
 const SDK_UI_SRC = resolve(CONFIG_DIR, '../src').replace(/\\/g, '/')
-const HOST_SRC = resolve(CONFIG_DIR, '../../../src').replace(/\\/g, '/')
 
 export default {
   content: [
@@ -17,8 +17,8 @@ export default {
     './src/**/*.{vue,js,ts,jsx,tsx}',
     // SDK 共享 UI 组件（@binblink/wasmnest-plugin-sdk-desktop/ui）
     `${SDK_UI_SRC}/**/*.{vue,js,ts,jsx,tsx}`,
-    // 宿主源码（导航条测试页跨项目引用 wasmnest-desktop/src 组件）
-    `${HOST_SRC}/**/*.{vue,js,ts,jsx,tsx}`,
+    // 被调试应用源码（app 的 Tailwind 类由 dev-shell 这次构建产出；
+    // 宿主前端不在此列——dev-shell 只引宿主样式表，不引宿主组件）
     ...(process.env.WASMNEST_DEV_PLUGINS || '')
       .split(',')
       .map((item) => item.trim())
