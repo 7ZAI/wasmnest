@@ -26,6 +26,7 @@ const refreshChannelToken = vi.hoisted(() => vi.fn(async () => {}))
 
 vi.mock('@/shell/mount/useAppMount', () => ({
   useAppMount: () => ({ mountAppBundle, unmountAppBundle, notifyAppRoute }),
+  MOUNT_CONTRACT: '1',
 }))
 vi.mock('@/shell/mount/appSession', () => ({ rememberAppRoute }))
 vi.mock('@/utils/appCommands', () => ({
@@ -91,9 +92,15 @@ describe('AppMountSlot 换应用（多任务切换）', () => {
     expect(mountAppBundle).toHaveBeenCalledTimes(1)
     // 挂载 = 身份重绑：必须强制换发令牌，不能复用页面内存里的旧缓存
     expect(refreshChannelToken).toHaveBeenCalledWith(APP_A)
-    const env = mountAppBundle.mock.calls[0][1] as { appId: string; initialRoute: string }
+    const env = mountAppBundle.mock.calls[0][1] as {
+      appId: string
+      initialRoute: string
+      mountContract: string
+    }
     expect(env.appId).toBe(APP_A)
     expect(env.initialRoute).toBe('/sessions')
+    // 契约版本必须由宿主注入（与 useAppMount 的 MOUNT_CONTRACT 同一值）
+    expect(env.mountContract).toBe('1')
   })
 
   it('换 appId（复用同一实例）→ 先卸载旧实例再装载新实例', async () => {

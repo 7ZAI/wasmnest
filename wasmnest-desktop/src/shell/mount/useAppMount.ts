@@ -26,10 +26,21 @@ import { invoke } from '@/utils/invoke'
 
 // ==================== 挂载契约（宿主面声明；各 app entry.ts 同形重复——drift 锁钉住） ====================
 
+/**
+ * 挂载契约版本（宿主壳 ↔ app 整包）。
+ *
+ * 只在**破坏性**改动 {@link AppMountEnv} / {@link AppMountHandle} 形状时 bump
+ * （删除 / 改名 / 语义变化）；新增可选字段是兼容变更，不 bump。分发化之后宿主与
+ * app 整包不再天然同版本，装载时必须显式比对（见 {@link assertMountContract}）。
+ */
+export const MOUNT_CONTRACT = '1'
+
 /** app 前端挂载环境（宿主注入；令牌/凭证已绑定本 app） */
 export interface AppMountEnv {
   /** 插件 id（= 应用 id） */
   appId: string
+  /** 挂载契约版本（宿主 MOUNT_CONTRACT；不匹配 = 显性报错，不静默挂载） */
+  mountContract: string
   /** 宿主面命令（invoke 原样，无附加凭证）：get_app_settings 等 */
   invoke: <T = unknown>(command: string, args?: Record<string, unknown>) => Promise<T>
   /** 插件面命令（plugin_invoke，本 app 通道令牌已绑定） */
@@ -113,8 +124,10 @@ const mounted = new Map<string, AppMountHandle>()
 /**
  * app 挂载包模块面：`mountApp` 必有（否则契约不匹配），`mountPreview` 可选。
  * 「bundle 是否导出 mountPreview」就是应用的能力声明——宿主不维护预览名单。
+ * `mountContract` 由各 app `entry.ts` 导出（与宿主 {@link MOUNT_CONTRACT} 比对）。
  */
 interface AppBundleModule {
+  mountContract?: string
   mountApp?: (root: HTMLElement, env: AppMountEnv) => Promise<AppMountHandle>
   mountPreview?: MountPreview
 }
@@ -144,6 +157,22 @@ export async function loadAppModule(appId: string): Promise<AppBundleModule> {
   return pending
 }
 
+/**
+ * 校验 app 整包的挂载契约版本（动态 import 之后、创建 app 之前）。
+ *
+ * 不匹配 / 缺失 = **显性报错**：分发化之后宿主运行时与 app 产物可以独立升级，
+ * 版本错位必须点名（appId / 期望值 / 实际值 / 修复指引），不能退化成 mount
+ * 失败的白屏。错误由挂载槽捕获并落到失败面 + 日志（ADR 0030）。
+ */
+export function assertMountContract(appId: string, actual: string | undefined): void {
+  if (actual === MOUNT_CONTRACT) return
+  const actualText = actual === undefined ? '缺失（bundle 未导出该常量）' : `实际 "${actual}"`
+  throw new Error(
+    `app bundle "${appId}" 挂载契约不匹配（mountContract）：期望 "${MOUNT_CONTRACT}"，${actualText}。` +
+      `请重编 app（应用仓 pnpm run build）后再挂载，或换用 mountContract 与 app 整包匹配的宿主版本。`,
+  )
+}
+
 /** 装载并挂载一个 app 前端到挂载槽元素 */
 export async function mountAppBundle(
   slotEl: HTMLElement,
@@ -153,6 +182,7 @@ export async function mountAppBundle(
   await unmountAppBundle(appId)
 
   const module = await loadAppModule(appId)
+  assertMountContract(appId, module.mountContract)
   if (typeof module.mountApp !== 'function') {
     throw new Error(`app bundle "${appId}" does not export mountApp (contract mismatch)`)
   }

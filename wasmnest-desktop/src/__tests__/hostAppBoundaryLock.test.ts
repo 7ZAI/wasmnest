@@ -80,7 +80,33 @@ describe('宿主 / 应用边界锁', () => {
       for (const needle of ['appInvoke', 'appStorageGet', 'locale', 'initialRoute']) {
         expect(code, `${entry} 契约缺 ${needle}`).toContain(needle)
       }
+      // 契约版本：宿主装载时按 MOUNT_CONTRACT 比对（分发化后版本不再天然一致，
+      // 见 CONTRACT.md §6 / §7：不匹配 = 显性报错，不白屏）
+      expect(code, `${entry} AppMountEnv 必须声明 mountContract`).toContain(
+        'mountContract: string',
+      )
+      expect(code, `${entry} 必须导出 mountContract = '1'`).toContain(
+        "export const mountContract = '1'",
+      )
     }
+  })
+
+  it('L3 宿主声明 MOUNT_CONTRACT，且在动态 import 后、创建 app 前校验', () => {
+    const mount = stripComments(
+      readFileSync(join(HOST_SRC, 'shell/mount/useAppMount.ts'), 'utf-8'),
+    )
+    expect(mount, "宿主必须导出 MOUNT_CONTRACT = '1'").toContain(
+      "export const MOUNT_CONTRACT = '1'",
+    )
+    expect(mount, 'AppMountEnv 必须带 mountContract 字段').toContain('mountContract: string')
+    expect(mount, '挂载包模块面必须声明 mountContract').toContain('mountContract?: string')
+    // 校验必须在装载模块之后、调用 mountApp 之前（fail-visible，不静默挂空包）
+    expect(mount, '装载后必须校验 bundle 的 mountContract').toMatch(
+      /assertMountContract\(\s*appId\s*,\s*module\.mountContract\s*\)/,
+    )
+    expect(mount.indexOf('assertMountContract(appId')).toBeLessThan(
+      mount.indexOf('module.mountApp('),
+    )
   })
 
   it('L5 各 app entry.ts 导出 mountPreview 契约（多任务卡片预览面）', () => {
