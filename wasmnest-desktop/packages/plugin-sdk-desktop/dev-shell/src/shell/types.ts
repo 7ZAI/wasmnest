@@ -19,6 +19,8 @@
 export interface AppMountEnv {
   /** 插件 id（= 应用 id） */
   appId: string
+  /** 挂载契约版本（与宿主 MOUNT_CONTRACT 比对；不匹配 = 显性报错） */
+  mountContract: string
   /** 宿主面命令（invoke 原样，无附加凭证）：get_app_settings 等 */
   invoke: <T = unknown>(command: string, args?: Record<string, unknown>) => Promise<T>
   /** 插件面命令（plugin_invoke，本 app 通道令牌已绑定） */
@@ -89,6 +91,7 @@ export type MountPreview = (root: HTMLElement, env: AppPreviewEnv) => Promise<Ap
  * 与宿主 `useAppMount.ts` 的 `AppBundleModule` 同形。
  */
 export interface AppBundleModule {
+  mountContract?: string
   mountApp?: (root: HTMLElement, env: AppMountEnv) => Promise<AppMountHandle>
   mountPreview?: MountPreview
 }
