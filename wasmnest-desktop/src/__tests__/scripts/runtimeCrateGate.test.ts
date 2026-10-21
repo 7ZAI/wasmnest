@@ -35,6 +35,7 @@ const PACKAGE_LIST = [
   'icons/32x32.png',
   'icons/icon.png',
   'resources/config.properties',
+  'resources/plugins/.gitkeep',
   'shell-dist/assets/index.js',
   'shell-dist/index.html',
   'src/lib.rs',
@@ -67,6 +68,15 @@ describe('missingRequiredEntries（包内必备清单）', () => {
     expect(missing).toEqual(expect.arrayContaining(['capabilities', 'config-properties', 'icons']))
   })
 
+  it('随包产物目录占位缺失时点名（缺目录 = tauri_build 直接失败）', () => {
+    const files = parseCargoPackageList(PACKAGE_LIST).filter(
+      (f) => f !== 'resources/plugins/.gitkeep',
+    )
+    expect(missingRequiredEntries(files)).toContain(
+      REQUIRED_PACKAGE_ENTRIES.find((e: { id: string }) => e.id === 'plugins-placeholder'),
+    )
+  })
+
   it('必须有 src 与 tauri.conf.json', () => {
     expect(missingRequiredEntries(['Cargo.toml']).map((e: { id: string }) => e.id)).toEqual(
       expect.arrayContaining(['src', 'tauri-conf', 'capabilities', 'icons', 'config-properties', 'shell-dist']),
@@ -96,8 +106,12 @@ describe('crate 身份（发布名与二进制名解耦）', () => {
 describe('tauri.conf.json（壳随包分发的落点）', () => {
   const conf = readJson('tauri.conf.json') as { build: { frontendDist: string; beforeBuildCommand: string } }
 
-  it('frontendDist 指向随包的 shell-dist，构建不再回写 ../dist', () => {
+  it('frontendDist 指向随包 shell-dist；构建前只允许刷新它，不得回退到 ../dist', () => {
     expect(conf.build.frontendDist).toBe('shell-dist')
-    expect(conf.build.beforeBuildCommand).toBe('')
+    // L2 后壳的落点是签入的 shell-dist：构建前命令必须是「dist → shell-dist 的同步」，
+    // 否则改了宿主前端却仍嵌入旧壳（静默陈旧）。空串也放行给显式 --skip 的场景，但
+    // 仓内基线必须走 shell:sync。
+    expect(conf.build.beforeBuildCommand).toBe('pnpm run shell:sync')
+    expect(conf.build.frontendDist).not.toContain('../dist')
   })
 })
