@@ -5,7 +5,7 @@
   "build": {
     "beforeDevCommand": "pnpm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "pnpm run shell:sync",
     "frontendDist": "shell-dist"
   },
   "app": {

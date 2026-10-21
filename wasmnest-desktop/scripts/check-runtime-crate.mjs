@@ -57,6 +57,11 @@ export const REQUIRED_PACKAGE_ENTRIES = [
     matches: (p) => p === 'resources/config.properties',
   },
   { id: 'shell-dist', label: 'shell-dist/**（随包的壳前端）', matches: (p) => p.startsWith('shell-dist/') },
+  {
+    id: 'plugins-placeholder',
+    label: 'resources/plugins/.gitkeep（随包产物目录占位；缺目录 = tauri_build 失败）',
+    matches: (p) => p === 'resources/plugins/.gitkeep',
+  },
 ]
 
 /** 归一化 `cargo package --list` 输出：去 BOM / CR / 空行 / 首尾空白 */

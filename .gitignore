@@ -37,7 +37,11 @@ CONTEXT.md
 *.pyo
 
 # 插件编译产物（WASM / index.js / plugin.json）由各插件 build 脚本生成，不入库
-**/src-tauri/resources/plugins/
+# 应用产物目录：内容不入库（构建期写入），但**目录本身必须存在**——
+# tauri.conf 的 bundle.resources 声明了 `resources/plugins/`，缺目录时 tauri_build
+# 直接失败（fresh checkout / cargo package 出来的 runtime crate 都会踩）。
+**/src-tauri/resources/plugins/*
+!**/src-tauri/resources/plugins/.gitkeep
 **/src-tauri/gen/android/app/src/main/assets/resources/plugins/
 
 # IDE and editors

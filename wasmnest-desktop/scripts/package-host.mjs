@@ -49,7 +49,8 @@
  *
  * `--via-cargo` 不走 CLI：先 `pnpm run build:fast` 产出宿主前端 `dist/`，再在
  * `src-tauri/` 下 `cargo build`（debug）——build.rs 的 `tauri_build::build()` 同样会把
- * `frontendDist`（`../dist`）嵌入二进制，产物与 `tauri build --no-bundle` 等价。
+ * `frontendDist`（L2 后 = `shell-dist`，由 `pnpm run shell:sync` 从 dist 同步）嵌入二进制，
+ * 产物与 `tauri build --no-bundle` 等价。
  *
  * ### 版本事实（单一真源 = `release-manifest.json` 的 `hostRuntime` 段）
  *
@@ -415,11 +416,13 @@ function defaultAssetDir(outDir) {
  */
 function buildHost(viaCargo) {
   if (viaCargo) {
-    console.log('[package-host] --via-cargo：先构建宿主前端 dist（pnpm run build:fast）')
-    const fe = spawnSync(toExecutable('pnpm'), ['run', 'build:fast'], { cwd: HOST_ROOT, stdio: 'inherit' })
-    if (fe.status !== 0) fail(`[package-host] 宿主前端构建失败（exit=${fe.status}）`)
-    if (!existsSync(join(HOST_ROOT, 'dist'))) {
-      fail('[package-host] dist/ 未生成 —— build.rs 嵌入 frontendDist 会失败')
+    // 随包壳前端 = src-tauri/shell-dist（frontendDist 指向它，L2 契约 §5.1）。
+    // 这条路径绕开 tauri CLI，因此 beforeBuildCommand 不会跑：必须自己 build:fast + 同步。
+    console.log('[package-host] --via-cargo：构建宿主前端并同步随包 shell-dist（pnpm run shell:sync）')
+    const fe = spawnSync(toExecutable('pnpm'), ['run', 'shell:sync'], { cwd: HOST_ROOT, stdio: 'inherit' })
+    if (fe.status !== 0) fail(`[package-host] 宿主前端 / shell-dist 构建失败（exit=${fe.status}）`)
+    if (!existsSync(join(HOST_ROOT, 'src-tauri', 'shell-dist', 'index.html'))) {
+      fail('[package-host] src-tauri/shell-dist 未生成 —— build.rs 嵌入 frontendDist 会失败')
     }
     console.log('[package-host] --via-cargo：cargo build（src-tauri，debug）')
     const be = spawnSync('cargo', ['build'], { cwd: join(HOST_ROOT, 'src-tauri'), stdio: 'inherit' })
@@ -434,7 +437,10 @@ function buildHost(viaCargo) {
   } catch {
     fail('[package-host] 找不到 @tauri-apps/cli（宿主工程未装依赖？先 pnpm install）')
   }
-  console.log('[package-host] 构建宿主（debug profile，--no-bundle）：前端 dist 会被嵌入二进制')
+  console.log(
+    '[package-host] 构建宿主（debug profile，--no-bundle）：随包壳 shell-dist 会被嵌入二进制\n' +
+      '[package-host]   shell-dist 由 tauri.conf 的 beforeBuildCommand（pnpm run shell:sync）刷新',
+  )
   const build = spawnSync(
     process.execPath,
     // createUpdaterArtifacts 需签名密钥；本产物不发布安装包，显式关掉避免缺密钥直接失败
