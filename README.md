@@ -177,15 +177,14 @@ wasmnest/
 ├─ wasmnest-desktop/            # Tauri 2 桌面宿主
 │  ├─ src/                      # 宿主壳（主屏 / 系统页 / 挂载槽 / 多任务预览）
 │  ├─ src-tauri/                # Rust 宿主：插件域接线 + 安全闸门 + server
-│  ├─ packages/plugin-sdk-desktop/
-│  ├─ scripts/                  # dev-run / plugin-build / plugin-watch / host:pack
+│  ├─ packages/plugin-sdk-desktop/  # 端内 SDK（bin/ dev 工具 + tools/componentize 随 npm 包发布）
+│  ├─ scripts/                  # dev-run / plugin-build / host:pack
 │  └─ e2e/ · bench/
 ├─ wasmnest-mobile/             # Tauri 2 Android 宿主
 │  ├─ src/                      # 宿主壳（shell 注册表 + 运行面）
 │  ├─ src-tauri/                # Rust 宿主 + gen/android 手写 Kotlin 面
 │  └─ packages/plugin-sdk-mobile/
 ├─ scripts/                     # WIT 拼装 / 清单校验 / 路径 resolver / 打包 / 版本
-├─ tools/componentize/          # core module → Component 组件化工具
 ├─ docs/                        # 架构 / 契约 / 前端 / 后端 / 安全 / 测试 / Git
 ├─ release-manifest.json        # 跨仓版本唯一表达
 └─ AGENTS.md                    # 开发导航与硬边界（人与 AI 协作者共用）

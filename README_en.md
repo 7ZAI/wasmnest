@@ -177,15 +177,14 @@ wasmnest/
 ├─ wasmnest-desktop/            # Tauri 2 desktop host
 │  ├─ src/                      # Host shell (home / system pages / mount slot / task preview)
 │  ├─ src-tauri/                # Rust host: plugin wiring + security gates + server
-│  ├─ packages/plugin-sdk-desktop/
-│  ├─ scripts/                  # dev-run / plugin-build / plugin-watch / host:pack
+│  ├─ packages/plugin-sdk-desktop/  # in-end SDK (bin/ dev tools + tools/componentize ship with the npm package)
+│  ├─ scripts/                  # dev-run / plugin-build / host:pack
 │  └─ e2e/ · bench/
 ├─ wasmnest-mobile/             # Tauri 2 Android host
 │  ├─ src/                      # Host shell (shell registry + runtime surfaces)
 │  ├─ src-tauri/                # Rust host + hand-written Kotlin under gen/android
 │  └─ packages/plugin-sdk-mobile/
 ├─ scripts/                     # WIT composition / manifest checks / path resolvers / packaging / versions
-├─ tools/componentize/          # core module → Component componentizer
 ├─ docs/                        # Architecture / contracts / frontend / backend / security / testing / git
 ├─ release-manifest.json        # Single expression of cross-repo versions
 └─ AGENTS.md                    # Development navigation and hard boundaries (humans and AI agents)

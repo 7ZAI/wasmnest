@@ -15,6 +15,7 @@
     "dist",
     "src",
     "bin",
+    "tools",
     "template",
     "README.md",
     "README_en.md",
@@ -70,6 +71,8 @@
     },
     "./bin/manifest-gen.js": "./bin/manifest-gen.js",
     "./bin/wasm-hash.js": "./bin/wasm-hash.js",
+    "./bin/plugin-watch.js": "./bin/plugin-watch.js",
+    "./tools/componentize/Cargo.toml": "./tools/componentize/Cargo.toml",
     "./package.json": "./package.json"
   },
   "dependencies": {

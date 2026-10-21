@@ -66,7 +66,7 @@
 
 - **桌面**：应用名单单一真源 = `scripts/plugin-build.js` 的 `PLUGINS`（5 个：agent-hub / ai-chatbox / bedcode(terminal-session) / file-transfer / monitor）；`pnpm run plugins:build`（= `--all`，CI/release 走这条）遍历它。
 - **移动**：无宿主侧注册表，`scripts/plugin-build.js` 自动扫描 `apps/*/mobile`。
-- 桌面一般应用走 `wasm32-wasip3`（cdylib 直出 Component）；**file-transfer 例外**：双端单产物，走 `wasm32-unknown-unknown` + 平台仓 `tools/componentize`（产物落应用仓共享 target `<appsRoot>/target/wasm-apps/…`）。
+- 桌面一般应用走 `wasm32-wasip3`（cdylib 直出 Component）；**file-transfer 例外**：双端单产物，走 `wasm32-unknown-unknown` + 桌面 SDK 的 `tools/componentize`（随 npm 包发布；产物落应用仓共享 target `<appsRoot>/target/wasm-apps/…`）。
 
 ### 5.2 单应用（单插件）调试命令
 
@@ -87,7 +87,7 @@
 ### 5.4 产物落点与排查
 
 - 产物目录：`<end>/src-tauri/resources/plugins/<end>/<id>/`（`resources/plugins/**` **不入库**，只由构建 / watch 脚本写入，勿手工拷）。
-- 桌面 dev 运行时的资源副本在 `target/debug/resources/plugins/desktop/`——源目录删除后副本**不会**自动同步（幽灵目录只在那里活着）；排查「改了没生效」先查这条，再看 `scripts/{dev-run,plugin-watch,plugin-build}.js` 与根 `scripts/app-paths.mjs`。
+- 桌面 dev 运行时的资源副本在 `target/debug/resources/plugins/desktop/`——源目录删除后副本**不会**自动同步（幽灵目录只在那里活着）；排查「改了没生效」先查这条，再看 `scripts/{dev-run,plugin-build}.js`、`packages/plugin-sdk-desktop/bin/plugin-watch.js` 与根 `scripts/app-paths.mjs`。
 - 每次 `tauri:dev` 的插件前端改动闭环：改 app 源码 → vite rebuild → 复制进 resources → 宿主 `PluginDevWatcher` emit `plugin:dev-reload` → 前端 reloadPlugin 重载。
 
 ## 6. 构建资源与 target 治理
