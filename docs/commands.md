@@ -48,6 +48,33 @@
 | `cd src-tauri && cargo test` | 宿主 Rust 全量（含能力层 / CSP 锁、生命周期注册锁、e2e；**部分用例要求先构建随包插件产物** `resources/plugins/desktop`，见各测试头注释） |
 | `pnpm run target:size` | target 治理（§6；`prebuild` 钩子自动跑） |
 
+### 3.1 通用宿主 runtime crate（L2，可选增强）
+
+`src-tauri` 的 lib 角色同时是**唯一**可发布的通用 runtime crate（票据
+`wasmnest-apps/.scratch/2026-10-21-host-runtime-distribution/` D4 / CONTRACT §5）：
+
+| 项 | 值 / 命令 |
+| --- | --- |
+| crate 名 | `wasmnest-desktop-runtime`（`[package].name`；`[lib].name` 仍 `wasmnest_desktop_lib`） |
+| 二进制名 | `wasmnest-desktop`（显式 `[[bin]]`，`host:pack` / E2E / 安装入口名不变） |
+| 壳随包 | `src-tauri/shell-dist/`（**签入**），`tauri.conf.json` 的 `frontendDist` 指它 |
+| 壳同步 / 漂移锁 | `node scripts/sync-shell-dist.mjs` / `node scripts/sync-shell-dist.mjs --check`（源 `dist/` 缺失时 fail-visible） |
+| 发布门禁 | `node scripts/check-runtime-crate.mjs`（`cargo package --list` 必备条目 + crate 身份 + `cargo metadata --no-deps` + 壳漂移） |
+| 本地安装 | `cargo install --path wasmnest-desktop/src-tauri --root <dir>` |
+| 发布安装 | `cargo install wasmnest-desktop-runtime --version =0.0.1 --root <dir>`（SDK `wasmnest-plugin-api =0.0.1` 必须已上 crates.io） |
+
+**安装通道偏离 CONTRACT §5.4（owner 裁决留档）**：CONTRACT 默认写「git tag 安装」，
+但平台仓**刻意没有根 workspace**（30+ 独立 Cargo.toml / 8 个 target 落点，见根
+`.cargo/config.toml` 头注），`cargo install --git <平台仓> wasmnest-desktop-runtime`
+无法定位 crate。故 L2 的安装通道取 **crates.io**；能力仓依赖仍用 git tag
+（`lib-v0.0.2`）固定编译期版本。**不要**为 cargo git 安装新增根 workspace（会改变
+平台仓全部 target / lock 布局）。
+
+依赖图与本地开发：12 条 `wasmnest-lib` 依赖 = git tag；桌面 SDK = crates.io 精确
+版本；同场开发由平台仓根 `.cargo/config.toml` 的 `[patch."https://github.com/7ZAI/wasmnest-lib"]`
+与 `[patch.crates-io]` 指回兄弟目录 / 工作树 SDK（patch 不进发布包，`Cargo.toml`
+内不得出现 `[patch]`——门禁脚本会转红）。
+
 ## 4. 移动端（`wasmnest-mobile/`）
 
 | 命令 | 说明 |

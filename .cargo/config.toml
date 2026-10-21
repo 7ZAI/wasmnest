@@ -85,3 +85,36 @@ SCCACHE_CACHE_SIZE = { value = "32212254720", force = false }
 # 若本机装有独立 LLVM 并已把 <LLVM>\bin 加入 PATH，可把 linker 改为 "lld-link" 使用最新版。
 [target.x86_64-pc-windows-msvc]
 linker = "rust-lld"
+
+# ==================== L2：本地同场开发的依赖重定向（不进发布包） ====================
+# 通用宿主 runtime crate（wasmnest-desktop/src-tauri）的发布形态：
+#   - 12 条能力仓依赖 = git tag `lib-v0.0.2`（https://github.com/7ZAI/wasmnest-lib）
+#   - 桌面 SDK `wasmnest-plugin-api` = crates.io `=0.0.1`
+# 本仓同场开发（R1 布局：`../wasmnest-lib` 兄弟目录 + 工作树 SDK）必须用本地源码，
+# 否则每改一次内核都要推 tag；故在此统一 patch 回本地 path。**patch 只住 cargo
+# config，不写进任何 crate 的 Cargo.toml**——`cargo package` 不带 config，发布包
+# 因此保持 registry / git tag 解析（`cargo package --list` 门禁见
+# wasmnest-desktop/scripts/check-runtime-crate.mjs）。
+#
+# 版本联动：patch 目标版本必须等于依赖声明（能力仓 0.0.1 / SDK 0.0.1）；不匹配时
+# cargo 报 patch 不适用（fail-visible，不会静默退回远端副本）。
+# 路径基准 = 本 config 文件所在目录的上一级（平台仓根），见 Cargo「Config-relative paths」。
+[patch."https://github.com/7ZAI/wasmnest-lib"]
+wasmnest-peer-net = { path = "../wasmnest-lib/peer-net" }
+wasmnest-link-crypto = { path = "../wasmnest-lib/link-crypto" }
+wasmnest-server-base = { path = "../wasmnest-lib/wasmnest-server-base" }
+wasmnest-host-kit = { path = "../wasmnest-lib/wasmnest-host-kit" }
+wasmnest-wasm-core = { path = "../wasmnest-lib/wasmnest-wasm-core" }
+wasmnest-pty-engine = { path = "../wasmnest-lib/wasmnest-pty-engine" }
+wasmnest-discovery-engine = { path = "../wasmnest-lib/wasmnest-discovery-engine" }
+wasmnest-crypto-engine = { path = "../wasmnest-lib/wasmnest-crypto-engine" }
+wasmnest-server-core = { path = "../wasmnest-lib/wasmnest-server-core" }
+wasmnest-server-http = { path = "../wasmnest-lib/wasmnest-server-http" }
+wasmnest-server-websocket = { path = "../wasmnest-lib/wasmnest-server-websocket" }
+wasmnest-server-peer-net = { path = "../wasmnest-lib/wasmnest-server-peer-net" }
+
+[patch.crates-io]
+# 桌面 Rust SDK：wasmnest-wasm-core 的 desktop-assembly feature 依赖 `wasmnest-plugin-api`，
+# 宿主自身也直接消费；本地开发用工作树代码而非（尚未发布的）registry 副本。
+wasmnest-plugin-api = { path = "wasmnest-desktop/packages/plugin-sdk-desktop/rust" }
+wasmnest-plugin-api-macros = { path = "wasmnest-desktop/packages/plugin-sdk-desktop/rust-macros" }

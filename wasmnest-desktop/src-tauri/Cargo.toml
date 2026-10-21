@@ -1,14 +1,49 @@
 [package]
-name = "wasmnest-desktop"
+# ==================== L2：通用宿主 runtime crate（可分发形态） ====================
+# 本 crate 从「宿主 bin crate」升为**唯一**通用 runtime crate（票据
+# .scratch/2026-10-21-host-runtime-distribution/spec.md D4 / CONTRACT §5）：
+# - 包名带 `-runtime`，供外部工程作为编译期依赖 / `cargo install` 消费；
+# - 二进制名经显式 `[[bin]]` 保持 `wasmnest-desktop`（安装入口、host:pack 产物名不变）；
+# - 壳前端随包分发（`shell-dist/`，签入），`tauri.conf.json` 的 frontendDist 指向它；
+# - 能力仓依赖全部固定为 git tag，桌面 SDK 固定为 crates.io 精确版本，
+#   本地开发经平台仓根 `.cargo/config.toml` 的 [patch] 指回兄弟目录（不进发布包）。
+# 安装通道 = crates.io（平台仓刻意无根 workspace，`cargo install --git` 不能定位本 crate，
+# 见票据「关键裁决」）。发布前置：wasmnest-plugin-api =0.0.1 已上 crates.io。
+name = "wasmnest-desktop-runtime"
 version = "0.0.1"
 license = "MIT"
-description = "WasmNest Desktop - Remote control for Claude Code via mobile devices"
+description = "WasmNest Desktop runtime - Tauri shell + plugin host for wasm apps (generic, full WIT)"
 authors = ["binblink"]
 edition = "2021"
+repository = "https://github.com/7ZAI/wasmnest"
+
+# 随包文件白名单：壳上下文（tauri.conf / capabilities / icons / 内置配置）与壳前端
+# （shell-dist/**）必须进包，否则 cargo install 后启动白屏或权限面缺失。
+# 构建期资源目录 `resources/plugins/` 是 gitignore 的运行期产物，不在发布包内
+# （宿主以 WASMNEST_PLUGINS_DIR 指定外部插件目录）。
+include = [
+  "src/**",
+  "build.rs",
+  "Cargo.toml",
+  "tauri.conf.json",
+  "capabilities/**",
+  "icons/**",
+  "resources/config.properties",
+  "resources/plugins/.gitkeep",
+  "resources/deb/**",
+  "nsis/**",
+  "shell-dist/**",
+  "README*",
+]
 
 [lib]
 name = "wasmnest_desktop_lib"
 crate-type = ["cdylib", "rlib"]
+
+# 显式 bin：包名改名后仍产出 `wasmnest-desktop`（host:pack / E2E / 安装入口按此名寻址）
+[[bin]]
+name = "wasmnest-desktop"
+path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -108,45 +143,54 @@ local-ip-address = "0.6"
 sysinfo = "0.33"
 
 # Plugin API
-wasmnest-plugin-api = { path = "../packages/plugin-sdk-desktop/rust" }
+# 发布形态：crates.io 精确版本（本地开发经平台仓根 .cargo/config.toml 的
+# [patch.crates-io] 指回 wasmnest-desktop/packages/plugin-sdk-desktop/rust）。
+wasmnest-plugin-api = { version = "=0.0.1" }
+# ==================== 能力仓依赖（git tag 固定，可发布） ====================
+# L2：12 条 wasmnest-lib 依赖从 path 改为 git tag。理由：`cargo package` / 外部工程
+# 消费时不存在 `../../../wasmnest-lib` 兄弟目录，path 依赖会让 crate 不可发布；
+# git tag 提供同样的编译期固定版本（tag 不可移动，发布线 = lib-v0.0.2）。
+# 本地同场开发由平台仓根 `.cargo/config.toml` 的
+# `[patch."https://github.com/7ZAI/wasmnest-lib"]` 指回兄弟目录（patch 不进发布包）。
+# `version` 与 tag 内各 crate 的 manifest 对齐（不匹配时 cargo fail-visible）。
 # 对等网络共享基础设施（节点身份 + 自签证书，issue peer-network/01）
-wasmnest-peer-net = { path = "../../../wasmnest-lib/peer-net" }
+wasmnest-peer-net = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2" }
 # 链路报文加密协议核心（issue 09 共享 crate，与移动端 event WS 共同消费）
-wasmnest-link-crypto = { path = "../../../wasmnest-lib/link-crypto" }
+wasmnest-link-crypto = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2" }
 # server-lib-split：桌面 server 基础层（错误/常量/错误边界/系统信息/网络配置/
 # 连接身份/端口 traits）与加密引擎（算法实现 + 注册表）
-wasmnest-server-base = { path = "../../../wasmnest-lib/wasmnest-server-base" }
+wasmnest-server-base = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2" }
 # 插件宿主机制内核（能力仓 `../wasmnest-lib`，双端共享锚点，wasm-core-lib-split 票 03）：
 # 插件实例状态 `WasmPluginState` + 能力模块契约 + 自动注册表 + Store 上限与指标值对象。
 # 它必须独立于宿主 bin crate —— 否则能力 crate 无法命名 `WasmPluginState`
 # （`add_to_linker::<S,D>` 是单态）⇒ 与宿主构成 Cargo 环。本期为**零行为变更的搬迁**：
 # StoreLimits / PluginMetrics / WasmPluginState 原位从 wasm_core 搬入，宿主留转发。
-wasmnest-host-kit = { path = "../../../wasmnest-lib/wasmnest-host-kit" }
+wasmnest-host-kit = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2" }
 # 插件机制整核（wasm-core-whole-crate，.scratch/2026-10-06）：wasm_core 整目录 +
 # 引擎面（db/pty/enums/system 部分）+ 宿主胶水迁入本 crate；lib.rs 经 `pub use
 # wasmnest_wasm_core as wasm_core` 垫片保持既有 `crate::wasm_core::*` 路径零改动。
-# 2026-10-08 迁根：整核本体与能力域同落能力仓（平台侧经兄弟目录 `../wasmnest-lib` 消费）。
-wasmnest-wasm-core = { path = "../../../wasmnest-lib/wasmnest-wasm-core" }
+# 2026-10-08 迁根：整核本体与能力域同落能力仓（发布形态经 git tag 消费）。
+wasmnest-wasm-core = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2" }
 # PTY 能力域（wasm-core 纯净性收口票 02/06 → pty-capability-domain 票 D1/D3）：
 # 引擎面 + host-pty WIT 接线整面迁入能力 crate（ADR 0039）。票 02 批次 02 起宿主
 # **直接消费**：端口 adapter + 强制引用行 + 白名单条目同落 `src/plugin/pty.rs`
 # （wasm-core 已不再依赖本 crate，也不再出现它的任何路径）。
 # lib 声明同时满足 crate_boundary_lock 断言③「宿主清单声明全部拆分产物」
 # （pty-engine 已登记 SPLIT_CRATES）。
-wasmnest-pty-engine = { path = "../../../wasmnest-lib/wasmnest-pty-engine", features = ["common-host"] }
+wasmnest-pty-engine = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2", features = ["common-host"] }
 # 组播发现能力域（mDNS，wasm-core-lib-split 票 03）：引擎 + 宿主绑定层 + 自动
 # 注册。票 02 批次 03 起宿主**直接消费**：端口 adapter 在 `src/plugin/mdns.rs`
 # （wasm-core 已不再依赖本 crate，`host_context_registry` 随其退役）。
-wasmnest-discovery-engine = { path = "../../../wasmnest-lib/wasmnest-discovery-engine", features = ["common-host"] }
-wasmnest-crypto-engine = { path = "../../../wasmnest-lib/wasmnest-crypto-engine" }
+wasmnest-discovery-engine = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2", features = ["common-host"] }
+wasmnest-crypto-engine = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2" }
 # server-lib-split 票 03：传输无关内核（supervisor/filter/link_crypto/metrics + TransportFace 组合）
-wasmnest-server-core = { path = "../../../wasmnest-lib/wasmnest-server-core" }
+wasmnest-server-core = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2" }
 # server-lib-split 票 04：HTTP 传输面（registry/gateway/controllers/middleware/dtos + HttpTransportFace）
-wasmnest-server-http = { path = "../../../wasmnest-lib/wasmnest-server-http", features = ["common-host"] }
+wasmnest-server-http = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2", features = ["common-host"] }
 # server-lib-split 票 05：WebSocket 传输面（conn/channel/registry/endpoint/routes/manager）
-wasmnest-server-websocket = { path = "../../../wasmnest-lib/wasmnest-server-websocket", features = ["common-host"] }
+wasmnest-server-websocket = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2", features = ["common-host"] }
 # server-lib-split 票 06：对等网络引擎域（节点身份/节点与发现守护生命周期/host-peer 引擎转发）
-wasmnest-server-peer-net = { path = "../../../wasmnest-lib/wasmnest-server-peer-net", features = ["common-host"] }
+wasmnest-server-peer-net = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.2", features = ["common-host"] }
 inventory = "0.3"
 
 # Power management (prevent system sleep)
@@ -224,15 +268,10 @@ opt-level = 2
 [profile.test.package.wasmtime]
 debug-assertions = false
 
-# ==================== [patch] 本地 SDK 指回（票 07 / L2/E2a-B） ====================
-# 背景：`wasmnest-wasm-core` 的 `desktop-assembly` feature 依赖已发布版本的桌面 SDK
-# `wasmnest-plugin-api`（内核单克隆可构建，见 lib 仓 wasm-core/Cargo.toml 注释）。
-# 本端宿主默认启用该 feature（宿主必须装配桌面 Rust 插件体系面）⇒ 构建时该依赖在
-# 解析图上，必须有 source 可用。patch 把 crates.io 的 `wasmnest-plugin-api` 重定向到
-# 本仓工作树 SDK，保证同场开发用工作树代码而不是 registry 上的已发布副本。
-# 版本联动（必须一致）：patch 目标 SDK 的 `version` == lib 声明的 `version`；不匹配
-# 时 cargo 报 patch 不适用 / 解析失败（fail-visible，不静默退回 registry）。
-# 注意：本包（src-tauri）无 `[workspace]` 成员，自身即 workspace 根；wasmnest-test/cross-end-tests
-# 是另一个独立根，同样需要自己的 patch（见其 Cargo.toml）。
-[patch.crates-io]
-wasmnest-plugin-api = { path = "../packages/plugin-sdk-desktop/rust" }
+# ==================== [patch] 已迁往平台仓根 `.cargo/config.toml` ====================
+# L2 起本 crate 的依赖图必须是**可发布形态**（SDK 走 crates.io、能力仓走 git tag），
+# 而 `cargo package` 会拒绝带 `[patch]` 的 manifest（发布包不得内嵌本地路径重定向）。
+# 同场本地开发的 patch 统一放平台仓根 `.cargo/config.toml`：
+#   - `[patch."https://github.com/7ZAI/wasmnest-lib"]` → `../wasmnest-lib/<crate>`
+#   - `[patch.crates-io]` → `wasmnest-desktop/packages/plugin-sdk-desktop/rust{,-macros}`
+# cargo config 不进发布包，`cargo package --list` / 外部工程消费仍按 registry / git tag 解析。
