@@ -90,6 +90,8 @@ const RUST_PERMISSION_RULES = [
   { re: /\bplatform_pick_(files|folder|folders)\b/, perm: 'fs:pick' },
   // 插件私有库（host-plugin-database）与私有 KV 同挂 storage
   { re: /\bplugin_db_\w+\b/, perm: 'storage' },
+  // 运行监控（WIT `host-metrics.snapshot`）：只读、全局可见（一次授权看全部插件）
+  { re: /\bmetrics_snapshot\b/, perm: 'metrics:read' },
 ]
 
 /**

@@ -48,6 +48,7 @@ wasmnest/                                   # 平台仓根（本文件所在）
 | ai-chatbox | `com.wasmnest.ai-chatbox` | desktop + mobile | 挂载包 / 壳运行面 |
 | bedcode（显示名 BedCode） | `com.wasmnest.terminal-session` | desktop + mobile | 挂载包 / 壳运行面 |
 | file-transfer | `com.wasmnest.file-transfer` | desktop + mobile | 双端单产物（移动经 `desktop-compat` 桩） |
+| monitor | `com.wasmnest.monitor` | desktop + mobile | 挂载包 / 壳运行面（只读运行指标） |
 
 **产物流向**（应用源码住应用仓，产物落本仓宿主资源目录；`resources/plugins/**` 不入库）：
 
@@ -108,7 +109,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 ### 2.4 桌面脚本（`scripts/`）
 
-`dev-run.js`（宿主 dev：端口预检 → WASM/前端缺失预建 → tauri dev → `PLUGIN_WATCH_CMDS` 起前端 watch；bedcode 前端不参与 watch）、`plugin-build.js`（`PLUGINS` 注册表 = 4 个应用名单单一真源）、`plugin-dev.js`（单插件 dev）、`plugin-watch.js`（前端重载闭环）、`tauri-build.js`（updater 签名）、`package-host.mjs`（`host:pack` 宿主产物分发，见 docs/commands.md §3）、`check-target-size.js`（target 治理）、`generate-*.js`（图标生成）、`install-tauri-deps.sh`。**每个脚本头注释自解释。**
+`dev-run.js`（宿主 dev：端口预检 → WASM/前端缺失预建 → tauri dev → `PLUGIN_WATCH_CMDS` 起前端 watch；bedcode 前端不参与 watch）、`plugin-build.js`（`PLUGINS` 注册表 = 5 个应用名单单一真源）、`plugin-dev.js`（单插件 dev）、`plugin-watch.js`（前端重载闭环）、`tauri-build.js`（updater 签名）、`package-host.mjs`（`host:pack` 宿主产物分发，见 docs/commands.md §3）、`check-target-size.js`（target 治理）、`generate-*.js`（图标生成）、`install-tauri-deps.sh`。**每个脚本头注释自解释。**
 
 ## 3. 移动端导览（`wasmnest-mobile/`）
 
@@ -175,7 +176,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | --- | --- |
 | 改桌面宿主壳 / 挂载槽 / 系统页 | `wasmnest-desktop/src/main.ts` + `src/shell/**`（`src/shell/composables/useShellApps.ts` = 应用路由真源）+ docs/architecture.md §2；跑桌面 `test:run` + 真实 `tauri:dev` 目验 |
 | 改桌面设置页 / 状态栏 / 壳皮肤 | `src/shell/extensions/**`（注册表契约）+ `src/shell/components/ShellStatusBar.vue` + `src/shell/settings/Settings{ThemeSkin,Extensions}Section.vue` + `src/shell/sys/SysSettingsView.vue`（**关于固定最后**）；机制口径见 docs/frontend.md §6；跑桌面 `test:run`（含 `settingsOrderLock` / `shellExtensions` / `shellStatusBar`） |
-| 改多任务卡片 / 应用预览面（`mountPreview`） | `wasmnest-desktop/src/shell/components/ShellTaskSwitcher.vue` + `src/shell/mount/{useAppMount.ts,AppPreviewTile.vue}`（`mountAppPreview(root, env)` = 装载入口，`PREVIEW_MOUNT_TIMEOUT_MS` = 3s）+ `src/shell/mount/appSession.ts`（`lastRoute`）；契约 = `AppPreviewEnv` / `AppPreviewHandle` / `MountPreview`（宿主与四个 app `entry.ts` 同形，L5 锁钉住）；应用侧内容裁决在 `../wasmnest-apps`；跑桌面 `test:run` + 应用仓各 app `test:run` / `build:frontend` + 真实 `tauri:dev` 目验 |
+| 改多任务卡片 / 应用预览面（`mountPreview`） | `wasmnest-desktop/src/shell/components/ShellTaskSwitcher.vue` + `src/shell/mount/{useAppMount.ts,AppPreviewTile.vue}`（`mountAppPreview(root, env)` = 装载入口，`PREVIEW_MOUNT_TIMEOUT_MS` = 3s）+ `src/shell/mount/appSession.ts`（`lastRoute`）；契约 = `AppPreviewEnv` / `AppPreviewHandle` / `MountPreview`（宿主与五个 app `entry.ts` 同形，L5 锁钉住）；应用侧内容裁决在 `../wasmnest-apps`；跑桌面 `test:run` + 应用仓各 app `test:run` / `build:frontend` + 真实 `tauri:dev` 目验 |
 | 改移动宿主壳 / 运行面 / 注册表 | `wasmnest-mobile/src/shell/registry.ts`（职责边界：只注册不决策）+ 移动 SDK `src/types.ts`（`UIRegistry`）+ docs/architecture.md §4；优先移动 SDK dev-shell 预览 |
 | 改插件机制 / 生命周期 / 能力接线（Rust） | 该端 `src-tauri/src/plugin/**`（每域一个文件，端口 adapter + 白名单条目同处，**先读文件头注释**）+ 能力仓对应 crate；跑该端 `cargo test` |
 | 改权限 / 授权闸门 | 本端 SDK `rust/src/permission.rs`（词汇真源）+ docs/contracts.md §4 + docs/security.md §1；生成物重出（桌面 SDK 目录 `pnpm run gen:permissions`）；跑相关锁 |
@@ -202,7 +203,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 | 锁 | 位置（本仓） | 钉住什么 |
 | --- | --- | --- |
-| `hostAppBoundaryLock.test.ts` | `wasmnest-desktop/src/__tests__/` | 宿主零 app 源码 import、零 `__WASMNEST_SHARED__`、零旧贡献面；逐字校验四个桌面 app `src/entry.ts` 的 `mountApp` 契约；**L5 预览契约锁**：四个 entry 必须导出 `mountPreview` 且带 `appId` / `lastRoute` / `appInvoke` / `appStorageGet` / `locale` / `theme` 关键字段、宿主声明 `AppPreviewEnv` / `AppPreviewHandle` 且 `mountPreview?` 可选、预览路径禁用 `refreshChannelToken` / 写存储（**新增 / 改名桌面应用必须同步其 `APP_ENTRIES`**） |
+| `hostAppBoundaryLock.test.ts` | `wasmnest-desktop/src/__tests__/` | 宿主零 app 源码 import、零 `__WASMNEST_SHARED__`、零旧贡献面；逐字校验五个桌面 app `src/entry.ts` 的 `mountApp` 契约；**L5 预览契约锁**：五个 entry 必须导出 `mountPreview` 且带 `appId` / `lastRoute` / `appInvoke` / `appStorageGet` / `locale` / `theme` 关键字段、宿主声明 `AppPreviewEnv` / `AppPreviewHandle` 且 `mountPreview?` 可选、预览路径禁用 `refreshChannelToken` / 写存储（**新增 / 改名桌面应用必须同步其 `APP_ENTRIES`**） |
 | `i18nDriftLock.test.ts` | 同上 | 宿主 `src/i18n/host-{zh-CN,en}.ts` ↔ `apps/bedcode/desktop/src/i18n/host-{zh-CN,en}.ts` **逐字一致** |
 | `tailwindContentCoverage.test.ts` | 同上 | 宿主 Tailwind content 不得残留 app 路径 |
 | `appBundlePathLock.test.ts` · `appChromeLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 挂载包路径单一来源（`resources/plugins/desktop` 层级）；壳标题栏常驻、应用不得自绘标题栏/窗口控制/拖拽区 |

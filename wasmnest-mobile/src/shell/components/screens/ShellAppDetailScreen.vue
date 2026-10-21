@@ -96,6 +96,12 @@
                   {{ permissionTitle(grant.key) }}
                   <code class="ml-1.5 shell-type-micro text-[var(--mobile-text-secondary)]">{{ grant.key }}</code>
                 </div>
+                <div
+                  v-if="permissionDesc(grant.key)"
+                  class="shell-type-caption text-[var(--mobile-text-secondary)]"
+                >
+                  {{ permissionDesc(grant.key) }}
+                </div>
                 <div v-if="grant.locked" class="shell-type-caption text-[var(--mobile-text-secondary)]">
                   {{ t('shell.detail.permissionLocked') }}
                 </div>
@@ -221,7 +227,7 @@ import Toggle from '../ui/Toggle.vue'
 import { useToast } from '../../composables/useToast'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
-import { groupPermissions, permissionTitleKey } from '../../permissions'
+import { groupPermissions, permissionDescKey, permissionTitleKey } from '../../permissions'
 import { formatBytes } from '../../utils'
 import ShellAppIcon from '../ShellAppIcon.vue'
 import ShellChip from '../ShellChip.vue'
@@ -267,6 +273,12 @@ const permissionsNote = computed(() => {
 function permissionTitle(key: string): string {
   const i18nKey = permissionTitleKey(key)
   return i18nKey ? t(i18nKey) : key
+}
+
+/** 权限说明：已知权限展示能力边界（如 metrics:read 的侧信道提示）；未知权限不占行 */
+function permissionDesc(key: string): string {
+  const i18nKey = permissionDescKey(key)
+  return i18nKey ? t(i18nKey) : ''
 }
 
 const stateLabel = computed(() => {

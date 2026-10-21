@@ -218,6 +218,7 @@ export default {
         terminal: '终端与会话',
         data: '文件与网络',
         device: '设备与链路',
+        system: '系统与监控',
         interface: '界面与消息',
         other: '其他',
       },

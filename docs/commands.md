@@ -38,7 +38,7 @@
 | `pnpm run tauri:dev` | 宿主 dev（`scripts/dev-run.js`：端口预检 → 插件 wasm / 前端缺失预建 → tauri dev → 前端 watch；**bedcode 前端不参与 watch**，改了它单独重建 §5.2）。宿主启动的 file watch 覆盖整个 `src-tauri/`——**别在宿主冷构建期间手工往 `src-tauri/` 拷产物**，会触发重启风暴（机制见 `scripts/dev-run.js` 头注释） |
 | `pnpm run tauri:build` | 生产构建（`scripts/tauri-build.js` 解析 updater 签名；无密钥时自动关闭更新包产物） |
 | `pnpm run host:pack` | 产出「可运行宿主产物」（`scripts/package-host.mjs`，供 wasm-app 工程 dev 使用，不需平台仓源码）——宿主构建产物分发面：产物目录可用环境变量 `WASMNEST_PLUGINS_DIR` 覆盖（未设置时行为与源码构建一致；发布链路不受影响）。例子：`node scripts/package-host.mjs --out dist/host-desktop` |
-| `pnpm run plugins:build` | 全量应用构建（`scripts/plugin-build.js --all`，注册表 = 4 个应用名单单一真源，见 §5.1） |
+| `pnpm run plugins:build` | 全量应用构建（`scripts/plugin-build.js --all`，注册表 = 5 个应用名单单一真源，见 §5.1） |
 | `pnpm run plugins:dev` | 单插件 dev 构建（`scripts/plugin-dev.js`，见 §5.2） |
 | `pnpm run test:run` | vitest（宿主 `src/__tests__` + **桌面 SDK 契约测试** `packages/plugin-sdk-desktop/__tests__`） |
 | `pnpm run test:e2e` | WDIO E2E（需 debug 二进制 + 已构建前端；`e2e/specs/{smoke,bench}.spec.ts`） |
@@ -64,7 +64,7 @@
 
 ### 5.1 构建注册表与工具链
 
-- **桌面**：应用名单单一真源 = `scripts/plugin-build.js` 的 `PLUGINS`（4 个：agent-hub / ai-chatbox / bedcode(terminal-session) / file-transfer）；`pnpm run plugins:build`（= `--all`，CI/release 走这条）遍历它。
+- **桌面**：应用名单单一真源 = `scripts/plugin-build.js` 的 `PLUGINS`（5 个：agent-hub / ai-chatbox / bedcode(terminal-session) / file-transfer / monitor）；`pnpm run plugins:build`（= `--all`，CI/release 走这条）遍历它。
 - **移动**：无宿主侧注册表，`scripts/plugin-build.js` 自动扫描 `apps/*/mobile`。
 - 桌面一般应用走 `wasm32-wasip3`（cdylib 直出 Component）；**file-transfer 例外**：双端单产物，走 `wasm32-unknown-unknown` + 平台仓 `tools/componentize`（产物落应用仓共享 target `<appsRoot>/target/wasm-apps/…`）。
 

@@ -24,6 +24,8 @@ pub mod fs;
 pub mod http;
 pub mod log;
 pub mod mdns;
+/// 运行监控（`host-metrics`）：只读指标快照
+pub mod metrics;
 /// 系统通知（共享域契约 `host-notify`；2026-10-13 自 events 迁出）
 pub mod notify;
 pub mod peer;
@@ -49,6 +51,7 @@ pub use fs::{FsDirEntry, FsNodeType, FsStat, HostFs};
 pub use http::HostHttp;
 pub use log::HostLog;
 pub use mdns::{mdns_event_topic, HostMdns, MDNS_FOUND, MDNS_LOST};
+pub use metrics::HostMetrics;
 pub use notify::{HostNotify, NotifyOptions};
 pub use peer::HostPeer;
 pub use platform::HostPlatform;
@@ -178,6 +181,7 @@ pub trait HostApi:
     + HostProcess
     + HostApp
     + HostWebsocket
+    + HostMetrics
 {
 }
 
@@ -198,5 +202,6 @@ impl<T> HostApi for T where
         + HostProcess
         + HostApp
         + HostWebsocket
+        + HostMetrics
 {
 }

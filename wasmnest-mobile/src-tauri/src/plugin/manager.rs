@@ -331,6 +331,9 @@ impl PluginManager {
             status_reporter,
             Arc::new(crate::plugin::host_ports::HostPorts::new()), // 批次 2b：宿主引擎端口装配
         ));
+        // 运行监控出口（WIT `host-metrics`）：快照源 = 本运行时注册表。
+        // 与桌面 `PluginHost::new` 同一条装配路径（两阶段注入，实例化前写入）。
+        host_ctx.set_metrics_snapshot_source(runtime.monitor());
 
         // 宿主端事实（平台标识 = "mobile" / 无入站服务器）：单形态收口后从 wasm-core
         // 迁出的端差异实现，在插件实例化 / 激活之前注入（file-transfer 激活期探测
@@ -1196,6 +1199,10 @@ impl PluginManager {
         // 移除 WASM 实例与插件记录
         self.wasm_plugins.write().await.remove(plugin_id);
         self.plugins.write().await.remove(plugin_id);
+        // 指标注册表与已加载插件集合求一致：卸载后旧计数不得以幽灵卡留在快照里
+        if let Some(runtime) = self.wasm_runtime.get() {
+            runtime.monitor().remove(plugin_id);
+        }
         // Egress：卸载清策略 + 记录 + URL 声明（重装即全新授权，ADR 0022 §8 生命周期）
         crate::egress::policy().purge_plugin(plugin_id);
 

@@ -32,6 +32,9 @@ const PLUGINS = {
   'com.wasmnest.file-transfer': {
     slug: 'file-transfer',
   },
+  'com.wasmnest.monitor': {
+    slug: 'monitor',
+  },
   // terminal-session（bedcode）：dev 期前端**不参与 watch**（整包构建最重且每次
   // 写入 resources 都触发宿主重启，见 dev-run.js PLUGIN_WATCH_CMDS 条目注释）。
   // 保留条目 + frontendRetired 只为显性提示：改它的前端请单独重建
