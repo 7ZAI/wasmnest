@@ -74,8 +74,12 @@ fn split_crate_dir(crate_name: &str) -> PathBuf {
 }
 
 /// 宿主 crate 名——出现在任何拆分产物清单里即「反向依赖宿主」，在 crate
-/// 边界层面直接不成立（票 05/06 的面内锁也各自禁这一条，本锁在全矩阵上再钉一次）
-const HOST_CRATE: &str = "wasmnest-desktop";
+/// 边界层面直接不成立（票 05/06 的面内锁也各自禁这一条，本锁在全矩阵上再钉一次）。
+///
+/// L2 runtime crate 化（2026-10-21）：`[package].name` 从 `wasmnest-desktop` 改为
+/// `wasmnest-desktop-runtime`（二进制名仍是 `wasmnest-desktop`）。本常量跟随
+/// **包名**（依赖清单里出现的是包名），不是产物名。
+const HOST_CRATE: &str = "wasmnest-desktop-runtime";
 
 /// **登记表**：允许的向下依赖边（key crate → 它可以依赖的拆分产物兄弟）
 ///

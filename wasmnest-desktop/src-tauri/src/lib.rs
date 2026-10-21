@@ -8,6 +8,10 @@
 #[cfg(all(test, target_os = "linux"))]
 mod native_context_menu_test;
 
+// `run_with` 的插件目录注入单测（私有 fn 只能留 crate 内；不启动 Tauri）
+#[cfg(test)]
+mod run_with_test;
+
 // ==================== Domain Modules ====================
 
 pub mod commands;
@@ -281,6 +285,33 @@ fn native_context_menu_guard() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .build()
 }
 
+/// 宿主读取插件目录的环境变量名（启动流程的唯一读取点，`run_with` 也写它）
+pub(crate) const PLUGINS_DIR_ENV: &str = "WASMNEST_PLUGINS_DIR";
+
+/// 把外部插件目录写进宿主启动环境，返回写入的目录。
+///
+/// 空路径必须显性失败：启动流程把空字符串与「未设置」同等对待（回退内置插件目录），
+/// 静默回退会让调用方误以为自己的目录已生效（AGENTS「不静默降级」口径）。
+pub(crate) fn apply_plugins_dir_env(plugins_dir: impl Into<std::path::PathBuf>) -> std::path::PathBuf {
+    let dir = plugins_dir.into();
+    assert!(
+        !dir.as_os_str().is_empty(),
+        "run_with: plugins_dir 不能为空（空值会被宿主当作未设置而回退内置插件目录）"
+    );
+    std::env::set_var(PLUGINS_DIR_ENV, &dir);
+    dir
+}
+
+/// 以指定插件目录启动宿主（通用 runtime crate 的注入入口）。
+///
+/// 与 [`run`] 的唯一差别：启动前把 `plugins_dir` 写入 `WASMNEST_PLUGINS_DIR`；
+/// 宿主其余行为（内置目录回退、asset scope 动态放行、发布链路）逐字不变。
+/// 每个进程只应调用一次（Tauri 事件循环只能初始化一次）。
+pub fn run_with(plugins_dir: impl Into<std::path::PathBuf>) {
+    apply_plugins_dir_env(plugins_dir);
+    run();
+}
+
 pub fn run() {
     use tauri::Emitter;
 
@@ -443,7 +474,7 @@ pub fn run() {
                 // 不再有「平台仓源码目录」可 fallback：各 wasm-app 把自己的产物写进
                 // 该目录（`<dir>/<appId>/…`），宿主侧 PluginDevWatcher 监听它触发热重载。
                 // 未设置本变量时行为**逐字不变**（发布链路与平台仓 dev 均不受影响）。
-                let from_env = std::env::var("WASMNEST_PLUGINS_DIR")
+                let from_env = std::env::var(PLUGINS_DIR_ENV)
                     .ok()
                     .map(|v| v.trim().to_string())
                     .filter(|v| !v.is_empty())
