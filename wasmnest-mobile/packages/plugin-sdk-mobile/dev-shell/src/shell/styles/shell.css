@@ -344,53 +344,186 @@ html:not(.dark) .shell-ui {
 }
 
 /* ============================================================================
-   多任务卡片轨道（deck track）
+   多任务卡片布局（2026-10-21：对齐宿主与桌面多任务）
    ----------------------------------------------------------------------------
-   卡片**并排**成一行，不叠放：轨道整体平移，把当前卡片送到视口中间。轨道两端
-   的等量留白（padding-inline）让第一张 / 最后一张也能居中，于是「平移 = 序号 ×
-   步长」成立，卡宽与间距改这里即可，组件不必做布局计算。
-
-   视口比轨道窄时（多任务只剩这一屏的常态）相邻卡片在边缘被裁掉半张——那是裁切，
-   不是叠压：卡片之间永远不重叠。
+   信息条在上（图标 + 名称 + 状态），缩略区在下（大图标 + 版本 / 权限数），
+   比例固定 3/4，按行居中排布。每行 2 张（宽屏 3 张），整组上下左右居中，
+   内容超出时可纵向滚动。dev-shell 副本缺少宿主的 --shell-dur-* 动效 token，
+   这里用同一数值的字面量，交互观感与宿主一致。
    ============================================================================ */
-.shell-deck {
-  --deck-card-w: min(72vw, 300px);
-  --deck-gap: 12px;
-  /* 步长 = 卡宽 + 间距；轨道平移量 = 步长 × 序号（真源在组件的 trackStyle） */
-  --deck-step: calc(var(--deck-card-w) + var(--deck-gap));
+.shell-recents-grid {
+  --recents-gap: 12px;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
-.shell-deck-track {
+.shell-recents-grid-inner {
   display: flex;
-  align-items: center;
-  gap: var(--deck-gap);
-  height: 100%;
-  /* 首尾卡也能居中：两端各留「半个视口 - 半个卡宽」 */
-  padding-inline: calc(50% - var(--deck-card-w) / 2);
-  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: center;
+  justify-content: center;
+  gap: var(--recents-gap);
+  width: 100%;
+  max-width: 440px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
+  transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.shell-deck-card {
+.shell-recents-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  flex: 0 0 var(--deck-card-w);
-  width: var(--deck-card-w);
-  height: min(calc(100% - 24px), 440px);
+  flex: 0 0 calc((100% - var(--recents-gap)) / 2);
+  max-width: 214px;
+  aspect-ratio: 3 / 4;
+  min-width: 0;
   border-radius: var(--shell-radius-lg);
   border: 1px solid var(--mobile-border);
   background: var(--mobile-bg-card);
   box-shadow: var(--mobile-card-shadow);
   overflow: hidden;
+  animation: shell-recents-in 0.24s cubic-bezier(0, 0, 0.2, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 30ms);
   transition:
-    transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.24s ease;
+    transform 0.24s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.24s cubic-bezier(0.4, 0, 0.2, 1);
 }
-/* 拖拽期间关掉过渡并开启 will-change，抬起后交回 CSS 过渡——否则手指与卡片之间会慢半拍 */
-.shell-deck--dragging .shell-deck-track,
-.shell-deck--dragging .shell-deck-card {
+.shell-recents-card.active {
+  border-color: var(--mobile-border-active);
+}
+.shell-recents-grid--dragging .shell-recents-grid-inner,
+.shell-recents-grid--dragging .shell-recents-card {
+  animation: none;
   transition: none;
   will-change: transform;
+}
+.shell-recents-meta {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 2px 44px 2px 10px;
+  border-bottom: 1px solid var(--mobile-border);
+  background: var(--mobile-bg-card);
+  pointer-events: none;
+}
+.shell-recents-card.active .shell-recents-meta {
+  background: var(--mobile-accent-muted);
+}
+.shell-recents-name {
+  display: block;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--mobile-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-recents-status {
+  display: block;
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  line-height: 1.3;
+  color: var(--mobile-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-recents-status.is-warn {
+  color: var(--mobile-warning);
+}
+.shell-recents-status.is-danger {
+  color: var(--mobile-error);
+}
+.shell-recents-thumb {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 10px;
+  background: var(--mobile-bg-primary);
+  pointer-events: none;
+}
+.shell-recents-thumb.is-running {
+  background: color-mix(in srgb, var(--mobile-success) 12%, var(--mobile-bg-primary));
+}
+.shell-recents-thumb-meta {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  color: var(--mobile-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-recents-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.shell-recents-open:active {
+  background: var(--mobile-accent-muted);
+}
+.shell-recents-open:focus-visible {
+  outline: 2px solid var(--mobile-accent);
+  outline-offset: -3px;
+}
+.shell-recents-close {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--mobile-touch-target-min);
+  height: var(--mobile-touch-target-min);
+  border-radius: var(--shell-radius-control);
+  color: var(--mobile-text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.shell-recents-close:active {
+  background: var(--mobile-accent-muted);
+  color: var(--mobile-text-primary);
+}
+.shell-recents-close:focus-visible {
+  outline: 2px solid var(--mobile-accent);
+  outline-offset: -4px;
+}
+
+@keyframes shell-recents-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (min-width: 600px) {
+  .shell-recents-grid-inner {
+    max-width: 660px;
+  }
+  .shell-recents-card {
+    flex-basis: calc((100% - var(--recents-gap) - var(--recents-gap)) / 3);
+  }
 }
 
 /* ============================================================================
@@ -405,8 +538,8 @@ html:not(.dark) .shell-ui {
   .shell-sheet-leave-active,
   .shell-shade-enter-active,
   .shell-shade-leave-active,
-  .shell-deck-track,
-  .shell-deck-card,
+  .shell-recents-grid-inner,
+  .shell-recents-card,
   .shell-reveal,
   .notify-card--flee {
     transition-duration: 0.01ms;

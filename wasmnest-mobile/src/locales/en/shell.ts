@@ -87,17 +87,14 @@ export default {
     switcher: {
       title: 'Recents',
       back: 'Back',
+      /** Header count unit (same wording as desktop recents: "N apps") */
+      countUnit: 'apps',
       closeAll: 'Close all',
       closeCard: 'Close the card for {name}',
       dormant: 'Not running',
       /** Accessible name of the whole-card tap target (tap card = open/start) */
       enterApp: 'Open {name}',
       launchApp: 'Start {name}',
-      /** Deck navigation — keyboard/click alternative to dragging (WCAG 2.2) */
-      prev: 'Previous app',
-      next: 'Next app',
-      /** Card position for screen readers (the dots themselves are decorative) */
-      position: 'Card {index} of {total}',
       /** Empty-state primary action: recents is a dead end without a way out */
       goHome: 'Back to home',
       empty: 'Nothing to switch to',

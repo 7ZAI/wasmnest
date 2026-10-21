@@ -92,14 +92,12 @@ export const zhCNShell = {
     switcher: {
       title: '多任务',
       back: '返回',
+      countUnit: '个',
       closeAll: '全部关闭',
       closeCard: '关闭 {name} 的卡片',
       dormant: '未运行',
       enterApp: '进入 {name}',
       launchApp: '启动 {name}',
-      prev: '上一个应用',
-      next: '下一个应用',
-      position: '第 {index} 张，共 {total} 张',
       goHome: '回到主屏',
       empty: '没有可切换的应用',
       emptyHint: '回到主屏打开一个应用，它会出现在这里'

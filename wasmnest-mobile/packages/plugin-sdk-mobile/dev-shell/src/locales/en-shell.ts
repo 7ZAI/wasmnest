@@ -92,14 +92,12 @@ export const enShell = {
     switcher: {
       title: 'Recents',
       back: 'Back',
+      countUnit: 'apps',
       closeAll: 'Close all',
       closeCard: 'Close the card for {name}',
       dormant: 'Not running',
       enterApp: 'Open {name}',
       launchApp: 'Start {name}',
-      prev: 'Previous app',
-      next: 'Next app',
-      position: 'Card {index} of {total}',
       goHome: 'Back to home',
       empty: 'Nothing to switch to',
       emptyHint: 'Open an app from the home screen and it will show up here'

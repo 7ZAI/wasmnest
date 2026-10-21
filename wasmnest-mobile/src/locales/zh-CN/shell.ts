@@ -86,17 +86,14 @@ export default {
     switcher: {
       title: '多任务',
       back: '返回',
+      /** 页头计数单位（与桌面多任务同一口径：标题后跟「N 个」） */
+      countUnit: '个',
       closeAll: '全部关闭',
       closeCard: '关闭 {name} 的卡片',
       dormant: '未运行',
       /** 整卡可点的可访问名（点卡片 = 进入 / 启动，Android recents 同一交互） */
       enterApp: '进入 {name}',
       launchApp: '启动 {name}',
-      /** 卡片叠放导航（拖拽的键盘 / 单击替代路径，WCAG 2.2 Dragging Movements） */
-      prev: '上一个应用',
-      next: '下一个应用',
-      /** 卡片位置播报（圆点本身是纯视觉，读屏靠这句） */
-      position: '第 {index} 张，共 {total} 张',
       /** 空态主动作：多任务空了也要给一条出路，不能只剩页头返回键 */
       goHome: '回到主屏',
       empty: '没有可切换的应用',
