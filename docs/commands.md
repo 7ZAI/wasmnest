@@ -22,8 +22,10 @@
 | `pnpm run test:run` | 根脚本自测（`node --test "scripts/*.test.mjs"`：adaptive-run / build-profile） |
 | `pnpm run check:wit` | WIT 拼装漂移锁（== husky 判据；改了契约真源后必跑） |
 | `node scripts/compose-wit.mjs --all` | 双端重拼 WIT 生成物（bump / 改真源后） |
-| `pnpm run check:manifest` | `release-manifest.json` 一致性（判据见 docs/contracts.md §1） |
+| `pnpm run check:manifest` | `release-manifest.json` 一致性（判据见 docs/contracts.md §1；含 `hostRuntime` 段） |
 | `node scripts/check-release-manifest.mjs --print-hash` | 打印当前双端 WIT 指纹（更新 manifest 用） |
+| `node scripts/set-host-version.mjs <x.y.z>` | **发布时**同步宿主运行时版本三处（manifest `hostRuntime.version` / `tauri.conf.json` / `src-tauri/Cargo.toml`）；只写文件，不发布、不提交 |
+| `node scripts/update-host-runtime-artifacts.mjs --dir <资产目录>` | **发布后**把三平台真实 sha256 与 sourceCommit 写回 manifest（host-release workflow 用） |
 | `node scripts/bump-version.mjs --patch\|--minor\|--major\|-v X.Y.Z [--desktop\|--mobile\|--both] [--commit] [--tag]` | 双端版本号（各 3 处） |
 | `node scripts/package-sdks.mjs --list \| --target <desktop\|mobile\|all>` | 两端 SDK 构建 + 打包（npm tarball + crates + zip + SHA256 清单） |
 | `node scripts/app-script.mjs <slug> <desktop\|mobile> <script>` | 转发到应用仓单 app 脚本（见 §5.3） |
@@ -37,7 +39,7 @@
 | `pnpm install` | 本端依赖（独立 workspace，`packages/*`） |
 | `pnpm run tauri:dev` | 宿主 dev（`scripts/dev-run.js`：端口预检 → 插件 wasm / 前端缺失预建 → tauri dev → 前端 watch；**bedcode 前端不参与 watch**，改了它单独重建 §5.2）。宿主启动的 file watch 覆盖整个 `src-tauri/`——**别在宿主冷构建期间手工往 `src-tauri/` 拷产物**，会触发重启风暴（机制见 `scripts/dev-run.js` 头注释） |
 | `pnpm run tauri:build` | 生产构建（`scripts/tauri-build.js` 解析 updater 签名；无密钥时自动关闭更新包产物） |
-| `pnpm run host:pack` | 产出「可运行宿主产物」（`scripts/package-host.mjs`，供 wasm-app 工程 dev 使用，不需平台仓源码）——宿主构建产物分发面：产物目录可用环境变量 `WASMNEST_PLUGINS_DIR` 覆盖（未设置时行为与源码构建一致；发布链路不受影响）。例子：`node scripts/package-host.mjs --out dist/host-desktop` |
+| `pnpm run host:pack` | 产出「可运行宿主产物 + 分发资产」（`scripts/package-host.mjs`；产物契约 = 应用仓 `.scratch/2026-10-21-host-runtime-distribution/CONTRACT.md` §1）。默认写 `dist-host/host-desktop/`（**不在 `dist/` 下**，避免被 `vite build` 清空）并产出 `dist-host/host-desktop-<version>-<platform>-<arch>.tar.gz` + `.sha256`；`host-version.json` 的版本事实来自 `release-manifest.json` 的 `hostRuntime`。`--skip-build` 复用 `src-tauri/target/debug/<bin>` 重打资产；`--out` / `--asset-dir` 覆盖落点；`--via-cargo` 绕开 tauri CLI 版本一致性检查。应用侧以 env `WASMNEST_PLUGINS_DIR` 指定 plugins 目录 |
 | `pnpm run plugins:build` | 全量应用构建（`scripts/plugin-build.js --all`，注册表 = 5 个应用名单单一真源，见 §5.1） |
 | `pnpm run plugins:dev` | 单插件 dev 构建（`scripts/plugin-dev.js`，见 §5.2） |
 | `pnpm run test:run` | vitest（宿主 `src/__tests__` + **桌面 SDK 契约测试** `packages/plugin-sdk-desktop/__tests__`） |

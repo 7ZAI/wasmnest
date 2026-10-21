@@ -12,6 +12,9 @@
 **/dist/
 build/
 *.local
+# 宿主运行时产物（host:pack 的目录形态 + tar.gz / sha256）必须在 dist/ 之外：
+# vite build 会清空 dist，落在那里的产物会被下一次前端构建静默删除
+**/dist-host/
 
 # Documentation（顶层 docs/ 与两端 docs/ 全分支正常跟踪，含 uat/master，允许随发布分支推送远程；
 # 根 .gitignore 不忽略 /docs/，新文档文件可直接 git add）。
