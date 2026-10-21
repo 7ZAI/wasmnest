@@ -72,7 +72,7 @@ fn world_members(src: &str, world: &str, kind: &str) -> BTreeSet<String> {
 
 // ==================== ① core 机制纯净锁 ====================
 
-/// `core.wit` 的机制 interface 白名单（ADR 0052 D1）：8 import + 4 export
+/// `core.wit` 的机制 interface 白名单（ADR 0052 D1）：9 import + 4 export
 const CORE_IMPORTS: &[&str] = &[
     "host-storage",
     "host-plugin-database",
@@ -82,6 +82,9 @@ const CORE_IMPORTS: &[&str] = &[
     "host-bus",
     "host-fs",
     "host-platform",
+    // host-metrics：monitor 只读运行指标机制（90ba559 随 monitor 并 dev 时补录；
+    // 只返回数值计数与 plugin_id / 枚举键，无业务内容——机制白名单内）。
+    "host-metrics",
 ];
 /// export 白名单（`events-binary` 是可选导出，定义在文件内但不在 `world core`）
 const CORE_EXPORTS: &[&str] = &["command", "lifecycle", "manifest", "events-binary"];
@@ -102,11 +105,11 @@ fn core_wit_stays_mechanism_only() {
     let missing: Vec<&String> = expected.difference(&actual).collect();
     assert!(
         missing.is_empty(),
-        "core.wit 缺机制 interface {missing:?}（白名单是 8 import + 4 export，ADR 0052 D1）"
+        "core.wit 缺机制 interface {missing:?}（白名单是 9 import + 4 export，ADR 0052 D1）"
     );
 
     // ② world core 成员逐项钉死：
-    //    import = 8 机制域；export = 3 必选（events-binary 不在 world 内，可选导出）
+    //    import = 9 机制域；export = 3 必选（events-binary 不在 world 内，可选导出）
     let imports = world_members(&src, "core", "import");
     let expected_imports: BTreeSet<String> = CORE_IMPORTS.iter().map(|s| s.to_string()).collect();
     assert_eq!(imports, expected_imports, "world core 的 import 集漂移（机制白名单）");

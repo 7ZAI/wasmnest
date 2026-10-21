@@ -70,8 +70,9 @@ const SCANNED_CRATES: &[&str] = &[
     "wasmnest-ws-client-engine",
     // 仓库级插件组件化工具（file-transfer 单产物后双端共用同一编码路径，2026-10-13
     // 自移动 SDK rust/tools/ 提升）：core module → Component 编码（等价
-    // wasm-tools component new），零产品语义。三仓拆分后自 `packages/` 迁平台仓
-    // `tools/componentize`（目录名去掉 wasmnest- 前缀，落点见 `crate_dir`）。
+    // wasm-tools component new），零产品语义。随桌面 SDK 发布工具链（54fe8d3）
+    // 迁桌面 SDK 包 `packages/plugin-sdk-desktop/tools/componentize`（目录名去掉
+    // wasmnest- 前缀，落点见 `crate_dir`）。
     "wasmnest-componentize",
     // 通知域轻量契约房（2026-10-13 domain-owned-contracts 票 04）：只持 WIT 契约
     // （实现按端住宿主），零产品语义；抽根即入扫描面。
@@ -194,10 +195,11 @@ fn crate_dir(crate_name: &str) -> PathBuf {
             return candidate;
         }
     }
-    // 组件化工具已迁平台仓 `tools/componentize`（原能力仓 crate）
-    // `tools/componentize`（目录名去掉 wasmnest- 前缀）——登记名不变，落点单独解析。
+    // 组件化工具随桌面 SDK 发布（54fe8d3 迁 `packages/plugin-sdk-desktop/tools/componentize`，
+    // 原平台仓 `tools/componentize` 已移入 SDK 包）——登记名不变，落点单独解析。
     if crate_name == "wasmnest-componentize" {
-        let candidate = repo_root().join("tools/componentize");
+        let candidate = repo_root()
+            .join("wasmnest-desktop/packages/plugin-sdk-desktop/tools/componentize");
         if candidate.is_dir() {
             return candidate;
         }
@@ -208,7 +210,12 @@ fn crate_dir(crate_name: &str) -> PathBuf {
         governance_roots()
             .iter()
             .map(|p| p.display().to_string())
-            .chain(std::iter::once(repo_root().join("tools").display().to_string()))
+            .chain(std::iter::once(
+                repo_root()
+                    .join("wasmnest-desktop/packages/plugin-sdk-desktop/tools")
+                    .display()
+                    .to_string(),
+            ))
             .collect::<Vec<_>>()
             .join(" / ")
     )
