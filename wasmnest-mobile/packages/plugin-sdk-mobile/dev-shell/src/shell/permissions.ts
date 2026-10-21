@@ -51,6 +51,7 @@ const PERMISSION_I18N_KEY: Record<string, string> = {
   'ws:client': 'wsClient',
   auth: 'auth',
   notify: 'notify',
+  'metrics:read': 'metricsRead',
 }
 
 /** 能力域分组：与移动端权限词汇的能力域划分一致 */
@@ -69,6 +70,11 @@ export const SHELL_PERMISSION_GROUPS: ShellPermissionGroup[] = [
     id: 'device',
     titleKey: 'shell.permission.group.device',
     keys: ['peer', 'mdns', 'ws:client', 'auth', 'notify'],
+  },
+  {
+    id: 'system',
+    titleKey: 'shell.permission.group.system',
+    keys: ['metrics:read'],
   },
   {
     id: 'interface',
@@ -99,6 +105,12 @@ export const SHELL_LOCKED_PERMISSIONS: ReadonlySet<string> = new Set(['storage']
 export function permissionTitleKey(key: string): string | undefined {
   const suffix = PERMISSION_I18N_KEY[key]
   return suffix ? `shell.permission.perm.${suffix}.title` : undefined
+}
+
+/** 权限说明的 i18n key（未知权限返回 undefined） */
+export function permissionDescKey(key: string): string | undefined {
+  const suffix = PERMISSION_I18N_KEY[key]
+  return suffix ? `shell.permission.perm.${suffix}.desc` : undefined
 }
 
 /** 权限是否默认授予且不可关闭 */

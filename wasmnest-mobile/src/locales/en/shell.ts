@@ -221,6 +221,7 @@ export default {
         terminal: 'Terminal & sessions',
         data: 'Files & network',
         device: 'Device & link',
+        system: 'System & monitoring',
         interface: 'Interface & messaging',
         other: 'Other',
       },

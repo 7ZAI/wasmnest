@@ -23,6 +23,8 @@ pub mod fs;
 pub mod http;
 pub mod log;
 pub mod mdns;
+/// 运行监控（`host-metrics`）：只读指标快照
+pub mod metrics;
 pub mod notify;
 pub mod peer;
 pub mod platform;
@@ -40,6 +42,7 @@ pub use fs::HostFs;
 pub use http::HostHttp;
 pub use log::HostLog;
 pub use mdns::HostMdns;
+pub use metrics::HostMetrics;
 pub use notify::{HostNotify, HostNotifyMobile, NotifyOptions};
 pub use peer::HostPeer;
 pub use platform::HostPlatform;
@@ -170,6 +173,7 @@ pub trait HostApi:
     + HostPlatform
     + HostConfig
     + HostWs
+    + HostMetrics
 {
 }
 
@@ -191,5 +195,6 @@ impl<T> HostApi for T where
         + HostPlatform
         + HostConfig
         + HostWs
+        + HostMetrics
 {
 }

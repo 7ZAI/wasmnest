@@ -17,12 +17,12 @@
 use crate::host::{
     ConfigKey, CryptoKeypair, FsDirEntry, FsStat, HostApp, HostAuth, HostBus, HostConfig,
     HostConnection, HostCrypto, HostError, HostEvents, HostFs, HostHttp, HostLog, HostMdns,
-    HostNotify, HostPeer, HostPlatform, HostPluginDatabase, HostProcess, HostPty, HostStorage,
-    HostTask, HostWebsocket, NotifyOptions, ProcessSyncResult, PtyRingFetch,
+    HostMetrics, HostNotify, HostPeer, HostPlatform, HostPluginDatabase, HostProcess, HostPty,
+    HostStorage, HostTask, HostWebsocket, NotifyOptions, ProcessSyncResult, PtyRingFetch,
 };
 use crate::wasm::wasmnest::plugin::{
     host_app, host_auth_center, host_bus, host_config, host_connection_registry, host_crypto, host_events,
-    host_fs, host_fs_desktop, host_http, host_http_endpoint, host_log,
+    host_fs, host_fs_desktop, host_http, host_http_endpoint, host_log, host_metrics,
     host_mdns, host_notify, host_peer, host_platform, host_platform_desktop, host_plugin_database,
     host_process, host_pty, host_storage, host_task, host_timer, host_websocket,
     host_websocket_server,
@@ -425,6 +425,15 @@ impl HostLog for WasmHost {
 
     fn mark_plugin_error(&self, error: &str) {
         host_log::mark_plugin_error(error);
+    }
+}
+
+// ==================== HostMetrics（运行监控） ====================
+
+impl HostMetrics for WasmHost {
+    fn metrics_snapshot(&self) -> Result<serde_json::Value, HostError> {
+        let raw = host_metrics::snapshot().map_err(|e| host_err("metrics_snapshot", e))?;
+        parse_json("metrics_snapshot", raw)
     }
 }
 

@@ -224,6 +224,7 @@ export const zhCNShell = {
         terminal: '终端与会话',
         data: '文件与网络',
         device: '设备与链路',
+        system: '系统与监控',
         interface: '界面与消息',
         other: '其他'
       },
@@ -302,6 +303,10 @@ export const zhCNShell = {
         },
         uiBack: {
           title: '返回键接管'
+        },
+        metricsRead: {
+          title: '运行指标读取',
+          desc: '只读查看所有已加载插件的运行指标（计数与资源用量）；一次授权全局可见，可推断其他应用活跃度（侧信道）。'
         }
       }
     },

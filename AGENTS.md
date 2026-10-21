@@ -36,7 +36,7 @@
 
 平台仓 = 双端宿主 + 端内 SDK + 根工具；Rust **无根 workspace**。能力仓 `../wasmnest-lib` 是全部内部依赖 crate 的真源，平台经 Cargo path（`../../../wasmnest-lib/<crate>`）直接消费，版本由 `release-manifest.json` 的 `repos.lib.tag` 钉住；平台仓不复制、不镜像能力仓源码。应用源码住应用仓、产物落本仓 `resources/plugins/**`（不入库）。**双端一句话**：桌面 = 同窗口全屏挂载独立构建的应用包（机制 B）；移动 = 宿主壳运行面（`registerSurface` 等运行时注册），共享模块外置宿主全局与桌面不同。
 
-**应用清单**（真源 = 各端构建注册表 + `release-manifest.json`）：`agent-hub`（desktop）、`ai-chatbox`（双端）、`bedcode`（显示名 BedCode，双端）、`file-transfer`（双端单产物，移动经 `desktop-compat` 桩）。
+**应用清单**（真源 = 各端构建注册表 + `release-manifest.json`）：`agent-hub`（desktop）、`ai-chatbox`（双端）、`bedcode`（显示名 BedCode，双端）、`file-transfer`（双端单产物，移动经 `desktop-compat` 桩）、`monitor`（双端，只读运行指标）。
 
 ## 2. 强制红线：宿主薄壳（动宿主前必读）
 
