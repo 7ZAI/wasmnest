@@ -1,5 +1,9 @@
 /**
- * 插件前端 watch 构建（共享模块）
+ * 插件前端 watch 构建（SDK 共享模块）
+ *
+ * 随桌面 SDK 发布（`bin/plugin-watch.js`，经 `exports` 暴露）：应用仓各桌面工程的
+ * `scripts/build.js` 从包名导入，不再 import 平台仓源码。
+ * 平台宿主自己的 `scripts/dev-run.js` 反向引本文件（同仓相对路径）。
  *
  * 供各插件 scripts/build.js 调用：以 `vite build --watch` 长驻构建前端，
  * 每次重建完成后把产物复制到宿主资源目录（src-tauri/resources/plugins/desktop/<id>/）。
@@ -8,8 +12,8 @@
  *   改插件源码 → vite 重建 dist/index.js → 复制到产物目录
  *   → watcher 检测 .js 变化 → emit plugin:dev-reload → 前端 reloadPlugin 重新加载
  *
- * 用法：
- *   import { startPluginWatch } from '../../scripts/plugin-watch.js'
+ * 用法（应用侧）：
+ *   import { startPluginWatch } from '@binblink/wasmnest-plugin-sdk-desktop/bin/plugin-watch.js'
  *   startPluginWatch({ root: ROOT, resourcesDir: RESOURCES_DIR, extraFiles: [...] })
  *
  * 只 watch 前端：WASM 产物不参与（Rust 改动仍需一次性 `node scripts/build.js` 全量构建）。
@@ -20,7 +24,8 @@ import { basename, join, resolve } from 'node:path'
 // 票 16：与另两个装配点（应用仓 `apps/*/desktop/scripts/build.js`、`sdk/bin/cli.js`）共用同一份
 // 摘要注入实现——此前本文件漏了这一行 import，dev 期每次前端重建都在复制链最后一步
 // 抛 `ReferenceError: injectWasmHash is not defined`，把已注入的 wasmHash 又抹掉。
-import { injectWasmHash, sha256Hex, wasmFileName } from '../packages/plugin-sdk-desktop/bin/wasm-hash.js'
+// P1：本文件收进 SDK 后与 wasm-hash.js 同目录，按同目录导入（发布包内自包含）。
+import { injectWasmHash, sha256Hex, wasmFileName } from './wasm-hash.js'
 
 /** dist 写入事件防抖间隔（vite 重建会连续触发多次文件事件） */
 const COPY_DEBOUNCE_MS = 500

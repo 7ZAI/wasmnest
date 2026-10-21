@@ -41,7 +41,8 @@ import net from 'node:net'
 import { resolve, basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { appDir, hasAppDir } from '../../scripts/app-paths.mjs'
-import { syncArtifactManifest } from './plugin-watch.js'
+// plugin-watch 随桌面 SDK 发布（应用侧从包名导入）；宿主 dev 反向引 SDK 内同一份实现
+import { syncArtifactManifest } from '../packages/plugin-sdk-desktop/bin/plugin-watch.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -170,7 +171,7 @@ const PLUGIN_WATCH_CMDS = [
     id: 'com.wasmnest.file-transfer',
     args: ['scripts/build.js', '--watch'],
     // 单产物口径（2026-10-13）：file-transfer 与移动端共用一份 wasm，本端也走
-    // wasm32-unknown-unknown + componentize（平台仓级 `tools/componentize`），
+    // wasm32-unknown-unknown + componentize（桌面 SDK 的 `tools/componentize`，随 npm 包发布），
     // 产物落应用仓的 wasm 应用共享 target（`<appsRoot>/target/wasm-apps/…`）。
     // 注意本字段只被 `ensurePluginWasm` 取 `basename()` 定位 resources 下的目标产物
     // （陈旧判定比的是「resources 产物 vs Rust 源码 mtime」，不据此路径找源产物），
