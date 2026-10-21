@@ -685,6 +685,10 @@ export default {
         wsClient: { title: 'WebSocket Client', desc: 'Connect to remote WebSocket services as a client' },
         auth: { title: 'Authentication', desc: 'Take part in pairing and authentication flows' },
         notify: { title: 'Notifications', desc: 'Post local notifications' },
+        metricsRead: {
+          title: 'Runtime Metrics',
+          desc: 'Read-only metrics (counts and resource usage) for every loaded plugin; one grant covers all apps and can reveal activity patterns (side channel).',
+        },
         uiRoute: { title: 'Page Routing', desc: 'Register and open plugin-owned pages' },
         uiDialog: { title: 'Dialogs', desc: 'Use the host dialog and scrim' },
         uiBack: { title: 'Back Key', desc: 'Handle the Android system back key' },

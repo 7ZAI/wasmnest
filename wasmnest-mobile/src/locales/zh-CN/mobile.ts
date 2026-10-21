@@ -677,6 +677,7 @@ export default {
         wsClient: { title: 'WebSocket 客户端', desc: '作为客户端连接远端 WebSocket 服务' },
         auth: { title: '认证', desc: '参与配对与认证链路' },
         notify: { title: '通知', desc: '发送本地通知提醒' },
+        metricsRead: { title: '运行指标读取', desc: '只读查看所有已加载插件的运行指标（计数与资源用量）；一次授权全局可见，可推断其他应用活跃度（侧信道）。' },
         uiRoute: { title: '页面路由', desc: '注册并跳转插件自有页面' },
         uiDialog: { title: '弹窗', desc: '使用宿主统一弹窗与遮罩' },
         uiBack: { title: '返回键接管', desc: '接管 Android 系统返回键' },

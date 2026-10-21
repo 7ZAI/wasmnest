@@ -226,6 +226,7 @@ export const enShell = {
         terminal: 'Terminal & sessions',
         data: 'Files & network',
         device: 'Device & link',
+        system: 'System & monitoring',
         interface: 'Interface & messaging',
         other: 'Other'
       },
@@ -304,6 +305,10 @@ export const enShell = {
         },
         uiBack: {
           title: 'Back Key'
+        },
+        metricsRead: {
+          title: 'Runtime Metrics',
+          desc: 'Read-only metrics (counts and resource usage) for every loaded plugin; one grant covers all apps and can reveal activity patterns (side channel).'
         }
       }
     },

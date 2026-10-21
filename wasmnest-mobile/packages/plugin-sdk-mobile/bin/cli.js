@@ -776,21 +776,25 @@ function cmdPackage(flags) {
 
 /** 合法权限列表（与宿主 src/plugin/permission.ts 权限映射键同步） */
 const VALID_PERMISSIONS = new Set([
-  'terminal:input',
   'terminal:output',
   'session:read',
   'session:write',
-  'ui:toolbox',
-  'ui:navtab',
   'ui:settings',
-  'ui:input',
   'ui:route',
+  'ui:dialog',
+  'ui:back',
   'network:http',
   'storage',
   'fs:read',
   'fs:write',
   'bus',
+  'system:open',
   'peer',
+  'mdns',
+  'ws:client',
+  'auth',
+  'notify',
+  'metrics:read',
 ])
 
 const VALID_PLUGIN_TYPES = new Set(['wasm', 'ts-only', 'rust', 'rust-ts'])

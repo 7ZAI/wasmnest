@@ -1199,6 +1199,10 @@ impl PluginManager {
         // 移除 WASM 实例与插件记录
         self.wasm_plugins.write().await.remove(plugin_id);
         self.plugins.write().await.remove(plugin_id);
+        // 指标注册表与已加载插件集合求一致：卸载后旧计数不得以幽灵卡留在快照里
+        if let Some(runtime) = self.wasm_runtime.get() {
+            runtime.monitor().remove(plugin_id);
+        }
         // Egress：卸载清策略 + 记录 + URL 声明（重装即全新授权，ADR 0022 §8 生命周期）
         crate::egress::policy().purge_plugin(plugin_id);
 

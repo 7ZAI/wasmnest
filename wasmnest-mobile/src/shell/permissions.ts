@@ -23,7 +23,7 @@ export interface ShellPermissionGroup {
 /** 权限词 → 既有本地化文案 key 的后缀（前缀统一 mobile.plugin.perm.；
  *  terminal:input 已随票 15 阶段 B 整面退役，不在展示词表）
  *
- * 词表口径：覆盖 SDK 权限常量全集 + 内置应用清单已声明的权限（2026-10-14 对齐）。
+ * 词表口径：覆盖 SDK 权限常量全集 + 内置应用清单已声明的权限（2026-10-21 对齐）。
  * 缺一条的代价是「权限总览」页直接裸显英文 code（实测：auth / mdns / peer / ws:client 等
  * 与中文标签混排），因此新增权限词时必须同步补这里与双语 locale。 */
 const PERMISSION_I18N_KEY: Record<string, string> = {
@@ -52,6 +52,7 @@ const PERMISSION_I18N_KEY: Record<string, string> = {
   'ws:client': 'wsClient',
   auth: 'auth',
   notify: 'notify',
+  'metrics:read': 'metricsRead',
 }
 
 /** 能力域分组：与移动端权限词汇的能力域划分一致 */
@@ -70,6 +71,11 @@ export const SHELL_PERMISSION_GROUPS: ShellPermissionGroup[] = [
     id: 'device',
     titleKey: 'shell.permission.group.device',
     keys: ['peer', 'mdns', 'ws:client', 'auth', 'notify'],
+  },
+  {
+    id: 'system',
+    titleKey: 'shell.permission.group.system',
+    keys: ['metrics:read'],
   },
   {
     id: 'interface',

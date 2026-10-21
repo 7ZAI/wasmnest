@@ -23,6 +23,12 @@ describe('权限文案映射', () => {
     expect(permissionDescKey('fs:write')).toBe('mobile.plugin.perm.fsWrite.desc')
   })
 
+  it('should_mapMetricsRead_when_permissionAdded', () => {
+    // metrics:read 是全局只读指标位：标题 + 侧信道说明都必须可见，不能裸显英文 code
+    expect(permissionTitleKey('metrics:read')).toBe('mobile.plugin.perm.metricsRead.title')
+    expect(permissionDescKey('metrics:read')).toBe('mobile.plugin.perm.metricsRead.desc')
+  })
+
   it('should_notMapRetiredTerminalInput_when_permissionRetired', () => {
     // 票 15 阶段 B：terminal:input 权限位整面退役，文案映射一并移除
     expect(permissionTitleKey('terminal:input')).toBeUndefined()
@@ -79,7 +85,7 @@ describe('权限分组', () => {
   it('should_coverEveryDeclaredPermissionKey_when_groupDefinitionsComplete', () => {
     // 守卫：新增权限词若忘了归类，会静默掉进「其他」——这里把已归类集合显式钉住，
     // 便于评审时发现「新词未归类」而不是上线后才发现。
-    // 词表口径（2026-10-14）：SDK 权限常量全集 + 内置应用清单已声明的权限。
+    // 词表口径（2026-10-21）：SDK 权限常量全集 + 内置应用清单已声明的权限。
     const covered = new Set(SHELL_PERMISSION_GROUPS.flatMap((g) => g.keys))
     expect([...covered].sort()).toEqual(
       [
@@ -91,6 +97,7 @@ describe('权限分组', () => {
         'fs:read',
         'fs:write',
         'mdns',
+        'metrics:read',
         'network:http',
         'notify',
         'peer',

@@ -85,6 +85,8 @@ memories/tables 实时数量）。页面只拿内存 `current / quota.memory_byt
 - 移动：`wasmnest-mobile/src-tauri/src/plugin/manager.rs` 同形注入。
 - 未装配 → `UnimplementedMetricsSnapshot` 返回 `Err`（**不返回 `{}`**；否则监控页会把断链
   显示成「没有插件」）。
+- 卸载插件时同步 `MetricsRegistry::remove(plugin_id)`：快照必须与已加载插件集合一致，
+  否则旧计数会以「状态未知」幽灵卡残留到宿主重启。停机重载 / 重装**不**清（累计计数延续）。
 
 ## 3. 应用侧（`wasmnest-apps/apps/monitor`）
 
@@ -128,10 +130,15 @@ Rust 命令面：`monitor.snapshot` → `WasmHost::metrics_snapshot()` 原样返
 
 ### 3.4 测试覆盖
 
-- 桌面 43 项：纯函数（快照校验 / 合并 / 格式化 / 汇总）、轮询生命周期与在飞去重、
-  界面成功 / 错误 / 空态 / 重试 / 卸载清定时器、挂载契约、预览只读与晚到数据。
-- 移动 14 项：纯函数、轮询、界面成功 / 错误 / 空态 / 卸载、activate/deactivate 契约。
-- 平台：`hostAppBoundaryLock`（L3/L5 五 app）、router、useShellApps、桌面全量 635 项。
+- 桌面 48 项：纯函数（快照校验 / 合并 / 格式化 / 汇总）、轮询生命周期与在飞去重、
+  页面隐藏跳过刷新、界面成功 / 错误 / 空态 / 重试 / 卸载清定时器、实时徽章错误态、
+  挂载契约、预览只读 / 晚到数据 / 零插件空态。
+- 移动 16 项：纯函数、轮询（含页面隐藏跳过）、界面成功 / 错误 / 空态 / 卸载 / 实时徽章、
+  activate/deactivate 契约。
+- 内核：host-kit 指标 6 项（trap 分类 / 在飞 / 配额 / 激活耗时 / grow 拒绝 / 桶形状）、
+  wasm-core `monitor::` 17 项（含 shape 锁新字段与卸载清理）、宿主卸载清理接线回归 1 项。
+- 平台：`hostAppBoundaryLock`（L3/L5 五 app）、router、useShellApps、桌面全量 635 项；
+  移动 SDK `validate` 权限白名单回归 3 项（含与 Rust 真源的防漂移锁）。
 
 ## 4. 发布收口（待用户授权）
 
@@ -147,3 +154,8 @@ Rust 命令面：`monitor.snapshot` → `WasmHost::metrics_snapshot()` 原样返
   只读原语」的正规流程，不在应用里硬编码映射。
 - v1 无历史曲线 / 持久化 / 告警；阈值只做页内高亮。历史/导出属新设计分叉，需重新开一轮评审。
 - `quota` 是上限不是占用；不要把 instances / memories / tables 当实时数量展示。
+- **Q5 授权形态**：monitor 是随包应用（`PluginSource::Wasm`，非 `UserInstalled`），宿主审批门
+  对非用户安装来源直接跳过 ⇒ `metrics:read` 由 manifest 自动授予，**没有用户可见的「一次授权」
+  动作**。若产品要求随包应用也弹同意，需要新增授权形态（新设计分叉，另开评审）。
+- 「在飞」KPI 含 monitor 自身 `monitor.snapshot` 调用，因此稳定 ≥1；页面已加说明，不把它
+  当作「卡在长调用」的唯一信号。
