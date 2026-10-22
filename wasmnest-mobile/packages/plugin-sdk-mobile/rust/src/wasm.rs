@@ -88,6 +88,7 @@ mod tests {
                 rust_library: String::new(),
                 preauth_dirs: vec![],
                 preauth_urls: vec![],
+                ..Default::default()
             }
         }
 

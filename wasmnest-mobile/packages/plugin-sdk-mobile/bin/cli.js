@@ -809,6 +809,13 @@ const VALID_PERMISSIONS = new Set([
 ])
 
 const VALID_PLUGIN_TYPES = new Set(['wasm', 'ts-only', 'rust', 'rust-ts'])
+// 装配角色（manifest `type`，ADR 0032）：真源 = wasm-core `PluginKind`。
+// `system` / `application` 是历史拼写，宿主反序列化仍按别名接受，这里只告警。
+const VALID_PLUGIN_KINDS = new Set(['basic-service', 'internal-business', 'business-app'])
+const LEGACY_PLUGIN_KINDS = new Map([
+  ['system', 'basic-service'],
+  ['application', 'business-app'],
+])
 const WASM_HASH_RE = /^sha256-[0-9a-f]{64}$/i
 
 // 适配平台取值域（manifest `platform`，必填，与 id/name/version 同档）。
@@ -864,6 +871,18 @@ function cmdValidate(flags) {
       `pluginType 非法: "${manifest.pluginType}"（允许: ${[...VALID_PLUGIN_TYPES].join(' / ')}）`,
     )
   }
+  // type（装配角色）：非法取值构建期拒；历史拼写只告警（宿主仍按别名接受）
+  if (manifest.type !== undefined && manifest.type !== null && manifest.type !== '') {
+    if (!VALID_PLUGIN_KINDS.has(manifest.type) && !LEGACY_PLUGIN_KINDS.has(manifest.type)) {
+      errors.push(
+        `type 非法: "${manifest.type}"（允许: ${[...VALID_PLUGIN_KINDS].join(' / ')}）`,
+      )
+    } else if (LEGACY_PLUGIN_KINDS.has(manifest.type)) {
+      warnings.push(
+        `type="${manifest.type}" 是历史拼写，改写为 "${LEGACY_PLUGIN_KINDS.get(manifest.type)}"`,
+      )
+    }
+  }
   if (manifest.pluginType === 'wasm' && !manifest.rustLibrary) {
     errors.push('pluginType=wasm 时必须提供 rustLibrary（与 Cargo.toml 包名一致）')
   }
@@ -889,6 +908,38 @@ function cmdValidate(flags) {
   if (manifest.contributes && typeof manifest.contributes !== 'object') {
     errors.push('contributes 必须是对象')
   }
+
+  // contributes.monitorPanels（monitor 统一壳的自定义面板注册元数据）
+  // 只登记 id / title / order；面板实现住提供方应用工程（mountMonitorPanel），
+  // 因此这里不校验组件路径。非法条目会让面板「列得出来、挂不上」，构建期判死。
+  const monitorPanels = manifest.contributes?.monitorPanels
+  if (monitorPanels !== undefined && monitorPanels !== null) {
+    if (!Array.isArray(monitorPanels)) {
+      errors.push('contributes.monitorPanels 必须是数组')
+    } else {
+      const panelIds = new Set()
+      for (const entry of monitorPanels) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          errors.push(`contributes.monitorPanels 条目形态非法: ${JSON.stringify(entry)}`)
+          continue
+        }
+        if (typeof entry.id !== 'string' || entry.id.trim() === '') {
+          errors.push(`contributes.monitorPanels 条目缺非空 id: ${JSON.stringify(entry)}`)
+        } else if (panelIds.has(entry.id)) {
+          errors.push(`contributes.monitorPanels 重复 id: ${entry.id}`)
+        } else {
+          panelIds.add(entry.id)
+        }
+        if (typeof entry.title !== 'string' || entry.title.trim() === '') {
+          errors.push(`contributes.monitorPanels 条目缺非空 title: ${JSON.stringify(entry)}`)
+        }
+        if (entry.order !== undefined && !Number.isFinite(entry.order)) {
+          errors.push(`contributes.monitorPanels 条目 order 非法（须为数字）: ${JSON.stringify(entry)}`)
+        }
+      }
+    }
+  }
+
 
   for (const w of warnings) console.log(`  ⚠ ${w}`)
   for (const e of errors) console.error(`  ✗ ${e}`)

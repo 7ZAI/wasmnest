@@ -26,7 +26,41 @@ fn test_manifest_parse_with_defaults() {
     assert_eq!(m.rust_library, "");
     assert_eq!(m.preauth_dirs, Vec::<String>::new());
     assert_eq!(m.preauth_urls, Vec::<String>::new());
+    assert_eq!(m.kind, PluginKind::BusinessApp);
+    assert_eq!(m.api, Vec::<String>::new());
 }
+#[test]
+fn test_manifest_kind_parses_current_and_legacy_spellings() {
+    for (raw, expected) in [
+        ("internal-business", PluginKind::InternalBusiness),
+        ("basic-service", PluginKind::BasicService),
+        ("system", PluginKind::BasicService),
+        ("application", PluginKind::BusinessApp),
+        ("business-app", PluginKind::BusinessApp),
+    ] {
+        let json = serde_json::json!({
+            "id": "com.wasmnest.kind",
+            "name": "Kind",
+            "version": "1.0.0",
+            "platform": "mobile",
+            "type": raw
+        });
+        let m: PluginManifest = serde_json::from_value(json).unwrap();
+        assert_eq!(m.kind, expected, "type={raw}");
+    }
+
+    // 缺省 L3 不写入序列化输出（与 core 同 skip 语义）
+    let m: PluginManifest = serde_json::from_value(serde_json::json!({
+        "id": "com.wasmnest.kind-default",
+        "name": "Kind Default",
+        "version": "1.0.0",
+        "platform": "mobile"
+    }))
+    .unwrap();
+    let back = serde_json::to_value(&m).unwrap();
+    assert!(back.get("type").is_none(), "缺省 business-app 不落 type 键");
+}
+
 #[test]
 fn test_manifest_preauth_urls_parse() {
     // preauthUrls（Egress L2 声明，camelCase）解析 + 缺失默认空数组

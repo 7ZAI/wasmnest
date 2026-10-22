@@ -58,6 +58,8 @@ export interface PluginInfo {
   author: string
   main: string
   pluginType: import('@binblink/wasmnest-plugin-sdk-mobile').PluginType
+  /** 装配角色（manifest `type`；basic-service / internal-business / business-app） */
+  kind?: string
   permissions: string[]
   state: import('@binblink/wasmnest-plugin-sdk-mobile').PluginState
   contributes: import('@binblink/wasmnest-plugin-sdk-mobile').MobilePluginContributes

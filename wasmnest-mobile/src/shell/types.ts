@@ -113,6 +113,11 @@ export interface ShellApp {
   iconUrl?: string
   /** 官方应用标记（用于「官方」徽标） */
   official?: boolean
+  /**
+   * 装配角色（manifest `kind`）：`basic-service` / `internal-business` /
+   * `business-app`（缺省）。系统服务区的唯一判据；不在适配器里按 id 硬编码。
+   */
+  kind?: string
   state: ShellAppState
   permissions: ShellPermissionGrant[]
   /** 应用数据占用（字节）；数据源未统计时为 undefined，UI 显示「—」而非伪造 0 */

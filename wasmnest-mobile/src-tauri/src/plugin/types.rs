@@ -1,10 +1,14 @@
 //! Mobile Plugin Types (Host)
 //!
-//! 从 wasmnest-plugin-api-mobile re-export 共享类型
-//! 仅保留宿主运行时内部类型
+//! **manifest 词汇真源 = `wasmnest_wasm_core::manifest`**（与桌面宿主同源）。
+//! 移动 SDK 的 `wasmnest-plugin-api-mobile::types` 是 guest 面 wire 镜像，
+//! 编到 wasm32 时不能依赖 wasm-core；宿主侧不再消费它。
 
-pub use wasmnest_plugin_api_mobile::types::PluginManifest;
-pub use wasmnest_plugin_api_mobile::types::*;
+pub use wasmnest_wasm_core::manifest::{
+    CommandContribution, ConfigProperty, LifecycleContribution, NavTabContribution,
+    PluginConfiguration, PluginContributes, PluginKind, PluginManifest, PluginPlatform,
+    PluginState, PluginType, SettingsContribution, TerminalContribution, ViewContribution,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +28,7 @@ pub enum PluginSource {
 /// 已加载插件的内部表示
 pub struct LoadedPlugin {
     pub manifest: PluginManifest,
-    pub state: wasmnest_plugin_api_mobile::types::PluginState,
+    pub state: PluginState,
     /// 插件来源
     pub source: PluginSource,
     /// 插件目录路径（包含 plugin.json 的目录）
@@ -46,10 +50,13 @@ pub struct MobilePluginInfo {
     pub description: String,
     pub author: String,
     pub main: String,
-    pub plugin_type: wasmnest_plugin_api_mobile::types::PluginType,
+    pub plugin_type: PluginType,
+    /// 装配角色（L1 基础服务 / L2 内部业务 / L3 应用）；缺省 = L3。
+    /// 与桌面 `HostPluginInfo.kind` 同形，系统服务区 / 服务监控的唯一判据。
+    pub kind: PluginKind,
     pub permissions: Vec<String>,
-    pub state: wasmnest_plugin_api_mobile::types::PluginState,
-    pub contributes: wasmnest_plugin_api_mobile::types::PluginContributes,
+    pub state: PluginState,
+    pub contributes: PluginContributes,
     /// 插件来源
     pub source: String,
     /// 插件目录路径（含 plugin.json 的目录），前端经 asset protocol 加载前端模块
@@ -109,6 +116,7 @@ impl From<&LoadedPlugin> for MobilePluginInfo {
             author: p.manifest.author.clone(),
             main: p.manifest.main.clone(),
             plugin_type: p.manifest.plugin_type.clone(),
+            kind: p.manifest.kind,
             permissions: p.manifest.permissions.clone(),
             state: p.state.clone(),
             contributes: p.manifest.contributes.clone(),

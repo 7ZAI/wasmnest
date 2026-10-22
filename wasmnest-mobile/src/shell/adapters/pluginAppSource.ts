@@ -99,6 +99,7 @@ export function toShellApp(info: PluginInfo): ShellApp {
         ? toPluginAssetUrl(info.extensionPath, info.icon!.trim())
         : undefined,
     official: isOfficial(info),
+    kind: info.kind,
     state: mapState(info),
     permissions: mapPermissions(info),
     sizeBytes: typeof info.sizeBytes === 'number' ? info.sizeBytes : undefined,

@@ -89,6 +89,36 @@ impl Default for PluginState {
     }
 }
 
+/// 组件装配角色（manifest `type` 字段，ADR 0032）
+///
+/// 与 `wasmnest-wasm-core` 的 `PluginKind` 保持 serde 拼写一致；本枚举仅服务于
+/// guest 面的 manifest 构造，宿主侧以 wasm-core 类型为准。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum PluginKind {
+    /// **L3 业务应用**（缺省）
+    #[default]
+    #[serde(alias = "application")]
+    BusinessApp,
+    /// **L1 基础服务**（历史拼写 `system` 仍被接受）
+    #[serde(alias = "system")]
+    BasicService,
+    /// **L2 内部统一业务应用**
+    InternalBusiness,
+}
+
+impl PluginKind {
+    /// 是否角色驱动（L1 / L2）
+    pub fn is_role_driven(self) -> bool {
+        matches!(self, Self::BasicService | Self::InternalBusiness)
+    }
+
+    /// serde skip_serializing_if 钩子：缺省角色（L3）不写入序列化输出
+    pub fn is_business_app(&self) -> bool {
+        matches!(self, Self::BusinessApp)
+    }
+}
+
 /// 插件清单
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -112,6 +142,13 @@ pub struct PluginManifest {
     pub main: String,
     #[serde(default)]
     pub plugin_type: PluginType,
+    /// 装配角色（manifest `type`）：`basic-service` / `internal-business` /
+    /// `business-app`（缺省）。宿主不再消费本镜像，但插件作者可在代码里声明。
+    #[serde(rename = "type", default, skip_serializing_if = "PluginKind::is_business_app")]
+    pub kind: PluginKind,
+    /// 对外可互调 api 清单（全限定名；与核心 manifest 同形）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub api: Vec<String>,
     #[serde(default)]
     pub permissions: Vec<String>,
     #[serde(default)]
@@ -161,6 +198,19 @@ pub struct PluginContributes {
     pub configuration: Option<PluginConfiguration>,
     #[serde(default)]
     pub lifecycle: Option<LifecycleContribution>,
+    /// 自定义监控面板声明（monitor 统一壳消费）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub monitor_panels: Vec<MonitorPanelContribution>,
+}
+
+/// 自定义监控面板声明（只登记元数据；实现住提供方应用工程）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitorPanelContribution {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub order: i32,
 }
 
 /// 命令扩展点
