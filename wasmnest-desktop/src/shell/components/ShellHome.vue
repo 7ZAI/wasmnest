@@ -59,7 +59,7 @@
             <span class="nm truncate">{{ app.name }}</span>
           </div>
           <div v-if="!apps.length" class="note" style="grid-column: 1 / -1; padding: 14px 2px">
-            {{ t('shell.home.noApps', { q }) }}
+            {{ emptyAppsHint }}
           </div>
         </div>
       </section>
@@ -101,6 +101,8 @@
  * 归属（AGENTS §5.1）：注册表投影的纯呈现，无业务编排；打开动作委托 useShellState
  * （dormant 即点即启 / approval 进审批屏卡）。**打开过 / 后台运行的面不在这里**：
  * 用户裁决（2026-10-17）把「正在运行」区从主屏撤掉，改由工具栏多任务全屏层承载。
+ * 停用的应用也从这里缺席（启用 = 主屏入口可见性，2026-10-21 裁决；恢复入口
+ * 在应用管理页，语义真源 = 宿主 lifecycle.rs `ENABLED_KEY_PREFIX` 文档）。
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -119,9 +121,15 @@ const q = computed(() => state.homeQ.value)
 /** 搜索匹配：名称 / id（均小写包含） */
 const matchQ = (s: string) => s.toLowerCase().includes(q.value.toLowerCase())
 
+/**
+ * 主屏可见应用（启用 = 主屏入口可见性，用户裁决 2026-10-21）：
+ * 停用（`plugin.enabled.{id}` = false）的应用从应用网格与搜索结果统一隐藏
+ * （恢复入口在「应用管理」页）；运行中的实例不在此隐藏——它们由多任务层呈现。
+ */
 const filterApps = computed(() => {
-  if (!q.value) return appsStore.plugins.value
-  return appsStore.plugins.value.filter((a) => matchQ(a.name) || matchQ(a.id))
+  const visible = appsStore.plugins.value.filter((a) => a.enabled)
+  if (!q.value) return visible
+  return visible.filter((a) => matchQ(a.name) || matchQ(a.id))
 })
 
 const matchedSys = computed(() =>
@@ -129,6 +137,14 @@ const matchedSys = computed(() =>
 )
 
 const apps = filterApps
+
+/** 空网格文案：搜索无匹配 → noApps；无搜索但全被停用 → noneEnabled（入口在应用管理可恢复） */
+const emptyAppsHint = computed(() => {
+  if (q.value) return t('shell.home.noApps', { q: q.value })
+  return appsStore.plugins.value.length
+    ? t('shell.home.noneEnabled')
+    : t('shell.home.noApps', { q: '' })
+})
 
 /** chip 展示（展示态 → 文案 i18n + 样式类；单表真源 = state.ts `CHIP_META`） */
 function chipMeta(st: string): { text: string; cls: string } {
