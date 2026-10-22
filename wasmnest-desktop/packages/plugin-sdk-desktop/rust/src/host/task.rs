@@ -40,13 +40,13 @@
 //!    必须自行分片提交，批次级失败只波及该片。
 //! 5. **批量结果驻留插件线性内存（更紧的约束）**：`execute-batch` 一次性返回
 //!    整批全部单元结果，插件解码还会产生副本（raw + 解析树 + 结果数组 +
-//!    解码内容 ≈ 内容 × 3~4）。插件线性内存硬顶 256MB（`MAX_PLUGIN_MEMORY_BYTES`）
+//!    解码内容 ≈ 内容 × 3~4）。插件线性内存硬顶 128MB（`MAX_PLUGIN_MEMORY_BYTES`）
 //!    ——**批量大小按内容字节预算定，不只看单元数**：全量内容（如 430MB 日志）
 //!    一次驻留直接 `rust_oom` abort trap（2026-09-28 实机：agent-hub 扫描
 //!    200 单元/批 × ~660KB ≈ 500MB 峰值 → wasm trap）。分片粒度取内容上限 ~1MB
-//!    的 32 文件量级（单片峰值 ≈ 96MB），并逐片「读→处理→释放」。另：单元结果
-//!    超 `PLUGIN_TASK_UNIT_RESULT_MAX_BYTES`（1MB）会被截断成**非完整 JSON**
-//!    （`truncated` 标记），大文件须走无截断的串行 `fs.read` 全量重读。
+//!    的 16 文件量级（单片峰值 ≈ 48MB，占硬顶约 37%），并逐片「读→处理→释放」。
+//!    另：单元结果超 `PLUGIN_TASK_UNIT_RESULT_MAX_BYTES`（1MB）会被截断成
+//!    **非完整 JSON**（`truncated` 标记），大文件须走无截断的串行 `fs.read` 全量重读。
 
 use serde::Serialize;
 use super::HostError;

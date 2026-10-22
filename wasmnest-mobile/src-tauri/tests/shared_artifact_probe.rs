@@ -118,7 +118,10 @@ fn mobile_runtime(aot_cache_dir: Option<PathBuf>) -> WasmRuntime {
     // 无头形态**（`HostPeerPorts::new(None)`：无 AppHandle → `peer_ctx` 汇报
     // HEADLESS_UNAVAILABLE、权限门 fail-safe 拒绝），不是自造替身——探针要验的是生产
     // 接线路径，无头降级正是无头环境的真实形态。crate 侧 OnceLock 幂等（首装胜出）。
-    wasmnest_mobile_lib::plugin::peer_ports::install(None);
+    wasmnest_mobile_lib::plugin::peer_ports::install(
+        None,
+        std::sync::Arc::new(wasmnest_server_base::service::ServiceRegistry::new()),
+    );
 
     // 发现域端口同理：插件 `host-mdns.browse` 走**类型中枢**（ADR 0054），中枢的泵任务
     // 经 `DiscoveryPorts::spawn` 派生到宿主运行时，进程级出口取 `ports::ports()`

@@ -260,6 +260,78 @@ fn test_component_fuel_trap() {
     });
 }
 
+/// 燃料耗尽的后遗症：Store 被 wasmtime `set_trapped()` 污染 —— 同实例后续调用
+/// 持续报 `cannot enter component instance`，唯一恢复途径是整体重载
+/// （宿主 trap 自动重载机制的立论依据）。与桌面
+/// `engine_e2e::test_component_trap_poisons_store_and_reinstantiate_recovers`
+/// 同口径，覆盖移动同步形态；用 `set_fuel(1)` 制造瞬时耗尽，不烧满 64G 预算。
+#[test]
+fn test_component_fuel_trap_poisons_store_and_reinstantiate_recovers() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async move {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let host_ctx = build_host_ctx();
+        let runtime = mobile_runtime(Some(tmp.path().join("aot")));
+        let component =
+            Component::from_binary(wasmnest_wasm_core::test_support::runtime_engine(&runtime), &build_test_component(&[]))
+                .expect("compile test component");
+
+        // 1. 实例 A：注入 1 单位燃料后直接调导出（绕过 invoke_command 的调用前续费）
+        let mut plugin_a = runtime
+            .instantiate_component(
+                &component,
+                TEST_PLUGIN_ID,
+                ctx_with_grant(&host_ctx, TEST_PLUGIN_ID, HashSet::new()),
+                &[],
+                None,
+            )
+            .expect("instantiate component A");
+        {
+            let (store, instance) = plugin_raw_store(&mut plugin_a);
+            store.set_fuel(1).expect("set tiny fuel");
+            let binding = wasmnest_mobile_lib::plugin::bindings::Plugin::new(&mut *store, instance)
+                .expect("bind exports");
+            let result = wasmnest_wasm_core::runtime_util::block_on_async(async {
+                binding
+                    .wasmnest_plugin_command()
+                    .call_invoke(store, "ping", r#"{"a":1}"#)
+                    .await
+            });
+            let err = result.expect_err("fuel exhausted must trap");
+            assert!(
+                format!("{:#}", err).contains("all fuel consumed"),
+                "trap 原因必须是燃料耗尽（Debug 全链），实际: {:#}",
+                err
+            );
+        }
+
+        // 2. 同一实例再次调用：必须持续失败（Store 已中毒，不能自愈）
+        let err = plugin_a
+            .invoke_command("ping", r#"{"a":2}"#)
+            .expect_err("poisoned store must keep failing");
+        assert!(
+            err.to_string().contains("cannot enter component instance"),
+            "中毒 Store 应报 CannotEnterComponent，实际: {}",
+            err
+        );
+
+        // 3. 重新实例化（等价宿主 reload_wasm_plugin 的重建）→ 新实例正常可用
+        let mut plugin_b = runtime
+            .instantiate_component(
+                &component,
+                TEST_PLUGIN_ID,
+                ctx_with_grant(&host_ctx, TEST_PLUGIN_ID, HashSet::new()),
+                &[],
+                None,
+            )
+            .expect("re-instantiate after trap");
+        let echo = plugin_b
+            .invoke_command("ping", r#"{"hello":"recovered"}"#)
+            .expect("fresh instance must work");
+        assert!(echo.contains("recovered"), "got: {}", echo);
+    });
+}
+
 /// ResourceLimiter 生效：内存阈值单元断言 + 超限组件集成断言
 #[test]
 fn test_component_limiter_rejects_over_limit_memory() {
@@ -268,19 +340,17 @@ fn test_component_limiter_rejects_over_limit_memory() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let host_ctx = build_host_ctx();
 
-        // 单元层：阈值语义（256MB 内放行、超限拒绝）——资源上限由 host-kit
-        // state 的 ResourceLimiter 实现承载（统一 state，票 04）
+        // 单元层：阈值语义（硬顶内放行、超 1 字节拒绝）——资源上限由 host-kit
+        // state 的 ResourceLimiter 实现承载（统一 state，票 04）。阈值从统一
+        // 默认配置读取，不写死数字：硬顶调整（2026-10-22 256MB → 128MB）时
+        // 本用例仍锁「边界 = 配置值」语义
+        let max_memory = wasmnest_wasm_core::config::StoreLimits::default().max_memory_bytes;
         let mut state = wasmnest_wasm_core::test_support::build_component_state(TEST_PLUGIN_ID, &[]);
+        assert_eq!(state.memory_growing(0, max_memory, None).unwrap(), true);
         assert_eq!(
-            state.memory_growing(0, 256 * 1024 * 1024, None).unwrap(),
-            true
-        );
-        assert_eq!(
-            state
-                .memory_growing(0, 256 * 1024 * 1024 + 1, None)
-                .unwrap(),
+            state.memory_growing(0, max_memory + 1, None).unwrap(),
             false,
-            "超过 256MB 的内存增长必须被拒绝"
+            "超过硬顶的内存增长必须被拒绝"
         );
         assert_eq!(state.table_growing(0, 1_000_000, None).unwrap(), true);
         assert_eq!(state.table_growing(0, 1_000_001, None).unwrap(), false);
