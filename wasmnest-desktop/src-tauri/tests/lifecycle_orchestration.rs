@@ -8,8 +8,12 @@
 //!   （下次 boot 不复活）；关闭 = deactivate（persist=true）→ 停用 + 快照写停用
 //!   （机制层的 revoke_all / 总线退订 / store 回收由 wasm-core 自身测试覆盖，
 //!   本层只证「编排把 persist 语义接到原语上」）；
-//! - enabled / autostart 偏好：移动端同款 key 语义（只改偏好、持久化、缺省关）；
-//! - boot 装配补路：apply_autostart 按偏好补激活未运行应用、幂等、无偏好零副作用。
+//! - enabled / autostart 偏好：移动端同款 key 字面（只改偏好、系统分区持久化、
+//!   只落偏好不触发当前进程启停）；enabled 语义 = 桌面主屏入口可见性（缺省可见，
+//!   用户裁决 2026-10-21），与移动端「可用性标记缺省关」已裁决分叉；
+//! - boot 装配补路：apply_autostart 按偏好补激活未运行应用、幂等、无偏好零副作用；
+//!   系统服务（L1/L2）由 wasm-core 角色层先激活，用户显式关自启时在 boot 收口停用
+//!   （2026-10-22 spec D4）。
 //!
 //! 装配走 `support::setup_host`（`PluginHost::new` 真实路径 + 随包产物），
 //! 与 wasm_flow_e2e / broadcast_shutdown 同一基座。
@@ -148,15 +152,15 @@ async fn enabled_pref_roundtrip_and_persisted_in_system_partition() {
     let manager = setup_manager().await;
     let agent_hub = bundled_id(&manager, AGENT_HUB_ID_SUFFIX).await;
 
+    // 缺省 = 可见（主屏入口可见性缺省成立——停用是显式 false，缺省不隐藏任何应用）
     assert!(
-        !manager.is_enabled(&agent_hub).await,
-        "缺省 = 不可用标记不成立（fail-safe）"
+        manager.is_enabled(&agent_hub).await,
+        "无偏好行 = 主屏入口可见（启用语义：主屏入口可见性，2026-10-21 用户裁决）"
     );
 
     manager.set_enabled(&agent_hub, true).await.expect("set enabled");
-    assert!(manager.is_enabled(&agent_hub).await, "置 true 后生效");
-
-    // 持久化契约：偏好落在系统分区的 plugin.enabled.{id} 行（同一张 plugin_storage 表）
+    assert!(manager.is_enabled(&agent_hub).await, "置 true 后生效；偏好行可读且为 true");
+    // 持久化契约：用户显式 true 也落行（可见取向显式化，不依赖缺省推断）
     let storage = manager.host().storage();
     let value = storage
         .get(SYSTEM_PLUGIN_ID, &format!("{ENABLED_KEY_PREFIX}{agent_hub}"))
@@ -165,7 +169,10 @@ async fn enabled_pref_roundtrip_and_persisted_in_system_partition() {
     assert_eq!(value, Some(serde_json::json!(true)), "偏好行必须可读且为 true");
 
     manager.set_enabled(&agent_hub, false).await.expect("set disabled");
-    assert!(!manager.is_enabled(&agent_hub).await, "置 false 后回退");
+    assert!(
+        !manager.is_enabled(&agent_hub).await,
+        "置 false = 主屏 / 搜索隐藏入口（不停止已运行实例，由壳层过滤）"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -194,6 +201,37 @@ async fn autostart_pref_roundtrip_without_activating() {
 
     manager.set_autostart(&agent_hub, false).await.expect("set false");
     assert!(!manager.is_autostart(&agent_hub).await, "置 false 后回退");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn apply_autostart_stops_role_driven_service_when_disabled_by_preference() {
+    let manager = setup_manager().await;
+    let monitor_id = bundled_id(&manager, "monitor").await;
+
+    let info = manager.get_info(&monitor_id).await.expect("monitor 在随包清单");
+    assert!(
+        info.kind.is_role_driven(),
+        "随包 monitor 必须声明为系统服务（internal-business）"
+    );
+    // wasm-core boot 的角色驱动层（ADR 0032）先于业务应用激活服务
+    assert!(manager.is_running(&monitor_id).await, "角色驱动层应已激活服务");
+    assert!(
+        manager.is_autostart(&monitor_id).await,
+        "未写偏好 = 系统服务缺省自启开（D4）"
+    );
+
+    // 用户显式关闭自启 → boot 收口停用本会话实例（不写启动快照）
+    manager.set_autostart(&monitor_id, false).await.expect("set false");
+    assert_eq!(manager.apply_autostart().await, 0, "停用不计入激活数");
+    assert!(
+        !manager.is_running(&monitor_id).await,
+        "显式关闭自启后 boot 收口应停用系统服务"
+    );
+
+    // 幂等：再跑一次仍停用、不报错；偏好仍为显式 false
+    assert_eq!(manager.apply_autostart().await, 0);
+    assert!(!manager.is_running(&monitor_id).await);
+    assert!(!manager.is_autostart(&monitor_id).await);
 }
 
 #[tokio::test(flavor = "multi_thread")]

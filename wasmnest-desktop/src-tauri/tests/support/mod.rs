@@ -40,7 +40,7 @@ pub mod fixture_build;
 pub mod fixture_target;
 // 平台侧测试读应用仓的集中 resolver（路径解析见该文件头注）
 #[path = "app_paths.rs"]
-mod app_paths;
+pub mod app_paths;
 
 /// 读 SDK 绑定夹具产物（`<wasmnest-desktop>/target/fixtures/wasm32-wasip3/<profile>/`，
 /// 与 `fixture_build::sdk_fixture_artifact` 同路径规则）

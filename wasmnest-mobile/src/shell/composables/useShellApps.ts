@@ -352,6 +352,42 @@ function supportsRemove(appId: string): boolean {
   return typeof registry.getSourceOf(appId)?.remove === 'function'
 }
 
+/** 该应用是否支持自启偏好（取决于数据源能力） */
+function supportsAutostart(appId: string): boolean {
+  return typeof registry.getSourceOf(appId)?.setAutostart === 'function'
+}
+
+/** 查询自启偏好（未实现 / 查询失败按关处理，UI 不伪造开启） */
+async function isAutostart(appId: string): Promise<boolean> {
+  const source = registry.getSourceOf(appId)
+  if (!source?.isAutostart) return false
+  try {
+    return await source.isAutostart(appId)
+  } catch (e) {
+    logger.error(`[Shell] read autostart failed: appId=${appId}`, e)
+    return false
+  }
+}
+
+/** 设置自启偏好（只改偏好，不触发当前进程启停） */
+async function setAutostart(appId: string, autostart: boolean): Promise<boolean> {
+  const source = registry.getSourceOf(appId)
+  if (!source?.setAutostart) {
+    logger.warn(`[Shell] autostart unsupported: appId=${appId}`)
+    return false
+  }
+  try {
+    await source.setAutostart(appId, autostart)
+    lastError.value = null
+    return true
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    logger.error(`[Shell] set autostart failed: appId=${appId}`, e)
+    lastError.value = message
+    return false
+  }
+}
+
 /** 卸载应用并删除数据 */
 async function removeApp(appId: string): Promise<boolean> {
   const source = registry.getSourceOf(appId)
@@ -402,6 +438,9 @@ export interface ShellApps {
   installFromLocalPackage: typeof installFromLocalPackage
   supportsRemove: typeof supportsRemove
   removeApp: typeof removeApp
+  supportsAutostart: typeof supportsAutostart
+  isAutostart: typeof isAutostart
+  setAutostart: typeof setAutostart
 }
 
 /** 获取宿主壳应用视图模型（单例） */
@@ -428,5 +467,8 @@ export function useShellApps(): ShellApps {
     installFromLocalPackage,
     supportsRemove,
     removeApp,
+    supportsAutostart,
+    isAutostart,
+    setAutostart,
   }
 }

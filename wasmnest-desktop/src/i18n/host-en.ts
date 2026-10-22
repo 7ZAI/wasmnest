@@ -24,6 +24,7 @@ export default {
       appsTitle: 'Apps',
       installed: 'installed',
       noApps: 'No apps match "{q}"',
+      noneEnabled: 'No enabled apps (re-enable them in App management)',
       sysTitle: 'System',
       sysHint: 'Global management pages (open from Background apps)',
       matches: 'matches',
@@ -307,6 +308,8 @@ export default {
         'Failed to load the app interface. You can retry; if it keeps failing, check the logs',
       errorHint:
         'The app failed to start (no running instance). Start it again, or review Permissions & Authorization and retry',
+      systemServices: 'System services',
+      businessApps: 'Apps',
       enabled: 'Enabled',
       enabledHint: 'Enabled = app available (preference record, does not trigger start)',
       autostart: 'Autostart',

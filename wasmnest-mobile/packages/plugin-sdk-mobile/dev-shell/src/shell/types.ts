@@ -87,6 +87,8 @@ export interface ShellApp {
   iconUrl?: string
   /** 官方应用标记 */
   official?: boolean
+  /** 装配角色（manifest kind；系统服务分区判据） */
+  kind?: string
   state: ShellAppState
   permissions: ShellPermissionGrant[]
   /** 应用数据占用（字节）；未统计时 undefined，UI 显示「—」而非伪造 0 */
@@ -132,4 +134,7 @@ export interface ShellAppSource {
   installFromLocalPackage?(): Promise<string | null>
   /** 卸载应用并删除其数据；未实现时壳不渲染「卸载」入口 */
   remove?(appId: string): Promise<boolean>
+  /** 查询 / 设置「启动时自动激活」偏好（未实现时壳不渲染自启开关） */
+  isAutostart?(appId: string): Promise<boolean>
+  setAutostart?(appId: string, autostart: boolean): Promise<void>
 }

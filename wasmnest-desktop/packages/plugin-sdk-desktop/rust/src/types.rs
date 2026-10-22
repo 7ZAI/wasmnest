@@ -430,6 +430,24 @@ pub struct PluginContributes {
     /// 声明此插件感兴趣的消息 topic（宿主据此路由消息）
     #[serde(default)]
     pub subscribes: Vec<String>,
+    /// 自定义监控面板声明（monitor 统一壳消费）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub monitor_panels: Vec<MonitorPanelContribution>,
+}
+
+/// 自定义监控面板声明（只登记元数据；实现住提供方应用工程）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitorPanelContribution {
+    pub id: String,
+    pub title: String,
+    /// 排序权重（小者靠前；缺省 100，与 core / 前端同口径）
+    #[serde(default = "default_monitor_panel_order")]
+    pub order: i32,
+}
+
+fn default_monitor_panel_order() -> i32 {
+    100
 }
 
 /// 生命周期扩展点声明

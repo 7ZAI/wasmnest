@@ -33,6 +33,8 @@ const PLUGINS = {
     slug: 'file-transfer',
   },
   'com.wasmnest.monitor': {
+    // 系统服务（L2）：工程住应用仓 servers/ 分组
+    group: 'servers',
     slug: 'monitor',
   },
   // terminal-session（bedcode）：dev 期前端**不参与 watch**（整包构建最重且每次
@@ -83,7 +85,7 @@ if (process.env.WASMNEST_PLUGIN_DEBUG) {
 }
 
 // 委托给插件的构建脚本
-const pluginDir = appDir(config.slug, 'desktop')
+const pluginDir = appDir(config.slug, 'desktop', { group: config.group })
 console.log(`Running plugin dev build in: ${pluginDir}`)
 
 const proc = spawn(IS_WIN ? 'pnpm.cmd' : 'pnpm', ['run', 'dev'], {

@@ -28,6 +28,7 @@ import type {
   ShellSlotContribution,
   ShellCapsuleItem,
   ShellSettingsEntry,
+  MonitorPanelHandle,
 } from './types'
 import { hasPermissionForApi } from './permission'
 import * as pluginCmds from './commands'
@@ -77,8 +78,20 @@ function extractInvokeErrorMessage(e: unknown): string {
   return ''
 }
 
+/** 宿主注入的能力钩子（loader 装配；测试可省略） */
+export interface PluginContextHooks {
+  mountMonitorPanel?: (
+    container: HTMLElement,
+    appId: string,
+    panelId: string,
+  ) => Promise<MonitorPanelHandle>
+}
+
 /** 创建插件的 PluginContext */
-export function createPluginContext(info: PluginInfo): PluginContext {
+export function createPluginContext(
+  info: PluginInfo,
+  hooks: PluginContextHooks = {},
+): PluginContext {
   const disposables: Disposable[] = []
   const permissions = info.permissions
   let context: PluginContext | null = null
@@ -152,6 +165,16 @@ export function createPluginContext(info: PluginInfo): PluginContext {
   // （宿主壳只认 registerSurface 一种运行面形态）。退役清单的防回接锁见
   // src/__tests__/shell/retiredHostUIRetirementLocks.test.ts（R4）。
   const ui: UIRegistry = {
+    async mountMonitorPanel(
+      container: HTMLElement,
+      appId: string,
+      panelId: string,
+    ): Promise<MonitorPanelHandle> {
+      if (!hooks.mountMonitorPanel) {
+        throw new Error('host does not support monitor panels')
+      }
+      return await hooks.mountMonitorPanel(container, appId, panelId)
+    },
     registerSurface(surface: ShellSurfaceContribution): Disposable {
       // 宿主壳运行面：应用自持 UI 的挂载位，无特权动作——不做 requirePermission
       // 快速失败（真源仲裁仍在 Rust host 原语层；本面不触发任何宿主能力）。

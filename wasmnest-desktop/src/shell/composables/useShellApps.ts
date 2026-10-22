@@ -15,7 +15,9 @@
  *   store 随实例回收——wasm-core 机制，见宿主 lifecycle.rs 头注释）
  * - 审批 = approve（整单批准 + 内容哈希钉扎）
  * - 卸载 = uninstall（停用 → 丢私有库 → 删目录 → 清存储）
- * - 启用 / 自启 = set_enabled / set_autostart（只改持久化偏好，不触发当前进程启停）
+ * - 启用 = set_enabled（**主屏入口可见性**，2026-10-21 用户裁决：缺省可见，false =
+ *   主屏 / 搜索隐藏入口；不触发启停、不停止已运行实例——宿主 lifecycle.rs 头注释）
+ * - 自启 = set_autostart（只改持久化偏好，boot 装配生效，与启用解耦）
  */
 import { computed, ref } from 'vue'
 import { invoke } from '@/utils/invoke'
@@ -75,13 +77,17 @@ export interface ShellAppEntry {
   state: AppDisplayState
   /** 原始 PluginState 字符串（详情/排障用） */
   pluginState: string
+  /** 装配角色（manifest `type`）：L1/L2 = 系统服务，L3 = 业务应用；缺省视为 L3 */
+  kind?: string
   /** 错误详情（state=error 时非空） */
   error?: string
   /** 来源：builtin / scanned / wasm / user-installed */
   source: string
   sizeBytes?: number
   permissions: string[]
+  /** 主屏入口可见性偏好（缺省 true；false = 用户停用 → 主屏 / 搜索隐藏入口，真源 = 宿主 lifecycle.rs） */
   enabled: boolean
+  /** 启动时自动激活偏好（缺省 false；boot 装配真源，与启用解耦） */
   autostart: boolean
   /** 宿主挂载运行面的落地路由（有前端界面的应用在 SURFACE_ROUTES 登记；无界面应用缺省 = 无挂载面） */
   route?: string
@@ -90,7 +96,8 @@ export interface ShellAppEntry {
 /**
  * 宿主挂载运行面路由表（桌面 UI 宿主修正 2026-10-17）：应用前端由壳经挂载槽承载
  * 其独立构建的前端整包（机制 B，非贡献面）。每个有前端界面的挂载包都在此登记
- * （现状 5 个：terminal-session / agent-hub / ai-chatbox / file-transfer / monitor）；
+ * （现状 6 个：terminal-session / agent-hub / ai-chatbox / file-transfer / monitor /
+ * auth-center）；`auth-center` 住应用仓 `servers/` 分组（服务型 wasm）；
  * 无前端界面的应用无挂载路由。registerSurface 契约为多应用扩展预留（防回接锁保持）。
  *
  * 插件 id 家族随 ADR 0056 全改 `com.wasmnest`（bedcode 应用豁免仅显示名 / rust
@@ -156,6 +163,11 @@ export function pluginIdOfAppRoute(path: string): string | undefined {
   return undefined
 }
 
+/** 装配角色是否为系统服务（L1 基础服务 / L2 内部业务） */
+export function isServiceKind(kind?: string): boolean {
+  return kind === 'basic-service' || kind === 'internal-business'
+}
+
 /** PluginState 字符串 → 壳展示态（AppDisplayState 五档） */
 export function mapDisplayState(pluginState: string): AppDisplayState {
   switch (pluginState) {
@@ -199,6 +211,7 @@ function toEntry(info: HostPluginInfo, enabled: boolean, autostart: boolean): Sh
     tone: toneOf(info.id),
     state: mapDisplayState(info.state.state),
     pluginState: info.state.state,
+    kind: info.kind,
     error: info.state.error,
     source: info.source,
     sizeBytes: typeof info.sizeBytes === 'number' ? info.sizeBytes : undefined,
@@ -234,11 +247,12 @@ async function refresh(): Promise<void> {
   loading.value = true
   try {
     const infos = (await invoke('plugin_list_loaded')) as HostPluginInfo[]
-    // 偏好逐应用查询（命令面真通道；失败按缺省 false 容错，不影响清单投影）
+    // 偏好逐应用查询（命令面真通道；失败按各 key 的缺省取向容错——enabled 缺省
+    // 可见 / autostart 缺省关，与宿主 read_bool_pref 的 fallback 一致，不影响清单投影）
     const entries: ShellAppEntry[] = []
     for (const info of infos) {
       const pluginId = info.id
-      let enabled = false
+      let enabled = true
       let autostart = false
       try {
         enabled = (await invoke('plugin_is_enabled', { pluginId })) as boolean

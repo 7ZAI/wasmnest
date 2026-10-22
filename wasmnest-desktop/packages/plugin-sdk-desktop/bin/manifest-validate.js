@@ -209,6 +209,38 @@ export function validateManifest(dir) {
     errors.push('contributes 必须是对象')
   }
 
+
+  // contributes.monitorPanels（monitor 统一壳的自定义面板注册元数据）
+  // 只登记 id / title / order；面板实现住提供方应用工程（mountMonitorPanel），
+  // 因此这里不校验组件路径。非法条目会让面板「列得出来、挂不上」，构建期判死。
+  const monitorPanels = manifest.contributes?.monitorPanels
+  if (monitorPanels !== undefined && monitorPanels !== null) {
+    if (!Array.isArray(monitorPanels)) {
+      errors.push('contributes.monitorPanels 必须是数组')
+    } else {
+      const panelIds = new Set()
+      for (const entry of monitorPanels) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          errors.push(`contributes.monitorPanels 条目形态非法: ${JSON.stringify(entry)}`)
+          continue
+        }
+        if (typeof entry.id !== 'string' || entry.id.trim() === '') {
+          errors.push(`contributes.monitorPanels 条目缺非空 id: ${JSON.stringify(entry)}`)
+        } else if (panelIds.has(entry.id)) {
+          errors.push(`contributes.monitorPanels 重复 id: ${entry.id}`)
+        } else {
+          panelIds.add(entry.id)
+        }
+        if (typeof entry.title !== 'string' || entry.title.trim() === '') {
+          errors.push(`contributes.monitorPanels 条目缺非空 title: ${JSON.stringify(entry)}`)
+        }
+        if (entry.order !== undefined && !Number.isFinite(entry.order)) {
+          errors.push(`contributes.monitorPanels 条目 order 非法（须为数字）: ${JSON.stringify(entry)}`)
+        }
+      }
+    }
+  }
+
   // contributes.httpEndpoints（票 16 路径白名单、票 08 追加认证档位）
   // 宿主**只认声明**：未声明路径 404，未声明清单等于没有 HTTP 面。条目两形态并存——
   // 纯路径段（档位 = 宿主最严缺省 jwt）或 `{ path, auth }`。条目非法会让声明侧

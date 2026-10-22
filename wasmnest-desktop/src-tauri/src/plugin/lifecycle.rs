@@ -17,9 +17,13 @@
 //!   令牌/互调 API 注销 + store 随实例回收（机制已证，见 wasm-core
 //!   `deactivate_plugin_inner` 步骤 ①—统一清理段，D4 只补编排不重复实现）；
 //!   `persist=true` 同时把历史版本留下的「启动复活」快照写成停用；
-//! - **偏好** = `plugin.enabled.{id}`（可用性标记，不驱动启动）/ `plugin.autostart.{id}`
-//!   （boot 自启偏好，缺省即关；只改偏好不触发当前进程启停，与移动端
-//!   `plugin_set_autostart` 语义逐字一致）；
+//! - **偏好** = `plugin.enabled.{id}`（桌面语义 = **主屏入口可见性**，2026-10-21
+//!   用户裁决「启用赋予真实语义」，缺省无行 = 可见；`false` = 用户停用 → 主屏 /
+//!   搜索隐藏入口——不触发当前进程启停、不停止已运行实例，显式自启偏好独立生效。
+//!   同一 key 移动端仍是「可用性标记」且无行为消费，双端语义分叉已在
+//!   [`ENABLED_KEY_PREFIX`] 文档记录）/ `plugin.autostart.{id}`
+//!   （boot 自启偏好，缺省按角色：L1/L2 系统服务默认开、L3 应用默认关；只改偏好
+//!   不触发当前进程启停，与移动端 `plugin_set_autostart` 语义逐字一致）；
 //! - **审批** = `preauthorize`（预授权/高权限位提示）→ 未授权落 `NeedsApproval`
 //!   → `approve`（人工整单批准 + 目录内容哈希钉扎）→ 重新激活；
 //! - **卸载** = `uninstall`（仅未启用插件可卸；停用 → 丢私有库 → 删目录 → 清存储
@@ -49,8 +53,15 @@ use crate::Result;
 /// `pub(crate)`，本端只读同名常量并在测试里钉住逐字一致）。
 pub const SYSTEM_PLUGIN_ID: &str = "__system__";
 
-/// 启用偏好 key 前缀（移动端 `PLUGIN_ENABLED_KEY_PREFIX` 同款语义与字面：
-/// `plugin.enabled.{plugin_id}`，值为 JSON `true` / `false`）
+/// 启用偏好 key 前缀（移动端 `PLUGIN_ENABLED_KEY_PREFIX` 同款 key 字面与 JSON bool
+/// 值形态：`plugin.enabled.{plugin_id}`。
+///
+/// **双端语义分叉（已裁决，勿"修复"到单边）**：桌面把该行解读为**主屏入口可见性**
+/// ——缺省（无行 / 坏行 / 读取失败）= 可见，`false` = 用户显式停用；移动端仍按
+/// 「可用性标记」持有该行并保持缺省 false 的 fail-safe 读（该端 legacy 迁移
+/// `auto_approve_legacy` 与错误路径写 false 都依赖缺省为"未启用"，改缺省会把
+/// 全量插件自动补审批，故移动端不动）。跨端锁只钉命令名与 key 字面
+/// （`command_vocabulary_lock.rs`），不钉缺省值语义。
 pub const ENABLED_KEY_PREFIX: &str = "plugin.enabled.";
 
 /// 自启偏好 key 前缀（移动端 `PLUGIN_AUTOSTART_KEY_PREFIX` 同款语义与字面：
@@ -163,6 +174,15 @@ impl PluginLifecycleManager {
     /// 重装静默继承旧偏好（移动端 manager.rs 同款回收；偏好清理失败 warn 留痕，
     /// 不阻断卸载——插件本体已卸，残留行由重装覆盖 / 下次卸载再清）。
     pub async fn uninstall(&self, plugin_id: &str) -> Result<()> {
+        // 系统服务（L1/L2）随宿主分发，卸载入口只为用户安装的 L3 应用保留。
+        // 判据 = manifest kind（宿主硬门，UI 隐藏不是唯一防线）。
+        if let Some(info) = self.host.get_plugin(plugin_id).await {
+            if info.kind.is_role_driven() {
+                return Err(crate::AppError::Plugin(format!(
+                    "系统服务不可卸载: {plugin_id}（随宿主分发）"
+                )));
+            }
+        }
         self.host
             .uninstall_plugin(plugin_id)
             .await
@@ -173,19 +193,28 @@ impl PluginLifecycleManager {
 
     // ==================== 偏好（移动端同款 key 语义；只改偏好，不触发当前进程启停） ====================
 
-    /// 应用「已启用 / 可用」偏好（缺省 false；不是启动触发器）
+    /// 应用「主屏入口可见性」偏好（缺省 `true` = 显示；`false` = 用户停用）
+    ///
+    /// 桌面壳把 `false` 解读为「主屏 / 搜索隐藏入口」：不触发启停、不停止已运行
+    /// 实例，显式自启偏好独立生效。移动端维持「可用性标记」原义（分叉见模块头）。
     pub async fn is_enabled(&self, plugin_id: &str) -> bool {
-        read_bool_pref(&self.host.storage(), ENABLED_KEY_PREFIX, plugin_id).await
+        read_bool_pref(&self.host.storage(), ENABLED_KEY_PREFIX, plugin_id, true).await
     }
 
-    /// 设置应用「已启用 / 可用」偏好并持久化（不触发激活）
+    /// 设置应用「主屏入口可见性」偏好并持久化（不触发激活、不停止已运行实例）
     pub async fn set_enabled(&self, plugin_id: &str, enabled: bool) -> Result<()> {
         write_bool_pref(&self.host.storage(), ENABLED_KEY_PREFIX, plugin_id, enabled).await
     }
 
-    /// 应用「启动时自动激活」偏好（缺省 false = 不自动启动）
+    /// 应用「启动时自动激活」偏好
+    ///
+    /// 缺省值按装配角色：L1 基础服务 / L2 内部业务 = `true`（系统服务默认随宿主
+    /// 启动），L3 业务应用 = `false`。显式写入的 `false` 优先——用户关掉后不会
+    /// 因缺省值又被拉起；不写偏好行，避免卸载重装回到默认开。
     pub async fn is_autostart(&self, plugin_id: &str) -> bool {
-        read_bool_pref(&self.host.storage(), AUTOSTART_KEY_PREFIX, plugin_id).await
+        let kind = self.host.get_plugin(plugin_id).await.map(|info| info.kind);
+        let fallback = autostart_fallback(kind);
+        read_bool_pref(&self.host.storage(), AUTOSTART_KEY_PREFIX, plugin_id, fallback).await
     }
 
     /// 设置应用「启动时自动激活」偏好并持久化
@@ -198,15 +227,21 @@ impl PluginLifecycleManager {
 
     // ==================== boot 装配（唯一启动源 = autostart 偏好） ====================
 
-    /// boot 后按 `plugin.autostart.{id}` 偏好激活应用
+    /// boot 后按 `plugin.autostart.{id}` 偏好装配：启动标记自启的业务应用，停用
+    /// 用户显式关闭自启的系统服务。
     ///
-    /// 这是 L3 业务应用**唯一**的 boot 启动源：历史「上次运行快照」在
+    /// 业务应用（L3）：autostart=true 且当前未运行 → 激活（persist=false——偏好是
+    /// 启动真源，运行快照不再参与下次 boot）。历史「上次运行快照」在
     /// `PluginHost::new` 之前已由 [`clear_persisted_activation_snapshot`] 清空。
-    /// autostart=true 且当前未运行 → 激活（persist=false——偏好是启动真源，
-    /// 运行快照不再参与下次 boot）。
     ///
-    /// 角色驱动层（L1/L2）由 wasm-core boot 无条件激活，不消费偏好；此处幂等
-    /// （已运行即跳过）。返回本次实际激活数（供 boot 日志 / 测试断言）。
+    /// 系统服务（L1/L2）：wasm-core boot 按角色**无条件**激活（ADR 0032：层序保证
+    /// auth / gateway 先于业务就绪）。用户显式把自启关掉时，偏好行已存在 `false`
+    /// （`is_autostart` 对角色驱动缺省 true，走不到这里），本方法在 boot 收口处停用
+    /// 本会话实例，让桌面「自启」开关对服务同样生效（2026-10-22 用户裁决 D4）。
+    /// 不写启动快照（服务启停仍不持久化），下次 boot 仍按偏好重新判定。
+    ///
+    /// 幂等：服务已停止 / 应用已运行时零动作。返回本次实际激活数（供 boot 日志 /
+    /// 测试断言；停用不计入）。
     pub async fn apply_autostart(&self) -> usize {
         let infos = self.list_loaded().await;
         let mut activated = 0usize;
@@ -215,7 +250,25 @@ impl PluginLifecycleManager {
                 // 静态注册的系统组件（能力提供面）不消费用户偏好
                 continue;
             }
-            if !self.is_autostart(&info.id).await {
+            let autostart = self.is_autostart(&info.id).await;
+            if info.kind.is_role_driven() {
+                if autostart || !self.host.is_running(&info.id).await {
+                    continue;
+                }
+                match self.host.deactivate_plugin(&info.id, false).await {
+                    Ok(()) => tracing::info!(
+                        plugin_id = %info.id,
+                        "[PluginLifecycle] service autostart disabled by preference, stopped after boot"
+                    ),
+                    Err(e) => tracing::warn!(
+                        plugin_id = %info.id,
+                        error = %e,
+                        "[PluginLifecycle] service autostart-off deactivation failed"
+                    ),
+                }
+                continue;
+            }
+            if !autostart {
                 continue;
             }
             if self.host.is_running(&info.id).await {
@@ -242,22 +295,32 @@ impl PluginLifecycleManager {
 
 // ==================== 偏好读写（纯函数，可单测；存储真源 = 插件存储系统分区） ====================
 
-/// 读布尔偏好（缺省 / 损坏一律 false——fail-safe：自启 / 可用性默认不成立；
-/// 存储读失败同样按 false 落，但 warn 留痕——不静默吞错，两次启动间持续失败可见）
-async fn read_bool_pref(storage: &PluginStorage, prefix: &str, plugin_id: &str) -> bool {
+/// 自启缺省值：L1 基础服务 / L2 内部业务默认开，L3 应用 / 未知默认关。
+///
+/// 只决定「偏好行不存在时」的取向；显式写入的 `false` 仍由 `read_bool_pref` 优先。
+fn autostart_fallback(kind: Option<wasmnest_wasm_core::manifest::PluginKind>) -> bool {
+    kind.map(|k| k.is_role_driven()).unwrap_or(false)
+}
+
+/// 读布尔偏好（缺省 / 损坏 / 读取失败一律回落到 `fallback`——不静默吞错，warn 留痕
+/// 让两次启动间的持续失败可见；`fallback` 按各 key 的语义取向分别给定：
+/// enabled = `true`（主屏入口可见性缺省成立，坏行不静默藏掉入口），
+/// autostart = `false`（自启只能显式打开，坏行绝不静默启动应用））
+async fn read_bool_pref(storage: &PluginStorage, prefix: &str, plugin_id: &str, fallback: bool) -> bool {
     let key = format!("{prefix}{plugin_id}");
     match storage.get(SYSTEM_PLUGIN_ID, &key).await {
         Ok(Some(serde_json::Value::Bool(value))) => value,
-        // None（缺省）/ 非 Bool（历史字符串形态 / 手工写坏）→ fail-safe false
-        Ok(_) => false,
+        // None（缺省）/ 非 Bool（历史字符串形态 / 手工写坏）→ 按 fallback 取向
+        Ok(_) => fallback,
         Err(e) => {
             tracing::warn!(
                 plugin_id = %plugin_id,
                 key = %key,
+                fallback = %fallback,
                 error = %e,
-                "[PluginLifecycle] pref read failed, fall back to false (fail-safe)"
+                "[PluginLifecycle] pref read failed, fall back (fail-safe)"
             );
-            false
+            fallback
         }
     }
 }
@@ -293,13 +356,13 @@ async fn remove_prefs(storage: &PluginStorage, plugin_id: &str) {
 // 仅补移动端 `commands.rs` 已有而桌面 api_bridge 缺失的六臂；清单 / 启停 /
 // 审批 / 卸载等既有臂已由 api_bridge 注册（lib.rs 保留）。
 
-/// 查询插件启用状态（应用「已启用 / 可用」偏好，不是启动触发器）
+/// 查询插件启用状态（主屏入口可见性偏好：缺省 true = 显示；不是启动触发器）
 #[tauri::command]
 pub async fn plugin_is_enabled(plugin_id: String, manager: State<'_, Arc<PluginLifecycleManager>>) -> Result<bool> {
     Ok(manager.is_enabled(&plugin_id).await)
 }
 
-/// 设置插件启用状态并持久化（不触发激活）
+/// 设置插件启用状态并持久化（不触发激活、不停止已运行实例；桌面壳消费为主屏入口可见性）
 #[tauri::command]
 pub async fn plugin_set_enabled(
     plugin_id: String,
@@ -353,31 +416,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn enabled_pref_roundtrip_and_default_off() {
+    async fn enabled_pref_roundtrip_and_default_visible() {
         let storage = storage();
-        // 缺省 = false（fail-safe：可用性 / 自启默认不成立）
-        assert!(!read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.a").await);
+        // 缺省 = 可见（主屏入口可见性缺省成立——停用是显式 `false`，
+        // 缺省不隐藏任何应用，2026-10-21 用户裁决「启用赋予真实语义」）
+        assert!(read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.a", true).await);
 
         write_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.a", true)
             .await
             .expect("write true");
-        assert!(read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.a").await);
+        assert!(read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.a", true).await);
 
         write_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.a", false)
             .await
             .expect("write false");
-        assert!(!read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.a").await);
+        assert!(!read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.a", true).await);
+    }
+
+    #[test]
+    fn autostart_fallback_is_role_driven() {
+        use wasmnest_wasm_core::manifest::PluginKind;
+        assert!(autostart_fallback(Some(PluginKind::BasicService)));
+        assert!(autostart_fallback(Some(PluginKind::InternalBusiness)));
+        assert!(!autostart_fallback(Some(PluginKind::BusinessApp)));
+        assert!(!autostart_fallback(None), "未知插件不得缺省自启");
     }
 
     #[tokio::test]
     async fn autostart_pref_roundtrip_and_default_off() {
         let storage = storage();
-        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.b").await);
+        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.b", false).await);
 
         write_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.b", true)
             .await
             .expect("write true");
-        assert!(read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.b").await);
+        assert!(read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.b", false).await);
     }
 
     #[tokio::test]
@@ -405,7 +478,7 @@ mod tests {
             .expect("load after clear")
             .is_empty());
         assert!(
-            read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.legacy").await,
+            read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.legacy", false).await,
             "清理启动快照不得触碰 plugin.autostart 偏好"
         );
 
@@ -422,7 +495,7 @@ mod tests {
         write_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.c", true)
             .await
             .expect("enabled");
-        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.c").await);
+        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.c", false).await);
 
         // 插件间互不串扰
         write_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.c", true)
@@ -431,17 +504,18 @@ mod tests {
         write_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.d", false)
             .await
             .expect("autostart d");
-        assert!(read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.c").await);
-        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.d").await);
+        assert!(read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.c", false).await);
+        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.d", false).await);
         // id 前缀匹配不得放宽（plugin.autostart.com.wasmnest.test.c 不应命中 test.d）
-        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.d").await);
+        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.d", false).await);
     }
 
     #[tokio::test]
-    async fn corrupted_pref_value_falls_back_to_false() {
+    async fn corrupted_pref_value_falls_back_to_key_default() {
         let storage = storage();
-        // 非 Bool 值（历史字符串形态 / 手工写坏）一律按 false 读——fail-safe，
-        // 不因坏行把自启偏好误判成开启
+        // 非 Bool 值（历史字符串形态 / 手工写坏）一律按各 key 的 fallback 取向：
+        // 自启坏行不得误判成「自启」（false，防静默启动应用）；
+        // 启用坏行不得静默藏掉主屏入口（true，可见性缺省成立）——两者都 warn 留痕
         storage
             .set(
                 SYSTEM_PLUGIN_ID,
@@ -450,7 +524,20 @@ mod tests {
             )
             .await
             .expect("seed string value");
-        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.e").await);
+        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.e", false).await);
+
+        storage
+            .set(
+                SYSTEM_PLUGIN_ID,
+                &format!("{ENABLED_KEY_PREFIX}com.wasmnest.test.e"),
+                serde_json::json!("false"),
+            )
+            .await
+            .expect("seed corrupt enabled value");
+        assert!(
+            read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.e", true).await,
+            "启用偏好坏行按缺省可见解读（不在坏行时静默隐藏应用）"
+        );
     }
 
     #[tokio::test]
@@ -469,25 +556,33 @@ mod tests {
 
         remove_prefs(&storage, "com.wasmnest.test.x").await;
 
-        assert!(!read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.x").await);
-        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.x").await);
-        assert!(read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.y").await);
+        // 行已删 → 各自回到 key 缺省取向（可见 / 不自启）
+        assert!(
+            read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.x", true).await,
+            "卸载清行后启用回到缺省可见"
+        );
+        assert!(
+            !read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.x", false).await,
+            "卸载清行后自启回到缺省关"
+        );
+        assert!(read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.y", true).await);
     }
 
     #[tokio::test]
     async fn remove_prefs_is_idempotent_when_absent() {
         let storage = storage();
-        // 无偏好行的插件卸载：不得报错、不得误删任何行
+        // 无偏好行的插件卸载：不得报错、不得误删任何行（断言 = 各 key 缺省取向）
         remove_prefs(&storage, "com.wasmnest.test.z").await;
-        assert!(!read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.z").await);
-        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.z").await);
+        assert!(read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.z", true).await);
+        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.z", false).await);
     }
 
     #[tokio::test]
     async fn key_prefixes_match_mobile_contract_literally() {
         // 移动端 `system/constants/plugin.rs`：plugin.enabled. / plugin.autostart.
-        // 双端命令语义逐字一致（wasmnest-test/cross-end-tests 门禁），key 前缀字面必须钉死——
-        // 改前缀而不改移动端 = 双端偏好互相读不到
+        // 跨端锁（wasmnest-test/cross-end-tests 门禁）钉的是**命令名与 key 前缀字面**
+        // 一致；缺省值语义已裁决分叉（桌面 enabled 缺省 = 可见 / 移动端 = 未启用），
+        // 改前缀而不改移动端 = 双端偏好互相读不到，故字面钉死不变
         assert_eq!(ENABLED_KEY_PREFIX, "plugin.enabled.");
         assert_eq!(AUTOSTART_KEY_PREFIX, "plugin.autostart.");
         assert_eq!(SYSTEM_PLUGIN_ID, "__system__");

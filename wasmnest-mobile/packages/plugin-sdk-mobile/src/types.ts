@@ -79,6 +79,16 @@ export interface MobilePluginContributes {
   routes?: RouteContribution[]
   configuration?: PluginConfiguration
   lifecycle?: LifecycleContribution
+  /** 自定义监控面板声明（monitor 统一壳消费；实现住提供方应用工程） */
+  monitorPanels?: MonitorPanelContribution[]
+}
+
+/** 自定义监控面板声明（只登记元数据） */
+export interface MonitorPanelContribution {
+  id: string
+  title: string
+  /** 排序权重（小者靠前；缺省 100） */
+  order?: number
 }
 
 /** 命令扩展点 */
@@ -540,6 +550,30 @@ export interface PluginDialogHandle {
   update(options: Partial<PluginDialogOptions>): void
 }
 
+/** 监控面板环境（收窄只读面；面板实现住提供方应用工程） */
+export interface MonitorPanelEnv {
+  appId: string
+  panelId: string
+  /** 本应用插件面命令（与主界面同一权限；只在面板内只读取数） */
+  appInvoke: <T = any>(command: string, ...args: any[]) => Promise<T>
+  /** 本应用插件 KV 只读访问 */
+  appStorageGet: <T = any>(key: string) => Promise<T | undefined>
+  locale: string
+  theme: string
+  platform?: string
+}
+
+/** 监控面板句柄（monitor 切换页签 / 卸载时销毁） */
+export interface MonitorPanelHandle {
+  unmount(): Promise<void>
+}
+
+/** 提供方模块可选导出；未导出 = 没有该面板实现（不是错误） */
+export type MountMonitorPanel = (
+  root: HTMLElement,
+  env: MonitorPanelEnv,
+) => Promise<MonitorPanelHandle>
+
 /**
  * UI 注册表
  *
@@ -550,6 +584,15 @@ export interface PluginDialogHandle {
  * 宿主在调用点显式抛错（fail-visible），不做「查不到就静默忽略」。
  */
 export interface UIRegistry {
+  /**
+   * 装载其他应用注册的自定义监控面板（monitor 统一壳用；宿主中介）。
+   * 只 import 提供方前端模块并调用其 `mountMonitorPanel`，不激活其后端。
+   */
+  mountMonitorPanel(
+    container: HTMLElement,
+    appId: string,
+    panelId: string,
+  ): Promise<MonitorPanelHandle>
   /** 宿主壳运行面（/mobile/shell 的应用运行屏；appId = 插件 id 由宿主代填）。
    *  应用自持整个运行面——含底部导航与页签，壳不向其内加壳 chrome。 */
   registerSurface(surface: ShellSurfaceContribution): Disposable
@@ -676,6 +719,11 @@ export interface PluginContext {
 export interface PluginModule {
   activate(context: PluginContext): Promise<void>
   deactivate?: () => Promise<void>
+  /**
+   * 可选：自定义监控面板实现（由 monitor 统一壳经宿主中介装载）。
+   * 只在面板装载时调用，不要求 activate 先执行；面板自行处理后端未运行的情况。
+   */
+  mountMonitorPanel?: MountMonitorPanel
   /** dev-shell 领域数据（见 PluginDevMock）；真实宿主忽略 */
   devMock?: PluginDevMock
 }

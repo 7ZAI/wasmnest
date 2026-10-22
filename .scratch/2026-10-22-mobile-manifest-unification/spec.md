@@ -1,6 +1,6 @@
 # 移动端 manifest 统一到 wasm-core（前置 spec）
 
-> 状态：待实施。**阻塞** `.scratch/2026-10-22-monitor-system-service/spec.md` 与
+> 状态：**已实施（2026-10-22）**。解除对 `.scratch/2026-10-22-monitor-system-service/spec.md` 与
 > `wasmnest-apps/.scratch/2026-10-22-monitor-system-service/spec.md`。
 >
 > 关联：能力仓 `wasmnest-lib`（`wasmnest-wasm-core/src/manifest.rs`）、平台仓
@@ -112,3 +112,45 @@
   若要同批退役，另开票）。
 - 不新增 `/apps` 或 `/servers` 的运行时概念；`kind` 仍是 manifest 装配角色。
 - 不实现系统服务区 / monitor 迁移 / 面板注册（main spec）。
+
+
+---
+
+## 6. 实施记录（2026-10-22）
+
+- 移动宿主 `wasmnest-mobile/src-tauri/src/plugin/types.rs` 改为从
+  `wasmnest_wasm_core::manifest` re-export `PluginManifest` / `PluginKind` /
+  `PluginType` / `PluginState` / `PluginContributes` 等；`LoadedPlugin` 与
+  `MobilePluginInfo` 同步切换，`MobilePluginInfo.kind` 透出。
+- `loader.rs` / `downloader.rs` / `manager.rs` 的 manifest 解析与比较全部走 core
+  类型；测试夹具改用 `..Default::default()`。
+- 移动 SDK guest 镜像（`plugin-sdk-mobile/rust/src/types.rs`）补 `PluginKind` /
+  `kind` / `api`，serde 拼写与 core 对齐（缺省 L3 不落 `type` 键）；
+  `tests/pluginmanifest.rs` 覆盖当前拼写 / 历史别名 / 缺省。
+- 移动 CLI `validateManifest` 校验 `type`；历史拼写只告警。
+- 移动前端 `PluginInfo.kind` / `ShellApp.kind` / `pluginAppSource` 透传。
+- 自启缺省按角色：两端 `is_autostart` 未写偏好时 L1/L2 = true、L3 = false；
+  显式 `false` 优先；桌面 / 移动单测覆盖。
+- 漂移锁：
+  - `wasmnest-mobile/src-tauri/tests/mobile_manifest_kind_lock.rs`（core / SDK
+    kind 拼写、别名、缺省、`MobilePluginInfo.kind`、`monitorPanels` 解析）
+  - `wasmnest-desktop/src-tauri/src/plugin/lifecycle.rs::autostart_fallback_is_role_driven`
+  - `wasmnest-mobile/src-tauri/src/plugin/manager.rs::test_auto_start_defaults_on_for_role_driven_services`
+- `wasmnest-wasm-core/src/manifest.rs::LifecycleContribution` 补齐移动事件字段与
+  `is_declared`（中性超集此前漏了移动端 lifecycle 字段）。
+
+### 验证
+
+- `cargo check`（mobile / desktop 宿主）通过。
+- `cargo test --lib`（mobile 宿主）267 passed。
+- `cargo test --test mobile_manifest_kind_lock` 6 passed。
+- 移动 SDK `cargo test --features wasm` 全绿。
+- 移动前端 `pnpm run test:run` 748 passed；`vue-tsc --noEmit` 无错误。
+- 桌面 `pnpm run test:run` 664 passed（另有一条并发工作树
+  `server::crate_boundary_lock` 红，与本次改动无关）。
+
+### 残留
+
+- guest SDK 的 wire 镜像按 ADR 0018 保留（wasm32 不能依赖 wasm-core）；若要彻底
+  删除，需要独立零重依赖契约 crate 并随 SDK 发布（另开票）。
+- 未跑 Android 真机 / 全量移动构建；进入 main spec 的 E2E 前需补一次。

@@ -50,6 +50,10 @@ export type {
   MobileHttpResult,
   MobileHttpRequestOptions,
   MobileHostApi,
+  MonitorPanelContribution,
+  MonitorPanelEnv,
+  MonitorPanelHandle,
+  MountMonitorPanel,
 } from './types'
 
 export {

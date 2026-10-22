@@ -193,6 +193,16 @@ export interface PluginContributes {
   wsEndpoints?: WsEndpointContribution[]
   configuration?: PluginConfiguration
   lifecycle?: LifecycleContribution
+  /** 自定义监控面板声明（monitor 统一壳消费；实现住提供方应用工程） */
+  monitorPanels?: MonitorPanelContribution[]
+}
+
+/** 自定义监控面板声明（只登记元数据） */
+export interface MonitorPanelContribution {
+  id: string
+  title: string
+  /** 排序权重（小者靠前；缺省 100） */
+  order?: number
 }
 
 /** HTTP 端点认证档位（与 WS 端点注册面同一张词汇表，票 08） */

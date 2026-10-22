@@ -5,8 +5,15 @@
  * 插件代码编译进主 bundle，通过 import() 从 http://tauri.localhost/ 加载
  */
 
-import type { PluginInfo, PluginModule, PluginContext } from './types'
+import type {
+  PluginInfo,
+  PluginModule,
+  PluginContext,
+  MonitorPanelEnv,
+  MonitorPanelHandle,
+} from './types'
 import { nextTick } from 'vue'
+import i18n from '@/locales'
 import { logger } from '@/utils/frontendLogger'
 import * as pluginCmds from './commands'
 import { toPluginAssetUrl } from './assets'
@@ -218,6 +225,49 @@ class PluginLoaderClass {
     logger.log(`[PluginLoader] Plugin deactivated: ${pluginId}`)
   }
 
+  /**
+   * 装载提供方应用的自定义监控面板（monitor 统一壳用；宿主中介）。
+   *
+   * 只 import 提供方前端模块并调用其可选 `mountMonitorPanel` 导出；
+   * **不调用 activate**——面板是只读旁路，不因被监控而启动应用后端。
+   * 面板需要后端数据时自行显示「应用未运行」或由用户先启动应用。
+   */
+  async mountMonitorPanel(
+    container: HTMLElement,
+    appId: string,
+    panelId: string,
+  ): Promise<MonitorPanelHandle> {
+    const info = await pluginCmds.pluginGetInfo(appId)
+    if (!info) throw new Error(`monitor panel provider not found: ${appId}`)
+    const module = await loadPluginModuleScoped(appId, () =>
+      this.importWithTimeout(toPluginAssetUrl(info.extensionPath, info.main)),
+    )
+    if (typeof module.mountMonitorPanel !== 'function') {
+      throw new Error(
+        `plugin ${appId} 未导出 mountMonitorPanel（panel=${panelId}）——` +
+          `manifest contributes.monitorPanels 有声明但实现缺失`,
+      )
+    }
+    const env: MonitorPanelEnv = {
+      appId,
+      panelId,
+      appInvoke: (command, ...args) => pluginCmds.pluginInvoke(appId, command, args[0] ?? null),
+      appStorageGet: (key) => pluginCmds.pluginStorageGet(appId, key),
+      locale: i18n.global.locale.value,
+      theme:
+        typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+          ? 'dark'
+          : 'light',
+      platform: 'mobile',
+    }
+    const handle = await module.mountMonitorPanel(container, env)
+    if (!handle || typeof handle.unmount !== 'function') {
+      throw new Error(`plugin ${appId} mountMonitorPanel returned an invalid handle`)
+    }
+    logger.log(`[PluginLoader] monitor panel mounted: ${appId}/${panelId}`)
+    return handle
+  }
+
   /** 获取已激活插件 */
   getActivePlugin(pluginId: string): ActivePlugin | undefined {
     return this.plugins.get(pluginId)
@@ -236,7 +286,10 @@ class PluginLoaderClass {
         this.importWithTimeout(toPluginAssetUrl(manifest.extensionPath, manifest.main)),
       )
 
-      const context = createPluginContext(manifest)
+      const context = createPluginContext(manifest, {
+        mountMonitorPanel: (container, appId, panelId) =>
+          this.mountMonitorPanel(container, appId, panelId),
+      })
       // 关键：先注册 context 再激活 —— activate 内 registerSurface / registerSlot 等会立即
       // 更新壳注册表的响应式状态，宿主可能随之渲染插件组件，必须保证
       // PluginViewHost provide 能取到 context，否则插件组件 inject 得到 undefined 崩溃

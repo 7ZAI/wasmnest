@@ -52,9 +52,12 @@ import { useRouter } from 'vue-router'
 import {
   useAppMount,
   MOUNT_CONTRACT,
+  mountAppMonitorPanel,
   type AppMountEnv,
   type AppMountHandle,
+  type MonitorPanelEnv,
 } from '@/shell/mount/useAppMount'
+import { MONITOR_PLUGIN_ID } from '@/shell/composables/useShellApps'
 import { rememberAppRoute } from '@/shell/mount/appSession'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlatform } from '@/composables/usePlatform'
@@ -101,6 +104,36 @@ async function buildEnv(initialRoute: string, appId: string): Promise<AppMountEn
     theme: settingsStore.settings.ui.theme || 'dark',
     platform: platformInfo.value.isDesktop ? 'desktop' : 'mobile',
     initialRoute,
+    // 自定义监控面板装载：只对 monitor 注入；面板实现住提供方 app bundle。
+    // monitor 只拿容器 + 句柄，不直接 import 他人 bundle / 不拼 asset URL。
+    mountMonitorPanel:
+      appId === MONITOR_PLUGIN_ID
+        ? async (root, targetAppId, panelId) => {
+            // 面板用提供方自己的通道；提供方未运行 / 无令牌时**不阻断装载**：
+            // 面板元数据不依赖激活（未运行的应用也要能列出面板），面板自己渲染
+            // 「应用未运行」态；命令面失败由面板的 appInvoke 拒绝暴露，宿主不代猜。
+            // 只 warn 留痕，不像挂载主界面那样把宿主面凭证缺失升为装载失败。
+            try {
+              await refreshChannelToken(targetAppId)
+            } catch (e) {
+              logger.warn(
+                `[AppMount] panel provider channel token unavailable (${targetAppId}), ` +
+                  `mounting panel anyway: ${panelId}`,
+                e,
+              )
+            }
+            const panelEnv: MonitorPanelEnv = {
+              appId: targetAppId,
+              panelId,
+              appInvoke: (command, ...args) => appInvoke(targetAppId, command, ...args),
+              appStorageGet: (key) => appStorageGet(targetAppId, key),
+              locale: settingsStore.settings.ui.language || 'zh-CN',
+              theme: settingsStore.settings.ui.theme || 'dark',
+              platform: platformInfo.value.isDesktop ? 'desktop' : 'mobile',
+            }
+            return await mountAppMonitorPanel(root, panelEnv)
+          }
+        : undefined,
     onEvent: (type, payload) => {
       // 'navigate'：应用请求宿主导航（壳路由跳转 / 深链开面）
       if (type === 'navigate' && typeof payload === 'string') {

@@ -116,12 +116,14 @@ fn monitor_panels_contribution_parses_in_core_and_sdk_mirror() {
     let core = parse(json);
     assert_eq!(core.contributes.monitor_panels.len(), 2);
     assert_eq!(core.contributes.monitor_panels[0].id, "usage");
-    assert_eq!(core.contributes.monitor_panels[1].order, 0);
+    // 缺省排序权重 = 100（与双端 SDK 镜像 / monitor 壳 `order ?? 100` 同口径）
+    assert_eq!(core.contributes.monitor_panels[1].order, 100);
 
     let sdk: wasmnest_plugin_api_mobile::types::PluginManifest =
         serde_json::from_str(json).expect("SDK mirror parses monitorPanels");
     assert_eq!(sdk.contributes.monitor_panels.len(), 2);
     assert_eq!(sdk.contributes.monitor_panels[0].title, "Usage");
+    assert_eq!(sdk.contributes.monitor_panels[1].order, 100);
 }
 
 /// 前端消费面：`MobilePluginInfo` 必须带 `kind`（系统服务区分组 / 服务监控）。

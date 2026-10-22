@@ -125,7 +125,7 @@ describe('注册表投影（plugin_list_loaded 真通道）', () => {
     expect(apps.lastError.value).toBe('host.internal')
   })
 
-  it('偏好查询失败不影响清单投影（缺省 false 容错）', async () => {
+  it('偏好查询失败不影响清单投影（按各 key 缺省取向容错：enabled 可见 / autostart 关）', async () => {
     mockedInvoke
       .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })])
       .mockRejectedValueOnce(new Error('pref backend down'))
@@ -133,7 +133,7 @@ describe('注册表投影（plugin_list_loaded 真通道）', () => {
     const apps = useShellApps()
     await apps.load()
     expect(apps.plugins.value.length).toBe(1)
-    expect(apps.plugins.value[0].enabled).toBe(false)
+    expect(apps.plugins.value[0].enabled).toBe(true)
     expect(apps.plugins.value[0].autostart).toBe(false)
     expect(apps.lastError.value).toBeNull() // 清单成功，偏好失败不污染主错误
   })

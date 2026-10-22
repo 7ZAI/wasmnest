@@ -4,6 +4,11 @@
  * 只放纯函数（无状态、无副作用），方便单测与复用。
  */
 
+/** 装配角色是否为系统服务（manifest `kind`；L1 基础服务 / L2 内部业务） */
+export function isServiceKind(kind: string | undefined): boolean {
+  return kind === 'basic-service' || kind === 'internal-business'
+}
+
 /** 字节数格式化（1024 进制，保留 1 位小数；<1KB 直接给 B） */
 export function formatBytes(bytes: number | undefined): string {
   if (bytes === undefined || bytes === null || Number.isNaN(bytes)) return '—'

@@ -753,9 +753,10 @@ pub fn run() {
             app.manage(plugin::assets::AppAssetsDir(plugins_dir.clone()));
             // 宿主侧插件生命周期编排层（2026-10-17 lifecycle-sync）：壳动作经它驱动
             // 真实启停/审批/卸载 + enabled/autostart 偏好持久化；boot 装配在其后跑
-            // `apply_autostart`（按 `plugin.autostart.{id}` 偏好激活）。历史
-            // 「上次运行快照」已在上方创建 `PluginHost` 之前清空，故这里是 L3
-            // 业务应用唯一的 boot 启动源（用户 2026-10-20 裁决）。
+            // `apply_autostart`（业务应用按 `plugin.autostart.{id}` 补激活；系统服务
+            // 被用户显式关闭自启时停用本会话实例）。历史「上次运行快照」已在上方创建
+            // `PluginHost` 之前清空，故这里是 L3 业务应用唯一的 boot 启动源（用户
+            // 2026-10-20 裁决）。
             let lifecycle = Arc::new(plugin::lifecycle::PluginLifecycleManager::new(plugin_host.clone()));
             app.manage(lifecycle.clone());
             tauri::async_runtime::block_on(lifecycle.apply_autostart());

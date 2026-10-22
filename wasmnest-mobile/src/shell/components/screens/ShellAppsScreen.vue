@@ -50,49 +50,55 @@
         </div>
       </div>
 
-      <!-- ==================== 已安装列表 ==================== -->
-      <ShellSection :title="t('shell.apps.installedTitle')" />
-      <div class="px-4 pb-1">
-        <ShellGroupCard v-if="sortedApps.length > 0">
-          <button
-            v-for="app in sortedApps"
-            :key="app.id"
-            type="button"
-            class="flex items-center gap-3 w-full px-3 py-3 text-left transition-colors duration-200 active:bg-[var(--mobile-group-row-active)] min-h-[var(--mobile-touch-target-min)]"
-            @click="nav.openDetail(app.id)"
-          >
-            <ShellAppIcon :app="app" :size="40" />
-            <span class="flex-1 min-w-0">
-              <span class="flex items-center gap-1.5">
-                <b class="shell-type-label text-[var(--mobile-text-primary)] truncate">{{ app.name }}</b>
-                <ShellChip v-if="app.official" :label="t('shell.detail.official')" tone="accent" />
-                <ShellChip
-                  v-if="app.state === 'running'"
-                  :label="t('shell.common.running')"
-                  tone="success"
-                />
-                <ShellChip
-                  v-else-if="app.state === 'disabled'"
-                  :label="t('shell.common.disabled')"
-                  tone="neutral"
-                />
-                <ShellChip
-                  v-else-if="app.state === 'error'"
-                  :label="t('shell.common.error')"
-                  tone="danger"
-                />
+      <!-- ==================== 已安装列表（系统服务区按 manifest kind 分组） ==================== -->
+      <template v-for="group in appGroups" :key="group.id">
+        <ShellSection
+          :title="group.title"
+          :data-testid="`mobile-shell-apps-group-${group.id}`"
+        />
+        <div class="px-4 pb-1">
+          <ShellGroupCard>
+            <button
+              v-for="app in group.apps"
+              :key="app.id"
+              type="button"
+              class="flex items-center gap-3 w-full px-3 py-3 text-left transition-colors duration-200 active:bg-[var(--mobile-group-row-active)] min-h-[var(--mobile-touch-target-min)]"
+              @click="nav.openDetail(app.id)"
+            >
+              <ShellAppIcon :app="app" :size="40" />
+              <span class="flex-1 min-w-0">
+                <span class="flex items-center gap-1.5">
+                  <b class="shell-type-label text-[var(--mobile-text-primary)] truncate">{{ app.name }}</b>
+                  <ShellChip v-if="app.official" :label="t('shell.detail.official')" tone="accent" />
+                  <ShellChip
+                    v-if="app.state === 'running'"
+                    :label="t('shell.common.running')"
+                    tone="success"
+                  />
+                  <ShellChip
+                    v-else-if="app.state === 'disabled'"
+                    :label="t('shell.common.disabled')"
+                    tone="neutral"
+                  />
+                  <ShellChip
+                    v-else-if="app.state === 'error'"
+                    :label="t('shell.common.error')"
+                    tone="danger"
+                  />
+                </span>
+                <span class="block shell-type-caption text-[var(--mobile-text-secondary)] truncate">
+                  {{ appMeta(app) }}
+                </span>
               </span>
-              <span class="block shell-type-caption text-[var(--mobile-text-secondary)] truncate">
-                {{ appMeta(app) }}
-              </span>
-            </span>
-            <svg class="flex-shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :style="{ color: 'var(--mobile-text-secondary)' }">
-              <path d="M9 6l6 6-6 6" />
-            </svg>
-          </button>
-        </ShellGroupCard>
+              <svg class="flex-shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :style="{ color: 'var(--mobile-text-secondary)' }">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+          </ShellGroupCard>
+        </div>
+      </template>
+      <div v-if="appGroups.length === 0" class="px-4 pb-1">
         <p
-          v-else
           class="rounded-[12px] border border-dashed border-[var(--mobile-border-hover)] px-3 py-5 text-center shell-type-caption text-[var(--mobile-text-secondary)]"
         >
           {{ t('shell.apps.empty') }}
@@ -140,7 +146,7 @@ import { useToast } from '../../composables/useToast'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
 import type { ShellApp } from '../../types'
-import { formatBytes } from '../../utils'
+import { formatBytes, isServiceKind } from '../../utils'
 import ShellAppIcon from '../ShellAppIcon.vue'
 import ShellChip from '../ShellChip.vue'
 import ShellGroupCard from '../ShellGroupCard.vue'
@@ -150,6 +156,24 @@ const { t } = useI18n()
 const toast = useToast()
 const nav = useShellNavigation()
 const { sortedApps, stats, supportsInstall, installFromLocalPackage, refresh } = useShellApps()
+
+/**
+ * 系统服务 / 业务应用分组（唯一判据 = manifest kind；不在 UI 里硬编码 id）。
+ * 服务按 L1 → L2 → 名称；应用保持现有运行中优先 + 名称排序。
+ */
+const appGroups = computed(() => {
+  const services = sortedApps.value
+    .filter((app) => isServiceKind(app.kind))
+    .sort((a, b) => {
+      const rank = (kind?: string) => (kind === 'basic-service' ? 0 : 1)
+      return rank(a.kind) - rank(b.kind) || a.name.localeCompare(b.name, 'zh-Hans-CN')
+    })
+  const apps = sortedApps.value.filter((app) => !isServiceKind(app.kind))
+  return [
+    { id: 'services', title: t('shell.apps.systemServices'), apps: services },
+    { id: 'apps', title: t('shell.apps.businessApps'), apps },
+  ].filter((group) => group.apps.length > 0)
+})
 
 const installing = ref(false)
 

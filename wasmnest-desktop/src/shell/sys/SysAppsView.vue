@@ -1,34 +1,52 @@
 <template>
   <div class="flex flex-col gap-2.5">
-    <!-- 已安装应用清单（注册表投影：真实运行态 / 来源 / 启用 / 自启；动作走真实命令面） -->
-    <ShellCard
-      v-for="app in appsStore.plugins.value"
-      :key="app.id"
-      :title="app.name"
-      :icon="app.icon"
-    >
+    <!-- 已安装应用清单（注册表投影：真实运行态 / 来源 / 启用 / 自启；动作走真实命令面）。
+         系统服务区按 manifest kind 分组：L1/L2 在前、L3 业务应用在后；没有服务时不渲染空标题。 -->
+    <template v-for="group in appGroups" :key="group.id">
+      <div
+        v-if="group.title"
+        class="group-title"
+        :data-testid="`sys-apps-group-${group.id}`"
+      >
+        {{ group.title }}
+      </div>
+      <ShellCard
+        v-for="app in group.apps"
+        :key="app.id"
+        :title="app.name"
+        :icon="app.icon"
+      >
       <div class="sub-line">
         <span class="shell-chip" :class="chipMeta(app.state).cls">{{ chipMeta(app.state).text }}</span>
         <span class="sub-note mono">{{ app.pluginId }}</span>
         <span class="sub-note">{{ sourceText(app.source) }} · v{{ app.version }}</span>
         <span class="grow"></span>
-        <!-- 启用 / 自启偏好（只改持久化偏好，不触发当前进程启停） -->
+        <!-- 启用 = 主屏入口可见性（缺省可见；关闭后主屏 / 搜索隐藏入口）；自启 = boot
+             自动激活偏好。两者都只写持久化偏好，不触发当前进程启停（方角开关，视觉同设置页） -->
         <label class="toggle" :title="t('shell.apps.enabledHint')">
-          <input
-            type="checkbox"
-            :checked="app.enabled"
+          <button
+            class="switch"
+            type="button"
+            role="switch"
+            :aria-checked="app.enabled"
             :disabled="busy(app.id)"
-            @change="onEnabled(app, ($event.target as HTMLInputElement).checked)"
-          />
+            @click="onEnabled(app, !app.enabled)"
+          >
+            <span class="switch-thumb" />
+          </button>
           <span>{{ t('shell.apps.enabled') }}</span>
         </label>
         <label class="toggle" :title="t('shell.apps.autostartHint')">
-          <input
-            type="checkbox"
-            :checked="app.autostart"
+          <button
+            class="switch"
+            type="button"
+            role="switch"
+            :aria-checked="app.autostart"
             :disabled="busy(app.id)"
-            @change="onAutostart(app, ($event.target as HTMLInputElement).checked)"
-          />
+            @click="onAutostart(app, !app.autostart)"
+          >
+            <span class="switch-thumb" />
+          </button>
           <span>{{ t('shell.apps.autostart') }}</span>
         </label>
       </div>
@@ -70,7 +88,7 @@
           </button>
         </template>
         <button
-          v-if="app.source === 'user-installed'"
+          v-if="app.source === 'user-installed' && !isServiceKind(app.kind)"
           class="shell-btn danger ghost"
           :disabled="busy(app.id) || app.state === 'running' || app.state === 'degraded'"
           :title="t('shell.apps.uninstallDisabled')"
@@ -79,8 +97,8 @@
           <ShellIcon name="trash" :size="13" /> {{ t('shell.apps.uninstall') }}
         </button>
       </div>
-      <p v-if="app.route" class="note">{{ t('shell.apps.surfaceHint', { route: app.route }) }}</p>
-    </ShellCard>
+      </ShellCard>
+    </template>
 
     <!-- 权限入口（与「权限与授权」系统页同构跳转；策略/记录呈现单一口径） -->
     <ShellCard :title="t('shell.apps.permCardTitle')" icon="shield">
@@ -103,16 +121,35 @@
  * 收口），启停 / 审批 / 卸载 / 启用 / 自启开关全部走真实命令面（D2）。
  * 卸载带数据清理确认（ShellDialogLayer uninstall 分支）。
  */
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { chipMetaOf, isHighRisk } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
-import { useShellApps, type ShellAppEntry } from '../composables/useShellApps'
+import { isServiceKind, useShellApps, type ShellAppEntry } from '../composables/useShellApps'
 import ShellIcon from '../components/ShellIcon.vue'
 import ShellCard from '../components/ShellCard.vue'
 
 const { t } = useI18n()
 const state = useShellState()
 const appsStore = useShellApps()
+
+/**
+ * 系统服务 / 业务应用分组（唯一判据 = manifest kind；不在 UI 里硬编码 id）。
+ * 服务按 L1 → L2 → 名称，应用保持原注册表顺序（运行态排序由主屏负责）。
+ */
+const appGroups = computed(() => {
+  const services = appsStore.plugins.value
+    .filter((app) => isServiceKind(app.kind))
+    .sort((a, b) => {
+      const rank = (kind?: string) => (kind === 'basic-service' ? 0 : 1)
+      return rank(a.kind) - rank(b.kind) || a.name.localeCompare(b.name, 'zh-Hans-CN')
+    })
+  const apps = appsStore.plugins.value.filter((app) => !isServiceKind(app.kind))
+  return [
+    { id: 'services', title: services.length > 0 ? t('shell.apps.systemServices') : '', apps: services },
+    { id: 'apps', title: apps.length > 0 ? t('shell.apps.businessApps') : '', apps },
+  ].filter((group) => group.apps.length > 0)
+})
 
 function busy(id: string): boolean {
   return appsStore.busyId.value === id
@@ -156,6 +193,12 @@ function onUninstall(app: ShellAppEntry) {
 </script>
 
 <style scoped>
+.group-title {
+  padding: 4px 2px 0;
+  font-size: calc(12px * var(--ui-scale));
+  color: var(--text-tertiary);
+  letter-spacing: 0.04em;
+}
 .sub-line {
   display: flex;
   align-items: center;
@@ -181,12 +224,44 @@ function onUninstall(app: ShellAppEntry) {
   color: var(--text-secondary);
   cursor: pointer;
 }
-.toggle input {
-  accent-color: var(--color-primary);
-  width: 15px;
-  height: 15px;
-  margin: 0;
+/* 方角开关（视觉同 SettingsSystemSection 的防止休眠开关：40×20 轨道 + 12×12 滑块） */
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 20px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-page);
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.switch[aria-checked='true'] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.switch .switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  transition:
+    left 0.15s ease,
+    background 0.15s ease;
+}
+.switch[aria-checked='true'] .switch-thumb {
+  left: 22px;
+  background: var(--color-primary-contrast);
+}
+.switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .approval-callout {
   padding: 8px 10px;

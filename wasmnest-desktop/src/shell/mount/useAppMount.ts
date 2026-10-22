@@ -66,7 +66,47 @@ export interface AppMountEnv {
    *   路由，宿主 history 看不到它的内部跳转，壳据此记住「切回该应用时回到哪一页」。
    */
   onEvent?: (type: string, payload: unknown) => void
+  /**
+   * 自定义监控面板装载（只对 monitor 的 env 注入）。
+   *
+   * monitor 提供统一壳；面板实现住提供方应用工程，由宿主经 bundle 缓存装载，
+   * monitor 不直接 import 他人 bundle、不拼 asset URL。
+   */
+  mountMonitorPanel?: (
+    root: HTMLElement,
+    appId: string,
+    panelId: string,
+  ) => Promise<MonitorPanelHandle>
 }
+
+// ==================== 自定义监控面板（monitor 统一壳 ↔ 提供方整包） ====================
+
+/**
+ * 监控面板环境（收窄只读面）：只给提供方自己的令牌 / 只读存储。
+ * 不提供宿主 `invoke`、写存储、导航、事件出口；面板无权新增权限。
+ */
+export interface MonitorPanelEnv {
+  appId: string
+  panelId: string
+  /** 本应用插件面命令（与主界面同一令牌 / 权限；只在面板内只读取数） */
+  appInvoke: <T = unknown>(command: string, ...args: unknown[]) => Promise<T>
+  /** 本应用插件 KV 只读访问 */
+  appStorageGet: <T = unknown>(key: string) => Promise<T | undefined>
+  locale: string
+  theme: string
+  platform?: string
+}
+
+/** 监控面板句柄（monitor 切换页签 / 卸载时销毁） */
+export interface MonitorPanelHandle {
+  unmount(): Promise<void>
+}
+
+/** 提供方 app bundle 可选导出；未导出 = 没有该面板实现（不是错误） */
+export type MountMonitorPanel = (
+  root: HTMLElement,
+  env: MonitorPanelEnv,
+) => Promise<MonitorPanelHandle>
 
 /** app 前端挂载句柄（宿主卸载 / 路由通知用） */
 export interface AppMountHandle {
@@ -134,6 +174,7 @@ interface AppBundleModule {
   mountContract?: string
   mountApp?: (root: HTMLElement, env: AppMountEnv) => Promise<AppMountHandle>
   mountPreview?: MountPreview
+  mountMonitorPanel?: MountMonitorPanel
 }
 
 /**
@@ -255,6 +296,35 @@ export async function mountAppPreview(
     throw new Error(`app bundle "${env.appId}" mountPreview returned an invalid handle`)
   }
   logger.log(`[AppPreview] mounted preview: ${env.appId}`)
+  return handle
+}
+
+/**
+ * 在容器中装载提供方 app 的自定义监控面板（host-mediated；monitor 只拿句柄）。
+ *
+ * - 复用 {@link loadAppModule} 的 bundle 缓存；不重复下载；
+ * - 校验 mountContract 与可选导出存在，失败 fail-visible（点名 appId / panelId）；
+ * - 面板实例与主应用实例生命周期独立，句柄由调用方（monitor）持有并负责卸载。
+ */
+export async function mountAppMonitorPanel(
+  root: HTMLElement,
+  env: MonitorPanelEnv,
+): Promise<MonitorPanelHandle> {
+  const module = await loadAppModule(env.appId)
+  assertMountContract(env.appId, module.mountContract)
+  if (typeof module.mountMonitorPanel !== 'function') {
+    throw new Error(
+      `app bundle "${env.appId}" 未导出 mountMonitorPanel（panel=${env.panelId}）` +
+        `——manifest contributes.monitorPanels 有声明但实现缺失`,
+    )
+  }
+  const handle = await module.mountMonitorPanel(root, env)
+  if (!handle || typeof handle.unmount !== 'function') {
+    throw new Error(
+      `app bundle "${env.appId}" mountMonitorPanel 返回的句柄非法（panel=${env.panelId}）`,
+    )
+  }
+  logger.log(`[AppMount] mounted monitor panel: ${env.appId}/${env.panelId}`)
   return handle
 }
 

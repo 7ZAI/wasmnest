@@ -26,7 +26,10 @@ import { join } from 'node:path'
 /** 前端 context API 使用 → 权限（正则按合并后的前端源码匹配） */
 const FRONTEND_PERMISSION_RULES = [
   { re: /\.(storage)\b/, perm: 'storage' },
-  { re: /\.(session)\b/, perm: 'session:read' },
+  // `session:read` 只从真实会话 API 用法推导（`context.session.list/get/onStatusChange`）。
+  // 裸 `\.session\b` 会把 i18n key（如 `monitor.footer.session`） / 普通字段名误判成
+  // 权限使用 → 构建期静默给 manifest 加一条未用到的权限。
+  { re: /\.session\s*\.\s*(list|get|onStatusChange)\b/, perm: 'session:read' },
 ]
 
 /** Rust host API 调用 → 权限（与 SDK permission 常量一一对应） */

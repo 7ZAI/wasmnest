@@ -20,6 +20,7 @@ export default {
       appsTitle: '应用',
       installed: '已安装',
       noApps: '没有匹配「{q}」的应用',
+      noneEnabled: '没有已启用的应用（在应用管理中重新启用）',
       sysTitle: '系统',
       sysHint: '全局管理页面（从后台应用面板打开）',
       matches: '个匹配',
@@ -298,6 +299,8 @@ export default {
       mountFailed: '应用界面加载失败，可重试；若持续失败请查看日志',
       // 失败态只给壳自有文案，后端原文（WASM/linker 报错）只进日志（ADR 0030）
       errorHint: '应用启动失败（实例未在运行）：可再次启动，或先到「权限与授权」核对授权后重试',
+      systemServices: '系统服务',
+      businessApps: '应用',
       enabled: '启用',
       enabledHint: '已启用 = 应用可用（偏好记录，不驱动启动）',
       autostart: '自启',

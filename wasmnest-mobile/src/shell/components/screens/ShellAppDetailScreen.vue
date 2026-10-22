@@ -78,6 +78,33 @@
         </ShellGroupCard>
       </div>
 
+      <!-- ==================== 自启（系统服务默认开，用户可关） ==================== -->
+      <template v-if="canAutostart">
+        <ShellSection
+          :title="t('shell.apps.autostart')"
+          :note="isService ? t('shell.apps.systemServiceHint') : t('shell.apps.autostartHint')"
+        />
+        <div class="px-4 pb-1">
+          <ShellGroupCard>
+            <div class="flex items-center gap-3 px-3 py-3 min-h-[var(--mobile-touch-target-min)]">
+              <div class="flex-1 min-w-0">
+                <div class="shell-type-label text-[var(--mobile-text-primary)]">
+                  {{ t('shell.apps.autostart') }}
+                </div>
+                <div class="shell-type-caption text-[var(--mobile-text-secondary)]">
+                  {{ t('shell.apps.autostartHint') }}
+                </div>
+              </div>
+              <Toggle
+                :model-value="autostart"
+                :disabled="autostartBusy"
+                @update:model-value="handleAutostart"
+              />
+            </div>
+          </ShellGroupCard>
+        </div>
+      </template>
+
       <!-- ==================== 权限 ==================== -->
       <ShellSection :title="t('shell.detail.permissions')" :note="permissionsNote" />
       <div class="px-4 pb-1">
@@ -228,7 +255,7 @@ import { useToast } from '../../composables/useToast'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
 import { groupPermissions, permissionDescKey, permissionTitleKey } from '../../permissions'
-import { formatBytes } from '../../utils'
+import { formatBytes, isServiceKind } from '../../utils'
 import ShellAppIcon from '../ShellAppIcon.vue'
 import ShellChip from '../ShellChip.vue'
 import ShellGroupCard from '../ShellGroupCard.vue'
@@ -243,6 +270,9 @@ const {
   setPermissionGrant,
   supportsRemove,
   removeApp,
+  supportsAutostart,
+  isAutostart,
+  setAutostart,
   stop,
   approveApp,
   launch,
@@ -255,7 +285,15 @@ const app = computed(() => getApp(appId.value))
 const permissionControlEnabled = computed(() =>
   appId.value ? supportsPermissionControl(appId.value) : false,
 )
-const canRemove = computed(() => (appId.value ? supportsRemove(appId.value) : false))
+const isService = computed(() => isServiceKind(app.value?.kind))
+const canRemove = computed(
+  () => !isService.value && (appId.value ? supportsRemove(appId.value) : false),
+)
+const canAutostart = computed(
+  () => (appId.value ? supportsAutostart(appId.value) : false),
+)
+const autostart = ref(false)
+const autostartBusy = ref(false)
 
 /** 权限按能力域分组；未归类的新权限进「其他」组，保证不会因未归类而消失 */
 const permissionGroups = computed(() =>
@@ -327,10 +365,26 @@ const stateDot = computed(() => {
 const toggleError = ref<string | null>(null)
 /** 卸载二次确认（复用平台 ConfirmDialog，见模板） */
 const confirmRemove = ref(false)
-// 切换应用时清掉上一条的失败提示，避免张冠李戴
-watch(appId, () => {
-  toggleError.value = null
-})
+// 切换应用时清掉上一条的失败提示，避免张冠李戴；顺带读取自启偏好
+watch(
+  appId,
+  async () => {
+    toggleError.value = null
+    autostart.value = appId.value ? await isAutostart(appId.value) : false
+  },
+  { immediate: true },
+)
+
+async function handleAutostart(next: boolean): Promise<void> {
+  if (!appId.value || autostartBusy.value) return
+  autostartBusy.value = true
+  try {
+    const ok = await setAutostart(appId.value, next)
+    if (ok) autostart.value = next
+  } finally {
+    autostartBusy.value = false
+  }
+}
 
 async function handleToggle(key: string, next: boolean): Promise<void> {
   if (!appId.value) return

@@ -12,6 +12,7 @@ export type {
   PluginConfiguration,
   ConfigProperty,
   PluginContributes,
+  MonitorPanelContribution,
   EndpointAuthTier,
   HttpEndpointContribution,
   WsEndpointContribution,

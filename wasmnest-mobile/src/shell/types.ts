@@ -174,4 +174,11 @@ export interface ShellAppSource {
    * 未实现时宿主不渲染「卸载」入口，同理不留死按钮。
    */
   remove?(appId: string): Promise<boolean>
+  /**
+   * 查询「启动时自动激活」偏好。
+   * 未实现时宿主不渲染自启开关（能力诚实原则）。
+   */
+  isAutostart?(appId: string): Promise<boolean>
+  /** 设置「启动时自动激活」偏好（只改偏好，下次启动生效）。 */
+  setAutostart?(appId: string, autostart: boolean): Promise<void>
 }

@@ -209,8 +209,13 @@ pub struct PluginContributes {
 pub struct MonitorPanelContribution {
     pub id: String,
     pub title: String,
-    #[serde(default)]
+    /// 排序权重（小者靠前；缺省 100，与 core / 前端同口径）
+    #[serde(default = "default_monitor_panel_order")]
     pub order: i32,
+}
+
+fn default_monitor_panel_order() -> i32 {
+    100
 }
 
 /// 命令扩展点

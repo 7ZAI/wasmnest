@@ -18,7 +18,9 @@ import {
   pluginGetInfo,
   pluginListLoaded,
   pluginInstallFromFile,
+  pluginIsAutostart,
   pluginPreauthorize,
+  pluginSetAutostart,
   pluginUninstall,
 } from '@/plugin/commands'
 import { pluginLoader } from '@/plugin/loader'
@@ -172,6 +174,14 @@ export function createPluginAppSource(): ShellAppSource {
       await pluginLoader.deactivate(appId)
       await pluginUninstall(appId)
       return true
+    },
+
+    async isAutostart(appId: string): Promise<boolean> {
+      return await pluginIsAutostart(appId)
+    },
+
+    async setAutostart(appId: string, autostart: boolean): Promise<void> {
+      await pluginSetAutostart(appId, autostart)
     },
 
     /**

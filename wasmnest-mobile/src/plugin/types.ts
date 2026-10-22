@@ -46,6 +46,9 @@ export type {
   StatusAPI,
   PluginContext,
   PluginModule,
+  MonitorPanelEnv,
+  MonitorPanelHandle,
+  MountMonitorPanel,
   SystemAPI,
 } from '@binblink/wasmnest-plugin-sdk-mobile'
 

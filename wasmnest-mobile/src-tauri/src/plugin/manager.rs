@@ -416,6 +416,11 @@ impl PluginManager {
         for (id, wasm_plugin) in wasm_plugins {
             current_wasm.insert(id, Arc::new(TokioMutex::new(wasm_plugin)));
         }
+        drop(current_wasm);
+
+        // 装载 / 重扫后立刻刷新监控元数据：动态安装与重扫不走 `load_all`，
+        // 若只在那里同步，新插件的 name / kind / monitorPanels 要到下次启动才出现。
+        self.sync_plugin_meta().await;
     }
 
     /// 存量兼容：迁移后首启，对「已启用且无审批记录」的非内置插件自动批准一次
@@ -523,22 +528,17 @@ impl PluginManager {
         let ids: Vec<String> = self.plugins.read().await.keys().cloned().collect();
         let mut candidates = Vec::new();
         for id in ids {
-            let key = format!("{}{}", PLUGIN_AUTOSTART_KEY_PREFIX, &id);
-            match self.settings.get(&key).await {
-                Ok(Some(value)) if value == "true" => candidates.push(id),
-                // 缺省（未设置）/ "false" 一律不自启；读取失败按 fail-safe 不自启
-                Ok(_) => {}
-                Err(e) => {
-                    tracing::warn!(plugin_id = %id, error = %e, "Failed to read autostart state");
-                }
+            // 缺省按角色：L1/L2 默认自启，L3 默认不自启；显式 false 优先。
+            if self.is_autostart(&id).await {
+                candidates.push(id);
             }
         }
         candidates.sort();
         candidates
     }
 
-    /// 应用启动时：扫描已完成（`scan_and_load`），此处只对显式开启「启动时自动激活」
-    /// 的应用做自动激活（`plugin.autostart.{id}`，缺省关）
+    /// 应用启动时：扫描已完成（`scan_and_load`），此处只对「启动时自动激活」的应用
+    /// 做自动激活（`plugin.autostart.{id}`；缺省按角色：L1/L2 默认开、L3 默认关）
     ///
     /// 其余应用保持 Loaded 态，等用户在宿主壳里点击启动（`plugin_activate`）。
     pub async fn load_all(&self) {
@@ -550,7 +550,7 @@ impl PluginManager {
         let candidates = self.auto_start_candidates().await;
         tracing::info!(
             count = candidates.len(),
-            "[PluginManager] autostart candidates resolved (plugin.autostart.{{id}}, default off)"
+            "[PluginManager] autostart candidates resolved (plugin.autostart.{{id}}, role-driven default)"
         );
         for id in candidates {
             if let Err(e) = self.activate(&id).await {
@@ -558,8 +558,43 @@ impl PluginManager {
             }
         }
 
+        // 把名称 / 装配角色写进监控元数据：移动端 monitor 没有宿主插件清单命令，
+        // 服务分类（L1/L2 vs L3）必须由宿主在快照里附带，不能要求目标插件参与。
+        self.sync_plugin_meta().await;
+
         // 通知所有插件应用启动完成
         self.dispatch_lifecycle_event(PluginLifecycleEvent::AppStartup).await;
+    }
+
+    /// 同步插件元数据到指标注册表（`plugin_meta` 快照段）
+    ///
+    /// 只写只读展示字段（name / kind / monitorPanels）；指标仍是全量快照的主体。
+    /// 装载 / 重扫后调用（含动态安装路径）；卸载路径由 `MetricsRegistry::remove`
+    /// 一并清理元数据，这里只负责 upsert。
+    async fn sync_plugin_meta(&self) {
+        let Some(runtime) = self.wasm_runtime.get() else {
+            return;
+        };
+        let monitor = runtime.monitor();
+        let metas: Vec<(String, serde_json::Value)> = {
+            let plugins = self.plugins.read().await;
+            plugins
+                .values()
+                .map(|plugin| {
+                    (
+                        plugin.manifest.id.clone(),
+                        serde_json::json!({
+                            "name": plugin.manifest.name,
+                            "kind": plugin.manifest.kind.as_str(),
+                            "monitorPanels": &plugin.manifest.contributes.monitor_panels,
+                        }),
+                    )
+                })
+                .collect()
+        };
+        for (id, meta) in metas {
+            monitor.set_plugin_meta(&id, meta);
+        }
     }
 
     /// 判断插件来源是否属于内置信任域（无需审批）
@@ -714,15 +749,15 @@ impl PluginManager {
         // 服务由插件经原语自行请求（双端同构），宿主不再按产品 id 开关节点。
         let result = self.activate_inner(plugin_id, run_preauth).await;
         if result.is_err() {
+            self.release_services_for(plugin_id, "activation failed").await;
+        }
+        result
+    }
+
     /// 释放插件持有的全部应用作用域服务租约（停用 / 激活失败 / Error 态共用）
     async fn release_services_for(&self, plugin_id: &str, reason: &str) {
         let reports = self.service_registry.release_all_for(plugin_id).await;
         log_release_reports(plugin_id, reason, reports);
-    }
-
-            self.release_services_for(plugin_id, "activation failed").await;
-        }
-        result
     }
 
     async fn activate_inner(&self, plugin_id: &str, run_preauth: bool) -> Result<()> {
@@ -1132,10 +1167,24 @@ impl PluginManager {
         Ok(())
     }
 
-    /// 查询插件「启动时自动激活」偏好（缺省 false = 不自动启动）
+    /// 查询插件「启动时自动激活」偏好
+    ///
+    /// 缺省值按装配角色：L1 基础服务 / L2 内部业务 = `true`（系统服务默认随宿主
+    /// 启动），L3 业务应用 = `false`。显式写入的 `false` 优先——用户关掉后不会
+    /// 因缺省值又被拉起；不写偏好行，避免卸载重装回到默认开。
     pub async fn is_autostart(&self, plugin_id: &str) -> bool {
         let key = format!("{}{}", PLUGIN_AUTOSTART_KEY_PREFIX, plugin_id);
-        matches!(self.settings.get(&key).await, Ok(Some(v)) if v == "true")
+        match self.settings.get(&key).await {
+            Ok(Some(v)) if v == "true" => true,
+            Ok(Some(v)) if v == "false" => false,
+            _ => {
+                let plugins = self.plugins.read().await;
+                plugins
+                    .get(plugin_id)
+                    .map(|p| p.manifest.kind.is_role_driven())
+                    .unwrap_or(false)
+            }
+        }
     }
 
     /// 设置插件「启动时自动激活」偏好并持久化
@@ -1169,6 +1218,8 @@ impl PluginManager {
             }
             plugin.state = PluginState::Error { error };
         }
+        // 锁外释放：release 会 await 服务 stop，不能持 plugins 锁
+        self.release_services_for(plugin_id, "plugin marked error").await;
     }
 
     /// 插件显式上报启动成功
@@ -1178,8 +1229,6 @@ impl PluginManager {
     /// 已激活状态保持不动。
     pub async fn report_ready(&self, plugin_id: &str) -> Result<()> {
         let mut plugins = self.plugins.write().await;
-        // 锁外释放：release 会 await 服务 stop，不能持 plugins 锁
-        self.release_services_for(plugin_id, "plugin marked error").await;
         let plugin = plugins
             .get_mut(plugin_id)
             .ok_or_else(|| crate::AppError::Plugin(format!("Plugin not found: {}", plugin_id)))?;
@@ -1203,6 +1252,14 @@ impl PluginManager {
             if plugin.source == PluginSource::ApkAsset {
                 return Err(crate::AppError::Plugin(format!(
                     "Builtin plugin cannot be uninstalled: {}",
+                    plugin_id
+                )));
+            }
+            // 系统服务（L1/L2）随宿主分发，卸载入口只为用户安装的 L3 应用保留。
+            // 判据 = manifest kind，不依赖来源标记（防绕过 apk-asset 标记的构造路径）。
+            if plugin.manifest.kind.is_role_driven() {
+                return Err(crate::AppError::Plugin(format!(
+                    "System service cannot be uninstalled: {}",
                     plugin_id
                 )));
             }
@@ -1439,15 +1496,6 @@ impl crate::plugin::message_bus::MessageDispatcher for PluginManagerDispatcher {
     }
 }
 
-// ==================== 状态机单元测试（spec §3.3 / issue 01 验证清单） ====================
-//
-// 设计依据：
-// - 与桌面端 host.rs:test_activate_degraded_on_startup_failure_then_retry_recovers
-//   同模式（真组件 + storage 开关）
-// - 移动端 plugin-component-test 已有 `on-startup-fail` feature（L107-109），
-//   `wasm_runtime/component.rs:745 build_test_component(features)` 编译产物
-// - 行为覆盖：activate 失败→Degraded / Degraded 可重试→Activated /
-//   Degraded 停用→Deactivated / dispatch_lifecycle 跳过 AppStartup 二次调用
 // ==================== 服务租约释放日志（生命周期路径共用） ====================
 
 /// 逐条记录租约释放结果：单 key 失败只记录、不阻断插件生命周期。
@@ -1476,6 +1524,15 @@ fn log_release_reports(
     }
 }
 
+// ==================== 状态机单元测试（spec §3.3 / issue 01 验证清单） ====================
+//
+// 设计依据：
+// - 与桌面端 host.rs:test_activate_degraded_on_startup_failure_then_retry_recovers
+//   同模式（真组件 + storage 开关）
+// - 移动端 plugin-component-test 已有 `on-startup-fail` feature（L107-109），
+//   `wasm_runtime/component.rs:745 build_test_component(features)` 编译产物
+// - 行为覆盖：activate 失败→Degraded / Degraded 可重试→Activated /
+//   Degraded 停用→Deactivated / dispatch_lifecycle 跳过 AppStartup 二次调用
 //
 // 锁约束：manager 字段全 pub(crate)；mod tests 在同文件内访问合法
 
@@ -1539,18 +1596,18 @@ mod tests {
 
     /// 在 manager.plugins map 内插入一条 LoadedPlugin 记录（state 由调用方定）
     async fn seed_plugin(manager: &PluginManager, pid: &str, state: PluginState) {
-        let manifest = wasmnest_plugin_api_mobile::types::PluginManifest {
+        let manifest = crate::plugin::types::PluginManifest {
             id: pid.to_string(),
             name: pid.to_string(),
             version: "0.1.0".to_string(),
-            platform: wasmnest_plugin_api_mobile::types::PluginPlatform::Mobile,
+            platform: crate::plugin::types::PluginPlatform::Mobile,
             description: String::new(),
             author: String::new(),
             main: String::new(),
-            plugin_type: wasmnest_plugin_api_mobile::types::PluginType::Wasm,
+            plugin_type: crate::plugin::types::PluginType::Wasm,
             permissions: vec![],
-            contributes: wasmnest_plugin_api_mobile::types::PluginContributes {
-                lifecycle: Some(wasmnest_plugin_api_mobile::types::LifecycleContribution {
+            contributes: crate::plugin::types::PluginContributes {
+                lifecycle: Some(crate::plugin::types::LifecycleContribution {
                     on_auth_success: true,
                     ..Default::default()
                 }),
@@ -1561,6 +1618,7 @@ mod tests {
             rust_library: String::new(),
             preauth_dirs: vec![],
             preauth_urls: vec![],
+            ..Default::default()
         };
         let mut plugins = manager.plugins.write().await;
         plugins.insert(
@@ -1789,19 +1847,19 @@ mod tests {
         pid: &str,
         ext_dir: &std::path::Path,
         permissions: Vec<String>,
-        plugin_type: wasmnest_plugin_api_mobile::types::PluginType,
+        plugin_type: crate::plugin::types::PluginType,
     ) {
-        let manifest = wasmnest_plugin_api_mobile::types::PluginManifest {
+        let manifest = crate::plugin::types::PluginManifest {
             id: pid.to_string(),
             name: pid.to_string(),
             version: "0.1.0".to_string(),
-            platform: wasmnest_plugin_api_mobile::types::PluginPlatform::Mobile,
+            platform: crate::plugin::types::PluginPlatform::Mobile,
             description: String::new(),
             author: String::new(),
             main: String::new(),
             plugin_type,
             permissions,
-            contributes: wasmnest_plugin_api_mobile::types::PluginContributes {
+            contributes: crate::plugin::types::PluginContributes {
                 lifecycle: None,
                 ..Default::default()
             },
@@ -1810,6 +1868,7 @@ mod tests {
             rust_library: String::new(),
             preauth_dirs: vec![],
             preauth_urls: vec![],
+            ..Default::default()
         };
         let mut plugins = manager.plugins.write().await;
         plugins.insert(
@@ -1852,7 +1911,7 @@ mod tests {
             pid,
             &ext_dir,
             vec![],
-            wasmnest_plugin_api_mobile::types::PluginType::TsOnly,
+            crate::plugin::types::PluginType::TsOnly,
         )
         .await;
 
@@ -1867,19 +1926,19 @@ mod tests {
         manager: &PluginManager,
         pid: &str,
         permissions: Vec<String>,
-        plugin_type: wasmnest_plugin_api_mobile::types::PluginType,
+        plugin_type: crate::plugin::types::PluginType,
     ) {
-        let manifest = wasmnest_plugin_api_mobile::types::PluginManifest {
+        let manifest = crate::plugin::types::PluginManifest {
             id: pid.to_string(),
             name: pid.to_string(),
             version: "0.1.0".to_string(),
-            platform: wasmnest_plugin_api_mobile::types::PluginPlatform::Mobile,
+            platform: crate::plugin::types::PluginPlatform::Mobile,
             description: String::new(),
             author: String::new(),
             main: String::new(),
             plugin_type,
             permissions,
-            contributes: wasmnest_plugin_api_mobile::types::PluginContributes {
+            contributes: crate::plugin::types::PluginContributes {
                 lifecycle: None,
                 ..Default::default()
             },
@@ -1888,6 +1947,7 @@ mod tests {
             rust_library: String::new(),
             preauth_dirs: vec![],
             preauth_urls: vec![],
+            ..Default::default()
         };
         let mut plugins = manager.plugins.write().await;
         plugins.insert(
@@ -1931,7 +1991,7 @@ mod tests {
                 "session:read".to_string(),
                 "terminal:output".to_string(),
             ],
-            wasmnest_plugin_api_mobile::types::PluginType::TsOnly,
+            crate::plugin::types::PluginType::TsOnly,
         )
         .await;
 
@@ -1968,7 +2028,7 @@ mod tests {
                 "fs:read".to_string(),
                 "not-a-permission".to_string(),
             ],
-            wasmnest_plugin_api_mobile::types::PluginType::TsOnly,
+            crate::plugin::types::PluginType::TsOnly,
         )
         .await;
 
@@ -1998,7 +2058,7 @@ mod tests {
             &manager,
             pid,
             vec!["storage".to_string()],
-            wasmnest_plugin_api_mobile::types::PluginType::TsOnly,
+            crate::plugin::types::PluginType::TsOnly,
         )
         .await;
         manager.activate(pid).await.expect("activate");
@@ -2054,6 +2114,28 @@ mod tests {
         assert!(manager.get_info(pid).await.is_some(), "内置插件记录保留");
     }
 
+    /// 系统服务（L1/L2）不可卸载：判据 = manifest kind，不依赖来源标记。
+    #[tokio::test]
+    async fn test_uninstall_system_service_rejected_by_kind() {
+        let (manager, _tmp) = setup_manager().await;
+        let pid = "com.wasmnest.test.service-uninstall";
+        seed_plugin(&manager, pid, PluginState::Loaded).await;
+        {
+            let mut plugins = manager.plugins.write().await;
+            let plugin = plugins.get_mut(pid).expect("seeded");
+            plugin.manifest.kind = PluginKind::InternalBusiness;
+            // 来源改为用户安装，确保命中的是 kind 硬门而非内置来源门
+            plugin.source = PluginSource::RemoteDownload;
+        }
+
+        let err = manager.uninstall(pid).await.expect_err("系统服务不可卸载");
+        assert!(
+            err.to_string().contains("System service cannot be uninstalled"),
+            "err: {err}"
+        );
+        assert!(manager.get_info(pid).await.is_some(), "拒绝后记录必须保留");
+    }
+
     #[tokio::test]
     async fn test_uninstall_removes_records_and_dir() {
         // 非内置插件卸载副作用：审批撤销 + 记录清除 + 插件目录删除
@@ -2073,7 +2155,7 @@ mod tests {
             pid,
             &ext_dir,
             vec![],
-            wasmnest_plugin_api_mobile::types::PluginType::TsOnly,
+            crate::plugin::types::PluginType::TsOnly,
         )
         .await;
 
@@ -2135,6 +2217,76 @@ mod tests {
         );
     }
 
+    /// 系统服务（L1/L2）缺省自启：未写偏好 = true；显式 false 优先。
+    #[tokio::test]
+    async fn test_auto_start_defaults_on_for_role_driven_services() {
+        let (manager, _tmp) = setup_manager().await;
+        let service = "com.wasmnest.test.as-service";
+        let app = "com.wasmnest.test.as-business";
+
+        seed_plugin(&manager, service, PluginState::Loaded).await;
+        seed_plugin(&manager, app, PluginState::Loaded).await;
+        {
+            let mut plugins = manager.plugins.write().await;
+            plugins
+                .get_mut(service)
+                .expect("service seeded")
+                .manifest
+                .kind = PluginKind::InternalBusiness;
+        }
+
+        assert!(manager.is_autostart(service).await, "L2 缺省自启");
+        assert!(!manager.is_autostart(app).await, "L3 缺省不自启");
+        assert_eq!(
+            manager.auto_start_candidates().await,
+            vec![service.to_string()],
+            "只有缺省自启的系统服务进入候选"
+        );
+
+        manager
+            .set_autostart(service, false)
+            .await
+            .expect("set false");
+        assert!(!manager.is_autostart(service).await, "显式 false 优先于角色缺省");
+        assert!(manager.auto_start_candidates().await.is_empty());
+    }
+
+    /// 监控元数据：`sync_plugin_meta` 把 name / kind / monitorPanels 写进快照
+    /// （移动端 monitor 的服务分类与自定义面板列表来源）。
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sync_plugin_meta_exposes_kind_and_panels() {
+        let (manager, _tmp) = setup_manager().await;
+        let service = "com.wasmnest.test.meta-service";
+        seed_plugin(&manager, service, PluginState::Loaded).await;
+        {
+            let mut plugins = manager.plugins.write().await;
+            let manifest = &mut plugins.get_mut(service).expect("seeded").manifest;
+            manifest.name = "Meta Service".to_string();
+            manifest.kind = PluginKind::InternalBusiness;
+            manifest.contributes.monitor_panels = vec![
+                wasmnest_wasm_core::manifest::MonitorPanelContribution {
+                    id: "health".to_string(),
+                    title: "Health".to_string(),
+                    order: 100,
+                },
+            ];
+        }
+
+        manager.sync_plugin_meta().await;
+
+        let runtime = manager.wasm_runtime.get().expect("wasm runtime initialized");
+        let snapshot = runtime.monitor().snapshot();
+        let meta = &snapshot["plugin_meta"][service];
+        assert_eq!(meta["name"], "Meta Service");
+        assert_eq!(meta["kind"], "internal-business");
+        assert_eq!(meta["monitorPanels"][0]["id"], "health");
+        assert_eq!(meta["monitorPanels"][0]["order"], 100);
+        assert!(
+            snapshot["plugins"].is_object(),
+            "元数据不得替换插件指标段（monitor 仍按全量指标展开）"
+        );
+    }
+
     /// 正例 + 反例 + 副作用：自启动偏好持久化（缺省 false → true → false）
     #[tokio::test]
     async fn test_autostart_preference_persists_and_defaults_off() {
@@ -2190,7 +2342,7 @@ mod tests {
             pid,
             &ext_dir,
             vec![],
-            wasmnest_plugin_api_mobile::types::PluginType::TsOnly,
+            crate::plugin::types::PluginType::TsOnly,
         )
         .await;
         manager.set_autostart(pid, true).await.expect("set autostart");
@@ -2199,7 +2351,6 @@ mod tests {
 
         assert!(!manager.is_autostart(pid).await, "卸载后自启动偏好已清除");
     }
-}
 
     // ==================== 应用作用域服务租约的生命周期回收 ====================
 
@@ -2278,3 +2429,4 @@ mod tests {
         assert!(snapshot[0].holders.is_empty(), "Error 态必须释放租约");
         assert!(!snapshot[0].running, "Error 态不得继续对外提供服务");
     }
+}

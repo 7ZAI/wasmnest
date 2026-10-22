@@ -42,7 +42,35 @@ export interface AppMountEnv {
    *   路由，宿主 history 看不到它的内部跳转，壳据此记住「切回该应用时回到哪一页」。
    */
   onEvent?: (type: string, payload: unknown) => void
+  /** 自定义监控面板装载（只对 monitor 的 env 注入；dev-shell 可省略） */
+  mountMonitorPanel?: (
+    root: HTMLElement,
+    appId: string,
+    panelId: string,
+  ) => Promise<MonitorPanelHandle>
 }
+
+/** 监控面板环境（收窄只读面；与宿主同形） */
+export interface MonitorPanelEnv {
+  appId: string
+  panelId: string
+  appInvoke: <T = unknown>(command: string, ...args: unknown[]) => Promise<T>
+  appStorageGet: <T = unknown>(key: string) => Promise<T | undefined>
+  locale: string
+  theme: string
+  platform?: string
+}
+
+/** 监控面板句柄 */
+export interface MonitorPanelHandle {
+  unmount(): Promise<void>
+}
+
+/** 提供方 app bundle 可选导出 */
+export type MountMonitorPanel = (
+  root: HTMLElement,
+  env: MonitorPanelEnv,
+) => Promise<MonitorPanelHandle>
 
 /** app 前端挂载句柄（宿主卸载 / 路由通知用） */
 export interface AppMountHandle {
@@ -94,4 +122,5 @@ export interface AppBundleModule {
   mountContract?: string
   mountApp?: (root: HTMLElement, env: AppMountEnv) => Promise<AppMountHandle>
   mountPreview?: MountPreview
+  mountMonitorPanel?: MountMonitorPanel
 }
