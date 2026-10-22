@@ -49,10 +49,16 @@
       }
     },
     "com.wasmnest.monitor": {
-      "path": "apps/monitor",
+      "path": "servers/monitor",
       "ends": {
         "desktop": { "artifact": "wasmnest_plugin_monitor.wasm" },
         "mobile": { "artifact": "wasmnest_plugin_monitor.wasm" }
+      }
+    },
+    "com.wasmnest.auth-center": {
+      "path": "servers/auth-center",
+      "ends": {
+        "desktop": { "artifact": "wasmnest_plugin_auth_center.wasm" }
       }
     }
   }

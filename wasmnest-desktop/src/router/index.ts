@@ -16,6 +16,7 @@
  * - com.wasmnest.ai-chatbox：/chat
  * - com.wasmnest.file-transfer：/transfer
  * - com.wasmnest.monitor：/monitor
+ * - com.wasmnest.auth-center：/auth（服务型 wasm，应用仓 servers/auth-center）
  */
 import { createRouter, createWebHistory } from 'vue-router'
 
@@ -26,6 +27,7 @@ import {
   AI_CHATBOX_PLUGIN_ID,
   FILE_TRANSFER_PLUGIN_ID,
   MONITOR_PLUGIN_ID,
+  AUTH_CENTER_PLUGIN_ID,
 } from '@/shell/composables/useShellApps'
 
 const router = createRouter({
@@ -102,7 +104,7 @@ const router = createRouter({
       meta: { bareWindow: true },
     },
 
-    // ==================== 其余四个 wasm app 应用面（独立界面，挂载整包） ====================
+    // ==================== 其余 wasm app 应用面（独立界面，挂载整包） ====================
     {
       path: '/hub',
       name: 'app-agent-hub',
@@ -126,6 +128,13 @@ const router = createRouter({
       name: 'app-monitor',
       component: AppMountSlot,
       props: { appId: MONITOR_PLUGIN_ID, route: '/monitor' },
+    },
+    {
+      // 认证中心（服务型 wasm，应用仓 `servers/auth-center`）：系统服务面
+      path: '/auth',
+      name: 'app-auth-center',
+      component: AppMountSlot,
+      props: { appId: AUTH_CENTER_PLUGIN_ID, route: '/auth' },
     },
 
     // ==================== 兜底 ====================

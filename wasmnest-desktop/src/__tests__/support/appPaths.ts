@@ -12,9 +12,28 @@ import { resolve } from 'node:path'
 
 const APPS_ROOT = process.env.WASMNEST_APPS_ROOT ?? resolve(process.cwd(), '../../wasmnest-apps')
 
-/** 应用工程内文件路径：`<appsRoot>/apps/<slug>/<end>/<...rest>` */
+/** 工程分组（与应用仓目录同名）：apps = 产品应用 / servers = 服务型 wasm */
+export type ProjectGroup = 'apps' | 'servers'
+
+/**
+ * 应用工程内文件路径：`<appsRoot>/<group>/<slug>/<end>/<...rest>`
+ *
+ * 带 `group` 时按分组定位（`servers/` 下的服务型 wasm：L1 基础服务 /
+ * L2 内部业务，随宿主分发）；
+ * 不带时保持既有口径 = `apps/<slug>/<end>`（绝大多数锁只关心产品应用）。
+ */
+export function projectPath(
+  group: ProjectGroup,
+  slug: string,
+  end: 'desktop' | 'mobile',
+  ...rest: string[]
+): string {
+  return resolve(APPS_ROOT, group, slug, end, ...rest)
+}
+
+/** 应用工程内文件路径（`apps/` 分组快捷方式）：`<appsRoot>/apps/<slug>/<end>/<...rest>` */
 export function appPath(slug: string, end: 'desktop' | 'mobile', ...rest: string[]): string {
-  return resolve(APPS_ROOT, 'apps', slug, end, ...rest)
+  return projectPath('apps', slug, end, ...rest)
 }
 
 /** 应用仓根（跨 app 扫描用） */

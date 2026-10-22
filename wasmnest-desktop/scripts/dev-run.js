@@ -190,13 +190,22 @@ const PLUGIN_WATCH_CMDS = [
     wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_agent_hub.wasm',
   },
   {
-    // Monitor：只读指标看板，前端与 Rust 都轻，走与其他应用同一条 watch 闭环
-    // （前端改动 → vite 重建 → resources → plugin:dev-reload；WASM 走
-    // ensurePluginWasm() 的缺失 / 陈旧补建）。
+    // Monitor：系统服务（L2），工程住应用仓 `servers/` 分组；只读指标看板，
+    // 前端与 Rust 都轻，走与其他应用同一条 watch 闭环。
+    group: 'servers',
     slug: 'monitor',
     id: 'com.wasmnest.monitor',
     args: ['scripts/build.js', '--watch'],
     wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_monitor.wasm',
+  },
+  {
+    // Auth Center（服务型 wasm，L2）：工程住应用仓 `servers/` 分组。页面轻
+    // （就位三态 + 声明面），与其它应用同一条 watch 闭环。
+    group: 'servers',
+    slug: 'auth-center',
+    id: 'com.wasmnest.auth-center',
+    args: ['scripts/build.js', '--watch'],
+    wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_auth_center.wasm',
   },
 ]
 
@@ -423,9 +432,9 @@ function shutdown(code) {
  * 补建失败 fail-fast：宿主起来也只会报加载失败，早停并给手动指引更可排查。
  */
 function ensurePluginWasm() {
-  for (const { slug, id, wasmFile } of PLUGIN_WATCH_CMDS) {
+  for (const { group, slug, id, wasmFile } of PLUGIN_WATCH_CMDS) {
     if (!wasmFile) continue
-    const pluginRoot = appDir(slug, 'desktop')
+    const pluginRoot = appDir(slug, 'desktop', { group })
     const wasmDest = resolve(RESOURCES_BASE, id, basename(wasmFile))
     const reason = wasmStaleReason(pluginRoot, wasmDest)
     if (!reason) continue
@@ -455,11 +464,11 @@ function ensurePluginWasm() {
  * 判据与 WASM 补建同款：产物缺失，或前端源码 / 产物清单比产物新。
  */
 function ensurePluginFrontends() {
-  for (const { slug, id, skipWatch } of PLUGIN_WATCH_CMDS) {
+  for (const { group, slug, id, skipWatch } of PLUGIN_WATCH_CMDS) {
     // 只处理「有前端 watch」的插件：启动后的二次加载正是它们的首次构建触发宿主重启；
     // 无 watch 的（bedcode）启动后不会再写 resources，不存在重启风险，且其整包构建较重
     if (skipWatch) continue
-    const pluginRoot = appDir(slug, 'desktop')
+    const pluginRoot = appDir(slug, 'desktop', { group })
     const bundleDest = resolve(RESOURCES_BASE, id, 'index.js')
     const reason = frontendStaleReason(pluginRoot, bundleDest)
     if (!reason) continue
@@ -491,13 +500,16 @@ function ensurePluginFrontends() {
  * 缺 wasm / 清单非法时不动文件（not-ready），交给 watch 原有的 fail-visible 预检。
  */
 function ensurePluginManifests() {
-  for (const { slug, id, skipWatch } of PLUGIN_WATCH_CMDS) {
-    if (skipWatch || !hasAppDir(slug, 'desktop')) continue
+  for (const { group, slug, id, skipWatch } of PLUGIN_WATCH_CMDS) {
+    if (skipWatch || !hasAppDir(slug, 'desktop', { group })) continue
     const artifactDir = resolve(RESOURCES_BASE, id)
     if (!existsSync(artifactDir)) continue
     let result
     try {
-      result = syncArtifactManifest(resolve(appDir(slug, 'desktop'), 'plugin.json'), artifactDir)
+      result = syncArtifactManifest(
+        resolve(appDir(slug, 'desktop', { group }), 'plugin.json'),
+        artifactDir,
+      )
     } catch (e) {
       // 同步只是把潜在写入提前，失败不该阻断宿主启动；留痕后交给 watch 原有的复制链报错
       console.warn(`[dev-run] ⚠ 插件清单摘要同步失败（${id}）：${e.message}`)
@@ -635,18 +647,18 @@ pruneStalePluginDirs()
  */
 function startPluginWatches() {
   if (shuttingDown) return
-  for (const { slug, args, skipWatch } of PLUGIN_WATCH_CMDS) {
+  for (const { group, slug, args, skipWatch } of PLUGIN_WATCH_CMDS) {
     // bedcode：dev 期跳过前端 watch（整包构建最重且每次写入都触发宿主重启，
     // 理由见 PLUGIN_WATCH_CMDS 条目注释）——跳过而非保持死链
     if (skipWatch) {
       console.log(`[dev-run] 跳过前端 watch：${slug}（前端已并入宿主 vite）`)
       continue
     }
-    if (!hasAppDir(slug, 'desktop')) {
+    if (!hasAppDir(slug, 'desktop', { group })) {
       console.warn(`[dev-run] 应用目录不存在，跳过 watch：${slug}`)
       continue
     }
-    const child = start(process.execPath, args, appDir(slug, 'desktop'))
+    const child = start(process.execPath, args, appDir(slug, 'desktop', { group }))
     // 插件 watch 异常退出 → 整组回收（fail fast，避免宿主运行在过期产物上）
     child.on('exit', (code) => {
       if (!shuttingDown) {

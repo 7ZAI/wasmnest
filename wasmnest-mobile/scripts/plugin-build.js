@@ -3,7 +3,8 @@
 /**
  * Plugin Build Script (Mobile) — 薄包装
  *
- * 扫描应用仓 `apps/<slug>/mobile`（三仓拆分后 app 源码住 wasmnest-apps，spec §5-E7），
+ * 扫描应用仓 `apps/<slug>/mobile` + `servers/<slug>/mobile`（三仓拆分后 app 源码住
+ * wasmnest-apps，spec §5-E7；servers = 服务型 wasm），
  * 调用 SDK CLI（wasmnest-plugin build）构建，
  * 并将产物复制到 src-tauri/resources/plugins/mobile/{id}/（进 APK 资源）。
  *
@@ -42,41 +43,43 @@ for (let i = 0; i < args.length; i++) {
   else if (args[i] === '--rust-only') rustOnly = true
 }
 
-// 应用仓布局：<appsRoot>/apps/<slug>/mobile（每 app 的移动端工程目录，含 plugin.json）
-const appsDir = join(appsRoot(), 'apps')
+// 应用仓布局：<appsRoot>/<group>/<slug>/mobile（group = apps 产品应用 / servers 服务型 wasm）
+const appsRootDir = appsRoot()
+const PROJECT_GROUPS = ['apps', 'servers']
 const resourcesDir = resolve(ROOT, 'src-tauri/resources/plugins/mobile')
 
 // 暂停开发的插件：不参与构建，恢复开发时从列表移除
 const EXCLUDED_PLUGINS = []
 
-// 扫描插件目录（跳过模板/隐藏目录/暂停开发的插件，需含 plugin.json）
-const candidates = readdirSync(appsDir, { withFileTypes: true })
-  .filter((d) => d.isDirectory() && !d.name.startsWith('_') && !d.name.startsWith('.'))
-  .map((d) => d.name)
-  .filter((name) => !EXCLUDED_PLUGINS.includes(name))
-  .filter((name) => existsSync(join(appsDir, name, 'mobile', 'plugin.json')))
+// 扫描插件目录（两个分组、跳过模板/隐藏目录/暂停开发的插件，需含 plugin.json）
+const candidates = PROJECT_GROUPS.flatMap((group) => {
+  const dir = join(appsRootDir, group)
+  if (!existsSync(dir)) return []
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !d.name.startsWith('_') && !d.name.startsWith('.'))
+    .map((d) => ({ group, name: d.name }))
+    .filter(({ name }) => !EXCLUDED_PLUGINS.includes(name))
+    .filter(({ group, name }) => existsSync(join(appsRootDir, group, name, 'mobile', 'plugin.json')))
+})
 
 const selected = targetPlugin
-  ? candidates.filter((name) => {
-      const manifest = readManifest(name)
-      return manifest.id === targetPlugin
-    })
+  ? candidates.filter((candidate) => readManifest(candidate).id === targetPlugin)
   : candidates
 
 if (selected.length === 0) {
   console.error(
     targetPlugin
       ? `Unknown plugin: ${targetPlugin}`
-      : `No plugins found in ${appsDir}/*/mobile（检查应用仓与 WASMNEST_APPS_ROOT）`,
+      : `No plugins found in ${PROJECT_GROUPS.map((g) => `${g}/*/mobile`).join(' / ')}（检查应用仓与 WASMNEST_APPS_ROOT）`,
   )
   process.exit(1)
 }
 
 const builtIds = []
-for (const name of selected) {
-  const manifest = readManifest(name)
+for (const { group, name } of selected) {
+  const manifest = readManifest({ group, name })
   builtIds.push(manifest.id)
-  const cwd = join(appsDir, name, 'mobile')
+  const cwd = join(appsRootDir, group, name, 'mobile')
   console.log(`\n=== Plugin Build (Mobile): ${manifest.id} ===\n`)
   const npxCmd = IS_WIN ? 'npx.cmd' : 'npx'
 
@@ -259,12 +262,14 @@ function resolveAppDataDir() {
  * 读取插件 manifest（含错误上下文：什么插件的 plugin.json 解析失败）。
  * 无效 JSON 让 process 直接退出（脚本语义上等同于缺 manifest，不应继续构建）。
  */
-function readManifest(name) {
-  const path = join(appsDir, name, 'mobile', 'plugin.json')
+function readManifest({ group, name }) {
+  const path = join(appsRootDir, group, name, 'mobile', 'plugin.json')
   try {
     return JSON.parse(readFileSync(path, 'utf-8'))
   } catch (e) {
-    console.error(`[plugin-build] 解析插件 manifest 失败（${name} @ ${path}）: ${e.message}`)
+    console.error(
+      `[plugin-build] 解析插件 manifest 失败（${group}/${name} @ ${path}）: ${e.message}`,
+    )
     process.exit(1)
   }
 }

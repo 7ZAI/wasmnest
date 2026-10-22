@@ -28,28 +28,40 @@ const __dirname = dirname(__filename)
 const ROOT = resolve(__dirname, '..')
 const IS_WIN = platform() === 'win32'
 
-// 插件配置 — `slug` 经 app-paths 解析到应用仓工程目录（<appsRoot>/apps/<slug>/desktop）
+// 插件配置 — `group` + `slug` 经 app-paths 解析到应用仓工程目录
+// （`<appsRoot>/<group>/<slug>/desktop`；group = apps 产品应用 / servers 服务型 wasm）
 const PLUGINS = {
   // 名单单一真源：`--all`（= pnpm `plugins:build`，CI/release/test.yml 走这条）与
   // `--plugin <id>`（docs/commands.md §5.2 的单应用调试命令）都从这里取。
   // 五个 wasm 应用必须齐全：agent-hub 曾只存在于源码目录而不在本表，
   // 于是批量构建漏掉它（CI 全新 checkout 里产物不生成）、单应用命令报
   // Unknown plugin 直接退出，前端只能手工 vite build —— 产物长期停在旧构建，
-  // 热力图按旧 CSS 渲染成整块色块（2026-10-06 实测）。
+  // 热力图按旧 CSS 渲染成整块色块（2026-10-06 实测）。新增工程同理必须同步本表。
   'com.wasmnest.agent-hub': {
+    group: 'apps',
     slug: 'agent-hub',
   },
   'com.wasmnest.ai-chatbox': {
+    group: 'apps',
     slug: 'ai-chatbox',
   },
   'com.wasmnest.file-transfer': {
+    group: 'apps',
     slug: 'file-transfer',
   },
   'com.wasmnest.monitor': {
+    // 系统服务（L2 内部业务）：工程迁入应用仓 `servers/` 分组
+    group: 'servers',
     slug: 'monitor',
   },
   'com.wasmnest.terminal-session': {
+    group: 'apps',
     slug: 'bedcode',
+  },
+  // 服务型 wasm（L2 内部业务）：认证中心。工程住应用仓 `servers/` 分组。
+  'com.wasmnest.auth-center': {
+    group: 'servers',
+    slug: 'auth-center',
   },
 }
 
@@ -116,8 +128,8 @@ function buildPlugin(targetPlugin) {
     console.log('[plugin-build] 注意：WASMNEST_PLUGIN_DEBUG 已设置——插件将以 debug profile 构建（仅供调试）')
   }
 
-  // 委托给插件的构建脚本
-  const pluginDir = appDir(config.slug, 'desktop')
+  // 委托给插件的构建脚本（工程分组 apps / servers 都在同一个注册表里）
+  const pluginDir = appDir(config.slug, 'desktop', { group: config.group })
   console.log(`Running plugin build in: ${pluginDir}`)
 
   // 构建前：按源码自动填充 plugin.json 的 contributes/permissions

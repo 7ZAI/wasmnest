@@ -102,6 +102,8 @@ export const AGENT_HUB_PLUGIN_ID = 'com.wasmnest.agent-hub'
 export const AI_CHATBOX_PLUGIN_ID = 'com.wasmnest.ai-chatbox'
 export const FILE_TRANSFER_PLUGIN_ID = 'com.wasmnest.file-transfer'
 export const MONITOR_PLUGIN_ID = 'com.wasmnest.monitor'
+/** 认证中心（服务型 wasm：L1 基础服务 / L2 内部业务，随宿主分发；应用仓 `servers/auth-center`） */
+export const AUTH_CENTER_PLUGIN_ID = 'com.wasmnest.auth-center'
 
 /**
  * 宿主挂载运行面路由表（桌面 UI 宿主修正 2026-10-17）：每个有前端界面的 wasm
@@ -120,6 +122,7 @@ export const SURFACE_ROUTES: Readonly<Record<string, string>> = {
   [AI_CHATBOX_PLUGIN_ID]: '/chat',
   [FILE_TRANSFER_PLUGIN_ID]: '/transfer',
   [MONITOR_PLUGIN_ID]: '/monitor',
+  [AUTH_CENTER_PLUGIN_ID]: '/auth',
 }
 
 /** 每 app 的路由前缀集（pluginIdOfAppRoute 反向映射用） */
@@ -137,6 +140,7 @@ const APP_ROUTE_PREFIXES: Readonly<Record<string, string[]>> = {
   [AI_CHATBOX_PLUGIN_ID]: ['/chat'],
   [FILE_TRANSFER_PLUGIN_ID]: ['/transfer'],
   [MONITOR_PLUGIN_ID]: ['/monitor'],
+  [AUTH_CENTER_PLUGIN_ID]: ['/auth'],
 }
 
 /** 应用 id（= pluginId）→ 挂载路由（landing）；无运行面的应用返回 undefined */

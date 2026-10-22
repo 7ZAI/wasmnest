@@ -9,7 +9,8 @@
 //! 面，wasm-core 内），lib 单向依赖取用。
 //!
 //! 认证语义（配对码 / QR / trust / consent / 生物 / **入场 JWT 签发与验签**）实现在
-//! 认证中心插件 `com.wasmnest.terminal-session`（[`SESSION_PLUGIN_ID`]），本文件是宿主
+//! 认证中心属主已从 `com.wasmnest.terminal-session` 迁至独立的
+//! `com.wasmnest.auth-center`（承接原认证语义），本文件是宿主
 //! 侧唯一桥接门：
 //! - **裁决面**（[`enforce_connection_policy`]，K2/K3 + ADR 0033）：**验签与策略收为
 //!   一次调用**——中心内部先验签（入场密钥自持）再逐条做策略，宿主只拿一份
@@ -29,7 +30,11 @@ use crate::wasm_core::manager::host::PluginHost;
 use crate::wasm_core::runtime_util::block_on_async;
 use wasmnest_server_base::identity::AuthenticatedIdentity;
 
-/// 认证中心插件 id（互通面常量：注册 / 停用 / 互调目标）
+/// BedCode 插件 id（历史常量；**认证中心属主已迁至 `com.wasmnest.auth-center`**）
+///
+/// 认证中心属主迁至独立的 `com.wasmnest.auth-center` 后，注册 / 停用 / 互调
+/// 寻址都由注册表的 `entry.owner` 动态决定，
+/// 本常量不再代表认证中心；平台集成测试仍用它定位 BedCode 产物（激活 / 停用）。
 pub const SESSION_PLUGIN_ID: &str = "com.wasmnest.terminal-session";
 
 /// 认证中心是否在册（K7 桥接门：替代退役的 api_registry 锚点判据）。

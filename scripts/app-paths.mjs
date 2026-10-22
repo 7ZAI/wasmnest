@@ -53,12 +53,16 @@ export function appsRoot() {
  *
  * @param {string} slug 应用 slug（目录名：bedcode / ai-chatbox / file-transfer / agent-hub）
  * @param {'desktop'|'mobile'} end 端
+ * @param {{group?: 'apps'|'servers'}} [options] 工程分组：`apps`（默认，L3 产品应用）
+ *        或 `servers`（服务型 wasm：L1 基础服务 / L2 内部业务，随宿主分发、不可卸载）
  * @returns {string} 应用工程目录绝对路径
  */
-export function appDir(slug, end) {
-  const dir = join(appsRoot(), 'apps', slug, end)
+export function appDir(slug, end, { group = 'apps' } = {}) {
+  const dir = join(appsRoot(), assertGroup(group), slug, end)
   if (!existsSync(dir)) {
-    throw new Error(`[app-paths] 应用目录不存在: ${dir}（检查 slug/end 拼写与 apps 仓内容）`)
+    throw new Error(
+      `[app-paths] 应用目录不存在: ${dir}（检查 group/slug/end 拼写与 apps 仓内容）`,
+    )
   }
   return dir
 }
@@ -71,12 +75,21 @@ export function appDir(slug, end) {
  *
  * @param {string} slug 应用 slug
  * @param {'desktop'|'mobile'} end 端
+ * @param {{group?: 'apps'|'servers'}} [options] 同 [`appDir`]
  * @returns {boolean}
  */
-export function hasAppDir(slug, end) {
+export function hasAppDir(slug, end, { group = 'apps' } = {}) {
   try {
-    return existsSync(join(appsRoot(), 'apps', slug, end))
+    return existsSync(join(appsRoot(), assertGroup(group), slug, end))
   } catch {
     return false
   }
+}
+
+/** 工程分组校验（未知分组显性抛错，不静默回落成 apps） */
+function assertGroup(group) {
+  if (group !== 'apps' && group !== 'servers') {
+    throw new Error(`[app-paths] 未知工程分组: ${JSON.stringify(group)}（允许 apps / servers）`)
+  }
+  return group
 }

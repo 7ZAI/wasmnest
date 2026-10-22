@@ -225,6 +225,8 @@ const PLUGIN_WATCH_CMDS = [
     // watch 闭环（前端改动 → SDK CLI 重建 → resources；WASM 走 ensurePluginWasm()
     // 的缺失 / 陈旧补建，补建经 scripts/plugin-build.js 委派 SDK CLI --rust-only）。
     // 与桌面 dev-run.js 的 PLUGIN_WATCH_CMDS 同构（两端同构纪律）。
+    // 工程已迁入应用仓 `servers/` 分组（系统服务）。
+    group: 'servers',
     slug: 'monitor',
     id: 'com.wasmnest.monitor',
     args: [
@@ -313,9 +315,9 @@ const DESKTOP_SDK_RUST = resolve(ROOT, '../wasmnest-desktop/packages/plugin-sdk-
  * 补建失败 fail-fast：宿主起来只会报 WASM 加载失败，早停给手动指引更可排查。
  */
 function ensurePluginWasm() {
-  for (const { slug, id, wasmFile } of PLUGIN_WATCH_CMDS) {
+  for (const { group, slug, id, wasmFile } of PLUGIN_WATCH_CMDS) {
     if (!wasmFile) continue
-    const pluginRoot = appDir(slug, 'mobile')
+    const pluginRoot = appDir(slug, 'mobile', { group })
     const wasmDest = resolve(RESOURCES_BASE, id, basename(wasmFile))
     const reason = wasmStaleReason(pluginRoot, wasmDest)
     if (!reason) continue
@@ -499,8 +501,8 @@ await precheckAdbReverse()
 ensurePluginWasm()
 
 // 2. 插件前端 watch（先行启动，产物在宿主 resources 同步前就绪）
-for (const { slug, args } of PLUGIN_WATCH_CMDS) {
-  const child = start(process.execPath, args, appDir(slug, 'mobile'))
+for (const { group, slug, args } of PLUGIN_WATCH_CMDS) {
+  const child = start(process.execPath, args, appDir(slug, 'mobile', { group }))
   // 插件 watch 异常退出 → 整组回收（fail fast，避免宿主运行在过期产物上）
   child.on('exit', (code) => {
     if (!shuttingDown) {

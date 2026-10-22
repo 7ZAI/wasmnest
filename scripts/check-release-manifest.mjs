@@ -313,52 +313,64 @@ export function runManifestCheck({ root = ROOT } = {}) {
   }
 
   // ==================== 5. apps 段覆盖应用仓全部端 ====================
+  //
+  // 工程分组：`apps/`（L3 产品应用）与 `servers/`（服务型 wasm：L1 基础服务 /
+  // L2 内部业务）同一个 `apps` 段表达 —— 判据是 plugin id → 端 → wasm 产物名，
+  // 与分组无关；`path` 字段
+  // 记录真实相对路径（`apps/<slug>` 或 `servers/<slug>`），装配链据此定位工程。
   try {
-    const appsDir = join(appsRoot(), 'apps')
-    const actual = new Map() // pluginId -> { slug, ends: Map<end, rustLibrary> }
-    for (const slug of readdirSync(appsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name)
-      .sort()) {
-      for (const end of ['desktop', 'mobile']) {
-        const manifestPath = join(appsDir, slug, end, 'plugin.json')
-        if (!existsSync(manifestPath)) continue
-        const plugin = JSON.parse(readFileSync(manifestPath, 'utf8'))
-        if (!plugin.id || !plugin.rustLibrary) {
-          fail(`${relative(root, manifestPath)} 缺 id / rustLibrary`)
-          continue
+    const actual = new Map() // pluginId -> { group, slug, ends: Map<end, rustLibrary> }
+    for (const group of ['apps', 'servers']) {
+      const groupDir = join(appsRoot(), group)
+      if (!existsSync(groupDir)) continue
+      for (const slug of readdirSync(groupDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name)
+        .sort()) {
+        for (const end of ['desktop', 'mobile']) {
+          const manifestPath = join(groupDir, slug, end, 'plugin.json')
+          if (!existsSync(manifestPath)) continue
+          const plugin = JSON.parse(readFileSync(manifestPath, 'utf8'))
+          if (!plugin.id || !plugin.rustLibrary) {
+            fail(`${relative(root, manifestPath)} 缺 id / rustLibrary`)
+            continue
+          }
+          if (!actual.has(plugin.id)) actual.set(plugin.id, { group, slug, ends: new Map() })
+          actual.get(plugin.id).ends.set(end, plugin.rustLibrary)
         }
-        if (!actual.has(plugin.id)) actual.set(plugin.id, { slug, ends: new Map() })
-        actual.get(plugin.id).ends.set(end, plugin.rustLibrary)
       }
     }
 
-    for (const [id, { slug, ends }] of actual) {
+    for (const [id, { group, slug, ends }] of actual) {
       const entry = manifest.apps[id]
       if (!entry) {
-        fail(`manifest.apps 缺 plugin id ${id}（应用仓 ${slug}，端 ${[...ends.keys()].join('/')}）`)
+        fail(
+          `manifest.apps 缺 plugin id ${id}（应用仓 ${group}/${slug}，端 ${[...ends.keys()].join('/')}）`,
+        )
         continue
       }
       requireField(
-        entry.path === `apps/${slug}`,
-        `manifest.apps["${id}"].path=${entry.path} 与应用仓实际 apps/${slug} 不一致`,
+        entry.path === `${group}/${slug}`,
+        `manifest.apps["${id}"].path=${entry.path} 与应用仓实际 ${group}/${slug} 不一致`,
       )
       const declaredEnds = Object.keys(entry.ends ?? {})
       for (const [end, rustLibrary] of ends) {
         if (!declaredEnds.includes(end)) {
-          fail(`manifest.apps["${id}"].ends 缺 ${end}（应用仓 apps/${slug}/${end} 实存）`)
+          fail(`manifest.apps["${id}"].ends 缺 ${end}（应用仓 ${group}/${slug}/${end} 实存）`)
           continue
         }
         const expectedArtifact = `${rustLibrary}.wasm`
         requireField(
           entry.ends[end].artifact === expectedArtifact,
           `manifest.apps["${id}"].ends.${end}.artifact=${entry.ends[end].artifact} ` +
-            `与 ${relative(root, join(appsDir, slug, end, 'plugin.json'))} rustLibrary 推导值=${expectedArtifact} 不一致`,
+            `与 ${relative(root, join(appsRoot(), group, slug, end, 'plugin.json'))} rustLibrary 推导值=${expectedArtifact} 不一致`,
         )
       }
       for (const end of declaredEnds) {
         if (!ends.has(end))
-          fail(`manifest.apps["${id}"].ends 多写 ${end}（应用仓 apps/${slug}/${end} 无 plugin.json）`)
+          fail(
+            `manifest.apps["${id}"].ends 多写 ${end}（应用仓 ${group}/${slug}/${end} 无 plugin.json）`,
+          )
       }
     }
     for (const id of Object.keys(manifest.apps)) {
