@@ -87,7 +87,9 @@ const KEPT_ADAPTER_FACE: &[(&str, &str)] = &[
     // 端口 + 平台缝的对象在装配点可见
     ("src/peer/net.rs", "PeerEnginePorts"),
     ("src/peer/net.rs", "fn peer_ctx("),
-    ("src/peer/net.rs", "FILE_TRANSFER_PLUGIN_ID"),
+    // 2026-10-22：服务租约波次删除宿主硬编码产品插件 id（节点生命周期改由插件
+    // 经 start-node 驱动，宿主不再带 com.wasmnest.* 常量）——原
+    // ("src/peer/net.rs", "FILE_TRANSFER_PLUGIN_ID") 判据随既定方向退役
     // mDNS 复用：共享守护经 discovery-engine 引擎三函数（零第二份 mDNS 代码）
     ("src/peer/ports.rs", "wasmnest_discovery_engine::engine::shared_daemon"),
     // 平台缝 trait 实现（SAF 共享访问 / 落点提升 / 内置共享条目）
