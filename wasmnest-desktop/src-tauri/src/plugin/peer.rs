@@ -6,10 +6,9 @@
 //! 端口装配只有本文件一条来源）。
 //!
 //! **与 pty / mdns 的差异（Cargo 边保留）**：内核仍消费该 crate 的**引擎面**——
-//! `manager/host/activation.rs::release_node_for`（停用回收释放节点）与
-//! `host_api::context::PeerCtxProvider` 的 `PeerCtx` 类型。那些不是能力域端口，
-//! 故 `wasmnest-wasm-core → wasmnest-server-peer-net` 这条边**本批次不摘**（摘它要先
-//! 把引擎面消费点搬出内核，属另一件事）。
+//! `host_api::context::PeerCtxProvider` 的 `PeerCtx` 类型。生命周期耦合已随
+//! service-leases 移除（内核不再调 `release_node_for`，改经通用服务租约释放），
+//! 剩余类型边摘除要先搬 `PeerCtxProvider`，属另一件事。
 //!
 //! 四件同处（与 pty / mdns 样板一致）：端口实现 / `install` 装配自报 / 白名单声明 +
 //! 强制引用行 / 装配器静态。
@@ -23,7 +22,9 @@
 //!   `HEADLESS_UNAVAILABLE`——本 crate 的 `peer_net_cmds` 仍是唯一认识 `AppHandle`
 //!   的引擎装配点，但那是**本文件**的依赖，不是能力域的；
 //! - **同步↔异步桥**：复用宿主那份唯一的 `runtime_util::block_on_async`（ambient
-//!   runtime + actix current_thread 自锁规避都是实测产物，能力域不得复制第二份）。
+//!   runtime + actix current_thread 自锁规避都是实测产物，能力域不得复制第二份）；
+//! - **服务注册表**：`service_registry()` 返回宿主 `WasmHostContext` 的晚绑槽位
+//!   （`net.peer-node` 按插件 id 记账；无头 / 测试返回 None → 能力域走兼容路径）。
 //!
 //! ## 判定顺序是被断言的行为（勿调换）
 //!
@@ -94,6 +95,13 @@ impl PeerPorts for HostPeerPorts {
     fn block_on_any(&self, fut: BoxedBlocked) -> Box<dyn Any + Send> {
         // 复用宿主那份唯一的同步↔异步桥（见模块文档第 3 条）
         wasmnest_wasm_core::runtime_util::block_on_async(fut)
+    }
+
+    fn service_registry(&self) -> Option<Arc<wasmnest_server_base::service::ServiceRegistry>> {
+        // 应用作用域服务租约（service-leases §4.1）：启动 / 停止节点按插件 id 记账。
+        // 宿主上下文未注入（无头测试）或本 crate 未开 desktop 装配时为 None →
+        // 能力域退化为直连引擎并落一次 warn。
+        self.ctx().service_registry()
     }
 }
 

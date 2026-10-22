@@ -54,6 +54,8 @@ pub mod platform;
 pub mod platform_picker;
 pub mod process;
 pub mod pty;
+/// 应用作用域服务租约的宿主侧 acquire 薄壳（endpoint 注册 → net.transport）
+pub mod services;
 pub mod task;
 pub mod timer;
 pub mod ws;

@@ -125,6 +125,7 @@ async fn init_test_app_context() {
             },
             std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
             None,
+            None,
         )
         .await;
         plugin_host.init_message_bus().await;

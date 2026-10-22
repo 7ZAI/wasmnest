@@ -63,7 +63,7 @@ pub fn run() {
 
     tracing::info!("Building Tauri application...");
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_os::init())
@@ -134,8 +134,8 @@ pub fn run() {
             app.manage(Arc::new(crate::peer::transfer::PeerTransferState::default()));
             app.manage(Arc::new(crate::peer::receive::PeerReceiveState::default()));
             app.manage(Arc::new(crate::peer::remote::PeerRemoteState::default()));
-            // 节点自启已退役：peer-net 生命周期随文件传输插件启停
-            // （插件管理器 activate/deactivate 外壳接线，见 peer::net::ensure_node_started）
+            // 节点自启已退役：peer-net 生命周期由应用作用域服务租约驱动
+            // （插件经 host-peer.start-node 按引用记账；宿主不再按产品 id 驱动）
 
             // 创建插件数据库连接（WASM Host Function 使用；
             // std Mutex：SQL 为同步操作，host fn 同步取锁，避免 block_on 绕行）
@@ -176,6 +176,15 @@ pub fn run() {
             );
             let plugin_manager = crate::state::init_plugin_manager(Arc::new(plugin_manager));
             app.manage(plugin_manager.clone());
+
+            // 应用作用域服务注册表：`net.peer-node` 服务经管理器的注册表注册
+            // （管理器在 init_wasm_runtime 时把同一份注入 wasm 宿主上下文；
+            // 节点状态容器已在上方托管，peer_ctx 可安全装配）
+            wasmnest_server_peer_net::service::PeerNodeService::register(
+                &plugin_manager.service_registry(),
+                crate::peer::net::peer_ctx(&app_handle),
+            )
+            .expect("register net.peer-node service (duplicate key = assembly bug)");
 
             // 异步：解压内置插件 → 初始化 WASM 运行时 → 扫描加载 → 自动激活
             // 使用 tauri::async_runtime::spawn 而非 tokio::spawn，
@@ -222,7 +231,10 @@ pub fn run() {
                     // 启动不再需要种子步骤。
 
                     pm.scan_and_load().await;
-                    pm.load_all(&ah).await;
+                    // 平台资源预热（设备名 / 下载目录）：过去由节点启动顺手完成，
+                    // 节点改由服务租约按需拉起后必须在 boot 显式预热带一次
+                    crate::peer::ports::prewarm_platform(&ah).await;
+                    pm.load_all().await;
                 });
             }
 
@@ -349,8 +361,29 @@ pub fn run() {
             // v2 批量传输批准（接收策略 / 异步批量批准）
             // SAF 存储访问（SafIo 主 seam，共享目录/上传页）
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { .. } => {
+            tracing::info!("WasmNest Mobile exit requested, shutting down scoped services...");
+            tauri::async_runtime::block_on(async {
+                if let Some(pm) = crate::state::try_get_plugin_manager() {
+                    for report in pm.service_registry().shutdown_all().await {
+                        if let Err(error) = report.outcome {
+                            tracing::error!(
+                                service_key = %report.key,
+                                error = %error,
+                                "scoped service shutdown failed (host exiting)"
+                            );
+                        }
+                    }
+                }
+            });
+        }
+        tauri::RunEvent::Exit { .. } => tracing::info!("WasmNest Mobile exited"),
+        _ => {}
+    });
 
     tracing::info!("WasmNest application closed");
 }

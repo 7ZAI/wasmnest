@@ -37,7 +37,7 @@ const RETIRED_DISCOVERY_PROJECTION: [&str; 7] = [
     "remove_shared_directory",
 ];
 
-/// 无主节点启停命令面：节点生命周期只经 host-peer 属主原语与插件外壳驱动
+/// 无主节点启停命令面：节点生命周期只经 host-peer 服务租约驱动
 ///
 /// needle 同时覆盖「函数定义」与「注册引用」两种回接形态——只锁注册会让
 /// 重新加回 `#[tauri::command]` 函数却暂不注册的实现溜过去。
@@ -93,7 +93,7 @@ fn retired_mobile_peer_discovery_projection_is_not_reintroduced() {
 fn retired_host_peer_command_face_is_not_reintroduced() {
     // 节点启停曾以「不认领属主」的宿主命令面存在，与 host-peer 谁起谁停的属主
     // 记账直接冲突（无主启动会让插件停用后节点仍在跑）。真入口只有
-    // host-peer `start-node` / `stop-node` 与插件 activate/deactivate 外壳。
+    // host-peer `start-node` / `stop-node`（服务租约按插件 id 记账）。
     let violations = scan(&RETIRED_HOST_COMMAND_FACE);
     assert!(
         violations.is_empty(),

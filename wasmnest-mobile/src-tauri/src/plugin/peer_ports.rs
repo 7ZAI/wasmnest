@@ -32,11 +32,16 @@ use wasmnest_server_peer_net::PeerCtx;
 /// 端口的宿主实现（持 AppHandle；无头 / 测试为 `None`）
 pub struct HostPeerPorts {
     app: Option<Arc<tauri::AppHandle>>,
+    /// 应用作用域服务注册表（与桌面同机制；节点启停按插件 id 记账）
+    service_registry: Arc<wasmnest_server_base::service::ServiceRegistry>,
 }
 
 impl HostPeerPorts {
-    pub fn new(app: Option<Arc<tauri::AppHandle>>) -> Self {
-        Self { app }
+    pub fn new(
+        app: Option<Arc<tauri::AppHandle>>,
+        service_registry: Arc<wasmnest_server_base::service::ServiceRegistry>,
+    ) -> Self {
+        Self { app, service_registry }
     }
 }
 
@@ -81,9 +86,37 @@ impl PeerPorts for HostPeerPorts {
         // 复用 wasm-core 唯一那份同步桥（见模块头注第 3 条）
         wasmnest_wasm_core::runtime_util::block_on_async(fut)
     }
+
+    fn service_registry(&self) -> Option<Arc<wasmnest_server_base::service::ServiceRegistry>> {
+        // 生产装配恒为 Some：host-peer.start-node / stop-node 按插件引用记账
+        Some(Arc::clone(&self.service_registry))
+    }
 }
 
 /// 装配进程级端口（开机期调用一次；crate 侧 OnceLock 幂等——首装胜出）
-pub fn install(app: Option<Arc<tauri::AppHandle>>) {
-    wasmnest_server_peer_net::plugin_binding::install_ports(Arc::new(HostPeerPorts::new(app)));
+pub fn install(
+    app: Option<Arc<tauri::AppHandle>>,
+    service_registry: Arc<wasmnest_server_base::service::ServiceRegistry>,
+) {
+    wasmnest_server_peer_net::plugin_binding::install_ports(Arc::new(HostPeerPorts::new(
+        app,
+        service_registry,
+    )));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 生产装配锁：移动 host-peer 端口必须暴露服务注册表（节点启停按引用记账，
+    /// 不走「无租约兼容路径」）。
+    #[test]
+    fn production_port_always_exposes_service_registry() {
+        let registry = Arc::new(wasmnest_server_base::service::ServiceRegistry::new());
+        let ports = HostPeerPorts::new(None, registry);
+        assert!(
+            ports.service_registry().is_some(),
+            "移动生产端口必须装配服务注册表"
+        );
+    }
 }

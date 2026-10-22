@@ -209,45 +209,70 @@ impl PowerPort for HostPowerPort {
 
 // ==================== MdnsAdvertiserPort ====================
 
-/// mDNS 服务广播（`AppContext::mdns_advertiser()` 包装，装配 `AdvertiseConfig`）
-pub struct HostMdnsAdvertiserPort;
+/// mDNS 服务广播（Tauri managed 的 `MdnsAdvertiser` 包装，装配 `AdvertiseConfig`）
+///
+/// 句柄优先取自 managed state：传输面可能在 `PluginHost::new` 内的角色组件
+/// 激活期启动，此时 `AppContext` 尚未注册；managed 句柄在 new 之前就已托管。
+pub struct HostMdnsAdvertiserPort {
+    app: Option<Arc<tauri::AppHandle>>,
+}
 
+impl HostMdnsAdvertiserPort {
+    pub fn new(app: Option<Arc<tauri::AppHandle>>) -> Self {
+        Self { app }
+    }
+
+    fn advertiser(&self) -> Option<Arc<tokio::sync::RwLock<wasmnest_discovery_engine::advertiser::MdnsAdvertiser>>> {
+        self.app
+            .as_ref()
+            .and_then(|app| {
+                app.try_state::<Arc<tokio::sync::RwLock<wasmnest_discovery_engine::advertiser::MdnsAdvertiser>>>()
+                    .map(|state| state.inner().clone())
+            })
+            .or_else(|| AppContext::try_global().map(|ctx| ctx.mdns_advertiser().clone()))
+    }
+}
+
+#[async_trait]
 impl MdnsAdvertiserPort for HostMdnsAdvertiserPort {
-    fn advertise(&self, service_name: String, port: u16, txt_records: std::collections::HashMap<String, String>) {
-        let Some(advertiser) = AppContext::try_global().map(|ctx| ctx.mdns_advertiser().clone()) else {
-            // 静默返回会让「广播没起来」无处可查（对端只看到设备凭空消失）：
-            // 显性 warn，调用方为 server 启停（非热路径，不会成日志风暴）
+    async fn advertise(
+        &self,
+        service_name: String,
+        port: u16,
+        txt_records: std::collections::HashMap<String, String>,
+    ) -> std::result::Result<(), String> {
+        let Some(advertiser) = self.advertiser() else {
+            // 无句柄 = 无法广播：显性失败，让 supervisor 回滚 server
+            // （静默返回会造成「服务器起了但设备不可见」的空壳，对端只看到设备凭空消失）
             tracing::warn!(
                 service_name = %service_name,
                 port = port,
-                "[ServerSupervisor] mDNS advertisement skipped: app context not initialized"
+                "[ServerSupervisor] mDNS advertisement failed: advertiser handle unavailable"
             );
-            return;
+            return Err("mDNS advertisement unavailable: advertiser handle unavailable".to_string());
         };
-        tokio::spawn(async move {
-            let advertiser = advertiser.read().await;
-            let config = wasmnest_discovery_engine::types::AdvertiseConfig {
-                service_name,
-                port,
-                txt_records,
-            };
-            if let Err(e) = advertiser.start(config).await {
-                tracing::error!("[ServerSupervisor] Failed to start mDNS advertisement: {}", e);
-            }
-        });
+        // await 到登记完成：supervisor.start 返回时广播必须已生效（§4.5）
+        let advertiser = advertiser.read().await;
+        let config = wasmnest_discovery_engine::types::AdvertiseConfig {
+            service_name,
+            port,
+            txt_records,
+        };
+        advertiser.start(config).await.map_err(|e| {
+            tracing::error!("[ServerSupervisor] Failed to start mDNS advertisement: {}", e);
+            e.to_string()
+        })
     }
 
-    fn stop(&self) {
-        let Some(advertiser) = AppContext::try_global().map(|ctx| ctx.mdns_advertiser().clone()) else {
-            tracing::warn!("[ServerSupervisor] mDNS advertisement stop skipped: app context not initialized");
+    async fn stop(&self) {
+        let Some(advertiser) = self.advertiser() else {
+            tracing::warn!("[ServerSupervisor] mDNS advertisement stop skipped: advertiser handle unavailable");
             return;
         };
-        tokio::spawn(async move {
-            let advertiser = advertiser.read().await;
-            if let Err(e) = advertiser.stop().await {
-                tracing::error!("[ServerSupervisor] Failed to stop mDNS advertisement: {}", e);
-            }
-        });
+        let advertiser = advertiser.read().await;
+        if let Err(e) = advertiser.stop().await {
+            tracing::error!("[ServerSupervisor] Failed to stop mDNS advertisement: {}", e);
+        }
     }
 }
 
@@ -362,10 +387,10 @@ pub fn assemble(app_handle: Option<Arc<tauri::AppHandle>>) -> ServerPorts {
             Arc::new(|bus| Arc::new(crate::plugin::ws::HostWsPorts::from_bus(Arc::clone(bus)))),
         )),
         event_sink: Arc::new(HostEventSink),
-        paths: Arc::new(HostPathsPort::new(app_handle)),
+        paths: Arc::new(HostPathsPort::new(app_handle.clone())),
         system_info: Arc::new(HostSystemInfoPort),
         power: Arc::new(HostPowerPort),
-        mdns_advertiser: Arc::new(HostMdnsAdvertiserPort),
+        mdns_advertiser: Arc::new(HostMdnsAdvertiserPort::new(app_handle)),
         lifecycle: Arc::new(HostServerLifecyclePort),
         runtime: Arc::new(HostRuntimePort),
         config: Arc::new(HostConfigPort),

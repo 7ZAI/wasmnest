@@ -413,7 +413,8 @@ export default {
       sectionStatus: 'Status',
       sectionNetwork: 'Network',
       port: 'Port',
-      portHint: 'Restart required after port change',
+      portHint: 'Takes effect on the next service start',
+      surfaceHint: 'Service follows app surfaces; stops when the last app surface closes',
       portSave: 'Save',
       portRestartConfirmTitle: 'Save Port',
       portRestartConfirmBody:

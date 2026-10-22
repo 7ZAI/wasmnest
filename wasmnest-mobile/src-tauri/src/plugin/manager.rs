@@ -147,6 +147,9 @@ pub struct PluginManager {
     fs_auth: Arc<wasmnest_wasm_core::security::fs_auth::FsAuthChecker>,
     /// 消息总线
     message_bus: Arc<crate::plugin::message_bus::MessageBus>,
+    /// 应用作用域共享服务注册表（与桌面同一机制）：boot 注册 `net.peer-node`
+    /// 服务并注入 wasm 宿主上下文；插件离开运行态时按 holder 回收。
+    service_registry: Arc<wasmnest_server_base::service::ServiceRegistry>,
 }
 
 impl PluginManager {
@@ -175,6 +178,8 @@ impl PluginManager {
             Vec::new(),
         ));
         let message_bus = Arc::new(crate::plugin::message_bus::MessageBus::new());
+        // 应用作用域服务注册表：实例随宿主，测试各自 new（互不干扰）
+        let service_registry = Arc::new(wasmnest_server_base::service::ServiceRegistry::new());
 
         // builtin_manifests() 当前返回空 Vec，内置插件走 APK assets 加载
         let mut plugins = HashMap::new();
@@ -204,7 +209,13 @@ impl PluginManager {
             app_handle,
             fs_auth,
             message_bus,
+            service_registry,
         }
+    }
+
+    /// 应用作用域共享服务注册表（boot 用它注册 `PeerNodeService`）
+    pub fn service_registry(&self) -> Arc<wasmnest_server_base::service::ServiceRegistry> {
+        Arc::clone(&self.service_registry)
     }
 
     /// 延迟初始化 WASM 运行时
@@ -264,10 +275,12 @@ impl PluginManager {
         let plugins = self.plugins.clone();
         let settings = self.settings.clone();
         let app_handle = self.app_handle.as_ref().cloned();
+        let service_registry = Arc::clone(&self.service_registry);
         let status_reporter: Arc<dyn Fn(&str, &str) + Send + Sync> = Arc::new(move |plugin_id, error| {
             let plugins = plugins.clone();
             let settings = settings.clone();
             let app_handle = app_handle.clone();
+            let service_registry = Arc::clone(&service_registry);
             let pid = plugin_id.to_string();
             let err = error.to_string();
             // async block 需要独占所有权，外层克隆供 emit/日志使用
@@ -282,6 +295,11 @@ impl PluginManager {
                             p.state = PluginState::Error { error: err_clone.clone() };
                         }
                         drop(map);
+
+                        // Error 态的活实例已不可服务：释放其应用作用域服务租约
+                        // （shutdown / release 由注册表模板保证幂等）
+                        let reports = service_registry.release_all_for(&pid_clone).await;
+                        log_release_reports(&pid_clone, "plugin marked error", reports);
 
                         // 撤销自启动：坏插件下次启动不再自动激活（旧行为由「持久化未启用」
                         // 承担，启用与自启动解耦后该职责归 autostart 偏好）——避免失败插件
@@ -340,10 +358,17 @@ impl PluginManager {
         // `host-platform.platform()`；晚注入 = 激活失败）
         host_ctx.set_host_facts(Arc::new(crate::plugin::host_ports::HostPorts::new()));
 
+        // 服务租约注册表：必须早于任何激活（load_all 在 init 之后触发；激活期
+        // 端点注册 / host-peer.start-node 会 acquire）
+        host_ctx.set_service_registry(Some(Arc::clone(&self.service_registry)));
+
         // host-peer 端口（wasm-core-mobile-purity 票 03）：wasm-core bare 面 19 条
         // 原语的薄转发经 crate `ports::ports()` 取本端口——权限判定 / 引擎上下文 /
-        // 同步桥三面在此与宿主衔接（幂等，重复 init 首装胜出）
-        crate::plugin::peer_ports::install(self.app_handle.as_ref().cloned());
+        // 同步桥 / 服务注册表四面在此与宿主衔接（幂等，重复 init 首装胜出）
+        crate::plugin::peer_ports::install(
+            self.app_handle.as_ref().cloned(),
+            Arc::clone(&self.service_registry),
+        );
 
         // 组件路径无启动期签名表校验：契约由 WIT 编译期保证；组件形态由
         // instantiate_component 内的 `abi-form` 检查逐实例校验（移动 WIT 无该导出，
@@ -516,7 +541,7 @@ impl PluginManager {
     /// 的应用做自动激活（`plugin.autostart.{id}`，缺省关）
     ///
     /// 其余应用保持 Loaded 态，等用户在宿主壳里点击启动（`plugin_activate`）。
-    pub async fn load_all(&self, app_handle: &tauri::AppHandle) {
+    pub async fn load_all(&self) {
         let plugin_ids: Vec<String> = self.plugins.read().await.keys().cloned().collect();
 
         // 存量兼容：迁移后首启自动批准（一次性，见 auto_approve_legacy）
@@ -535,12 +560,6 @@ impl PluginManager {
 
         // 通知所有插件应用启动完成
         self.dispatch_lifecycle_event(PluginLifecycleEvent::AppStartup).await;
-
-        // peer-net 节点状态对账：boot 装配后按最终插件状态对齐（幂等，与
-        // activate/deactivate 外壳接线互为兜底——激活失败/半程失败也收敛）
-        if let Err(e) = crate::peer::net::sync_node_with_plugin_state(app_handle).await {
-            tracing::error!(error = %e, "peer-net node sync after boot assembly failed");
-        }
     }
 
     /// 判断插件来源是否属于内置信任域（无需审批）
@@ -690,19 +709,18 @@ impl PluginManager {
     }
 
     async fn activate_impl(&self, plugin_id: &str, run_preauth: bool) -> Result<()> {
-        // 外壳：激活成功后接线 peer-net 节点生命周期（file-transfer 是节点唯一
-        // 消费方，节点随插件启停——旧 setup 无条件自启已退役，停用即服务下线）
+        // 激活失败补偿：插件可能在 activate() 里已 acquire 服务、随后才失败；
+        // 不回收会留下「插件未激活、服务仍在运行 / 仍在广播」的孤儿引用。
+        // 服务由插件经原语自行请求（双端同构），宿主不再按产品 id 开关节点。
         let result = self.activate_inner(plugin_id, run_preauth).await;
-        if result.is_ok() && plugin_id == crate::peer::net::FILE_TRANSFER_PLUGIN_ID {
-            if let Some(app) = self.app_handle.clone() {
-                if let Err(e) = crate::peer::net::ensure_node_started(&app).await {
-                    tracing::error!(
-                        plugin_id = %plugin_id,
-                        error = %e,
-                        "peer-net node start on plugin activation failed"
-                    );
-                }
-            }
+        if result.is_err() {
+    /// 释放插件持有的全部应用作用域服务租约（停用 / 激活失败 / Error 态共用）
+    async fn release_services_for(&self, plugin_id: &str, reason: &str) {
+        let reports = self.service_registry.release_all_for(plugin_id).await;
+        log_release_reports(plugin_id, reason, reports);
+    }
+
+            self.release_services_for(plugin_id, "activation failed").await;
         }
         result
     }
@@ -946,19 +964,11 @@ impl PluginManager {
     ///
     /// 锁约定同 activate：执行 WASM deactivate 导出期间不持 map 守卫
     pub async fn deactivate(&self, plugin_id: &str) -> Result<()> {
-        // 外壳：停用成功后接线 peer-net 节点生命周期（file-transfer 停用即
-        // 服务下线，对端即时感知；幂等）
+        // 停用成功（guest 清理已跑完）后回收该插件的服务租约：对端即时感知下线；
+        // 插件自己没主动 release 时由这一层兜底。
         let result = self.deactivate_inner(plugin_id).await;
-        if result.is_ok() && plugin_id == crate::peer::net::FILE_TRANSFER_PLUGIN_ID {
-            if let Some(app) = self.app_handle.clone() {
-                if let Err(e) = crate::peer::net::stop_node_for_plugin(&app).await {
-                    tracing::error!(
-                        plugin_id = %plugin_id,
-                        error = %e,
-                        "peer-net node stop on plugin deactivation failed"
-                    );
-                }
-            }
+        if result.is_ok() {
+            self.release_services_for(plugin_id, "plugin deactivated").await;
         }
         result
     }
@@ -1145,8 +1155,11 @@ impl PluginManager {
     /// / 权限总览靠它派生审批入口），被通用 `Error` 覆盖会让审批入口消失（前端
     /// loader 在 `plugin_activate` 失败后固定调本方法，审批被拒走的正是那条路径）。
     pub async fn mark_error(&self, plugin_id: &str, error: String) {
-        let mut plugins = self.plugins.write().await;
-        if let Some(plugin) = plugins.get_mut(plugin_id) {
+        {
+            let mut plugins = self.plugins.write().await;
+            let Some(plugin) = plugins.get_mut(plugin_id) else {
+                return;
+            };
             if plugin.state == PluginState::NeedsApproval {
                 tracing::debug!(
                     plugin_id = %plugin_id,
@@ -1165,6 +1178,8 @@ impl PluginManager {
     /// 已激活状态保持不动。
     pub async fn report_ready(&self, plugin_id: &str) -> Result<()> {
         let mut plugins = self.plugins.write().await;
+        // 锁外释放：release 会 await 服务 stop，不能持 plugins 锁
+        self.release_services_for(plugin_id, "plugin marked error").await;
         let plugin = plugins
             .get_mut(plugin_id)
             .ok_or_else(|| crate::AppError::Plugin(format!("Plugin not found: {}", plugin_id)))?;
@@ -1433,6 +1448,34 @@ impl crate::plugin::message_bus::MessageDispatcher for PluginManagerDispatcher {
 //   `wasm_runtime/component.rs:745 build_test_component(features)` 编译产物
 // - 行为覆盖：activate 失败→Degraded / Degraded 可重试→Activated /
 //   Degraded 停用→Deactivated / dispatch_lifecycle 跳过 AppStartup 二次调用
+// ==================== 服务租约释放日志（生命周期路径共用） ====================
+
+/// 逐条记录租约释放结果：单 key 失败只记录、不阻断插件生命周期。
+fn log_release_reports(
+    plugin_id: &str,
+    reason: &str,
+    reports: Vec<wasmnest_server_base::service::ReleaseReport>,
+) {
+    for report in reports {
+        match &report.outcome {
+            Ok(outcome) => tracing::info!(
+                plugin_id = %plugin_id,
+                service_key = %report.key,
+                outcome = ?outcome,
+                reason = %reason,
+                "scoped service released on plugin lifecycle"
+            ),
+            Err(error) => tracing::error!(
+                plugin_id = %plugin_id,
+                service_key = %report.key,
+                error = %error,
+                reason = %reason,
+                "scoped service release on plugin lifecycle failed"
+            ),
+        }
+    }
+}
+
 //
 // 锁约束：manager 字段全 pub(crate)；mod tests 在同文件内访问合法
 
@@ -2157,3 +2200,81 @@ mod tests {
         assert!(!manager.is_autostart(pid).await, "卸载后自启动偏好已清除");
     }
 }
+
+    // ==================== 应用作用域服务租约的生命周期回收 ====================
+
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// 租约测试替身：只记录启停次数，不触网络
+    struct LeaseProbe {
+        starts: AtomicUsize,
+        stops: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl wasmnest_server_base::service::ScopedService for LeaseProbe {
+        fn key(&self) -> &'static str {
+            "test.mobile.lease"
+        }
+
+        async fn start(&self) -> std::result::Result<(), String> {
+            self.starts.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn stop(&self) -> std::result::Result<(), String> {
+            self.stops.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    /// 三条离开运行态的路径都必须调用 `release_all_for`：
+    /// 停用成功 / 激活失败 / 进入 Error 态。
+    #[tokio::test]
+    async fn test_service_leases_released_on_deactivate_activation_failure_and_error() {
+        use wasmnest_server_base::service::ScopedService;
+
+        let (manager, _tmp) = setup_manager().await;
+        let registry = manager.service_registry();
+        let probe = StdArc::new(LeaseProbe {
+            starts: AtomicUsize::new(0),
+            stops: AtomicUsize::new(0),
+        });
+        registry
+            .register(probe.clone() as StdArc<dyn ScopedService>)
+            .unwrap();
+
+        let pid = "com.wasmnest.test.mgr-lease";
+        seed_trusted_plugin(
+            &manager,
+            pid,
+            vec!["storage".to_string()],
+            crate::plugin::types::PluginType::TsOnly,
+        )
+        .await;
+        manager.activate(pid).await.expect("activate");
+
+        // ① 停用成功 → 释放并关停
+        registry.acquire("test.mobile.lease", pid).await.unwrap();
+        assert_eq!(probe.starts.load(Ordering::SeqCst), 1);
+        manager.deactivate(pid).await.expect("deactivate");
+        let snapshot = registry.snapshot().await;
+        assert!(snapshot[0].holders.is_empty(), "停用后 holder 必须清空");
+        assert!(!snapshot[0].running, "最后一个引用释放后服务必须关停");
+        assert_eq!(probe.stops.load(Ordering::SeqCst), 1);
+
+        // ② 激活失败 → 外层补偿释放半程租约
+        registry.acquire("test.mobile.lease", "com.wasmnest.missing").await.unwrap();
+        assert!(manager.activate("com.wasmnest.missing").await.is_err());
+        assert!(
+            registry.snapshot().await[0].holders.is_empty(),
+            "激活失败后不得残留 holder"
+        );
+
+        // ③ Error 态 → 活实例已不可服务，必须释放并停播
+        registry.acquire("test.mobile.lease", pid).await.unwrap();
+        manager.mark_error(pid, "trap".to_string()).await;
+        let snapshot = registry.snapshot().await;
+        assert!(snapshot[0].holders.is_empty(), "Error 态必须释放租约");
+        assert!(!snapshot[0].running, "Error 态不得继续对外提供服务");
+    }

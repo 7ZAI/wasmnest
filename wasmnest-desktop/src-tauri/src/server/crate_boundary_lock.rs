@@ -167,8 +167,9 @@ const ALLOWED_DOWNWARD_EDGES: &[(&str, &[&str])] = &[
             // `src/plugin/pty.rs` 且内核不再引用该 crate）。
             //
             // **peer / ws / http 三条边仍是保留边**（本清单 + 下方 REQUIRED 表同时登记）：
-            // 内核继续消费这些 crate 的**引擎面**（peer 的 `release_node_for` / ws / http
-            // 的帧投递与连接清单）——摘边要把那些消费点一并搬出内核，属另一件事。
+            // 内核继续消费这些 crate 的**引擎面**（peer 的 `PeerCtx` 类型 / ws / http
+            // 的帧投递与连接清单）——peer 生命周期自 service-leases 起已改由宿主
+            // 服务注册表驱动，内核只余类型面；摘边要把剩余消费点一并搬出内核，属另一件事。
             //
             // 单形态（2026-10-13）：`wasmnest-crypto-engine` 与 `wasmnest-discovery-engine`
             // 边已摘除（源码零引用实证——认证中心/密码学走桌面宿主依赖，mdns 引擎由

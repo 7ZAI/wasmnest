@@ -660,42 +660,31 @@ pub use crate::wasm_core::api_bridge::*;
 
 // ==================== Server Control Commands ====================
 
-// Tauri commands for server lifecycle management and metrics query
+// ==================== App Surface Service Leases ====================
 
-/// 启动服务器
+// 启停 / 重启 / 自启动命令已退役（service-leases §7.2）：它们能在没有任何应用
+// 持有服务时把传输面拉起来，绕过引用记账（违反 Q1/Q4）。
+//
+// 端点注册只写路由表，不启动监听器；传输面由**应用界面打开**驱动：外壳挂载
+// 应用整包 → `plugin_surface_open`，卸载 → `plugin_surface_close`。这使 boot 期
+// 注册路由的基础设施应用（认证中心等）不会仅因注册就对外广播。
+
+/// 应用界面打开：为该应用持有 `net.transport`（无传输端点的应用为 no-op）
 #[tauri::command]
-pub async fn server_start(app_handle: tauri::AppHandle, port: u16) -> Result<()> {
-    let supervisor = ServerSupervisor::global();
-    supervisor.start(port).await?;
-
-    // 写入端口文件
-    let port_file = app_handle
-        .path()
-        .app_data_dir()
-        .ok()
-        .map(|p| p.join("wasmnest-port.txt"));
-    if let Some(port_file) = port_file {
-        if let Some(parent) = port_file.parent() {
-            let _ = tokio::fs::create_dir_all(parent).await;
-        }
-        let _ = tokio::fs::write(&port_file, port.to_string()).await;
-    }
-
-    Ok(())
+pub async fn plugin_surface_open(app_id: String) -> Result<()> {
+    let ctx = crate::system::app_context::AppContext::global();
+    crate::plugin::services::acquire_for_surface(ctx.service_registry(), &app_id, "plugin_surface_open")
+        .await
+        .map_err(crate::AppError::Internal)
 }
 
-/// 停止服务器
+/// 应用界面关闭：释放该应用的 `net.transport` 引用（未持有 = 幂等成功）
 #[tauri::command]
-pub async fn server_stop() -> Result<()> {
-    let supervisor = ServerSupervisor::global();
-    supervisor.stop().await
-}
-
-/// 重启服务器
-#[tauri::command]
-pub async fn server_restart() -> Result<()> {
-    let supervisor = ServerSupervisor::global();
-    supervisor.restart().await
+pub async fn plugin_surface_close(app_id: String) -> Result<()> {
+    let ctx = crate::system::app_context::AppContext::global();
+    crate::plugin::services::release_for_surface(ctx.service_registry(), &app_id, "plugin_surface_close")
+        .await
+        .map_err(crate::AppError::Internal)
 }
 
 /// 获取服务器状态信息
@@ -780,26 +769,6 @@ pub async fn update_server_port(app_handle: tauri::AppHandle, port: u16) -> Resu
     Ok(())
 }
 
-/// 更新自启动配置
-#[tauri::command]
-pub async fn update_server_auto_start(app_handle: tauri::AppHandle, auto_start: bool) -> Result<()> {
-    let config_path = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| crate::AppError::Config(format!("Failed to get app data dir: {}", e)))?
-        .join("config.properties");
-
-    let mut config = AppConfig::load(&config_path)?;
-    config.network.auto_start = auto_start;
-    config.save(&config_path)?;
-
-    let supervisor = ServerSupervisor::global();
-    supervisor.update_auto_start(auto_start).await;
-
-    tracing::info!("Server auto_start updated to {}", auto_start);
-    Ok(())
-}
-
 /// 更新服务器网络配置（Actix Web + WebSocket 参数）
 ///
 /// 仅更新配置文件，需重启服务器生效
@@ -812,15 +781,13 @@ pub async fn update_server_network_config(app_handle: tauri::AppHandle, network_
         .join("config.properties");
 
     let mut config = AppConfig::load(&config_path)?;
-    let auto_start = network_config.auto_start;
     let port = network_config.port;
     config.network = network_config;
     config.save(&config_path)?;
 
-    // 更新 supervisor 内存中的端口和自启动
+    // 只更新端口（启停由服务租约决定；network.auto_start 已退役、不再生效）
     let supervisor = ServerSupervisor::global();
     supervisor.update_port(port).await?;
-    supervisor.update_auto_start(auto_start).await;
 
     tracing::info!("Server network config updated");
     Ok(())
@@ -839,15 +806,13 @@ pub async fn reset_server_network_config(app_handle: tauri::AppHandle) -> Result
 
     let mut config = AppConfig::load(&config_path)?;
     let default_config = NetworkConfig::default();
-    let auto_start = default_config.auto_start;
     let port = default_config.port;
     config.network = default_config.clone();
     config.save(&config_path)?;
 
-    // 更新 supervisor 内存中的端口和自启动
+    // 只更新端口（启停由服务租约决定；network.auto_start 已退役、不再生效）
     let supervisor = ServerSupervisor::global();
     supervisor.update_port(port).await?;
-    supervisor.update_auto_start(auto_start).await;
 
     tracing::info!("Server network config reset to defaults");
     Ok(default_config)

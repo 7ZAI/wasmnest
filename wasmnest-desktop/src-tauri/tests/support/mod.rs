@@ -187,6 +187,7 @@ pub async fn setup_host() -> Arc<PluginHost> {
         },
         std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
         None,
+        None,
     )
     .await;
 

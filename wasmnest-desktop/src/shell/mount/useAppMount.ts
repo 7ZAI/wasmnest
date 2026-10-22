@@ -13,6 +13,10 @@
  * 每个 app 实例是独立 Vue 应用（自带 router/stores/i18n/样式，bundled 自身依赖）：
  * 卸载即销毁，宿主不持有 app 内部状态（§5.1 红线：宿主零业务状态）。
  *
+ * 界面挂载/卸载同时是**应用作用域服务租约**的信号（service-leases）：挂载 →
+ * `plugin_surface_open` 为应用持有 `net.transport`（仅注册过 HTTP/WS 端点的应用），
+ * 卸载 → `plugin_surface_close` 释放。端点注册只写路由表，不启动监听器。
+ *
  * 预览面（2026-10-20 多任务卡）：同一挂载包还可选导出 `mountPreview(root, env)`，
  * 由应用在卡片缩略区**自绘**一张只读、点时刻的预览面（不是截图 / 不是 DOM 克隆，
  * 见 `.scratch/2026-10-20-app-preview-contract/spec.md`）。宿主只负责给容器、装载、
@@ -173,6 +177,30 @@ export function assertMountContract(appId: string, actual: string | undefined): 
   )
 }
 
+/**
+ * 应用界面租约：挂载时（mount 之前）为应用持有 `net.transport`。
+ *
+ * 端点注册只写路由表，不启动监听器；「界面打开」是传输面的需求信号。
+ * 失败只记日志：应用本地界面仍可用，但不会对外广播（宿主命令返回
+ * StartFailed 等错误，排障看日志）。
+ */
+async function notifySurfaceOpen(appId: string): Promise<void> {
+  try {
+    await invoke('plugin_surface_open', { appId })
+  } catch (e) {
+    logger.error(`[AppMount] surface open failed: ${appId}`, e)
+  }
+}
+
+/** 应用界面租约：卸载时释放（未持有 = 幂等成功；失败只记日志） */
+async function notifySurfaceClose(appId: string): Promise<void> {
+  try {
+    await invoke('plugin_surface_close', { appId })
+  } catch (e) {
+    logger.error(`[AppMount] surface close failed: ${appId}`, e)
+  }
+}
+
 /** 装载并挂载一个 app 前端到挂载槽元素 */
 export async function mountAppBundle(
   slotEl: HTMLElement,
@@ -187,7 +215,16 @@ export async function mountAppBundle(
     throw new Error(`app bundle "${appId}" does not export mountApp (contract mismatch)`)
   }
 
-  const handle = await module.mountApp(slotEl, env)
+  // 界面打开即租用传输面：先于 mount，让应用首屏的网络路径在服务就绪后运行；
+  // mount 失败释放，避免失败挂载留下租约。
+  await notifySurfaceOpen(appId)
+  let handle: AppMountHandle
+  try {
+    handle = await module.mountApp(slotEl, env)
+  } catch (e) {
+    await notifySurfaceClose(appId)
+    throw e
+  }
   mounted.set(appId, handle)
   logger.log(`[AppMount] mounted: ${appId}`)
   return handle
@@ -231,6 +268,7 @@ export async function unmountAppBundle(appId: string): Promise<void> {
   } catch (e) {
     logger.error(`[AppMount] unmount failed: ${appId}`, e)
   }
+  await notifySurfaceClose(appId)
 }
 
 /** 通知已挂载 app：宿主路由变化 */

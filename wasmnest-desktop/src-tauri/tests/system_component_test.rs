@@ -698,6 +698,7 @@ async fn test_boot_activates_system_components_before_app_plugins() {
         },
         std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
         None,
+        None,
     )
     .await;
 
@@ -821,6 +822,7 @@ async fn setup_three_layer_host(tmp_dir: &tempfile::TempDir, l2_manifest_extra: 
             form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
         },
         std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
+        None,
         None,
     )
     .await;

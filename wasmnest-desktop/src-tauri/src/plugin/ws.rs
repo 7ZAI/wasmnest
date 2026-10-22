@@ -252,6 +252,8 @@ inventory::submit! {
 // WIT 层：服务端域 10 条原语 → 服务器引擎 API（薄转发，与迁移前 impl 逐字同源）
 impl wasmnest::plugin::host_websocket_server::Host for WasmPluginState {
     fn register_endpoint(&mut self, config_json: String) -> Result<String, String> {
+        // 只登记端点，不启动监听器：传输面由应用界面挂载触发
+        // （`plugin_surface_open`，与 HTTP 端点同一 key / 同一 holder）。
         wasmnest_server_websocket::plugin_binding::ws_register_endpoint(
             &wasmnest_server_websocket::plugin_binding::ports_for(self),
             &self.plugin_id,

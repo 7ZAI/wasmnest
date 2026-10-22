@@ -241,7 +241,7 @@ pub fn lifecycle_registry() -> &'static LifecycleRegistry {
 /// 注册核心模块的 Shutdown 钩子
 ///
 /// 在 lib.rs setup 闭包中调用，注册各核心服务的优雅关闭逻辑。
-/// 执行顺序由优先级决定：SessionManager(10) → PluginHost(15/20) → Server(30) → mDNS(40) → Power(50)
+/// 执行顺序由优先级决定：PTY 回收(10) → PluginHost(15/20) → 服务租约(25) → Server(30) → mDNS(40) → Power(50)
 pub fn register_core_lifecycle_hooks() {
     let registry = lifecycle_registry();
 
@@ -282,7 +282,28 @@ pub fn register_core_lifecycle_hooks() {
         }
     });
 
-    // ServerSupervisor — 优先级 30，停止 HTTP/WS 服务器
+    // 应用作用域服务租约兜底 — 优先级 25（deactivate 之后、server 停止之前）
+    //
+    // 插件停用路径已逐个 release；这里兜住 Error 态 / 停用失败 / stop 失败的
+    // 残留槽位（`shutdown_all` 对 running 槽执行 stop 并清空 holder）。
+    registry.on_shutdown("service-leases", 25, || async {
+        let ctx = crate::system::app_context::AppContext::global();
+        let Some(services) = ctx.service_registry() else {
+            return;
+        };
+        let reports = services.shutdown_all().await;
+        for report in reports {
+            if let Err(error) = report.outcome {
+                tracing::error!(
+                    service_key = %report.key,
+                    error = %error,
+                    "scoped service shutdown failed (host exiting)"
+                );
+            }
+        }
+    });
+
+    // ServerSupervisor — 优先级 30，兜底停止 HTTP/WS 服务器（通常已由服务租约停掉）
     registry.on_shutdown("server-supervisor", 30, || async {
         let supervisor = wasmnest_server_core::supervisor::ServerSupervisor::global();
         if supervisor.is_running().await {

@@ -2,15 +2,16 @@
 //!
 //! peer-net 拆 lib 后不再持有 `AppHandle`（引擎函数一律 `&PeerCtx` / `Arc<PeerCtx>`）：
 //! 本模块是唯一还认识 `AppHandle` 的薄壳——[`peer_ctx`] 从 `AppHandle` 装配
-//! [`PeerCtx`]（端口 + 四个引擎状态），五条前端命令在此保持 `#[tauri::command]`
-//! 签名并把调用转给引擎实现。拆分前命令壳与引擎同文件，本模块是拆分产物；
-//! 库函数本身不再标注 `#[tauri::command]`。
+//! [`PeerCtx`]（端口 + 四个引擎状态），三条前端命令（首连应答 / 信任列表 / 撤销）
+//! 在此保持 `#[tauri::command]` 签名并把调用转给引擎实现。节点启停命令已随
+//! service-leases 退役（改由 host-peer 原语按引用记账）。拆分前命令壳与引擎同文件，
+//! 本模块是拆分产物；库函数本身不再标注 `#[tauri::command]`。
 
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 use wasmnest_server_peer_net::{
     peer_engine_receive::PeerReceiveState, peer_engine_remote::PeerRemoteState,
-    peer_engine_transfer::PeerTransferState, PeerCtx, PeerNetState, PeerNodeStatus, TrustedPeerDto,
+    peer_engine_transfer::PeerTransferState, PeerCtx, PeerNetState, TrustedPeerDto,
 };
 
 /// 从 AppHandle 装配 peer-net 操作上下文
@@ -50,18 +51,10 @@ pub fn peer_ctx(app: &AppHandle) -> Arc<PeerCtx> {
 }
 
 // ==================== 前端命令面（薄壳，引擎实现见 peer_net） ====================
-
-/// 启动对等网络节点（幂等：已启动直接返回现状）
-#[tauri::command]
-pub async fn start_peer_node(app: AppHandle) -> crate::Result<PeerNodeStatus> {
-    wasmnest_server_peer_net::start_peer_node(peer_ctx(&app)).await
-}
-
-/// 优雅关停对等网络节点（幂等：未启动直接成功）
-#[tauri::command]
-pub async fn stop_peer_node(app: AppHandle) -> crate::Result<()> {
-    wasmnest_server_peer_net::stop_peer_node(peer_ctx(&app)).await
-}
+//
+// `start_peer_node` / `stop_peer_node` 已退役（service-leases §7.2）：节点生命周期
+// 由应用经 `host-peer.start-node` / `stop-node` 的引用记账驱动，宿主命令面不得
+// 创建无属主服务。
 
 /// 应答首连确认弹窗（issue 04 命令面）
 #[tauri::command]

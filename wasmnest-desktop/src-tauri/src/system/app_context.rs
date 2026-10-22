@@ -73,6 +73,11 @@ impl AppContext {
         &self.plugin_host
     }
 
+    /// 应用作用域共享服务注册表（宿主机制；未注入 = None）
+    pub fn service_registry(&self) -> Option<Arc<wasmnest_server_base::service::ServiceRegistry>> {
+        self.plugin_host.wasm_host_ctx().service_registry()
+    }
+
     pub fn mdns_advertiser(&self) -> &Arc<tokio::sync::RwLock<MdnsAdvertiser>> {
         &self.mdns_advertiser
     }

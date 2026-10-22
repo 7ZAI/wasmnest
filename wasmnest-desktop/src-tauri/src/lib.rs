@@ -587,10 +587,10 @@ pub fn run() {
             let peer_net_data_dir = app_handle.path().app_data_dir().expect("Failed to get app data dir");
             wasmnest_server_peer_net::init_node_identity(&peer_net_data_dir)?;
 
-            // 对等网络节点状态容器（ticket 03）：节点生命周期按**属主**随插件启停
-            // （审计票 12——插件经 host-peer.start-node / stop-node 自行请求，
-            // 内核只记账；见 peer_net::start_node_owned / release_node_for。
-            // 旧 setup 无条件自启与旧的按产品 id 开关外壳都已退役）
+            // 对等网络节点状态容器（ticket 03）：节点生命周期由应用作用域服务租约
+            // 驱动——插件经 host-peer.start-node / stop-node 按插件 id 记账，首个
+            // 引用拉起、最后一个引用关停（见 `net.peer-node` 服务）；宿主不再按
+            // 产品 id 驱动，也没有无属主的启动命令面。
             // 状态以 Arc 托管（server-lib-split）：peer-net 引擎派生任务需要
             // 克隆句柄跨 await 存活（drive_gate / session_watch / 入站桥 /
             // 发现刷新订阅）；命令壳与 host_api 经 peer_ctx 一次装配
@@ -622,6 +622,51 @@ pub fn run() {
             // 窄转发层（互调 api + `host-pty` 引擎）。
             // app_handle_arc 需在 plugin_host 之前创建，因为 PluginHost::new() 需要它构建 HostContextFns
             let app_handle_arc = Arc::new(app_handle.clone());
+
+            // mDNS 广播句柄：**必须早于 `PluginHost::new` 创建并托管**——传输面
+            // 服务可能在 L1/L2 角色组件激活期（new 内部）被 acquire，supervisor
+            // start 的广播登记经 Tauri managed state 解析它（早于 AppContext 注册）。
+            let mdns_advertiser = Arc::new(tokio::sync::RwLock::new(
+                wasmnest_discovery_engine::advertiser::MdnsAdvertiser::new(),
+            ));
+            // 提前托管：链路加密启动装配与 server 端口面在 `PluginHost::new` 之前
+            // 就需要 DB / 广播句柄（激活期 acquire 会真正拉起服务）
+            app.manage(db.clone());
+            app.manage(mdns_advertiser.clone());
+
+            // 链路加密先于任何服务启动装配：第一条流量就要被开关裁决（spec §6）；
+            // 身份损坏时强制回退全关，不阻断启动。
+            tauri::async_runtime::block_on(server::composition::init_link_crypto_at_startup(&app_handle));
+
+            // WS 管理器纯内存装配（不监听）：传输面由服务租约按需 start
+            tauri::async_runtime::block_on(wasmnest_server_websocket::WebSocketManager::global().init())
+                .expect("Failed to initialize WebSocketManager");
+
+            // server-lib-split：装配服务器端口（宿主壳实现注入；supervisor /
+            // ws / http / peer-net 的「无 AppContext」保守分支依赖本注册表）。
+            // **必须早于 `PluginHost::new`**：L1/L2 角色组件在 new 内激活；激活期
+            // 的 peer 节点请求（file-transfer）会 acquire 服务，且界面租约随后
+            // 启动传输面——两者都需要本注册表 + 托管状态。
+            // 句柄直传：本注册表早于 AppContext 注册，路径面靠它解析（2026-10-07 修）。
+            crate::server::composition::install_server_ports_with(Some(app_handle_arc.clone()));
+
+            // 服务器端口只记录配置，不启动（启停由 net.transport 服务租约决定）
+            let supervisor = wasmnest_server_core::supervisor::ServerSupervisor::global();
+            tauri::async_runtime::block_on(supervisor.init_config(ws_port));
+
+            // 应用作用域服务注册表：传输面 + 对等网络节点。必须在 `PluginHost::new`
+            // 之前完成注册与注入——角色驱动组件 / 应用 activate 可能请求 peer 节点
+            // 服务（acquire），内核生命周期回收也需要同一份注册表。
+            // 传输面本身不在 boot 启动：端点注册只预登记，应用界面挂载时才 acquire。
+            let service_registry = Arc::new(wasmnest_server_base::service::ServiceRegistry::new());
+            wasmnest_server_core::service::TransportService::register(&service_registry)
+                .expect("register net.transport service (duplicate key = assembly bug)");
+            wasmnest_server_peer_net::service::PeerNodeService::register(
+                &service_registry,
+                crate::server::peer_net_cmds::peer_ctx(&app_handle),
+            )
+            .expect("register net.peer-node service (duplicate key = assembly bug)");
+
             // 用户插件目录（app_data_dir/plugins）：zip 安装的插件所在地（可卸载），
             // 与只读的内置目录（resource_dir/resources/plugins/desktop）分离
             let user_plugins_dir = app_handle
@@ -667,12 +712,11 @@ pub fn run() {
                 Some(std::sync::Arc::new(crate::plugin::platform_picker::DesktopPlatformPicker::new(
                     (*app_handle_arc).clone(),
                 ))),
+                // 应用作用域服务注册表：new 内 L1/L2 激活期即可 acquire
+                Some(service_registry.clone()),
             ));
             // 注入消息总线 dispatcher（两阶段初始化）
             tauri::async_runtime::block_on(plugin_host.init_message_bus());
-            let mdns_advertiser = Arc::new(tokio::sync::RwLock::new(
-                wasmnest_discovery_engine::advertiser::MdnsAdvertiser::new(),
-            ));
 
             // 终端同步事件通道已随 websocket 业务下沉票 08 删除（插件事件改 bus+emit，
             // 宿主不再持有 HostSyncEvent / broadcast-sync 广播面）
@@ -699,18 +743,8 @@ pub fn run() {
                 .system_info(system_info.clone())
                 .build_and_init();
 
-            // server-lib-split：装配服务器端口（宿主壳实现注入；supervisor /
-            // ws / http / peer-net 的「无 AppContext」保守分支依赖本注册表）。
-            // 走组合根的单一装配点：无头 harness（wasmnest-test/cross-end-tests）调同一函数。
-            // 句柄直传：插件激活发生在上面的 `PluginHost::new` 内部，早于 AppContext
-            // 注册，提前装配的端口面靠它解析路径（2026-10-07 修：此前窗口内的
-            // `host-peer.start-node` 恒定报 `resolve app data dir failed: no runtime
-            // context`，peer 节点起不来 → 桌面端不广播 → 移动端发现不到）
-            crate::server::composition::install_server_ports_with(Some(app_handle_arc.clone()));
-
-            // 同时注册到 Tauri State（前端 invoke 可用）
-            app.manage(db.clone());
-            app.manage(mdns_advertiser.clone());
+            // 注册到 Tauri State（前端 invoke 可用）；db / mdns_advertiser 已在
+            // `PluginHost::new` 之前托管（激活期服务启动需要）
             app.manage(plugin_host.clone());
             // 应用整包目录（ADR 0057 机制 B）：启动装配已解析出唯一的 `plugins_dir`
             // （dev 回退到源码目录的逻辑也在这里），壳前端装载挂载包时只消费这条事实，
@@ -729,13 +763,9 @@ pub fn run() {
             // 网络出站授权应答通道（票 05）：与 fs 应答同一形态——前端弹窗经
             // 宿主面凭证代答，故应答器必须是进程级单例（与事件广播的询问一一对应）
             app.manage(plugin_host.wasm_host_ctx().net_auth().clone());
-            // peer-net 节点的启动不再需要 boot 对账（审计票 12）：旧实现要在装配末尾
-            // 按硬编码插件 id 补一次状态对账，因为 activate 外壳经
-            // `AppContext::try_global()` 取句柄，而 boot 装配期全局尚未注册
-            // （2026-09-06 实机实证：已激活插件的节点不随 boot 启动）。现在改由插件
-            // 在自己的 activate 里调 `host-peer.start-node`，宿主从 WasmHostContext
-            // 的 app_handle 字段取句柄（PluginHost::new 之前就早已就位，不依赖全局），
-            // 所以 boot 期直接起得来，那条对账连同它的产品耦合一起退役
+            // peer-net 节点的启动不再需要 boot 对账：节点由插件在自己的 activate 里
+            // 调 `host-peer.start-node` 经服务租约请求，宿主只按插件 id 记账；那条
+            // 按硬编码产品 id 的 boot 对账连同它的产品耦合一起退役
             // ==================== 开发模式：启动插件文件监听 ====================
             // 仅 debug 构建启用，监听插件产物变化触发热重载
             // notify 回调在非 Tokio 线程中运行，必须通过 Handle::spawn 而非 tokio::spawn
@@ -756,36 +786,15 @@ pub fn run() {
                 tracing::info!("Plugin dev watcher enabled (debug build)");
             }
 
-            // ==================== 启动服务器（通过 ServerSupervisor）====================
-
-            // 链路加密装配句柄（issue 01）：init_at_startup 需访问数据目录与 DB 状态
-            let link_crypto_app_handle = app_handle.clone();
-            let supervisor = wasmnest_server_core::supervisor::ServerSupervisor::global();
-            let ws_port_for_spawn = ws_port;
-            // 产品决策：服务器永久自启动，不再可配置（本地功能依赖此服务，
-            // 见 ServerSupervisor 类注释；config 中 network.auto_start 已废弃）
-            let auto_start = true;
-            tauri::async_runtime::spawn(async move {
-                // 链路加密先于服务器启动装配：第一条流量就要被开关裁决（spec §6）；
-                // 身份损坏时强制回退全关，不阻断启动。core 不认 AppHandle/Database，
-                // 数据目录与主库连接由宿主组合根薄壳解析后传入
-                server::composition::init_link_crypto_at_startup(&link_crypto_app_handle).await;
-
-                supervisor.init_config(ws_port_for_spawn, auto_start).await;
-
-                let ws_manager = wasmnest_server_websocket::WebSocketManager::global();
-                ws_manager.init().await.expect("Failed to initialize WebSocketManager");
-
-                if auto_start {
-                    tracing::info!("[BedCode] Auto-starting server on port {}", ws_port_for_spawn);
-                    match supervisor.start(ws_port_for_spawn).await {
-                        Ok(_) => tracing::info!("[BedCode] Server started successfully"),
-                        Err(e) => tracing::error!("[BedCode] Server failed to start: {}", e),
-                    }
-                } else {
-                    tracing::info!("[BedCode] Server auto-start disabled, waiting for manual start");
-                }
-            });
+            // ==================== 传输面按需启动 ====================
+            //
+            // 不再在此永久启动 server：应用调 `host-http-endpoint.register-endpoint` /
+            // `host-websocket-server.register-endpoint` 时经服务租约 acquire
+            // `net.transport`，首个引用拉起（Actix + mDNS 广播 + 防休眠 + 指标采样），
+            // 最后一个引用释放关停。零应用 = 零监听 / 零广播（Q1/Q2）。
+            //
+            // 链路加密装配、WS 管理器 init、端口注册表、服务注册表均已在上方
+            // `PluginHost::new` 之前完成（激活期 acquire 需要）。
 
             // 写入端口文件
             let app_handle_clone = app_handle.clone();
@@ -977,24 +986,23 @@ pub fn run() {
             commands::plugin_auth_set_strategy,
             commands::plugin_auth_revoke,
             commands::plugin_auth_remove_record,
-            // Server
-            commands::server_start,
-            commands::server_stop,
-            commands::server_restart,
+            // Server（启停 / 重启 / 自启动命令已退役：服务由应用引用记账驱动，
+            // 命令面不得创建无属主服务；保留只读与纯配置）
             commands::get_server_status,
             commands::get_server_metrics,
             commands::get_server_network_config,
             commands::update_server_port,
-            commands::update_server_auto_start,
             commands::update_server_network_config,
             commands::get_traffic_encryption_config,
             commands::set_traffic_encryption_config,
             commands::get_link_crypto_fingerprint,
             commands::reset_server_network_config,
+            // 应用界面租约（service-leases）：外壳挂载 / 卸载应用整包时驱动
+            // net.transport 的 acquire / release
+            commands::plugin_surface_open,
+            commands::plugin_surface_close,
             // Peer Net（命令壳在 peer_net_cmds——引擎实现不持有 AppHandle，
-            // server-lib-split）
-            peer_net_cmds::start_peer_node,
-            peer_net_cmds::stop_peer_node,
+            // server-lib-split）；节点启停已退役，由 host-peer 原语按引用记账
             // Phase 4（issue 13）：对等网络产品面已整体迁入 file-transfer 插件
             // （WIT host-peer 13 原语），主前端命令面退役——仅保留生命周期、
             // 首连确认与信任管理（宿主级兜底路径）。其余查询/管理命令的函数体

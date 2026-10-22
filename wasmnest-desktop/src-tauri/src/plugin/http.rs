@@ -216,6 +216,9 @@ inventory::submit! {
 // WIT 层：入站路由注册两条原语 → 服务器引擎 API（薄转发，与迁移前 impl 逐字同源）
 impl wasmnest::plugin::host_http_endpoint::Host for WasmPluginState {
     fn register_endpoint(&mut self, config_json: String) -> Result<String, String> {
+        // 只登记路由，不启动监听器：路由表独立于服务器，boot 期注册（认证中心等
+        // 基础设施）不构成对外可见性。传输面由应用界面挂载触发
+        // （`plugin_surface_open`，见 `plugin/services.rs`）。
         wasmnest_server_http::plugin_binding::http_register_endpoint(
             &wasmnest_server_http::plugin_binding::ports_for(self),
             &self.plugin_id,
