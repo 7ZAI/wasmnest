@@ -34,4 +34,20 @@ pub trait HostApp {
     /// 该事件 payload 的 `resource_dir` 字段提供）。
     /// 宿主服务不可用 / 插件未加载 → `Err`（不静默返回空串）。
     fn plugin_resource_dir(&self) -> Result<String, HostError>;
+
+    /// 把目录登记进**用户级 PATH**（幂等）：`dir` 为绝对路径。
+    ///
+    /// Windows：追加进 `HKCU\Environment\Path`（保留 `REG_EXPAND_SZ` 与用户
+    /// 原有项，写后广播 `WM_SETTINGCHANGE` → 新开终端立即生效）；
+    /// unix：为目录下每个可执行文件建 `~/.local/bin` 符号链接。
+    ///
+    /// 需要 `app:path` 权限（与 `app:cli` 分域）。目录必须落在宿主 allowlist
+    /// 根之内（应用数据根 / `~/.local`），越界即拒绝并点名实际路径——PATH 是
+    /// 持久化用户环境面，不能由插件任意指定。
+    fn path_register(&self, dir: &str) -> Result<(), HostError>;
+
+    /// 从用户级 PATH 精确摘除该目录（幂等）：只摘本目录的条目/链接。
+    ///
+    /// 需要 `app:path` 权限；条目不存在即成功（幂等）。
+    fn path_unregister(&self, dir: &str) -> Result<(), HostError>;
 }

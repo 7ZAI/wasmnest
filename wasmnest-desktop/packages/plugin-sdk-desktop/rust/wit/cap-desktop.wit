@@ -266,6 +266,22 @@ interface host-app {
     /// 途径（Agent 集成 hook 脚本源在该目录下，见插件 `task/hooks`）。
     /// 插件未加载 / 宿主服务不可用 → `Err`（不静默返回空串）。
     plugin-resource-dir: func() -> result<string, string>;
+    /// 把某个目录登记进**用户级 PATH**（幂等）：payload `{ "dir": "<绝对路径>" }`
+    /// （`scope` 只接受 `"user"`，缺省即 user；出现其他值即拒绝——本原语不做
+    /// 机器级 PATH，也就没有提权面）。
+    ///
+    /// Windows：把目录追加进 `HKCU\Environment\Path`（保留 `REG_EXPAND_SZ`
+    /// 类型与用户原有项，写后广播 `WM_SETTINGCHANGE`，新开终端立即生效）；
+    /// unix：为目录下每个可执行文件建 `~/.local/bin` 符号链接。
+    ///
+    /// **安全闸门（机制级）**：目录必须落在 allowlist 根之内（应用数据根
+    /// `~/.wasmnest` / `%LOCALAPPDATA%/com.wasmnest.app` / `~/.local`）、必须是
+    /// 绝对路径且已存在、无控制字符——PATH 是**持久化**用户环境面，越界目录
+    /// 一律拒绝并点名实际路径。权限 `app:path`（与 `app:cli` 分域）。
+    register-path: func(payload-json: string) -> result<_, string>;
+    /// 从用户级 PATH 精确摘除该目录（幂等）：payload 同 `register-path`。
+    /// 只摘本目录的条目/链接，用户原有项与其他目录不动；条目不存在即成功。
+    unregister-path: func(payload-json: string) -> result<_, string>;
 }
 /// 宿主 server 的在册连接清单（自 `host-session.connections-list` 迁出）
 ///

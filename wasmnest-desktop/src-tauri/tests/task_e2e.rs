@@ -97,6 +97,20 @@ impl PluginServices for MockTaskServices {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send + '_>> {
         Box::pin(async { Err("mock: no resource dir".to_string()) })
     }
+    fn register_path(
+        &self,
+        _plugin_id: String,
+        _dir: String,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>> {
+        Box::pin(async { Ok(()) })
+    }
+    fn unregister_path(
+        &self,
+        _plugin_id: String,
+        _dir: String,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + '_>> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 impl MockTaskServices {

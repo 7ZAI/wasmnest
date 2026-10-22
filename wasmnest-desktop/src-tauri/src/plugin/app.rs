@@ -12,7 +12,7 @@
 
 use wasmnest_host_kit::ports::downcast_host;
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_plugin_api::permission::PERMISSION_APP_CLI;
+use wasmnest_plugin_api::permission::{PERMISSION_APP_CLI, PERMISSION_APP_PATH};
 use wasmnest_wasm_core::host_api::check_permission;
 use wasmnest_wasm_core::host_api::context::{PermissionScope, ServicesScope, WasmHostContext};
 use wasmnest_wasm_core::runtime_util::block_on_async;
@@ -31,7 +31,11 @@ pub const MODULE_NAME: &str = "app";
 pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-app"];
 
 /// 本域的权限位（必须与 `wasmnest.wit` / SDK 权限表逐字一致）
-pub const MODULE_PERMISSIONS: &[&str] = &["app:cli"];
+///
+/// `app:cli` = 随包 CLI 装卸（宿主默认 bin 目录）；`app:path` = 把目录登记进
+/// 用户级 PATH（插件自持目录，如自下载的运行时）——两者写的 PATH 条目来源
+/// 不同，分位授权。
+pub const MODULE_PERMISSIONS: &[&str] = &["app:cli", "app:path"];
 
 /// 能力模块描述符（机制面：接口路径 / 权限位 / ABI 下界；**禁带产品名词**）
 ///
@@ -86,6 +90,14 @@ impl wasmnest::plugin::host_app::Host for WasmPluginState {
 
     fn plugin_resource_dir(&mut self) -> Result<String, String> {
         plugin_resource_dir(ctx_of(self), &self.plugin_id)
+    }
+
+    fn register_path(&mut self, payload_json: String) -> Result<(), String> {
+        register_path(ctx_of(self), ctx_of(self), &self.plugin_id, &payload_json)
+    }
+
+    fn unregister_path(&mut self, payload_json: String) -> Result<(), String> {
+        unregister_path(ctx_of(self), ctx_of(self), &self.plugin_id, &payload_json)
     }
 }
 
@@ -158,6 +170,80 @@ pub(crate) fn plugin_resource_dir(svc: &dyn ServicesScope, plugin_id: &str) -> R
     block_on_async(services.plugin_resource_dir(plugin_id.to_string()))
 }
 
+// ==================== 用户级 PATH 目录登记（register-path / unregister-path） ====================
+
+/// 目录登记进用户级 PATH（权限 `app:path` + 载荷解析 + 宿主服务执行）
+///
+/// payload: `{ "dir": "<绝对路径>", "scope": "user" }`——`scope` 只接受
+/// `"user"`（缺省即 user）；出现其他值即拒绝——本原语不做机器级 PATH，也就没有
+/// 提权面。
+///
+/// allowlist 校验在宿主服务侧（能力仓 `app_cli::path_dir_allowed`）：目录必须落在
+/// 应用数据根 / `~/.local` 之内，越界拒绝并点名实际路径。**不信任插件传参**。
+pub(crate) fn register_path(
+    svc: &dyn ServicesScope,
+    perm: &dyn PermissionScope,
+    plugin_id: &str,
+    payload_json: &str,
+) -> Result<(), String> {
+    if !check_permission(perm, plugin_id, PERMISSION_APP_PATH, "host_app_register_path") {
+        return Err("permission denied".to_string());
+    }
+    let dir = parse_path_payload(payload_json, "register_path")?;
+
+    let services = block_on_async(svc.services()).ok_or_else(|| "app error: host services unavailable".to_string())?;
+    block_on_async(services.register_path(plugin_id.to_string(), dir))
+}
+
+/// 从用户级 PATH 摘除该目录（权限 `app:path` + 载荷解析 + 宿主服务执行）
+pub(crate) fn unregister_path(
+    svc: &dyn ServicesScope,
+    perm: &dyn PermissionScope,
+    plugin_id: &str,
+    payload_json: &str,
+) -> Result<(), String> {
+    if !check_permission(perm, plugin_id, PERMISSION_APP_PATH, "host_app_unregister_path") {
+        return Err("permission denied".to_string());
+    }
+    let dir = parse_path_payload(payload_json, "unregister_path")?;
+
+    let services = block_on_async(svc.services()).ok_or_else(|| "app error: host services unavailable".to_string())?;
+    block_on_async(services.unregister_path(plugin_id.to_string(), dir))
+}
+
+/// 载荷解析：`{ "dir": "<绝对路径>", "scope": "user" }`
+///
+/// - `scope` 缺省即 `user`；其他值拒绝（本原语只做用户级登记）
+/// - `dir` 必填、必须绝对路径、不得含控制字符（控制字符会破坏命令行/注册表写入）
+///
+/// allowlist 与存在性校验在宿主服务侧（能力仓），此处只做**形状**校验。
+fn parse_path_payload(payload_json: &str, op: &str) -> Result<String, String> {
+    let payload: serde_json::Value =
+        serde_json::from_str(payload_json).map_err(|e| format!("app error: invalid payload JSON: {}", e))?;
+    if let Some(scope) = payload.get("scope").and_then(|v| v.as_str()) {
+        if scope != "user" {
+            return Err(format!(
+                "app error: {op} unsupported scope: {scope}（本原语只支持用户级 PATH 登记）"
+            ));
+        }
+    }
+    let dir = payload
+        .get("dir")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| format!("app error: {op} missing dir"))?
+        .to_string();
+    if dir.trim().is_empty() {
+        return Err(format!("app error: {op} empty dir"));
+    }
+    if dir.chars().any(|c| c.is_control()) {
+        return Err(format!("app error: {op} dir contains control characters"));
+    }
+    if !std::path::Path::new(&dir).is_absolute() {
+        return Err(format!("app error: {op} dir must be absolute: {dir}"));
+    }
+    Ok(dir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -224,8 +310,62 @@ mod tests {
         );
         assert_eq!(
             MODULE_PERMISSIONS,
-            &["app:cli"],
+            &["app:cli", "app:path"],
             "权限位必须与 `wasmnest.wit` / SDK 权限表逐字一致（装载期一致性核对用）"
         );
+    }
+
+    // ==================== register-path / unregister-path ====================
+
+    /// 无 `app:path` 权限：登记/摘除被拒（不得复用 `app:cli` 权限位）
+    #[test]
+    fn path_permission_denied() {
+        let ctx = build_host_ctx_at(None);
+        let err = register_path(ctx.as_ref(), ctx.as_ref(), PLUGIN, "{}").unwrap_err();
+        assert_eq!(err, "permission denied");
+        let err = unregister_path(ctx.as_ref(), ctx.as_ref(), PLUGIN, "{}").unwrap_err();
+        assert_eq!(err, "permission denied");
+    }
+
+    /// 有 `app:path` 权限但载荷畸形：拒绝（形状校验在域函数，服务不可达前即红）
+    #[test]
+    fn path_invalid_payload_rejected() {
+        let ctx = build_host_ctx_at(None);
+        grant_permissions(&ctx, PLUGIN, &[PERMISSION_APP_PATH]);
+        let err = register_path(ctx.as_ref(), ctx.as_ref(), PLUGIN, "not-json").unwrap_err();
+        assert!(err.contains("invalid payload"), "got: {}", err);
+        // 缺 dir
+        let err = register_path(ctx.as_ref(), ctx.as_ref(), PLUGIN, "{}").unwrap_err();
+        assert!(err.contains("missing dir"), "got: {}", err);
+        // 相对路径
+        let err = register_path(ctx.as_ref(), ctx.as_ref(), PLUGIN, r#"{"dir":"rel/dir"}"#).unwrap_err();
+        assert!(err.contains("absolute"), "got: {}", err);
+        // 控制字符
+        let err = register_path(ctx.as_ref(), ctx.as_ref(), PLUGIN, r#"{"dir":"/tmp/a\nb"}"#).unwrap_err();
+        assert!(err.contains("control characters"), "got: {}", err);
+    }
+
+    /// `scope` 只接受 user：机器级 scope 显性拒绝（本原语无提权面）
+    #[test]
+    fn path_scope_must_be_user() {
+        let ctx = build_host_ctx_at(None);
+        grant_permissions(&ctx, PLUGIN, &[PERMISSION_APP_PATH]);
+        let err = register_path(
+            ctx.as_ref(),
+            ctx.as_ref(),
+            PLUGIN,
+            r#"{"dir":"/tmp/x","scope":"machine"}"#,
+        )
+        .unwrap_err();
+        assert!(err.contains("unsupported scope"), "got: {}", err);
+    }
+
+    /// 有权限、载荷合法但 services 为 None（测试上下文）：报服务不可用
+    #[tokio::test]
+    async fn path_services_unavailable_in_test_ctx() {
+        let ctx = build_host_ctx_at(None);
+        grant_permissions(&ctx, PLUGIN, &[PERMISSION_APP_PATH]);
+        let err = register_path(ctx.as_ref(), ctx.as_ref(), PLUGIN, r#"{"dir":"/tmp/some-dir"}"#).unwrap_err();
+        assert!(err.contains("services unavailable"), "got: {}", err);
     }
 }

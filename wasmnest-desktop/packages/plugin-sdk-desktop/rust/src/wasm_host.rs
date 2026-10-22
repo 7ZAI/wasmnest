@@ -302,6 +302,16 @@ impl HostApp for WasmHost {
     fn plugin_resource_dir(&self) -> Result<String, HostError> {
         host_app::plugin_resource_dir().map_err(|e| host_err("plugin_resource_dir", e))
     }
+
+    fn path_register(&self, dir: &str) -> Result<(), HostError> {
+        let payload = serde_json::json!({ "dir": dir, "scope": "user" }).to_string();
+        host_app::register_path(&payload).map_err(|e| host_err("path_register", e))
+    }
+
+    fn path_unregister(&self, dir: &str) -> Result<(), HostError> {
+        let payload = serde_json::json!({ "dir": dir, "scope": "user" }).to_string();
+        host_app::unregister_path(&payload).map_err(|e| host_err("path_unregister", e))
+    }
 }
 
 // ==================== HostEvents ====================
