@@ -3,7 +3,7 @@
   "identifier": "com.wasmnest.app",
   "version": "0.0.1",
   "build": {
-    "beforeDevCommand": "pnpm run dev",
+    "beforeDevCommand": "node scripts/plugin-precheck.mjs && pnpm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm run shell:sync",
     "frontendDist": "shell-dist"
