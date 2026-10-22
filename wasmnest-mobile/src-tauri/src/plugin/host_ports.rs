@@ -276,21 +276,26 @@ impl HostEnginePorts for HostPorts {
             .map_err(|e| crate::AppError::Serialization(e))?;
         let entries = seeds
             .into_iter()
-            .map(|s| wasmnest_peer_net::SharedDirEntry {
+            .map(|s| wasmnest_server_peer_net::SharedDirEntry {
                 id: s.id,
                 name: s.name,
-                root: wasmnest_peer_net::SharedDirRoot::Saf { tree_uri: s.saf_tree_uri },
+                root: wasmnest_server_peer_net::SharedDirRoot::Saf { tree_uri: s.saf_tree_uri },
             })
             .collect();
         crate::peer::net::set_shared_roots(app.clone(), entries).await
     }
 
-    async fn peer_start_node(&self, app: &tauri::AppHandle, caller: &str) -> wasmnest_wasm_core::Result<bool> {
-        crate::peer::net::start_node_owned(app, caller).await
+    async fn peer_start_node(&self, _app: &tauri::AppHandle, caller: &str) -> wasmnest_wasm_core::Result<bool> {
+        // 与 WIT host-peer 同一入口：服务租约按插件 id 记账
+        let ports = wasmnest_server_peer_net::plugin_binding::ports::ports();
+        wasmnest_server_peer_net::plugin_binding::peer_start_node(&ports, caller)
+            .map_err(crate::AppError::Plugin)
     }
 
-    async fn peer_stop_node(&self, app: &tauri::AppHandle, caller: &str) -> wasmnest_wasm_core::Result<bool> {
-        crate::peer::net::stop_node_owned(app, caller).await
+    async fn peer_stop_node(&self, _app: &tauri::AppHandle, caller: &str) -> wasmnest_wasm_core::Result<bool> {
+        let ports = wasmnest_server_peer_net::plugin_binding::ports::ports();
+        wasmnest_server_peer_net::plugin_binding::peer_stop_node(&ports, caller)
+            .map_err(crate::AppError::Plugin)
     }
 
     // ==================== peer：transfer / receive / remote ====================

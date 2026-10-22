@@ -11,7 +11,7 @@
 //! `wasmnest-server-base::ports` + 平台资源预热）**与平台缝**（`peer::seam`：
 //! `PeerPlatformSeam` — SAF 共享访问 / 落点提升 / 内置共享条目）；**(b) 装配**
 //! （本文件 `peer_ctx`：托管四状态 + 端口 + 平台缝）；**(c) 产品语义薄壳**
-//! （插件激活外壳 `FILE_TRANSFER_PLUGIN_ID` / 节点生命周期与引擎入口委托）。
+//! （引擎上下文装配与引擎入口委托）。
 //!
 //! mDNS 复用：`MdnsPort`（`peer::ports`）直接接 `wasmnest-discovery-engine` 的
 //! 共享守护与类型中枢出口（`shared_daemon` / `register_host_service` /
@@ -30,11 +30,11 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Manager};
 
-use wasmnest_peer_net::SharedDirEntry;
+use wasmnest_server_peer_net::SharedDirEntry;
 use wasmnest_server_peer_net::engine_ports::PeerEnginePorts;
 
 use super::ports::{
-    prewarm_platform, MobileBusPort, MobileEventSink, MobileMdnsPort, MobilePathsPort, MobileSystemInfoPort,
+    MobileBusPort, MobileEventSink, MobileMdnsPort, MobilePathsPort, MobileSystemInfoPort,
 };
 use super::seam::MobilePlatformSeam;
 
@@ -47,12 +47,6 @@ pub use wasmnest_server_peer_net::peer_engine_transfer::PeerTransferState;
 pub use wasmnest_server_peer_net::{
     DialEndpoint, DialPeerResultDto, PeerCtx, PeerNetState, PeerNodeStatus, TrustedPeerDto,
 };
-
-// ==================== 常量 ====================
-
-/// 文件传输插件 id：peer-net 节点的唯一消费方（全仓唯一声明 `peer` 权限的插件），
-/// 节点生命周期随其启用状态（产品语义留宿主，能力域只按 caller 记账）
-pub const FILE_TRANSFER_PLUGIN_ID: &str = "com.wasmnest.file-transfer";
 
 // ==================== 装配（PeerCtx） ====================
 
@@ -84,61 +78,12 @@ pub(crate) fn peer_ctx(app: &AppHandle) -> Arc<PeerCtx> {
     })
 }
 
-// ==================== 生命周期（宿主薄壳：插件启停驱动 + 平台预热） ====================
-
-/// 当前节点属主（None = 未跑）
-pub fn node_owner(app: &AppHandle) -> Option<String> {
-    wasmnest_server_peer_net::node_owner(&peer_ctx(app))
-}
-
-/// 插件按需启动本机节点（host-peer `start-node` 引擎入口；幂等）；先预热平台资源
-pub async fn start_node_owned(app: &AppHandle, caller: &str) -> crate::Result<bool> {
-    prewarm_platform(app).await;
-    wasmnest_server_peer_net::start_node_owned(peer_ctx(app), caller).await
-}
-
-/// 属主插件让节点下线（host-peer `stop-node` 引擎入口；非属主拒绝）
-pub async fn stop_node_owned(app: &AppHandle, caller: &str) -> crate::Result<bool> {
-    wasmnest_server_peer_net::stop_node_owned(peer_ctx(app), caller).await
-}
-
-/// 内核侧按属主清理节点（插件停用/激活失败时调用；不匹配 no-op）
-pub async fn release_node_for(app: &AppHandle, former_owner: &str) -> crate::Result<bool> {
-    wasmnest_server_peer_net::release_node_for(peer_ctx(app), former_owner).await
-}
-
-/// 文件传输插件激活 → 确保节点运行（幂等；boot 对账与运行时启用共用漏斗）
-pub async fn ensure_node_started(app: &AppHandle) -> crate::Result<()> {
-    start_node_owned(app, FILE_TRANSFER_PLUGIN_ID).await.map(|_| ())
-}
-
-/// 文件传输插件停用 → 服务下线（幂等：节点未跑 / 非本插件所起为 no-op）
-pub async fn stop_node_for_plugin(app: &AppHandle) -> crate::Result<()> {
-    if node_owner(app).as_deref() != Some(FILE_TRANSFER_PLUGIN_ID) {
-        return Ok(());
-    }
-    stop_node_owned(app, FILE_TRANSFER_PLUGIN_ID).await.map(|_| ())
-}
-
-/// 文件传输插件当前是否已激活（插件管理器未就绪视为未激活）
-async fn plugin_transfer_activated() -> bool {
-    match crate::state::try_get_plugin_manager() {
-        Some(pm) => pm.is_activated(FILE_TRANSFER_PLUGIN_ID).await,
-        None => false,
-    }
-}
-
-/// peer-net 节点与文件传输插件运行状态对齐（状态驱动对账，幂等）：
-/// 插件运行 mDNS 就运行，插件不运行 mDNS 也不运行
-pub async fn sync_node_with_plugin_state(app: &AppHandle) -> crate::Result<bool> {
-    let activated = plugin_transfer_activated().await;
-    if activated {
-        ensure_node_started(app).await?;
-    } else {
-        stop_node_for_plugin(app).await?;
-    }
-    Ok(activated)
-}
+// ==================== 生命周期 ====================
+//
+// 节点生命周期由应用作用域服务租约驱动：插件经 `host-peer.start-node` /
+// `stop-node` acquire / release `net.peer-node`（首个引用拉起、最后引用关停）；
+// 宿主不再按产品 id 驱动，也不再做 boot 对账。平台资源预热在 boot 显式执行
+// 一次（`peer::ports::prewarm_platform`，过去由节点启动顺手完成）。
 
 // ==================== 引擎入口委托 ====================
 

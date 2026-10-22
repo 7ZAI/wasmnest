@@ -117,7 +117,7 @@ android_logger = "0.14"
 # Plugin SDK (Mobile)
 wasmnest-plugin-api-mobile = { path = "../packages/plugin-sdk-mobile/rust" }
 # 对等网络共享基础设施（节点身份 + 自签证书，issue peer-network/01）
-wasmnest-peer-net = { path = "../../../wasmnest-lib/peer-net" }
+# 2026-10-22 peer-net-dissolve：底座拆分并入 wasmnest-server-peer-net（base/），本依赖删除
 # 对等网络能力域（双端共享纯引擎形态：节点装配 / 会话控制面 / 引擎事件桥 +
 # 端口 + 平台缝；WIT 绑定层在 common-host feature，移动形态不引）——
 # 2026-10-10 能力域集中化：移动宿主引擎控制面下沉至此，宿主只留适配层

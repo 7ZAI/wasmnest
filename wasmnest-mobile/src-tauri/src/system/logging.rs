@@ -234,7 +234,7 @@ mod tests {
         ));
         assert!(!is_noise(
             Level::Debug,
-            "wasmnest_peer_net::identity",
+            "wasmnest_server_peer_net::identity",
             "connecting to 127.0.0.1"
         ));
     }

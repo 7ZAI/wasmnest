@@ -100,7 +100,6 @@ linker = "rust-lld"
 # cargo 报 patch 不适用（fail-visible，不会静默退回远端副本）。
 # 路径基准 = 本 config 文件所在目录的上一级（平台仓根），见 Cargo「Config-relative paths」。
 [patch."https://github.com/7ZAI/wasmnest-lib"]
-wasmnest-peer-net = { path = "../wasmnest-lib/peer-net" }
 wasmnest-link-crypto = { path = "../wasmnest-lib/link-crypto" }
 wasmnest-server-base = { path = "../wasmnest-lib/wasmnest-server-base" }
 wasmnest-host-kit = { path = "../wasmnest-lib/wasmnest-host-kit" }

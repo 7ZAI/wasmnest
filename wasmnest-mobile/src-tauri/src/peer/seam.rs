@@ -26,7 +26,7 @@ pub(crate) struct MobilePlatformSeam;
 impl PeerPlatformSeam for MobilePlatformSeam {
     /// Android SAF 共享目录访问（无 SAF 平台返回 None——dev 窗口无此形态，
     /// 注册表若存在 saf 条目会按 read-failed 拒绝，防御性兜底）
-    fn shared_saf_access(&self) -> Option<Arc<dyn wasmnest_peer_net::SharedSafAccess>> {
+    fn shared_saf_access(&self) -> Option<Arc<dyn wasmnest_server_peer_net::SharedSafAccess>> {
         #[cfg(target_os = "android")]
         {
             Some(Arc::new(android_saf_bridge::SafSharedAccess::new(
@@ -41,10 +41,10 @@ impl PeerPlatformSeam for MobilePlatformSeam {
 
     /// 落点提升钩子：私有下载目录中的完整文件尽力写入 MediaStore.Downloads
     /// （下载目录不可用时与集中化前一致：不提升）
-    fn file_landing(&self) -> Option<Arc<dyn wasmnest_peer_net::FileLanding>> {
+    fn file_landing(&self) -> Option<Arc<dyn wasmnest_server_peer_net::FileLanding>> {
         downloads_dir_cache().map(|_| {
             let io = crate::plugin::saf_io::default_saf_io();
-            Arc::new(MediaLanding { saf: io }) as Arc<dyn wasmnest_peer_net::FileLanding>
+            Arc::new(MediaLanding { saf: io }) as Arc<dyn wasmnest_server_peer_net::FileLanding>
         })
     }
 
@@ -62,7 +62,7 @@ mod android_saf_bridge {
     use super::*;
     use crate::file_service::saf_tree;
     use crate::plugin::saf_io::SafEntry;
-    use wasmnest_peer_net::SeqReader;
+    use wasmnest_server_peer_net::SeqReader;
 
     /// SAF 共享目录访问适配器：把既有 SafIo（Kotlin 桥）映射到 crate 的
     /// `SharedSafAccess` 缝。相对路径解析用 list_tree 逐层下降（与
@@ -77,8 +77,8 @@ mod android_saf_bridge {
         }
 
         /// 同步逐层下降到 rel 指向的条目（parts 已过 crate 路径清洗）
-        fn walk(&self, tree_uri: &str, root_doc_id: &str, parts: &[String]) -> wasmnest_peer_net::Result<SafEntry> {
-            use wasmnest_peer_net::{saf_not_found, PeerNetError};
+        fn walk(&self, tree_uri: &str, root_doc_id: &str, parts: &[String]) -> wasmnest_server_peer_net::Result<SafEntry> {
+            use wasmnest_server_peer_net::{saf_not_found, PeerNetError};
 
             if parts.is_empty() {
                 return Ok(self.root_entry(tree_uri, root_doc_id));
@@ -115,9 +115,9 @@ mod android_saf_bridge {
         }
     }
 
-    impl wasmnest_peer_net::SharedSafAccess for SafSharedAccess {
-        fn list_dir(&self, tree_uri: &str, rel: &str) -> wasmnest_peer_net::Result<Vec<wasmnest_peer_net::DirEntry>> {
-            use wasmnest_peer_net::{resolve_rel_path, saf_not_found, PeerNetError};
+    impl wasmnest_server_peer_net::SharedSafAccess for SafSharedAccess {
+        fn list_dir(&self, tree_uri: &str, rel: &str) -> wasmnest_server_peer_net::Result<Vec<wasmnest_server_peer_net::DirEntry>> {
+            use wasmnest_server_peer_net::{resolve_rel_path, saf_not_found, PeerNetError};
 
             let root_doc_id = saf_tree::tree_document_id(tree_uri).ok_or_else(|| PeerNetError::TransferSession {
                 role: "saf",
@@ -137,12 +137,12 @@ mod android_saf_bridge {
                     })?;
             Ok(children
                 .into_iter()
-                .map(|c| wasmnest_peer_net::DirEntry::new(c.name, c.is_dir, c.size.max(0) as u64))
+                .map(|c| wasmnest_server_peer_net::DirEntry::new(c.name, c.is_dir, c.size.max(0) as u64))
                 .collect())
         }
 
-        fn open_read(&self, tree_uri: &str, rel: &str) -> wasmnest_peer_net::Result<Arc<dyn SeqReader>> {
-            use wasmnest_peer_net::{resolve_rel_path, saf_not_found, PeerNetError};
+        fn open_read(&self, tree_uri: &str, rel: &str) -> wasmnest_server_peer_net::Result<Arc<dyn SeqReader>> {
+            use wasmnest_server_peer_net::{resolve_rel_path, saf_not_found, PeerNetError};
 
             let root_doc_id = saf_tree::tree_document_id(tree_uri).ok_or_else(|| PeerNetError::TransferSession {
                 role: "saf",
@@ -215,7 +215,7 @@ struct MediaLanding {
     saf: Arc<dyn crate::plugin::saf_io::SafIo>,
 }
 
-impl wasmnest_peer_net::FileLanding for MediaLanding {
+impl wasmnest_server_peer_net::FileLanding for MediaLanding {
     fn landed(&self, final_path: &Path, display_name: &str) {
         let src = final_path.to_string_lossy().into_owned();
         match self
@@ -278,7 +278,7 @@ mod share_landing_tests {
     use super::*;
     use crate::plugin::saf_io::{SafCopyHandle, SafCopyStatus, SafEntry, SafStreamHandle};
     // trait 方法调用需要 trait 在作用域内
-    use wasmnest_peer_net::FileLanding as _;
+    use wasmnest_server_peer_net::FileLanding as _;
 
     /// fake SafIo：write_media_downloads 结果可编程（None = 成功），其余方法不可达
     struct FakeSaf {
