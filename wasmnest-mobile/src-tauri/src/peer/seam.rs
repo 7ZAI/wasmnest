@@ -7,8 +7,9 @@
 //!   None，注册表若存在 saf 条目会按 read-failed 拒绝，防御性兜底）；
 //! - `file_landing`：落点提升钩子（私有下载目录中的完整文件尽力写入
 //!   MediaStore.Downloads，失败保留私有副本 = 回退语义）；
-//! - `builtin_shared_dirs`：内置免授权共享条目（app 私有下载目录，解析失败仅
-//!   跳过条目，不阻断启动）。
+//! - `default_shared_dirs`：平台默认共享目录（app 私有下载目录注册为普通条目，
+//!   解析失败仅跳过，不阻断启动；2026-10-22 起引擎不再有「内置免授权」特殊
+//!   语义，目录落盘持久）。
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -48,8 +49,9 @@ impl PeerPlatformSeam for MobilePlatformSeam {
         })
     }
 
-    /// 内置免授权共享条目：app 私有下载目录（解析失败仅跳过条目，不阻断启动）
-    fn builtin_shared_dirs(&self) -> Vec<(String, PathBuf)> {
+    /// 平台默认共享目录：app 私有下载目录（注册为普通条目，解析失败仅跳过、
+    /// 不阻断启动）
+    fn default_shared_dirs(&self) -> Vec<(String, PathBuf)> {
         downloads_dir_cache()
             .map(|dir| vec![("下载".to_string(), PathBuf::from(dir))])
             .unwrap_or_default()
