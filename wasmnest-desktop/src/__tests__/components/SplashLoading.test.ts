@@ -134,8 +134,8 @@ describe('SplashLoading Component', () => {
     }
     // g 变换与真源一致（镂空线框在底板中央，非实心态降级）
     const g = svg.querySelector('g')
-    expect(g?.getAttribute('transform')).toContain('translate(19.056,20.269)')
-    expect(g?.getAttribute('transform')).toContain('scale(0.61887)')
+    expect(g?.getAttribute('transform')).toContain('translate(16.5,18.45)')
+    expect(g?.getAttribute('transform')).toContain('scale(0.67)')
     // 无实心态填充层：镂空线框画完即最终态
     expect(svg.querySelector('.logo-fills')).toBeNull()
     // 双色齐全：左侧琥珀（活跃实例）+ 右侧暖白

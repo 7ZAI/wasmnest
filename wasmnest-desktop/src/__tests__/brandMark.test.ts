@@ -74,7 +74,7 @@ describe('品牌标志几何锁（宿主侧）', () => {
 
     const splashSource = readFileSync('src/components/SplashLoading.vue', 'utf-8')
     // g 变换与真源一致：镂空线框以同一缩放落在底板中央（非实心态降级档）
-    expect(splashSource).toContain('translate(19.056,20.269) scale(0.61887)')
+    expect(splashSource).toContain('translate(16.5,18.45) scale(0.67)')
     const splashPolys = [
       ...splashSource.matchAll(/<polyline class="logo-line" points="([^"]+)"/g),
     ].map((m) => m[1])
