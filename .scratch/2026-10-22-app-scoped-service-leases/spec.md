@@ -398,7 +398,7 @@ pnpm run check:manifest   # 依赖 lib tag 钉版；tag 未推送时按既有环
 | transport 自崩后注册表不自愈 | supervisor 崩溃监控只改自身状态；`running` 槽位在租约释放前不会重新 start。当前记录为已知风险（应用界面关闭→重开会重新 acquire；`shutdown_all` 兜底），后续可加健康探测 |
 | 跨仓 tag / manifest 收口 | 遵循 docs/git.md；manifest 当前受「lib/apps tag 未推送」环境红影响（历史已知），实施交付里如实说明 |
 | 并发会话未提交改动 | 平台仓当前混有多条并行改动：`shell-dist` / `lifecycle.rs`、`useShellApps` enabled 缺省可见（2026-10-21 裁决）、auth-center 路由与 `release-manifest.json` 条目、移动 `manager.rs` 的 manifest 类型迁移 + `is_autostart` 角色缺省（mobile-manifest-unification）。实施/提交时必须**显式按文件 + hunk 暂存**，禁止 `git add -A`；冲突处停下确认 |
-| 历史提交捆绑 | `bb66b42` 同提交带入了契约 0.0.2 / `app:path` / 默认线性内存 128MiB（另行工作流）。租约的「零 WIT」只描述租约本体；后续按票据拆分追溯，勿再混入 |
+| 历史提交捆绑 | `bb66b42` 同提交带入了契约 0.0.2 / `app:path` / 默认线性内存 128MiB（另行工作流）。**0.0.2 违反 dev 不 bump 规范，已由 `6ab6cc5` 回退；契约维持 0.0.1**。租约的「零 WIT」只描述租约本体；后续按票据拆分追溯，勿再混入 |
 | 防休眠语义变化 | §7.3 显式记录，若用户要求宿主级常驻另立项 |
 
 ## 11. 实施顺序（小步可验证）
@@ -459,15 +459,23 @@ pnpm run check:manifest   # 依赖 lib tag 钉版；tag 未推送时按既有环
    经平台仓 `.cargo/config.toml` patch 编译）；真机手验（§9.3）待执行。
 6. **同仓历史提交捆绑说明（2026-10-22 复核）**：能力仓 `bb66b42` 在租约实现之外
    还带入了三条不属于本 spec 裁决的工作流——
-   - 契约版本 0.0.1 → 0.0.2（host-runtime / monitor 收口）；
+   - 契约版本 0.0.1 → 0.0.2（曾以 host-runtime / monitor 收口为由）——
+     **违反 `docs/public/versioning.md` §1/§4「dev 不 bump 任何版本号」，
+     已由 `6ab6cc5` 全链路回退；契约维持 0.0.1**。平台侧未提交的 WIT/SDK 0.0.2
+     同步也已回退为 0.0.1；`check:wit` 绿。
    - `app:path` 权限位与 `register-path` / `unregister-path`（agent-hub node bootstrap P1，
      见应用仓 `.scratch/2026-10-22-agent-hub-node-bootstrap`）；
    - 默认线性内存上限 256MiB → 128MiB（**未找到独立票据/裁决记录**，需补）。
    本 spec §2/§6.1 的「零 WIT / ABI / 权限表变更」只描述租约本体；上述三项应按各自
-   票据单独追溯，不得据此认为租约引入了契约变更。平台仓随之再生成的 WIT 0.0.2 /
-   permission-vocabulary 同理属于该捆绑的跨仓跟随。
+   票据单独追溯，不得据此认为租约引入了契约变更。平台仓 `permission-vocabulary` 的
+   `app:path` 属 app:path 工作流，不随契约版本回退。
    **派生波纹**：`PluginServices` 新增 `register_path` / `unregister_path` 两个无默认
    实现的方法，`task_e2e.rs` 的 `MockTaskServices` 被迫加桩——这是 app:path 工作流的
    波纹，不应由租约测试承担；拆分时应给 trait 方法提供 fail-visible 默认实现，或把
    该 trait 扩展随 app:path 票据单独提交。默认线性内存 256→128MiB 目前**无独立票据**
    （检索未见裁决记录），发版前需补。
+7. **版本管理失守记录（2026-10-22）**：复核阶段已发现 0.0.2 bump 属范围外改动，
+   但当时只把它记为「另行工作流」而未按 `docs/public/versioning.md` 判定为硬违规并
+   要求回退，导致平台工作区继续生成 0.0.2。现已回退（能力仓 `6ab6cc5`；平台工作区
+   同步回退为 0.0.1）。后续遇到版本字段变更，一律先查版本规范再决定，不由提交者
+   自行 bump。
