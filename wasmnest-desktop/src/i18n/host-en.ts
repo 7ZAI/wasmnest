@@ -112,7 +112,7 @@ export default {
       },
       settings: {
         name: 'Settings',
-        desc: 'Appearance · background · skins · system · extensions · about',
+        desc: 'Appearance · background · skins · system · about',
       },
     },
     quickSettings: {
@@ -251,12 +251,6 @@ export default {
         default: 'Default',
         defaultDesc: 'Follow the platform default palette',
         hint: 'Skins only override shell CSS variables; palettes declared by an app root take precedence.',
-      },
-      extensions: {
-        title: 'Extension settings',
-        desc: 'Settings slots reserved for platform extensions; app-level settings stay with each app.',
-        empty: 'Reserved area · no extension settings yet',
-        hint: 'Rows appear automatically when an extension registers and are removed when it is disabled.',
       },
     },
     perms: {

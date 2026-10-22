@@ -107,7 +107,7 @@ export default {
       },
       settings: {
         name: '设置',
-        desc: '界面 · 背景 · 皮肤 · 系统 · 扩展 · 关于',
+        desc: '界面 · 背景 · 皮肤 · 系统 · 关于',
       },
     },
     quickSettings: {
@@ -245,12 +245,6 @@ export default {
         default: '默认',
         defaultDesc: '跟随平台默认色板',
         hint: '皮肤只覆盖平台外壳的 CSS 变量；应用根容器自己声明的配色优先。',
-      },
-      extensions: {
-        title: '扩展设置',
-        desc: '为平台扩展预留的设置位；应用级设置仍归各应用。',
-        empty: '预留区域 · 暂无扩展设置项',
-        hint: '扩展注册后自动出现；停用或卸载时一并摘除。',
       },
     },
     perms: {
