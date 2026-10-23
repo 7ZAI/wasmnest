@@ -133,7 +133,7 @@ function faceOfRoute(path: string): CardKey | null {
  * 多任务切换器与「全部关闭」只消费 `cards`，服务型应用不产卡 → 不出现在切换器、
  * 也不会被「全部关闭」误杀；关闭唯一入口 = 应用管理页的「停用」。
  */
-function isServiceFace(key: CardKey | null): boolean {
+function isServiceFace(key: CardKey | null): key is CardKey {
   return !!key && cardKind(key) === 'app' && isServiceKind(useShellApps().appOf(cardId(key))?.kind)
 }
 
