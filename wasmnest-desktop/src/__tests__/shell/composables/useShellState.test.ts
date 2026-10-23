@@ -42,10 +42,12 @@ vi.mock('@/shell/composables/useShellApps', async (importOriginal) => {
   return { ...actual, useShellApps: () => st }
 })
 
+const toastSuccess = vi.hoisted(() => vi.fn())
+
 vi.mock('@/composables/useToast', () => ({
   useToast: () => ({
     show: () => '',
-    success: () => '',
+    success: toastSuccess,
     error: () => '',
     warning: () => '',
     info: () => '',
@@ -93,6 +95,7 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
     vi.mocked(apps.approve).mockReset()
     vi.mocked(apps.uninstall).mockReset()
     vi.mocked(router.push).mockClear()
+    toastSuccess.mockClear()
     // 页面记忆是模块级单例：用例间必须清，否则「有没有记忆」会被前一个用例污染
     clearAppRoutes()
   })
@@ -138,6 +141,7 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       expect(s.cards.value).toEqual([`app:${TERMINAL_PLUGIN_ID}`])
       expect(s.screen.value).toBe('card')
       expect(router.push).toHaveBeenCalledWith('/sessions')
+      expect(s.notifs.value, '启动是静默动作，不落通知').toEqual([])
     })
 
     it('openApp 激活失败：不产卡不导航；未授权落审批弹窗', async () => {
@@ -162,6 +166,7 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       expect(s.cards.value).toEqual([])
       expect(s.screen.value).toBe('home')
       expect(router.push).not.toHaveBeenCalled()
+      expect(s.notifs.value, '启动是静默动作，不落通知').toEqual([])
     })
 
     it('未知应用不产卡不动作', async () => {
@@ -253,6 +258,23 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       await s.closeCard('sys:settings')
       expect(s.activeCard.value).toBe(`app:${TERMINAL_PLUGIN_ID}`)
       expect(s.screen.value).toBe('card')
+    })
+
+    it('移除最后一张卡（当前面为空）：收起多任务并回主屏', async () => {
+      const s = useShellState()
+      seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
+      await s.openApp(TERMINAL_PLUGIN_ID)
+      // 回主屏后卡片仍留在多任务里（后台运行），此时 activeCard 为 null
+      s.goHome()
+      s.recentsOpen.value = true
+
+      await s.closeCard(`app:${TERMINAL_PLUGIN_ID}`)
+
+      expect(s.cards.value).toEqual([])
+      expect(s.activeCard.value).toBeNull()
+      expect(s.screen.value).toBe('home')
+      expect(s.recentsOpen.value, '空多任务层不留在屏幕上').toBe(false)
+      expect(router.push).toHaveBeenLastCalledWith('/')
     })
   })
 
@@ -504,6 +526,7 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       await s.stopApp(TERMINAL_PLUGIN_ID)
       expect(apps.deactivate).toHaveBeenCalledWith(TERMINAL_PLUGIN_ID)
       expect(s.cards.value).toEqual([])
+      expect(toastSuccess, '停止是静默动作，不落 toast').not.toHaveBeenCalled()
     })
 
     it('stopApp 无卡运行：直接真停用', async () => {
@@ -511,6 +534,7 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
       await s.stopApp(TERMINAL_PLUGIN_ID)
       expect(apps.deactivate).toHaveBeenCalledWith(TERMINAL_PLUGIN_ID)
+      expect(toastSuccess, '停止是静默动作，不落 toast').not.toHaveBeenCalled()
     })
 
     it('uninstallApp：卸载 + 摘运行面 + 关弹窗', async () => {

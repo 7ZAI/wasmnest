@@ -172,7 +172,6 @@ async function openApp(appId: string): Promise<void> {
   const app = apps.appOf(appId)
   if (!app) return
 
-  const wasRunning = app.state === 'running' || app.state === 'degraded'
   const ok = await apps.activate(appId)
   if (!ok) {
     const failed = apps.appOf(appId)
@@ -188,32 +187,12 @@ async function openApp(appId: string): Promise<void> {
   }
 
   if (!app.route) {
-    // 无宿主运行面：激活成功但无界面可挂载——只落通知不产卡
-    if (!wasRunning) {
-      pushNotif({
-        kind: 'event',
-        icon: 'play',
-        source: t('shell.notif.hostSource'),
-        app: appId,
-        title: t('shell.notif.started.title'),
-        body: t('shell.notif.started.body', { name: app.name }),
-      })
-    }
+    // 无宿主运行面：激活成功但无界面可挂载（运行态在主屏网格 chip 可见）
     return
   }
 
   enterFace(appCardKey(appId))
   void router.push(lastRouteOf(appId) ?? app.route)
-  if (!wasRunning) {
-    pushNotif({
-      kind: 'event',
-      icon: 'play',
-      source: t('shell.notif.hostSource'),
-      app: appId,
-      title: t('shell.notif.started.title'),
-      body: t('shell.notif.started.body', { name: app.name }),
-    })
-  }
 }
 
 /** 开系统页卡 */
@@ -260,7 +239,8 @@ function activateCard(key: CardKey): void {
 /**
  * 关卡片：应用卡 = **真停用**（deactivate 成功后才摘面——失败留卡，错误提示由
  * `showUserError` 统一发出，不静默丢运行中实例）；系统页卡 = 只关页面。
- * 关的是当前全屏面 → 切 MRU 次卡路由，无卡 → 回主屏。
+ * 关的是当前全屏面 → 切 MRU 次卡路由；移除最后一张卡（无论是否为当前面）
+ * 一律回主屏，不把多任务层留在空态。
  */
 async function closeCard(key: CardKey, _silent = false): Promise<void> {
   if (cardKind(key) === 'app') {
@@ -271,21 +251,17 @@ async function closeCard(key: CardKey, _silent = false): Promise<void> {
       // 失败提示已由 showUserError 统一发出（ADR 0030）；lastError 是错误码，不可展示
       return // 停用失败：卡片与运行面保留（不留「关了还在跑」的假象）
     }
-    const app = apps.appOf(appId)
-    if (app) {
-      toast.success(t('shell.notif.stopped.toast', { name: app.name }))
-    }
     // 实例已停用 = 用户关掉了这个应用：页面记忆随之作废（下次是全新开始），
     // 否则「关了再开」会莫名其妙跳回上次那页
     forgetAppRoute(appId)
   }
   cards.value = mruRemove(cards.value, key)
+  if (cards.value.length === 0) {
+    goHome()
+    return
+  }
   if (activeCard.value === key) {
-    if (cards.value.length) {
-      activateCard(cards.value[0])
-    } else {
-      goHome()
-    }
+    activateCard(cards.value[0])
   }
 }
 
@@ -403,8 +379,6 @@ async function stopApp(appId: string): Promise<void> {
     const ok = await apps.deactivate(appId)
     if (ok) {
       forgetAppRoute(appId)
-      const app = apps.appOf(appId)
-      if (app) toast.success(t('shell.notif.stopped.toast', { name: app.name }))
     }
     // 失败同样已在 showUserError 内提示（ADR 0030），此处不重复
   }
