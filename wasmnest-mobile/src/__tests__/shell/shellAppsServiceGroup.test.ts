@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   openDetail: vi.fn(),
   refresh: vi.fn(async () => {}),
   installFromLocalPackage: vi.fn(async () => null),
+  installSupported: false,
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
 }))
@@ -24,7 +25,7 @@ vi.mock('@/shell/composables/useShellApps', () => ({
   useShellApps: () => ({
     sortedApps: mocks.apps as never,
     stats: ref({ installed: 0, running: 0, totalBytes: undefined }),
-    supportsInstall: () => false,
+    supportsInstall: () => mocks.installSupported,
     installFromLocalPackage: mocks.installFromLocalPackage,
     refresh: mocks.refresh,
   }),
@@ -68,7 +69,20 @@ function groupTitles(wrapper: ReturnType<typeof mountScreen>): string[] {
 
 beforeEach(() => {
   mocks.apps = ref([])
+  mocks.installSupported = false
   vi.clearAllMocks()
+})
+
+describe('添加应用', () => {
+  it('不显示「需审批」提示，只在安装中给出加载文案', () => {
+    mocks.installSupported = true
+    const wrapper = mountScreen()
+
+    expect(wrapper.text()).toContain('shell.apps.installLocal')
+    expect(wrapper.text(), '空闲态不再显示审批要求').not.toContain('shell.apps.installLocalHint')
+    expect(wrapper.text()).not.toContain('需审批')
+    expect(wrapper.text(), '非安装中不显示加载文案').not.toContain('shell.common.loading')
+  })
 })
 
 describe('移动壳应用管理的系统服务区', () => {

@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-full min-h-0">
+  <div class="flex flex-col h-full min-h-0" @click="onSurfaceClick">
     <!-- ==================== 页头（返回 + 标题 + 数量 + 全部关闭） ==================== -->
     <header class="flex items-center gap-2 px-2 pt-2 pb-1 flex-shrink-0">
       <button
@@ -127,7 +127,11 @@
     </template>
 
     <!-- ==================== 空态 ==================== -->
-    <div v-else class="flex-1 flex flex-col items-center justify-center px-6 text-center">
+    <div
+      v-else
+      class="flex-1 flex flex-col items-center justify-center px-6 text-center"
+      data-testid="shell-recents-empty"
+    >
       <span
         class="flex items-center justify-center w-14 h-14 rounded-[18px]"
         :style="{ background: 'var(--mobile-bg-elevated)', color: 'var(--mobile-text-secondary)' }"
@@ -141,18 +145,6 @@
       <p class="mt-4 shell-type-label text-[var(--mobile-text-primary)]">
         {{ t('shell.switcher.empty') }}
       </p>
-      <p class="mt-1 shell-type-caption text-[var(--mobile-text-secondary)]">
-        {{ t('shell.switcher.emptyHint') }}
-      </p>
-      <!-- 空态给主动作，不把用户堵在只有页头返回键的空屏里 -->
-      <button
-        type="button"
-        class="mt-5 flex items-center justify-center rounded-[10px] px-5 min-h-[var(--mobile-touch-target-min)] shell-type-label transition-opacity duration-200 active:opacity-80"
-        :style="{ background: 'var(--mobile-accent)', color: 'var(--mobile-text-on-accent)' }"
-        @click="nav.goHome()"
-      >
-        {{ t('shell.switcher.goHome') }}
-      </button>
     </div>
   </div>
 </template>
@@ -169,7 +161,7 @@
  *   ① 预览位不伪造内容——平台不持有应用内部快照，放大应用图标 + 真实元信息即
  *      平台掌握的全部事实（伪造截图属于 B4 业务投影越线）；
  *   ② 拖拽**不是唯一路径**（WCAG 2.2 Dragging Movements）：每张卡都可直接点按
- *      进入，关闭键常驻卡片右上角，页头返回负责退出；
+ *      进入，关闭键常驻卡片右上角，页头返回 / 点非卡片区域负责退出；
  *   ③ 手势不互相抢：pointermove 首次越过轴锁阈值即锁定本次手势方向——横向
  *      切卡、纵向上滑关闭；网格内容溢出时纵向手势让位给原生滚动（否则列表
  *      滚不动），贴屏幕左右边缘起手则让位给系统返回手势；
@@ -526,6 +518,19 @@ function onCardClick(card: RecentCard): void {
   void enter(card.app.id)
 }
 
+/**
+ * 点非卡片区域 = 回主屏（背景即「离开多任务」）。
+ *
+ * 卡片与交互控件（返回 / 全部关闭 / 卡片打开与关闭）有自己的动作，不在这里
+ * 重复处理；拖拽抬手后的补 click 也必须吞掉，避免手势收尾误回主屏。
+ */
+function onSurfaceClick(event: MouseEvent): void {
+  if (consumeDragClick()) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('button, a, input, textarea, select, [role="button"], [data-app-id]')) return
+  nav.goHome()
+}
+
 // ==================== 动作 ====================
 
 /** 关闭一张卡片：运行中先停用，然后（无论是否在跑）移出最近列表 */
@@ -540,6 +545,9 @@ async function dismiss(appId: string): Promise<void> {
   const app = cards.value[index]
   if (app?.running) await stop(appId)
   removeRecent(appId)
+  // 只有「关闭最后一张卡」这个动作才回主屏；进入多任务时本就无卡不算，
+  // 不能把 cards 变 0 本身当成返回信号。
+  if (cards.value.length === 0) nav.goHome()
 }
 
 /** 全部关闭：停止所有运行中实例并清空最近列表（Android「清除全部」的同一语义） */
@@ -549,6 +557,7 @@ async function closeAll(): Promise<void> {
     await stop(app.id)
   }
   clearRecent()
+  if (cards.value.length === 0) nav.goHome()
 }
 
 /** 进入应用：先回主屏重置栈，再走统一入口（未运行的会先启动，待审批落详情页） */

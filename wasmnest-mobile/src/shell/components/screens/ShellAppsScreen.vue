@@ -123,8 +123,12 @@
             <span class="flex-1 shell-type-label text-[var(--mobile-text-primary)]">
               {{ t('shell.apps.installLocal') }}
             </span>
-            <span class="flex-shrink-0 shell-type-micro" :style="{ color: 'var(--mobile-warning)' }">
-              {{ installing ? t('shell.common.loading') : t('shell.apps.installLocalHint') }}
+            <span
+              v-if="installing"
+              class="flex-shrink-0 shell-type-micro"
+              :style="{ color: 'var(--mobile-warning)' }"
+            >
+              {{ t('shell.common.loading') }}
             </span>
           </button>
         </ShellGroupCard>

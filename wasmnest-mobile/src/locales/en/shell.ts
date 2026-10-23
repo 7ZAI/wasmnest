@@ -54,7 +54,6 @@ export default {
       systemServiceHint: 'Bundled system service; uninstall is disabled. Autostart can be turned off below.',
       addTitle: 'Add app',
       installLocal: 'Install local package (.wasm)',
-      installLocalHint: 'Approval required',
       empty: 'No apps',
       permissionCount: '{count} permissions',
       installSuccess: 'Installed — approve and start it from the list',
@@ -89,14 +88,14 @@ export default {
     },
     run: {
       menu: 'App menu',
-      recents: 'Recents',
+      recents: 'Switch apps',
       home: 'Back home',
       noSurface: 'No interface available',
       noSurfaceHint: 'This app does not provide a run surface yet',
       notFound: 'App not found or uninstalled',
     },
     switcher: {
-      title: 'Recents',
+      title: 'Switch apps',
       back: 'Back',
       /** Header count unit (same wording as desktop recents: "N apps") */
       countUnit: 'apps',
@@ -106,10 +105,7 @@ export default {
       /** Accessible name of the whole-card tap target (tap card = open/start) */
       enterApp: 'Open {name}',
       launchApp: 'Start {name}',
-      /** Empty-state primary action: recents is a dead end without a way out */
-      goHome: 'Back to home',
       empty: 'Nothing to switch to',
-      emptyHint: 'Open an app from the home screen and it will show up here',
     },
     notify: {
       title: 'Notifications',

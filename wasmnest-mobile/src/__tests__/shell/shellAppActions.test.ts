@@ -9,10 +9,10 @@
  * | C-A1 | approveApp 正路 | 调数据源审批 + 刷新 | 返回 true，审批记录落到数据源 |
  * | C-A2 | approveApp 反例 | 数据源不支持审批 | 返回 false 且不抛（UI 据此不渲染入口） |
  * | C-A3 | approveApp 异常 | 后端拒绝 | 返回 false + lastError 暴露原因 |
- * | C-A4 | launch 通知 | 未运行 → 启动成功推「已启动」 | 通知标题带应用名 |
- * | C-A5 | launch 通知去噪 | 已运行再启动（重挂前端模块） | 不重复推「已启动」 |
+ * | C-A4 | launch 通知 | 启动成功 | 不落通知（启动是静默动作） |
+ * | C-A5 | launch 通知去噪 | 已运行再启动（重挂前端模块） | 不落通知 |
  * | C-A6 | launch 失败 | 后端拒绝 | 状态置 error + 推「启动失败」并带后端原因 |
- * | C-A7 | stop 通知 | 停止成功 | 推「已停止」 |
+ * | C-A7 | stop 通知 | 停止成功 | 不落通知（停止是静默动作） |
  * | C-A8 | install 通知 | 返回安装 id / 用户取消（null） | 有 id 才推「已安装」 |
  * | C-A9 | remove 通知 | 卸载成功 | 推「已卸载」（应用名取自卸载前快照） |
  * | C-A10 | stop 摘运行屏 | 停用成功且该应用运行屏在栈里 | 回落到该屏下面一屏（不留空态） |
@@ -137,18 +137,16 @@ describe('C-A1..C-A3 审批动作', () => {
 })
 
 describe('C-A4..C-A7 启动 / 停止通知', () => {
-  it('should_notifyStarted_when_appWasNotRunning', async () => {
+  it('should_notNotify_when_launchSucceeds', async () => {
     shell.upsertApps(SOURCE_ID, [app('com.test.a', 'stopped', 'AppA')])
 
     const ok = await useShellApps().launch('com.test.a')
 
     expect(ok).toBe(true)
-    const titles = notifications.notifications.value.map((n) => n.title)
-    expect(titles.join('|')).toContain('shell.notify.app.started.title')
-    expect(titles.join('|'), '通知标题要带应用名').toContain('AppA')
+    expect(notifications.notifications.value, '启动是静默动作，不落通知').toHaveLength(0)
   })
 
-  it('should_notDuplicateStartedNotification_when_appAlreadyRunning', async () => {
+  it('should_notNotify_when_appAlreadyRunning', async () => {
     // 壳允许重复点已运行的应用（用于重挂前端模块）：那不是「又启动了一次」
     shell.upsertApps(SOURCE_ID, [app('com.test.a', 'running', 'AppA')])
 
@@ -174,15 +172,13 @@ describe('C-A4..C-A7 启动 / 停止通知', () => {
     expect(failed!.body, '失败原因来自后端，原样呈现').toContain('approval required')
   })
 
-  it('should_notifyStopped_when_stopSucceeds', async () => {
+  it('should_notNotify_when_stopSucceeds', async () => {
     shell.upsertApps(SOURCE_ID, [app('com.test.a', 'running', 'AppA')])
 
     const ok = await useShellApps().stop('com.test.a')
 
     expect(ok).toBe(true)
-    expect(
-      notifications.notifications.value.some((n) => n.title.includes('shell.notify.app.stopped.title')),
-    ).toBe(true)
+    expect(notifications.notifications.value, '停止是静默动作，不落通知').toHaveLength(0)
   })
 })
 

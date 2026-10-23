@@ -53,7 +53,6 @@ export default {
       systemServiceHint: '系统服务随包分发，不可卸载；自启可在下方关闭',
       addTitle: '添加应用',
       installLocal: '安装本地包（.wasm）',
-      installLocalHint: '需审批',
       empty: '暂无应用',
       permissionCount: '{count} 项权限',
       installSuccess: '安装完成，可在列表中批准并启动',
@@ -87,14 +86,14 @@ export default {
     },
     run: {
       menu: '应用菜单',
-      recents: '多任务',
+      recents: '切换应用',
       home: '回主屏',
       noSurface: '应用暂无可用界面',
       noSurfaceHint: '该应用尚未提供运行界面',
       notFound: '应用不存在或已卸载',
     },
     switcher: {
-      title: '多任务',
+      title: '切换应用',
       back: '返回',
       /** 页头计数单位（与桌面多任务同一口径：标题后跟「N 个」） */
       countUnit: '个',
@@ -104,10 +103,7 @@ export default {
       /** 整卡可点的可访问名（点卡片 = 进入 / 启动，Android recents 同一交互） */
       enterApp: '进入 {name}',
       launchApp: '启动 {name}',
-      /** 空态主动作：多任务空了也要给一条出路，不能只剩页头返回键 */
-      goHome: '回到主屏',
       empty: '没有可切换的应用',
-      emptyHint: '回到主屏打开一个应用，它会出现在这里',
     },
     notify: {
       title: '通知栏',

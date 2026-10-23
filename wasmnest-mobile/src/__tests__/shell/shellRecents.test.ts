@@ -11,10 +11,10 @@
  * | C-S4 | dismiss（未运行） | 只移出最近列表，不调 stop | stop 不调用 + 卡片消失 |
  * | C-S5 | closeAll | 停止所有运行中 + 清空最近列表 | stop 每个 + 卡片清空 |
  * | C-S6 | 上滑关闭 | 轴锁后纵向上滑超阈值才关闭；下滑是取消；pointercancel 不关闭 | 达阈值 dismiss，否则不 dismiss |
- * | C-S7 | 空态 | 无卡片时给出原因与出口（页头返回 + 主动作「回到主屏」） | 空态在场，不渲染卡片与「全部关闭」 |
+ * | C-S7 | 空态 | 无卡片时只显示「没有可切换的应用」，不给回主屏按钮 | 空态在场，不渲染卡片 / 「全部关闭」/ 回主屏按钮 |
  * | C-S8 | 卡片布局 | 与桌面同形的多行卡片：信息条在上 + 缩略区在下，行内居中 | 样式表锁 flex-wrap / 居中 / 3:4；无旧 deck 轨道 |
  * | C-S9 | 横向切卡 | 左滑下一张 / 右滑上一张；网格轻微跟手 | activeIndex 变化 + 跟手位移 |
- * | C-S10 | 空态主动作 | 空态给一条出路，不把用户堵在只有页头返回键的空屏 | 点「回到主屏」→ goHome |
+ * | C-S10 | 非卡片区域 | 点卡片以外的区域即离开多任务 | goHome（交互控件与卡片除外） |
  * | C-S11 | 触控目标 | 每张卡的 × 命中区 ≥44px | 样式表锁 width/height = touch-target token |
  * | C-S12 | 卡片内容 | 信息条 = 图标 + 名称 + 状态；缩略区 = 大图标 + 版本/权限 | 运行中不重复「运行中」，未运行写明状态 |
  * | C-S13 | 手势让位 | 贴屏幕左右边缘起手不接管（不与系统返回手势抢同一条边） | 贴边横滑不切卡，中部起手照常切卡 |
@@ -26,9 +26,11 @@
  * | C-S19 | 滚动与手势分工 | 网格溢出时纵向上滑让位原生滚动，横向切卡仍生效 | 滚动场景上滑不 dismiss，横滑照常切卡 |
  * | C-S20 | 底部切换条退役 | 底部「上一个 / 下一个 / 圆点 / 页码」删除 | 源码 / 文案 / 样式表均无该组控件 |
  * | C-S21 | 页头计数 | 标题后显示卡片数（与桌面同一口径），空态不显示 | 有卡显示 N 个，无卡不显示 |
+ * | C-S22 | 关闭最后一张卡 | 关闭动作把卡片清空 → 自动回主屏 | goHome；非最后一张不回 |
+ * | C-S23 | 进入空多任务 | cards 为 0 本身不是返回信号 | 挂载后不回主屏 |
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { computed, ref } from 'vue'
@@ -347,6 +349,21 @@ describe('C-S5 全部关闭', () => {
     expect(mockStop.mock.calls.map((c) => c[0]).sort()).toEqual(['a', 'c'])
     expect(localStorage.getItem('wasmnest.shell.recentApps') ?? '[]').toBe('[]')
   })
+
+  it('should_goHome_when_closeAllLeavesNoCards', async () => {
+    apps.value = [app('a', 'running', 'AppA')]
+    mockStop.mockImplementationOnce(async () => {
+      apps.value = []
+      return true
+    })
+    const wrapper = mount(ShellSwitcherScreen)
+
+    const closeAll = wrapper.findAll('button').find((b) => b.text().includes('shell.switcher.closeAll'))!
+    await closeAll.trigger('click')
+    await flushPromises()
+
+    expect(mockGoHome, '关闭全部后已无卡片 = 关闭了最后一张').toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('C-S6 上滑关闭手势', () => {
@@ -443,39 +460,54 @@ describe('C-S19 滚动与手势分工', () => {
   })
 })
 
-describe('C-S7 空态', () => {
-  it('should_showEmptyStateWithExit_when_noCards', () => {
+describe('C-S7/C-S23 空态', () => {
+  it('should_showEmptyStateOnly_when_noCards', () => {
     apps.value = [app('a', 'stopped', 'AppA')] // 未运行且不在最近列表 → 无卡片
     const wrapper = mount(ShellSwitcherScreen)
 
     expect(wrapper.findAll('article.shell-recents-card')).toHaveLength(0)
     expect(wrapper.text()).toContain('shell.switcher.empty')
     expect(wrapper.text(), '空态不渲染「全部关闭」').not.toContain('shell.switcher.closeAll')
+    expect(wrapper.text(), '空态不给回主屏按钮').not.toContain('shell.switcher.goHome')
+    expect(wrapper.text()).not.toContain('shell.switcher.emptyHint')
+  })
+
+  it('should_notGoHome_when_enteringWithNoCards', () => {
+    apps.value = []
+    mount(ShellSwitcherScreen)
+
+    expect(mockGoHome, 'cards 为 0 本身不是返回信号').not.toHaveBeenCalled()
   })
 
   it('should_exitThroughHeaderBack_when_noSystemBar', async () => {
-    // 底部系统条退役后，返回出口由页头承担（空态另有主动作，见 C-S10）
+    // 底部系统条退役后，返回出口由页头或非卡片区域承担
     apps.value = []
     const wrapper = mount(ShellSwitcherScreen)
 
     await wrapper.find('button[aria-label="shell.switcher.back"]').trigger('click')
 
     expect(mockBack).toHaveBeenCalledTimes(1)
+    expect(mockGoHome, '页头返回走自己的动作，不重复回主屏').not.toHaveBeenCalled()
   })
 })
 
-describe('C-S10 空态主动作', () => {
-  it('should_goHome_when_emptyStateActionTapped', async () => {
-    // 空态只留文案没有动作 = 用户被堵在空屏里（ui-ux-pro-max Empty States：文案 + 动作）
+describe('C-S10 非卡片区域返回', () => {
+  it('should_goHome_when_nonCardAreaTapped', async () => {
+    apps.value = [app('a', 'running', 'AppA')]
+    const wrapper = mount(ShellSwitcherScreen)
+
+    await wrapper.find('.shell-recents-grid').trigger('click')
+
+    expect(mockGoHome, '点卡片以外的区域 = 离开多任务').toHaveBeenCalledTimes(1)
+  })
+
+  it('should_goHome_when_emptyStateTapped', async () => {
     apps.value = []
     const wrapper = mount(ShellSwitcherScreen)
 
-    const action = wrapper.findAll('button').find((b) => b.text().includes('shell.switcher.goHome'))
-    expect(action, '空态要有主动作').toBeTruthy()
+    await wrapper.find('[data-testid="shell-recents-empty"]').trigger('click')
 
-    await action!.trigger('click')
-
-    expect(mockGoHome).toHaveBeenCalledTimes(1)
+    expect(mockGoHome, '空态整面都是非卡片区域').toHaveBeenCalledTimes(1)
   })
 
   it('should_notRenderEmptyAction_when_cardsExist', () => {
@@ -483,6 +515,49 @@ describe('C-S10 空态主动作', () => {
     const text = mount(ShellSwitcherScreen).text()
 
     expect(text, '有卡片时不渲染空态动作').not.toContain('shell.switcher.goHome')
+  })
+})
+
+describe('C-S22 关闭最后一张卡自动回主屏', () => {
+  it('should_goHome_when_lastRunningCardClosed', async () => {
+    apps.value = [app('a', 'running', 'AppA')]
+    mockStop.mockImplementationOnce(async () => {
+      apps.value = []
+      return true
+    })
+    const wrapper = mount(ShellSwitcherScreen)
+
+    await activeCard(wrapper).find('button[aria-label="shell.switcher.closeCard"]').trigger('click')
+    await flushPromises()
+
+    expect(mockGoHome).toHaveBeenCalledTimes(1)
+  })
+
+  it('should_goHome_when_lastDormantCardClosed', async () => {
+    pushRecent('a')
+    apps.value = [app('a', 'stopped', 'AppA')]
+    const wrapper = mount(ShellSwitcherScreen)
+
+    await activeCard(wrapper).find('button[aria-label="shell.switcher.closeCard"]').trigger('click')
+    await flushPromises()
+
+    expect(mockGoHome).toHaveBeenCalledTimes(1)
+  })
+
+  it('should_stayOnSwitcher_when_nonLastCardClosed', async () => {
+    pushRecent('b')
+    pushRecent('a')
+    apps.value = [app('a', 'running', 'AppA'), app('b', 'running', 'AppB')]
+    mockStop.mockImplementationOnce(async () => {
+      apps.value = apps.value.filter((item) => item.id !== 'a')
+      return true
+    })
+    const wrapper = mount(ShellSwitcherScreen)
+
+    await activeCard(wrapper).find('button[aria-label="shell.switcher.closeCard"]').trigger('click')
+    await flushPromises()
+
+    expect(mockGoHome, '还有卡片时不自动回主屏').not.toHaveBeenCalled()
   })
 })
 

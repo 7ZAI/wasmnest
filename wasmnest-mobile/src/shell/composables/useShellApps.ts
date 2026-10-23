@@ -23,8 +23,6 @@ import { useShellNotifications } from './useShellNotifications'
 
 /** 生命周期通知图标（24×24 stroke 视框，与壳内其它 SVG 同规范） */
 const APP_EVENT_ICONS = {
-  started: 'M6 4l14 8-14 8z',
-  stopped: 'M6 6h12v12H6z',
   approved: 'M20 6L9 17l-5-5',
   installed: 'M12 3v12 M7 10l5 5 5-5 M4 21h16',
   uninstalled: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
@@ -34,7 +32,7 @@ const APP_EVENT_ICONS = {
 /**
  * 推送一条应用生命周期通知
  *
- * 归属（AGENTS §5.1 B6）：壳只对**自身动作的结果**落通知（启动/停止/审批/安装/卸载），
+ * 归属（AGENTS §5.1 B6）：壳只对**自身动作的结果**落通知（启动失败/审批/安装/卸载），
  * 不解释插件业务事件；文案是平台自己的，应用名是注册表事实。
  */
 function notifyAppEvent(
@@ -160,16 +158,12 @@ async function launch(appId: string): Promise<boolean> {
   // （后端 activate 幂等早退 / loader 对已加载模块直接返回），重跑一遍的代价远小于缺模块。
 
   // 乐观置为运行中：启动是秒级操作，先动 UI 避免点击后无反馈
-  // 通知只在「本就没在跑」时落：重复点已运行的应用（壳允许，用于重挂前端模块）
-  // 不该每次都在通知栏叠一条「已启动」
-  const wasRunning = app.state === 'running'
   registry.patchApp(appId, { state: 'running', error: undefined })
   try {
     await source.launch(appId)
     pushRecent(appId)
     lastError.value = null
     await refresh()
-    if (!wasRunning) notifyAppEvent('started', app)
     return true
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
@@ -196,7 +190,6 @@ async function stop(appId: string): Promise<boolean> {
     await source.stop(appId)
     lastError.value = null
     await refresh()
-    notifyAppEvent('stopped', app)
     // 停用即退出：运行面注册随前端模块一起被 dispose（pluginLoader.deactivate 走
     // context._disposables），运行屏留在栈里就只剩「应用暂无可用界面」空态。这里摘掉
     // 该应用的运行屏，退出动作才有落点；失败时不动栈（运行面多半还在，留用户看错误态）
