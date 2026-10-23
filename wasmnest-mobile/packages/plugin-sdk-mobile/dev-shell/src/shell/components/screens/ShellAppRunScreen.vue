@@ -1,5 +1,7 @@
 <template>
-  <div class="flex flex-col h-full min-h-0">
+  <!-- 根节点自铺默认页面底色：平台顶栏与应用运行面是同一个应用窗口
+       （与真机 ShellAppRunScreen 同形）。 -->
+  <div class="flex flex-col h-full min-h-0 bg-[var(--mobile-bg-primary)]">
     <!--
       平台顶栏：左侧应用身份（图标 + 名称），右侧胶囊（菜单 / 多任务 / 回主屏）。
       三个按钮都是显式点击路径，不依赖系统手势；胶囊对齐小程序形态——平台的

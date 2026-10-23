@@ -1,8 +1,9 @@
 <template>
   <!--
     壳自持布局框（票 2026-10-09 阶段 B）：旧宿主 MobileLayout 退役后，原先由它承担的
-    三件事收归壳内——① 100dvh 全高容器（ShellHost 用 h-full 承接）② 顶部安全区
-    padding（Android WebView 不支持 env(safe-area-inset-*)，完全依赖 JS 值）
+    三件事收归壳内——① 100dvh 全高容器（ShellHost 用 h-full 承接）② 把顶部安全区量
+    以 --shell-safe-top 交给壳根（Android WebView 不支持 env(safe-area-inset-*)，完全
+    依赖 JS 值；padding 由 ShellHost 承接，壁纸层才能铺满状态栏带）
     ③ `mobile-app mobile-ui` 祖先类（部分既有 CSS 选择器按这两个类命中）。
     安全区未就绪前只渲染占位底色，避免内容在状态栏下闪现（与旧 MobileLayout 同口径）。
   -->
@@ -51,16 +52,17 @@ const safeAreaReady = inject<Ref<boolean>>('safeAreaReady', ref(true))
 const platformInfo = inject<Ref<{ isMobile: boolean }>>('platformInfo', ref({ isMobile: false }))
 
 /**
- * 容器样式：仅移动形态下补顶部安全区；底部安全区由壳内底部元素各自 padding 承担。
+ * 容器样式：只暴露顶部安全区量（底部由壳内底部元素各自 padding 承担）。
  *
- * 同时把顶部内边距量以 `--shell-safe-top` 暴露出去：状态栏那条带子是容器的
- * padding 区，壁纸与氛围层都画在 `.shell-ui` 里（padding 之下），不补这一下
- * 状态栏下方会留一条与内容区不同色的硬边。壁纸据此向上越界内边距满幅铺开。
+ * 不再在本层加 paddingTop：壁纸层画在 ShellHost 里，若 padding 留在外层，
+ * 壁纸会被推到 padding 之下，状态栏那条带子只能露出页面底色（edge-to-edge
+ * 白开了）。改由 ShellHost 用 `padding-top: var(--shell-safe-top)` 承接安全区：
+ * 绝对定位的壁纸层铺满 padding box，自然盖住状态栏后方；内容仍在 padding 内。
  */
 const containerStyle = computed(() => {
   if (!platformInfo.value.isMobile) return {}
   const top = safeArea.value.top || 0
-  return { paddingTop: `${top}px`, '--shell-safe-top': `${top}px` }
+  return { '--shell-safe-top': `${top}px` }
 })
 
 let sourceDisposable: Disposable | null = null

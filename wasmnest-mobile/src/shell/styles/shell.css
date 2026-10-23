@@ -168,13 +168,12 @@
    壁纸挂在壳根（ShellHost）；本层给纯色 / 壁纸之上的页面垫一层顶部渐隐柔光，
    让列表页与主屏共享同一套空气感，又不抢列表对比度（列表卡自带 bg-card 表面）。
    层序固定在壁纸之下：壁纸存在时本层被完全覆盖，仅 none 档可见。
+   壳根的 padding box 已包含顶部安全区，inset:0 即盖到状态栏后方。
    ============================================================================ */
 .shell-ui::before {
   content: '';
   position: absolute;
   inset: 0;
-  top: calc(-1 * var(--shell-safe-top, 0px));
-  height: calc(100% + var(--shell-safe-top, 0px));
   z-index: -2;
   background: radial-gradient(
     132% 66% at 50% 0%,
@@ -182,6 +181,26 @@
     transparent 82%
   );
   pointer-events: none;
+}
+
+/* ============================================================================
+   应用运行面底色层（含顶部状态栏带）
+   ----------------------------------------------------------------------------
+   应用运行页是应用自己的窗口：平台顶栏、状态栏带与应用界面共用默认页面底色，
+   不再把宿主壁纸透成平台控件的背景。本层与壁纸同为负层序、位于壁纸之后，
+   因此盖住壁纸与氛围底；进出应用时淡入淡出，与屏幕栈过渡同步。
+   ========================================================================== */
+.shell-run-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--mobile-bg-primary);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--shell-dur-base) var(--shell-ease-standard);
+}
+.shell-run-backdrop.is-active {
+  opacity: 1;
 }
 
 /* ============================================================================
@@ -790,7 +809,8 @@
   .shell-capsule-btn,
   .shell-btn-danger-outline,
   .shell-btn-danger-text,
-  .shell-sys-tile {
+  .shell-sys-tile,
+  .shell-run-backdrop {
     transition-duration: 0.01ms;
   }
 }

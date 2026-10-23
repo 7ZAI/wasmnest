@@ -4,15 +4,23 @@
   <div
     class="shell-ui relative isolate flex flex-col h-full overflow-hidden bg-[var(--mobile-bg-primary)] text-[var(--mobile-text-primary)]"
     :class="wallRootClass"
-    :style="{ '--wall-dim': String(wallDim) }"
+    :style="{ '--wall-dim': String(wallDim), paddingTop: 'var(--shell-safe-top, 0px)' }"
   >
-    <!-- 宿主壁纸层（与桌面壳同口径：主屏 / 系统屏 / 应用运行面共用同一背景）。
+    <!-- 宿主壁纸层（主屏 / 系统屏共用；应用运行面见下方底色层）。
          负层序落在壳根底色之上、全部内容之下；none 档不渲染空装饰层。 -->
     <div
       v-if="wallClass"
       class="shell-wallpaper"
       aria-hidden="true"
       :style="wallImageStyle"
+    />
+
+    <!-- 应用运行面底色层：进入应用时整个运行面（含顶部状态栏带）回落到默认
+         页面底色，平台顶栏与应用界面因此处在同一层布局里，不再透出宿主壁纸。 -->
+    <div
+      class="shell-run-backdrop"
+      :class="{ 'is-active': isAppRun }"
+      aria-hidden="true"
     />
 
     <ShellStatusbar />
@@ -38,7 +46,11 @@
  * 宿主壳根组件
  * -----------------------------------------------------------------------------
  * 职责：宿主壁纸 + 状态条 + 屏幕栈 + 平台级覆盖层 + 宿主事件桥 + 系统返回键平台兜底。就这些。
- * 壁纸挂在壳根：主屏 / 应用管理 / 权限 / 设置 / 应用运行面共用同一背景（与桌面壳同口径）。
+ * 壁纸挂在壳根：主屏 / 应用管理 / 权限 / 设置共用同一背景（与桌面壳同口径）。
+ * 应用运行面例外：它是应用自己的窗口，壳根另铺一层默认底色（含状态栏带），
+ * 平台顶栏与应用界面同底色，不把宿主壁纸透成平台控件的背景。
+ * 顶部安全区 padding 也由本壳根承接（变量来自 ShellView）：绝对层铺满 padding box，
+ * 壁纸因此延伸到 Android 状态栏后方，内容仍从安全区之下开始。
  *
  * 底部系统条（返回 / 主屏 / 多任务）已于 2026-10-14 整条退役：常驻导航条
  * 会永久占掉一截应用可视高度，且与 Android 系统手势条重复；导航入口改为
@@ -85,6 +97,9 @@ const SCREENS: Record<ShellScreenId, Component> = {
 const nav = useShellNavigation()
 const { transitionName } = nav
 const { wallpaper, wallpaperImage, wallDim } = useShellPreferences()
+
+/** 当前是否在应用运行面：其底色层盖住壁纸（含状态栏带），只留默认页面底色 */
+const isAppRun = computed(() => nav.current.value.id === 'app-run')
 
 /** 壁纸档位类（none → 只保留壳根类；值与 shell.css / wallpaper.css 的 --wall-* 同源） */
 const wallClass = computed(() =>

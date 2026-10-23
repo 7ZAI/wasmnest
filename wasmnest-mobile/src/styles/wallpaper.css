@@ -60,15 +60,14 @@
   );
 }
 
-/* 壁纸层：绝对定位铺满壳根容器（不随内容滚动），遮罩由 ::after 叠加。
+/* 壁纸层：绝对定位铺满壳根的 padding box（不随内容滚动），遮罩由 ::after 叠加。
    两层叠放——柔光在上、色阶在下，均 cover 居中。
    负层序（壳根 isolate）：落在壳根底色之上、状态条与屏幕内容之下，
-   所有宿主屏共享同一张壁纸。 */
+   所有宿主屏共享同一张壁纸；顶部安全区 padding 也在壳根上，
+   因此壁纸盖过 Android 状态栏带，而内容仍从安全区之下开始。 */
 .shell-wallpaper {
   position: absolute;
   inset: 0;
-  top: calc(-1 * var(--shell-safe-top, 0px));
-  height: calc(100% + var(--shell-safe-top, 0px));
   z-index: -1;
   background-image: var(--wall-glow, none), var(--wall-active, none);
   background-size: cover, cover;
