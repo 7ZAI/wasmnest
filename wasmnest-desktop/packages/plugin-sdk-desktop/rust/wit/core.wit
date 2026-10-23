@@ -229,3 +229,5 @@ world core {
     export lifecycle;
     export manifest;
 }
+
+// seam3 red probe: intentional drift
