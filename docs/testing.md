@@ -21,7 +21,14 @@
 
 ## 3. 完成定义与验证
 
-**本仓（以及三仓）当前无 CI workflow**（未随迁；勿把「CI 会兜底」当依据）。门禁 = husky pre-commit + 本地命令 + 测试锁。**任何交付必须实际运行并贴出结果；无法运行要说明原因与风险。**
+**本仓测试 CI = `.github/workflows/test.yml`**（PR + 主线推送 + nightly）：
+- **PR required checks（node 层 + Rust 快检）**：`check-wit`（WIT 漂移锁）· `node-root`（根脚本自测 + 根 eslint + `check:links`）· `node-desktop` / `node-mobile`（`vue-tsc --noEmit` + vitest `test:run`）· `rust-check (desktop|mobile)`（`cargo check` + 不需要随包产物的快速锁测试，名单见 workflow 注释）。
+- **全量层（不进 PR 阻断）**：`rust-full`（main 线推送 + nightly + 手跑）= 先 `plugins:build` 重建随包产物，再双端全量 `cargo test`（pty / ws / http / app-bundle 等随包产物 e2e 在这一层）。
+- **`check:manifest` 不在 CI**：判据 2/6 要求 HEAD 正好是 manifest 钉住的 tag——开发分支必红，属发布 / tag 流水线。
+- **跨仓检出跟 ref 不钉 tag**：能力仓 / 应用仓默认 `dev`，`WASMNEST_LIB_REF` / `WASMNEST_APPS_REF` 可配（workflow_dispatch input 或仓库变量）——CI 只做校验，按 manifest tag 钉住是发布流水线的事。
+- CI 与 husky pre-commit 重复是 **by design**（钩子可被跳过，CI 不可）。
+
+门禁 = CI required checks + husky pre-commit + 本地命令 + 测试锁。**任何交付必须实际运行并贴出结果；无法运行要说明原因与风险。**
 
 **当前迁移期口径（用户 2026-10-18）**：不逐项跑集成 / 全量回归，收口后统一跑；日常改动至少跑**针对性单测 + 所在端测试**。以下为收口后的标准清单，按改动类型执行：
 

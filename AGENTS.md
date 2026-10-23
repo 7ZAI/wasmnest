@@ -95,7 +95,7 @@
 
 ## 5. 完成定义速查（完整清单 → `docs/testing.md` §3）
 
-本仓（以及三仓）当前**无 CI workflow**——门禁 = husky pre-commit + 本地命令 + 测试锁。**任何交付必须实际运行并贴出结果；无法运行要说明原因与风险。**
+本仓测试 CI = `.github/workflows/test.yml`：node 层 PR required（`check-wit` / `node-root` / `node-desktop` / `node-mobile`）+ Rust 分层（`rust-check (desktop|mobile)` 进 PR；`rust-full` 全量 cargo test 与随包产物 e2e 在主线推送 + nightly，不进 PR 阻断）；`check:manifest` 属发布 / tag 流水线，不做日常 PR check。门禁 = CI required checks + husky pre-commit + 本地命令 + 测试锁。**任何交付必须实际运行并贴出结果；无法运行要说明原因与风险。**
 
 - **当前迁移期口径（用户 2026-10-18）**：不逐项跑集成 / 全量回归，收口后统一跑；日常改动至少跑**针对性单测 + 所在端测试**（改动类型 → 最小测试集映射见 docs/testing.md §3）。
 - 改锁 / 改注册表 / 改 WIT：必须跑对应锁；锁清单过期**同一提交内同步更新**，禁止删锁、缩窄 glob、掏空断言（Seam 3：锁跑红一次证明不空转）。
