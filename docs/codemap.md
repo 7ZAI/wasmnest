@@ -142,6 +142,8 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `system.rs` · `mdns.rs` · `enums.rs` · `model.rs` · `state.rs` | 系统面 / 枚举 / 模型 / 状态 |
 | `gen/android/` | **混装面**：`app/src/main/java/com/wasmnest/mobile/` 下手写 Kotlin（`MainActivity.kt` + 各 `*Plugin.kt`：SafPicker / FileDelete / AllFilesAccess / BiometricKey / DownloadsDir / DeviceInfo / TaskNotification / StatusBarStyle / ForegroundService / PluginAssetExtractor 等）——`tauri android init` 重建后需手工恢复；改 Kotlin 必须 gradlew 验证 |
 
+> 移动宿主业务代码分桶盘点与薄壳例外表（B1–B6 判据 / 处置方向与票号 / Q2 截止条件，Rust 与旧前端五目录）→ `docs/host-exceptions.md`。
+
 ### 3.3 移动脚本（`scripts/`）
 
 `dev-run.js`（Android dev：adb 定位 / 插件 watch；插件改动进应用后需**手动重新激活**生效）、`plugin-build.js`（扫描 `../wasmnest-apps/apps/*/mobile` 全量构建，无宿主侧注册表）、`android-dev-log.js`、`build-terminal-font.mjs`、`check-target-size.js`、`adb-fd0-shim.sh`、`lib/`。
