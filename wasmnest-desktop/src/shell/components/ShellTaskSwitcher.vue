@@ -197,15 +197,15 @@ const scrolls = computed(
     Math.ceil(state.cards.value.length / RECENTS_MAX_COLS) > RECENTS_MAX_VISIBLE_ROWS,
 )
 /** 注入 `--ts-card-w` / `--ts-card-h` / `--ts-tracks`：CSS 不重复尺寸算术 */
-const bandStyle = computed<Record<string, string>>(() =>
-  cardWidth.value > 0
-    ? {
-        '--ts-card-w': `${cardWidth.value}px`,
-        '--ts-card-h': `${cardHeight.value}px`,
-        '--ts-tracks': String(recentsTrackCount(state.cards.value.length)),
-      }
-    : {},
-)
+const bandStyle = computed<Record<string, string>>(() => {
+  const style: Record<string, string> = {}
+  if (cardWidth.value > 0) {
+    style['--ts-card-w'] = `${cardWidth.value}px`
+    style['--ts-card-h'] = `${cardHeight.value}px`
+    style['--ts-tracks'] = String(recentsTrackCount(state.cards.value.length))
+  }
+  return style
+})
 
 /**
  * 单卡样式：入场错峰序号 + 末行不满时的显式居中位置

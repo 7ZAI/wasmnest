@@ -131,6 +131,8 @@ describe('全屏形态（安卓 recents：虚化背景 + 大卡片）', () => {
     // 末行不满 3 张时由 recentsCardPlacement 注入行列（6 半轨才能精确居中）
     expect(src).toContain('recentsCardPlacement(')
     expect(src).toContain(':style="cardStyle(i)"')
+    // 超过 2 行改滚动：必须切到置顶对齐，否则居中的首行滚不回来
+    expect(src).toContain("'is-scrolling': scrolls")
     // 尺寸随窗口 / 卡片数 / 滚动条变化而重算；关闭全屏层必须断开观察
     expect(src).toContain('ResizeObserver')
     expect(src).toContain("addEventListener('resize'")

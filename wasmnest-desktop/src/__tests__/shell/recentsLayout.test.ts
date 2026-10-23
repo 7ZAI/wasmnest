@@ -111,6 +111,13 @@ describe('几何：解算结果在带内不溢宽，两行放得下、三行必�
     expect(height * 3 + BAND_16_9.gap * 2).toBeGreaterThan(BAND_16_9.height)
   })
 
+  it('卡高 = 卡宽 / 3:4（行高与 aspect-ratio 同一公式，不另立一套比例）', () => {
+    const width = recentsCardWidth(3, BAND_16_9)
+    expect(recentsCardHeight(width)).toBeCloseTo(width / RECENTS_CARD_ASPECT)
+    expect(recentsCardHeight(0)).toBe(0)
+    expect(recentsCardHeight(-10)).toBe(0)
+  })
+
   it('带尺寸没量到（0 / 负数）或没有卡片 → 0，调用方保留 CSS 兜底宽度', () => {
     expect(recentsCardWidth(0, BAND_16_9)).toBe(0)
     expect(recentsCardWidth(3, { width: 0, height: 796, gap: 16 })).toBe(0)
@@ -118,7 +125,7 @@ describe('几何：解算结果在带内不溢宽，两行放得下、三行必�
     expect(recentsCardWidth(3, { width: -1, height: -1, gap: 16 })).toBe(0)
   })
 
-  it('带小到放不下时不会返回负数（负数 flex-basis 会让卡片直接消失）', () => {
+  it('带小到放不下时不会返回负数（负数轨道宽会让卡片直接消失）', () => {
     expect(recentsCardWidth(3, { width: 10, height: 10, gap: 16 })).toBe(0)
   })
 })
@@ -132,9 +139,19 @@ describe('与组件样式同源', () => {
     expect(ratio).toBeCloseTo(RECENTS_CARD_ASPECT)
   })
 
+  it('行高显式注入 + 溢出时置顶（auto 行高会被引擎压扁，首行滚不回来）', () => {
+    const src = readFileSync('src/shell/components/ShellTaskSwitcher.vue', 'utf-8')
+    expect(src, '行高必须与卡高同源').toMatch(
+      /\.ts-cards\s*\{[^}]*grid-auto-rows:\s*var\(--ts-card-h/,
+    )
+    expect(src, '超过 2 行必须从头排（可滚动）').toMatch(
+      /\.ts-cards\.is-scrolling\s*\{[^}]*align-content:\s*start/,
+    )
+  })
+
   it('网格轨道数与 RECENTS_GRID_TRACKS 一致（6 半轨 = 3 列，1/2 张收窄）', () => {
     const src = readFileSync('src/shell/components/ShellTaskSwitcher.vue', 'utf-8')
-    const rule = src.match(/\.ts-cards\s*\{[^}]*grid-template-columns:\s*repeat\(\s*([^,]+),/)
+    const rule = src.match(/\.ts-cards\s*\{[^}]*grid-template-columns:\s*repeat\(\s*(var\([^)]*\))/)
     expect(rule, '.ts-cards 必须声明半列网格').not.toBeNull()
     expect(rule?.[1]).toContain(`var(--ts-tracks, ${RECENTS_GRID_TRACKS})`)
     expect(recentsTrackCount(0)).toBe(RECENTS_GRID_TRACKS)
