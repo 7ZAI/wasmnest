@@ -90,6 +90,55 @@
 | `pnpm run tauri:android:dev:log` | Android 日志流（`scripts/android-dev-log.js`） |
 | `pnpm run target:size` | target 治理（§6；`prebuild` 钩子自动跑） |
 
+### 4.1 Android 真机无线调试（adb，联调 / 手工验收）
+
+> 用途：不接 USB，在同一局域网内对真机做 dev 安装、日志抓取与 UI 操作（双端联调默认走这条）。
+> adb 用移动端工程同一份 platform-tools（`ANDROID_HOME` / `ANDROID_SDK_ROOT` 下），不另装一套。
+
+**首次配对（Android 11+）**
+
+1. 设备与电脑接同一 Wi-Fi（关闭访客网络 / AP 隔离）；开发者选项 → 打开「无线调试」。
+2. 设备「无线调试」页 → 「使用配对码配对设备」：记下屏幕上的 `IP:配对端口` 与 6 位配对码（配对端口与调试端口不同，每次开关都会变）。
+3. 电脑执行（platform-tools ≥ 30）：
+   ```bash
+   adb pair <设备IP>:<配对端口>     # 按提示输入设备屏幕上的 6 位配对码
+   adb connect <设备IP>:<调试端口>
+   adb devices -l                   # 状态 device 即可用
+   ```
+4. 同网段且 mDNS 可用时，Android 11+ 常会**自动发现并连接**——`adb devices -l` 直接出现
+   `adb-<id>-<code>._adb-tls-connect._tcp` 串口（本仓测试平板即此形态），可跳过手动 `pair/connect`；
+   发现异常用 `adb mdns services` 排查。
+
+**Android 10 及以下（USB 过渡）**：先用 USB 连上并授权，`adb tcpip 5555`，拔线后 `adb connect <设备IP>:5555`。
+
+**多设备**：所有 adb 命令加 `-s <serial>`（serial 取 `adb devices -l` 第一列，mDNS 串口需整串引号）；
+跑 `pnpm run tauri:android:dev` 前先 `adb disconnect` 掉多余设备，避免 Tauri CLI 选错设备。
+
+**本仓联调闭环（命令在 `wasmnest-mobile/` 跑）**
+
+| 目的 | 命令 |
+| --- | --- |
+| dev 启动（无线即可；自带插件 watch、adb fd0 shim 自愈、`adb reverse` 隧道预检） | `pnpm run tauri:android:dev` |
+| dev 启动 + 日志落盘（推荐） | `pnpm run tauri:android:dev:log` → `.dev-logs/android-dev.YYYY-MM-DD.log`；`WASMNEST_DEV_VERBOSE=1` 含 Debug 级，`WASMNEST_LOG_NO_FILTER=1` 关过滤 |
+| 只重装现成 debug 包（不重建） | `adb -s <serial> install -r src-tauri/gen/android/app/build/outputs/apk/arm64/debug/app-arm64-debug.apk`（arm64 真机；通用包 `.../universal/debug/app-universal-debug.apk`） |
+| 实时看本方日志 | `adb -s <serial> logcat -v time \| grep WasmNest`（tag 族为 `WasmNest*`，含 Kotlin 侧 `WasmNest-*`；仓库脚本另有噪音过滤） |
+| 重启应用 | `adb -s <serial> shell am force-stop com.wasmnest.mobile`，再从桌面/启动器打开（或 `adb -s <serial> shell monkey -p com.wasmnest.mobile -c android.intent.category.LAUNCHER 1`） |
+| 截图（无界面验收 / 留证） | `adb -s <serial> exec-out screencap -p > /tmp/mobile.png` |
+| 点按 / 输入 / 返回 | `adb -s <serial> shell input tap <x> <y>` · `adb shell input text <ascii>` · `adb shell input keyevent KEYCODE_BACK` |
+| 热更失效时查反向隧道 | `adb -s <serial> reverse --list`；dev-run 启动日志会打印需要补建的 `adb reverse tcp:<port> tcp:<port>`（devUrl 与 HMR 两个端口），按它手工补即可 |
+
+**坐标换算**：`input tap` 用设备物理像素（`adb shell wm size` 查看）。截图被查看器缩放时先按比例换算
+（例：1600×2560 设备缩到 1200×1920 查看，展示坐标 ×4/3）；设备旋转后重新截图取点。
+
+**断线与排障**
+
+- 无线调试端口每次开关 / 重启都会变 → 重新 `pair` / `connect`；`adb devices` 出现 `offline` 先
+  `adb disconnect <serial>` 再重连，仍不行就关开一次设备端「无线调试」。
+- `adb kill-server` 会清掉 `adb reverse` 隧道（表现为改代码不热更、页面静默加载失败）——重跑
+  `pnpm run tauri:android:dev` 会自动重建，或按上表手工补。
+- 安装 / 调试被 MIUI 拦截：保持设备解锁并按屏幕提示允许安装；仍失败先用 USB 完成一次授权再切无线。
+- 安全：无线调试只在可信局域网临时开启，用完关闭；配对码一次性，**禁止**把 adb 端口暴露到公网（见 `docs/security.md`）。
+
 ## 5. wasm 应用与插件
 
 ### 5.1 构建注册表与工具链
