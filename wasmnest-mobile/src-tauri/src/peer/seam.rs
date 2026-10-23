@@ -79,7 +79,7 @@ mod android_saf_bridge {
         }
 
         /// 同步逐层下降到 rel 指向的条目（parts 已过 crate 路径清洗）
-        fn walk(&self, tree_uri: &str, root_doc_id: &str, parts: &[String]) -> wasmnest_server_peer_net::Result<SafEntry> {
+        fn walk(&self, tree_uri: &str, root_doc_id: &str, parts: &[String]) -> wasmnest_server_peer_net::base::Result<SafEntry> {
             use wasmnest_server_peer_net::{saf_not_found, PeerNetError};
 
             if parts.is_empty() {
@@ -118,7 +118,7 @@ mod android_saf_bridge {
     }
 
     impl wasmnest_server_peer_net::SharedSafAccess for SafSharedAccess {
-        fn list_dir(&self, tree_uri: &str, rel: &str) -> wasmnest_server_peer_net::Result<Vec<wasmnest_server_peer_net::DirEntry>> {
+        fn list_dir(&self, tree_uri: &str, rel: &str) -> wasmnest_server_peer_net::base::Result<Vec<wasmnest_server_peer_net::DirEntry>> {
             use wasmnest_server_peer_net::{resolve_rel_path, saf_not_found, PeerNetError};
 
             let root_doc_id = saf_tree::tree_document_id(tree_uri).ok_or_else(|| PeerNetError::TransferSession {
@@ -143,7 +143,7 @@ mod android_saf_bridge {
                 .collect())
         }
 
-        fn open_read(&self, tree_uri: &str, rel: &str) -> wasmnest_server_peer_net::Result<Arc<dyn SeqReader>> {
+        fn open_read(&self, tree_uri: &str, rel: &str) -> wasmnest_server_peer_net::base::Result<Arc<dyn SeqReader>> {
             use wasmnest_server_peer_net::{resolve_rel_path, saf_not_found, PeerNetError};
 
             let root_doc_id = saf_tree::tree_document_id(tree_uri).ok_or_else(|| PeerNetError::TransferSession {
