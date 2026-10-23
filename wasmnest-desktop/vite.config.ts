@@ -17,11 +17,13 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
+      '@': resolve(import.meta.dirname, 'src'),
     },
   },
   server: {
-    host: host ? '0.0.0.0' : false,
+    // 显式绑 IPv4 回环：默认 'localhost' 在本机只监听 [::1]:1420，WebKitGTK 解析到
+    // 127.0.0.1 时连接被拒 → 窗口白屏（devUrl 仍是 http://localhost:1420）
+    host: host ? '0.0.0.0' : '127.0.0.1',
     port: 1420,
     strictPort: true,
     watch: {
@@ -46,18 +48,18 @@ export default defineConfig({
     fs: {
       allow: [
         // 宿主前端源码（入口与 @ 别名均指向此处）
-        resolve(__dirname, 'src'),
+        resolve(import.meta.dirname, 'src'),
         // 插件 SDK 源码（@binblink/wasmnest-plugin-sdk-desktop 经 file: symlink 解析为真实路径，
         // 共享 UI 组件如 Select.vue 在 packages/ 下，dev server 需显式放行）
-        resolve(__dirname, 'packages'),
-        resolve(__dirname, 'index.html'),
-        resolve(__dirname, 'public'),
-        resolve(__dirname, 'node_modules'),
-        resolve(__dirname, 'package.json'),
-        resolve(__dirname, 'vite.config.ts'),
-        resolve(__dirname, 'tailwind.config.js'),
-        resolve(__dirname, 'postcss.config.js'),
-        resolve(__dirname, 'tsconfig.json'),
+        resolve(import.meta.dirname, 'packages'),
+        resolve(import.meta.dirname, 'index.html'),
+        resolve(import.meta.dirname, 'public'),
+        resolve(import.meta.dirname, 'node_modules'),
+        resolve(import.meta.dirname, 'package.json'),
+        resolve(import.meta.dirname, 'vite.config.ts'),
+        resolve(import.meta.dirname, 'tailwind.config.js'),
+        resolve(import.meta.dirname, 'postcss.config.js'),
+        resolve(import.meta.dirname, 'tsconfig.json'),
       ],
     },
   },
