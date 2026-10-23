@@ -36,4 +36,4 @@ pnpm run manifest   # 按源码自动填充 plugin.json 的 contributes/permissi
 > 权限提醒：桌面端**无默认授予**——`storage` 等权限均需写入 `plugin.json` 的 `permissions`，
 > 未声明即被拒（内置应用均显式声明了 `storage`）。
 
-完整开发指南见仓库文档 `../../../wasm-app-dev-desktop.md`。
+完整开发指南见仓库文档 `../../../docs/wasm-app-dev-desktop.md`。

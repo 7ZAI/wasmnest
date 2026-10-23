@@ -4,7 +4,7 @@ The WasmNest Mobile WASM app development kit — provides **type definitions**, 
 
 > Terminology: this repository calls "plugins" WASM apps; the package name, CLI name and identifiers keep the original `plugin` words (`plugin.json`, `wasmnest-plugin-api-mobile`).
 >
-> Full development guide: [`wasm-app-dev-mobile.md`](../../wasm-app-dev-mobile.md) (Chinese); development red-line checklist [`wasm-app-development-checklist.md`](../../../docs/knowledge/wasm-app-development-checklist.md).
+> Full development guide: [`wasm-app-dev-mobile.md`](../../docs/wasm-app-dev-mobile.md) (Chinese); development red-line checklist [`wasm-app-development-checklist.md`](../../../docs/knowledge/wasm-app-development-checklist.md).
 
 English | [简体中文](README.md)
 

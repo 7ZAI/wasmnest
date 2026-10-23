@@ -4,7 +4,7 @@ WasmNest 移动端 wasm 应用开发工具包 — 提供应用所需的**类型�
 
 > 术语：本仓把「插件」称为 wasm 应用；包名 / CLI 名 / 标识符保留 `plugin` 原词（`plugin.json`、`wasmnest-plugin-api-mobile`）。
 >
-> 完整开发指南见仓库文档 [`wasm-app-dev-mobile.md`](../../wasm-app-dev-mobile.md)；开发红线清单 [`wasm-app-development-checklist.md`](../../../docs/knowledge/wasm-app-development-checklist.md)。
+> 完整开发指南见仓库文档 [`wasm-app-dev-mobile.md`](../../docs/wasm-app-dev-mobile.md)；开发红线清单 [`wasm-app-development-checklist.md`](../../../docs/knowledge/wasm-app-development-checklist.md)。
 
 [English](README_en.md) | 简体中文
 

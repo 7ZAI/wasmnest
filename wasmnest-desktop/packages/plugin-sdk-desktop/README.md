@@ -4,7 +4,7 @@ WasmNest Desktop wasm 应用开发工具包 — 提供应用所需的**类型定
 
 > 术语：本仓把「插件」称为 wasm 应用；包名 / CLI 名 / 标识符保留 `plugin` 原词（`plugin.json`、`wasmnest-plugin-api`）。
 >
-> 完整开发指南见仓库文档 [`wasm-app-dev-desktop.md`](../../wasm-app-dev-desktop.md)；API 与扩展点参考 [`wasm-app-dev-guide.md`](../../../wasmnest-desktop/docs/knowledge/wasm-app-dev-guide.md)。
+> 完整开发指南见仓库文档 [`wasm-app-dev-desktop.md`](../../docs/wasm-app-dev-desktop.md)；API 与扩展点参考 [`wasm-app-dev-guide.md`](../../docs/knowledge/wasm-app-dev-guide.md)。
 
 [English](README_en.md) | 简体中文
 

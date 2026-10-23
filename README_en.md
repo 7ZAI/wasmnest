@@ -14,7 +14,7 @@ English | [简体中文](README.md)
 
 WasmNest is a dual-end wasm application host built on the [WebAssembly Component Model](https://component-model.bytecodealliance.org/): Tauri 2 + Vue 3 (Windows / macOS / Linux) on desktop, Tauri 2 (Android) + Vue 3 on mobile.
 
-The core problem it solves: **decoupling product capabilities from host code entirely**. Terminals, AI chat, file transfer, agent management — none of them live in the host. Each ships as an independent wasm app that runs in a wasmtime sandbox, is loaded under explicit permissions and is unloaded the moment it leaves the surface. The host only provides the generic engine, security gates and assembly — apps can grow freely while the host stays minimal.
+The core problem it solves: **decoupling product capabilities from host code entirely**. Terminals, AI chat, file transfer, agent management — none of them live in the host. Each ships as an independent wasm app that runs in a wasmtime sandbox and is loaded under explicit permissions; an app keeps running until it is disabled — switching away only hides it, and disable / uninstall is the only destroy point. The host only provides the generic engine, security gates and assembly — apps can grow freely while the host stays minimal.
 
 ## Goal
 
@@ -29,7 +29,7 @@ WasmNest is committed to making it fast to build **personal local "mini-programs
 | **wasmtime sandbox**: one isolated Component instance per app, explicit capability imports | Apps start with zero system capabilities and only get the file / network access they were approved for | A runaway or malicious app is contained to the smallest possible radius |
 | **WIT / Component Model cross-language contracts**: host and app talk only through interfaces, sharing no code | Apps can be written in any language that can emit a wasm Component; the host doesn't care about language or toolchain | Plugin ecosystems locked to the host's language and runtime |
 | **Capability is permission**: `plugin.json` declarations ∩ user approval, nothing granted by default | What an app can do is decided by the user, with high-risk abilities split by domain | Installing an app means handing over all permissions |
-| **Independently built app bundles + assembly mechanism** | Add, swap or remove capabilities without touching the host; apps unload when they leave | Features coupled into the host, forcing a full release for every change |
+| **Independently built app bundles + assembly mechanism** | Add, swap or remove capabilities without touching the host; apps are destroyed only on disable / uninstall | Features coupled into the host, forcing a full release for every change |
 | **One shared WIT and SDK across both ends** | Write an app once, load it on desktop and Android | Split ecosystems and duplicated work |
 | **Thin host + cross-repo version fingerprints** | The host only does engines and assembly; contract drift fails immediately | Host bloat and integration issues lurking silently |
 
@@ -50,7 +50,7 @@ WasmNest is committed to making it fast to build **personal local "mini-programs
 | App loading | Full-screen mount of an independently built app bundle in the same window | Runtime surface registration in the host shell |
 | App isolation | wasmtime sandbox instance + explicit capability imports | Same, plus content-bound approval on Android |
 
-Desktop apps are unloaded as soon as they leave the app surface; the host holds no app-internal state. Assembly details: [`docs/architecture.md`](docs/architecture.md), [`docs/frontend.md`](docs/frontend.md).
+An app keeps running as long as it is not disabled — switching away only hides it (DOM / component instances are retained); disable / uninstall is the only destroy point, and the host shell holds no app-internal state. Assembly details: [`docs/architecture.md`](docs/architecture.md), [`docs/frontend.md`](docs/frontend.md).
 
 ## Four Repositories
 

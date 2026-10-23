@@ -4,7 +4,7 @@ The WasmNest Desktop WASM app development kit — provides everything an app nee
 
 > Terminology: this repository calls "plugins" WASM apps; the package name, CLI name and identifiers keep the original `plugin` words (`plugin.json`, `wasmnest-plugin-api`).
 >
-> Full development guide: [`wasm-app-dev-desktop.md`](../../wasm-app-dev-desktop.md) (Chinese); API & extension-point reference [`wasm-app-dev-guide.md`](../../../wasmnest-desktop/docs/knowledge/wasm-app-dev-guide.md).
+> Full development guide: [`wasm-app-dev-desktop.md`](../../docs/wasm-app-dev-desktop.md) (Chinese); API & extension-point reference [`wasm-app-dev-guide.md`](../../docs/knowledge/wasm-app-dev-guide.md).
 
 English | [简体中文](README.md)
 
