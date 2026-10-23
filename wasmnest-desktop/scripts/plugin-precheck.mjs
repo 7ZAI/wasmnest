@@ -24,6 +24,11 @@
  * 用法：
  *   node scripts/plugin-precheck.mjs        # 直接执行（tauri beforeDevCommand 用）
  *   import { runPluginPrecheck } from './plugin-precheck.js'   # dev-run.js 复用
+ *
+ * 可测性（src/__tests__/scripts/pluginPrecheck.test.ts）：四步与陈旧判定全部导出并
+ * 接受可选 `deps` 注入（插件表 / 产物根 / 应用目录解析 / SDK 根 / 构建执行器 / 退出）。
+ * 不注入 = 生产默认（真实注册表 + 真实 spawn 构建 + process.exit）；测试注入记录器
+ * 在真实临时目录上跑行为断言，绝不触发真实构建。
  */
 import { spawnSync } from 'node:child_process'
 import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, rmSync } from 'node:fs'
@@ -122,6 +127,12 @@ const RESOURCES_BASE = resolve(ROOT, 'src-tauri/resources/plugins/desktop')
 const RUNTIME_RESOURCES_BASE = resolve(ROOT, 'src-tauri/target/debug/resources/plugins/desktop')
 
 /**
+ * 桌面 SDK 根（陈旧判据的共享源码面：`packages/plugin-sdk-desktop`）。
+ * 作为可注入依赖的默认值存在：前端判据取其 `src/`，WASM 判据取其 `rust/`。
+ */
+const DEFAULT_SDK_ROOT = resolve(ROOT, 'packages/plugin-sdk-desktop')
+
+/**
  * 剪掉不属于当前注册表的插件产物目录。
  *
  * **为什么必须有**：插件 id 改名（ADR 0056 `com.bedcode.*` → `com.wasmnest.*`）后，
@@ -133,13 +144,21 @@ const RUNTIME_RESOURCES_BASE = resolve(ROOT, 'src-tauri/target/debug/resources/p
  * 只删「不在注册表里的目录」：用户安装的插件在 app_data_dir/plugins（不在这里），
  * 内置资源目录里出现的未知 id 只可能是退役产物。
  */
-const KNOWN_PLUGIN_IDS = new Set(PLUGIN_WATCH_CMDS.map((p) => p.id))
-
-function pruneStalePluginDirs() {
-  for (const base of [RESOURCES_BASE, RUNTIME_RESOURCES_BASE]) {
+/**
+ * 只删「不在注册表里的目录」：用户安装的插件在 app_data_dir/plugins（不在这里），
+ * 内置资源目录里出现的未知 id 只可能是退役产物。
+ */
+export function pruneStalePluginDirs(deps = {}) {
+  const {
+    plugins = PLUGIN_WATCH_CMDS,
+    resourcesBase = RESOURCES_BASE,
+    runtimeResourcesBase = RUNTIME_RESOURCES_BASE,
+  } = deps
+  const knownPluginIds = new Set(plugins.map((p) => p.id))
+  for (const base of [resourcesBase, runtimeResourcesBase]) {
     if (!existsSync(base)) continue
     for (const entry of readdirSync(base, { withFileTypes: true })) {
-      if (!entry.isDirectory() || KNOWN_PLUGIN_IDS.has(entry.name)) continue
+      if (!entry.isDirectory() || knownPluginIds.has(entry.name)) continue
       const target = join(base, entry.name)
       try {
         rmSync(target, { recursive: true, force: true })
@@ -155,7 +174,11 @@ function pruneStalePluginDirs() {
 // ==================== 陈旧判定 ====================
 
 /** 返回前端产物需要重建的原因（null = 产物最新，无需动作） */
-function frontendStaleReason(pluginRoot, bundleDest) {
+export function frontendStaleReason(
+  pluginRoot,
+  bundleDest,
+  { sdkSrcRoot = join(DEFAULT_SDK_ROOT, 'src') } = {},
+) {
   let bundleStat
   try {
     bundleStat = statSync(bundleDest)
@@ -166,7 +189,7 @@ function frontendStaleReason(pluginRoot, bundleDest) {
   // 否则冷启动后的首次 watch 构建会把差异写进 resources → 宿主重启（加载两次）
   const newestSrc = Math.max(
     latestSourceMtime(join(pluginRoot, 'src')),
-    latestSourceMtime(join(ROOT, 'packages/plugin-sdk-desktop/src')),
+    latestSourceMtime(sdkSrcRoot),
     fileMtime(join(pluginRoot, 'plugin.json')),
     fileMtime(join(pluginRoot, 'tailwind.config.js')),
     fileMtime(join(pluginRoot, 'vite.config.ts')),
@@ -185,7 +208,11 @@ function fileMtime(path) {
 }
 
 /** 返回 wasm 需要补建的原因（null = 产物最新，无需动作） */
-function wasmStaleReason(pluginRoot, wasmDest) {
+export function wasmStaleReason(
+  pluginRoot,
+  wasmDest,
+  { sdkRustRoot = join(DEFAULT_SDK_ROOT, 'rust') } = {},
+) {
   let wasmStat
   try {
     wasmStat = statSync(wasmDest)
@@ -201,7 +228,7 @@ function wasmStaleReason(pluginRoot, wasmDest) {
   const newestSrc = Math.max(
     latestSourceMtime(join(pluginRoot, 'rust')),
     latestSourceMtime(join(pluginRoot, '..', 'rust')),
-    latestSourceMtime(join(ROOT, 'packages/plugin-sdk-desktop/rust')),
+    latestSourceMtime(sdkRustRoot),
   )
   if (newestSrc > wasmStat.mtimeMs) return 'Rust 源码比产物新（需重建）'
   return null
@@ -242,6 +269,23 @@ function latestSourceMtime(root) {
 
 // ==================== 预检四步 ====================
 
+// ---- 可注入依赖的默认实现（不注入 = 生产行为；测试注入替身见 pluginPrecheck.test.ts） ----
+
+/** 应用工程目录解析（按注册表条目的 slug/group） */
+function defaultAppDirOf(slug, group) {
+  return appDir(slug, 'desktop', { group })
+}
+
+/** 真实构建执行器：spawn `node scripts/build.js …`（与注入前行为逐参数一致） */
+function defaultRunBuild(script, cwd) {
+  return spawnSync(process.execPath, script, { cwd, stdio: 'inherit' })
+}
+
+/** 补建失败 fail-fast（测试注入记录器 / 抛错替身，不真杀测试进程） */
+function defaultExit(code) {
+  process.exit(code)
+}
+
 /**
  * 各插件 WASM 产物缺失或过期时串行补建一次。
  *
@@ -257,30 +301,38 @@ function latestSourceMtime(root) {
  *     其后 watch 接管前端增量
  * 补建失败 fail-fast：宿主起来也只会报加载失败，早停并给手动指引更可排查。
  */
-function ensurePluginWasm() {
-  for (const { group, slug, id, wasmFile } of PLUGIN_WATCH_CMDS) {
+export function ensurePluginWasm(deps = {}) {
+  const {
+    plugins = PLUGIN_WATCH_CMDS,
+    resourcesBase = RESOURCES_BASE,
+    appDirOf = defaultAppDirOf,
+    sdkRoot = DEFAULT_SDK_ROOT,
+    runBuild = defaultRunBuild,
+    exit = defaultExit,
+  } = deps
+  for (const { group, slug, id, wasmFile } of plugins) {
     if (!wasmFile) continue
-    const pluginRoot = appDir(slug, 'desktop', { group })
-    const wasmDest = resolve(RESOURCES_BASE, id, basename(wasmFile))
-    const reason = wasmStaleReason(pluginRoot, wasmDest)
+    const pluginRoot = appDirOf(slug, group)
+    const wasmDest = resolve(resourcesBase, id, basename(wasmFile))
+    const reason = wasmStaleReason(pluginRoot, wasmDest, { sdkRustRoot: join(sdkRoot, 'rust') })
     if (!reason) continue
 
     console.warn(`[plugin-precheck] ⚠ 插件 ${slug} WASM 需要补建：${reason}`)
     const hasFrontend = existsSync(resolve(pluginRoot, 'dist', 'index.js'))
-    // 必须 `--out <RESOURCES_BASE>` 直写宿主产物目录：apps 仓 build.js 默认只写
+    // 必须 `--out <resourcesBase>` 直写宿主产物目录：apps 仓 build.js 默认只写
     // 仓内 `.build/plugins`（G2 设计），不经 `--out` 时 resources 里的旧 wasm 不会被
     // 更新（watch 只复制前端、不碰 wasm），宿主启动仍加载旧产物——「保证最新」
     // 正落在这一步（2026-10-23 修复：dev-run 原内联实现同样未带 --out）。
-    const outArgs = ['--out', RESOURCES_BASE]
+    const outArgs = ['--out', resourcesBase]
     const script = hasFrontend
       ? ['scripts/build.js', '--rust-only', ...outArgs]
       : ['scripts/build.js', ...outArgs]
     console.log(`[plugin-precheck] 自动补建 WASM（${hasFrontend ? '--rust-only' : '全量'}）：node ${script.join(' ')}`)
-    const res = spawnSync(process.execPath, script, { cwd: pluginRoot, stdio: 'inherit' })
+    const res = runBuild(script, pluginRoot)
     if (res.status !== 0) {
       console.error(`[plugin-precheck] ✗ WASM 补建失败（${slug}）。请手动执行后重试：`)
       console.error(`[plugin-precheck]   cd ${pluginRoot} && node scripts/build.js --out <宿主 resources/plugins/desktop>`)
-      process.exit(res.status ?? 1)
+      exit(res.status ?? 1)
     }
   }
 }
@@ -297,32 +349,36 @@ function ensurePluginWasm() {
  *
  * 判据与 WASM 补建同款：产物缺失，或前端源码 / 产物清单比产物新。
  */
-function ensurePluginFrontends() {
-  for (const { group, slug, id, skipWatch } of PLUGIN_WATCH_CMDS) {
+export function ensurePluginFrontends(deps = {}) {
+  const {
+    plugins = PLUGIN_WATCH_CMDS,
+    resourcesBase = RESOURCES_BASE,
+    appDirOf = defaultAppDirOf,
+    sdkRoot = DEFAULT_SDK_ROOT,
+    runBuild = defaultRunBuild,
+    exit = defaultExit,
+  } = deps
+  for (const { group, slug, id, skipWatch } of plugins) {
     // 只处理「有前端 watch」的插件：启动后的二次加载正是它们的首次构建触发宿主重启；
     // 无 watch 的（bedcode）启动后不会再写 resources，不存在重启风险，且其整包构建较重
     if (skipWatch) continue
-    const pluginRoot = appDir(slug, 'desktop', { group })
-    const bundleDest = resolve(RESOURCES_BASE, id, 'index.js')
-    const reason = frontendStaleReason(pluginRoot, bundleDest)
+    const pluginRoot = appDirOf(slug, group)
+    const bundleDest = resolve(resourcesBase, id, 'index.js')
+    const reason = frontendStaleReason(pluginRoot, bundleDest, { sdkSrcRoot: join(sdkRoot, 'src') })
     if (!reason) continue
 
     console.warn(`[plugin-precheck] ⚠ 插件 ${slug} 前端产物需要重建：${reason}`)
     console.log(`[plugin-precheck] 预重建前端挂载包（宿主启动前完成，避免启动后重启）：node scripts/build.js --frontend-only --out <resources>`)
     // 同样必须 `--out` 直写 resources：否则 resources 的 index.js 仍旧，宿主启动后
     // watch 首次复制（dist 字节不同）才会落盘 → tauri file watch 重启 → 前端加载两次。
-    const res = spawnSync(
-      process.execPath,
-      ['scripts/build.js', '--frontend-only', '--out', RESOURCES_BASE],
-      {
-        cwd: pluginRoot,
-        stdio: 'inherit',
-      },
+    const res = runBuild(
+      ['scripts/build.js', '--frontend-only', '--out', resourcesBase],
+      pluginRoot,
     )
     if (res.status !== 0) {
       console.error(`[plugin-precheck] ✗ 前端产物重建失败（${slug}）。请手动执行后重试：`)
       console.error(`[plugin-precheck]   cd ${pluginRoot} && node scripts/build.js --frontend-only --out <宿主 resources/plugins/desktop>`)
-      process.exit(res.status ?? 1)
+      exit(res.status ?? 1)
     }
   }
 }
@@ -339,17 +395,21 @@ function ensurePluginFrontends() {
  *
  * 缺 wasm / 清单非法时不动文件（not-ready），交给 watch 原有的 fail-visible 预检。
  */
-function ensurePluginManifests() {
-  for (const { group, slug, id, skipWatch } of PLUGIN_WATCH_CMDS) {
-    if (skipWatch || !hasAppDir(slug, 'desktop', { group })) continue
-    const artifactDir = resolve(RESOURCES_BASE, id)
+export function ensurePluginManifests(deps = {}) {
+  const {
+    plugins = PLUGIN_WATCH_CMDS,
+    resourcesBase = RESOURCES_BASE,
+    appDirOf = defaultAppDirOf,
+    hasApp = (slug, group) => hasAppDir(slug, 'desktop', { group }),
+    sync = syncArtifactManifest,
+  } = deps
+  for (const { group, slug, id, skipWatch } of plugins) {
+    if (skipWatch || !hasApp(slug, group)) continue
+    const artifactDir = resolve(resourcesBase, id)
     if (!existsSync(artifactDir)) continue
     let result
     try {
-      result = syncArtifactManifest(
-        resolve(appDir(slug, 'desktop', { group }), 'plugin.json'),
-        artifactDir,
-      )
+      result = sync(resolve(appDirOf(slug, group), 'plugin.json'), artifactDir)
     } catch (e) {
       // 同步只是把潜在写入提前，失败不该阻断宿主启动；留痕后交给 watch 原有的复制链报错
       console.warn(`[plugin-precheck] ⚠ 插件清单摘要同步失败（${id}）：${e.message}`)
@@ -371,13 +431,15 @@ function ensurePluginManifests() {
  * 跑完整插件产物预检（顺序 = 原 dev-run.js 内联实现：WASM 补建 → 前端预重建 →
  * 清单基线 → 退役产物清理）。幂等：产物全部最新时无副作用，秒过。
  *
+ * `deps` 透传给四步（生产不注入 = 真实注册表 / 真实构建；测试注入替身后可在
+ * 临时目录上断言四步**顺序**与各自行为，见 pluginPrecheck.test.ts）。
  * 返回每个插件最终状态（供调试/日志）；预检失败（补建 exit≠0）直接 process.exit。
  */
-export function runPluginPrecheck() {
-  ensurePluginWasm()
-  ensurePluginFrontends()
-  ensurePluginManifests()
-  pruneStalePluginDirs()
+export function runPluginPrecheck(deps = {}) {
+  ensurePluginWasm(deps)
+  ensurePluginFrontends(deps)
+  ensurePluginManifests(deps)
+  pruneStalePluginDirs(deps)
   return PLUGIN_WATCH_CMDS.map(({ group, slug, id }) => ({ group, slug, id }))
 }
 

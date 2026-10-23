@@ -199,23 +199,15 @@ describe('接线（dev 脚本必须真的用上内容感知复制）', () => {
     expect(src).not.toContain("copyStep('复制 plugin.json'")
   })
 
-  it('dev-run 在启动宿主之前对齐 plugin.json 摘要（否则窗口出现后仍会重启一次）', () => {
+  // 预检已收进 scripts/plugin-precheck.mjs（dev-run 只 import 并调用 runPluginPrecheck），
+  // 接线面只留这一条轻量锁：预检真的被调用、且先于宿主启动点。四步内部顺序与判据由
+  // pluginPrecheck.test.ts 的行为测试承载（issue #12 / spec §4.1：不回填旧函数名）。
+  it('dev-run 在宿主启动前调用 runPluginPrecheck（顺序错了仍会二次加载）', () => {
     const src = readFileSync(DEV_RUN, 'utf-8')
-    // 行首匹配调用点，避开同名函数定义里的 `ensurePluginManifests()`
-    const manifestAt = src.match(/^ensurePluginManifests\(\)$/m)?.index ?? -1
+    const precheckAt = src.indexOf('runPluginPrecheck()')
     const hostAt = src.indexOf('const host = start(')
-    expect(manifestAt, '摘要在启动前对齐必须真的被调用').toBeGreaterThan(-1)
-    expect(hostAt, '宿主启动点在场').toBeGreaterThan(manifestAt)
-  })
-
-  it('dev-run 在启动宿主之前做前端预重建（顺序错了仍会二次加载）', () => {
-    const src = readFileSync(DEV_RUN, 'utf-8')
-    const wasmAt = src.indexOf('ensurePluginWasm()')
-    const frontAt = src.indexOf('ensurePluginFrontends()')
-    const hostAt = src.indexOf('const host = start(')
-    expect(wasmAt, 'WASM 补建必须在场').toBeGreaterThan(-1)
-    expect(frontAt, '前端预重建必须在场').toBeGreaterThan(wasmAt)
-    expect(hostAt, '宿主启动点在场').toBeGreaterThan(frontAt)
+    expect(precheckAt, '插件产物预检必须在宿主启动前真的被调用').toBeGreaterThan(-1)
+    expect(hostAt, '宿主启动点在场').toBeGreaterThan(precheckAt)
   })
 
   it('bedcode 的 --frontend-only 真的构建前端（否则预重建静默复用旧 dist）', () => {
