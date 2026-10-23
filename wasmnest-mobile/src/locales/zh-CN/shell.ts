@@ -33,6 +33,10 @@ export default {
       sysApps: '应用管理',
       sysPermissions: '权限管理',
       sysSettings: '设置',
+      /* 宿主系统级服务的系统宫格条目（auth-center / monitor）：
+         主屏应用宫格不显示系统服务，它们作为系统入口住在“系统”区。 */
+      sysAuthCenter: '认证中心',
+      sysMonitor: '运行监控',
     },
     apps: {
       title: 'WASM 应用',

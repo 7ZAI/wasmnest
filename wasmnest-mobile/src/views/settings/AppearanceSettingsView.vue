@@ -23,7 +23,7 @@
           <!-- 主色色板：2026-10-16 移出宿主。主色是各 wasm-app 自持的产品外观
                （§5.1 B5 业务默认值 / 策略），选择器与真源随之下沉到应用自己的设置页
                （bedcode 见 wasm-apps/bedcode/src/settings）；本页面只留平台机制项：
-               主题深浅、语言、字号缩放、主屏背景。 -->
+               主题深浅、语言、字号缩放、宿主背景。 -->
           <div class="settings-row">
             <span class="settings-label settings-row-label">{{ t('settings.appearance.language') }}</span>
             <div class="settings-segment" role="group" :aria-label="t('settings.appearance.language')">
@@ -75,9 +75,9 @@
         </div>
       </section>
 
-      <!-- 主屏背景（壁纸）：2026-10-15 由壳设置页迁入——背景属外观配置，
-           与主题/色板/字体同在一个页面；档位渐变与遮罩预览复用主屏同一份
-           真源（styles/wallpaper.css）。壁纸只落主屏：应用运行面保持纯色。 -->
+      <!-- 宿主背景（壁纸）：2026-10-15 由壳设置页迁入——背景属外观配置，
+           与主题/色板/字体同在一个页面；档位渐变与遮罩预览复用壳根同一份
+           真源（styles/wallpaper.css）。2026-10-23 起壁纸全宿主生效。 -->
       <section class="space-y-2">
         <h2 class="settings-section-title">{{ t('settings.appearance.backgroundSection') }}</h2>
         <div class="settings-group">
@@ -171,9 +171,9 @@
 
 <script setup lang="ts">
 /**
- * 外观设置二级页面 - 主题深浅、语言、字号缩放、主屏背景
+ * 外观设置二级页面 - 主题深浅、语言、字号缩放、宿主背景
  *
- * 本页只留**平台机制**项（§6 壳自持三类之②：外观 / 语言 / 字号缩放 / 主屏壁纸）。
+ * 本页只留**平台机制**项（§6 壳自持三类之②：外观 / 语言 / 字号缩放 / 宿主壁纸）。
  * 主色色板不在此列：主色是各 wasm-app 自持的产品外观，2026-10-16 已连同选择器与
  * 真源下沉到应用自己的设置页（bedcode 见 wasm-apps/bedcode/src/settings），
  * 宿主外壳固定用 `:root` 默认主色。
@@ -257,7 +257,7 @@ function onFontSliderPointerDown(e: PointerEvent) {
 
 onMounted(loadSettings)
 
-// ==================== 主屏背景（壁纸） ====================
+// ==================== 宿主背景（壁纸） ====================
 // 2026-10-15 由壳设置页迁入（用户指令：背景并入外观设置）；档位/遮罩与主屏
 // 同一份真源（styles/wallpaper.css + useShellPreferences）。
 const { wallpaper, wallpaperImage, wallDim, setWallpaper, setWallpaperImage, setWallDim } =

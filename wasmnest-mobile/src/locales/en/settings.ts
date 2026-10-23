@@ -43,11 +43,12 @@ export default {
       fontXLarge: 'Extra Large',
       generalSection: 'General',
       displaySection: 'Display',
-      // Home wallpaper (moved from the shell settings page on 2026-10-15: background
-      // belongs to appearance config, same screen as theme mode; gradient & dim
-      // preview logic live in styles/wallpaper.css, shared with the home screen)
-      backgroundSection: 'Home background',
-      backgroundNote: 'Home screen only',
+      // Host wallpaper (moved from the shell settings page on 2026-10-15: background
+      // belongs to appearance config, same screen as theme mode; since 2026-10-23
+      // it applies to the whole host, matching the desktop shell. Gradient & dim
+      // preview logic live in styles/wallpaper.css, shared with the shell root)
+      backgroundSection: 'Host background',
+      backgroundNote: 'Applies to the whole host',
       wallNone: 'None',
       wallAurora: 'Aurora',
       wallDune: 'Dune',

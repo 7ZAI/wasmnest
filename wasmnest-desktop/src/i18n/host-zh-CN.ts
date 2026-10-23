@@ -23,6 +23,10 @@ export default {
       noneEnabled: '没有已启用的应用（在应用管理中重新启用）',
       sysTitle: '系统',
       sysHint: '全局管理页面（从后台应用面板打开）',
+      /* 宿主系统级服务的系统宫格条目（auth-center / monitor）：
+         主屏应用网格不显示系统服务，它们作为系统入口住在“系统”区。 */
+      sysAuthCenter: '认证中心',
+      sysMonitor: '运行监控',
       matches: '个匹配',
     },
     // 多任务面板（工具栏入口）：打开过 / 后台运行的面在此切换与关闭

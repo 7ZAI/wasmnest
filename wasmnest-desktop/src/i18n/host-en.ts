@@ -27,6 +27,10 @@ export default {
       noneEnabled: 'No enabled apps (re-enable them in App management)',
       sysTitle: 'System',
       sysHint: 'Global management pages (open from Background apps)',
+      /* Host-level system services as System-grid entries (auth-center / monitor):
+         the home app grid hides system services; they live in the System section. */
+      sysAuthCenter: 'Auth Center',
+      sysMonitor: 'Monitor',
       matches: 'matches',
     },
     // Recent-tasks panel (toolbar entry): opened / background faces switch and close here

@@ -113,7 +113,7 @@
 
           <!-- 全无应用才给整体空态；全待审批时审批卡已占位，列表不重复解释 -->
           <p
-            v-if="appRows.length === 0 && apps.length === 0"
+            v-if="appRows.length === 0 && visibleApps.length === 0"
             class="rounded-[12px] border border-dashed border-[var(--mobile-border-hover)] px-3 py-6 text-center shell-type-caption text-[var(--mobile-text-secondary)]"
           >
             {{ t('mobile.plugin.noPermissions') }}
@@ -198,6 +198,9 @@
  *   · 按应用（默认）= 审计主视图，一行一应用，只给摘要行；勾选/审计去详情页
  *   · 按权限 = 反查「哪些应用持有某权限」，行尾带授予状态（点 + 文字双通道）
  * 两者由同一份 apps.permissions 派生，视图切换不产生新状态。
+ *
+ * 系统服务（manifest kind L1/L2）不需要用户授权：先从 apps 过滤掉，两个视图、
+ * 待审批分区与空态都只认 visibleApps（2026-10-23 用户裁决）。
  */
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -206,6 +209,7 @@ import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
 import { permissionTitleKey, SHELL_PERMISSION_GROUPS } from '../../permissions'
 import type { ShellApp } from '../../types'
+import { isServiceKind } from '../../utils'
 import ShellAppIcon from '../ShellAppIcon.vue'
 import ShellChip from '../ShellChip.vue'
 import ShellGroupCard from '../ShellGroupCard.vue'
@@ -248,8 +252,16 @@ const { apps, approveApp, launch } = useShellApps()
 /** 当前视图：按应用（审计主视图，默认）｜按权限（反查） */
 const view = ref<'apps' | 'groups'>('apps')
 
+/**
+ * 需要用户授权的应用（2026-10-23 用户裁决）：系统服务（manifest kind L1/L2）
+ * 不需要授权，两个视图与待审批分区都不列它们。
+ */
+const visibleApps = computed(() => apps.value.filter((a) => !isServiceKind(a.kind)))
+
 /** 待审批应用：审批入口的置顶分区（批准后状态变化，卡片自然消失） */
-const pendingApps = computed(() => apps.value.filter((a) => a.state === 'approval'))
+const pendingApps = computed(() =>
+  visibleApps.value.filter((a) => a.state === 'approval'),
+)
 
 /**
  * 应用权限清单（按应用视图）
@@ -258,7 +270,7 @@ const pendingApps = computed(() => apps.value.filter((a) => a.state === 'approva
  * 让整页重新排。待审批应用由上方审批卡承担展示位，列表不重复出现。
  */
 const appRows = computed<ShellApp[]>(() =>
-  [...apps.value]
+  [...visibleApps.value]
     .filter((a) => a.state !== 'approval')
     .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN')),
 )
@@ -342,7 +354,7 @@ function permissionTitle(key: string): string {
  */
 const domainRows = computed<DomainRow[]>(() => {
   const byKey = new Map<string, GrantApp[]>()
-  for (const app of apps.value) {
+  for (const app of visibleApps.value) {
     for (const grant of app.permissions) {
       const list = byKey.get(grant.key) ?? []
       list.push({

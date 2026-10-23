@@ -5,7 +5,6 @@
  *
  * | 契约 | 来源 | 规则 | 预期 |
  * |---|---|---|---|
- * | C-H1 | wallClass / --wall-dim | 壁纸层由壳偏好驱动；none 档不挂壁纸类 | 类名与遮罩变量随偏好变化 |
  * | C-H2 | 头部快捷入口 | 铃铛左侧是多任务图标，不是运行中应用图标；入口不随运行态变化 | 多任务紧邻铃铛左侧；无 switchTo 图标 |
  * | C-H3 | 应用宫格 | 全部应用在场；待审批有「!」角标与可访问状态 | 未运行也在格内；approval 角标可见 |
  * | C-H4 | 系统宫格 | 三个平台自有面进栈（可返回） | navigate('apps') / openPermissions / navigate('settings') |
@@ -14,7 +13,6 @@
  * | C-H7 | 快捷卡片轨道 | 横向 scroll-snap 轨道（原型形态），不定宽竖排 | 轨道内 listitem 数 = 卡片数 |
  * | C-H8 | 应用分组头 | 只留标题：计数与管理图标均已退役（管理入口在系统宫格） | 无 manageApps 按钮、无计数文案 |
  * | C-H9 | 文案纪律 | 不渲染方案期解释（由应用提供 / 平台自带 / 最近使用在前） | 三个退役 key 缺席 |
- * | C-H10 | 自定义壁纸 | custom 档 + 路径 → 壁纸层用 asset URL 铺底 | 图片层 style 含 URL |
  * | C-H11 | 多任务入口 | 主屏头部图标与铃铛同档，点击进多任务 | openSwitcher 被调用 |
  * | C-H12 | 系统宫格瓦片样式 | 启动器风格：.shell-sys-tile + data-tile=entry.id，SVG 为 24 画框实心块面（fill + evenodd 挖空），不再是 stroke 线稿 | 类名 / data-tile / fill 属性按入口在场 |
  * | C-H13 | 运行带退役 | 主屏不再渲染运行卡片与停止按钮 | 无 article / 无 stopInstance / 无 runningTitle |
@@ -25,7 +23,6 @@ import { mount } from '@vue/test-utils'
 import { computed, ref } from 'vue'
 import { resetShellNotifications, useShellNotifications } from '@/shell/composables/useShellNotifications'
 import { clearRecent } from '@/shell/composables/useShellRecent'
-import { useShellPreferences } from '@/shell/composables/useShellPreferences'
 import type { ShellApp } from '@/shell/types'
 
 // ==================== 替身 ====================
@@ -98,32 +95,6 @@ beforeEach(() => {
   mockNavigate.mockClear()
   mockOpenPermissions.mockClear()
   mockOpenSwitcher.mockClear()
-  useShellPreferences().setWallpaper('aurora')
-  useShellPreferences().setWallDim(30)
-})
-
-describe('C-H1 壁纸层', () => {
-  it('should_applyWallpaperClassAndDim_when_preferenceSet', () => {
-    useShellPreferences().setWallpaper('dune')
-    useShellPreferences().setWallDim(55)
-
-    const root = mount(ShellHomeScreen).find('div')
-    const classes = root.classes()
-
-    expect(classes, '壁纸类名由偏好驱动').toContain('shell-wall')
-    expect(classes).toContain('wall-dune')
-    expect(root.attributes('style')).toContain('--wall-dim: 55')
-    expect(root.find('.shell-wallpaper').exists(), '壁纸层必须存在（纯装饰层）').toBe(true)
-  })
-
-  it('should_notApplyWallpaperClass_when_noneSelected', () => {
-    useShellPreferences().setWallpaper('none')
-
-    const classes = mount(ShellHomeScreen).find('div').classes()
-
-    expect(classes).toContain('shell-wall')
-    expect(classes.filter((c) => c.startsWith('wall-'))).toEqual([])
-  })
 })
 
 describe('C-H2 头部快捷入口（多任务，不是运行应用）', () => {
@@ -278,6 +249,64 @@ describe('C-H12 系统宫格瓦片样式（启动器风格）', () => {
   })
 })
 
+describe('宿主系统级服务（L1/L2 = 系统宫格，不进应用宫格）', () => {
+  function service(id: string, kind: string, name = id): ShellApp {
+    const s = app(id, 'running', name)
+    return { ...s, kind }
+  }
+
+  it('系统服务不出现在应用宫格，作为系统入口住在系统宫格（本地化名 + 专属瓦片）', () => {
+    apps.value = [
+      service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
+      service('com.wasmnest.monitor', 'internal-business', 'MonitoringService'),
+      app('com.wasmnest.agent-hub', 'running', 'Agent Hub'),
+    ]
+    const wrapper = mount(ShellHomeScreen)
+
+    // 业务应用在应用宫格；两个系统服务不在（也不以插件名出现）
+    expect(wrapper.text()).toContain('Agent Hub')
+    expect(wrapper.text()).not.toContain('Auth Center')
+    expect(wrapper.text()).not.toContain('MonitoringService')
+
+    // 系统宫格：静态三入口 + 两个系统服务瓦片（本地化 key 回显 + 专属 data-tile）
+    const auth = wrapper.find('button[aria-label="shell.home.sysAuthCenter"]')
+    const monitor = wrapper.find('button[aria-label="shell.home.sysMonitor"]')
+    expect(auth.exists()).toBe(true)
+    expect(monitor.exists()).toBe(true)
+    expect(auth.find('.shell-sys-tile').attributes('data-tile')).toBe('auth-center')
+    expect(monitor.find('.shell-sys-tile').attributes('data-tile')).toBe('monitor')
+  })
+
+  it('点击系统服务瓦片打开应用面（open），不是系统页导航', async () => {
+    apps.value = [
+      service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
+    ]
+    const wrapper = mount(ShellHomeScreen)
+
+    await wrapper.find('button[aria-label="shell.home.sysAuthCenter"]').trigger('click')
+    expect(mockOpen).toHaveBeenCalledWith('com.wasmnest.auth-center')
+    expect(mockNavigate).not.toHaveBeenCalledWith('apps')
+  })
+
+  it('未知系统服务回退插件名 + 通用瓦片（不硬编码新 id）', () => {
+    apps.value = [service('com.wasmnest.unknown-svc', 'basic-service', 'UnknownSvc')]
+    const wrapper = mount(ShellHomeScreen)
+
+    expect(wrapper.text()).toContain('UnknownSvc')
+    const tile = wrapper.find('button[aria-label="UnknownSvc"] .shell-sys-tile')
+    expect(tile.attributes('data-tile')).toBe('com.wasmnest.unknown-svc')
+  })
+
+  it('只有系统服务、没有业务应用 → 应用宫格空态（不误报“全部停用”）', () => {
+    apps.value = [service('com.wasmnest.monitor', 'internal-business', 'MonitoringService')]
+    const wrapper = mount(ShellHomeScreen)
+
+    expect(wrapper.text()).toContain('shell.home.emptyAppsHint')
+    // 系统服务仍在系统宫格
+    expect(wrapper.find('button[aria-label="shell.home.sysMonitor"]').exists()).toBe(true)
+  })
+})
+
 describe('C-H5 通知入口', () => {
   it('should_countNotificationsPlusPending_when_badgeRendered', () => {
     useShellNotifications().pushNotification({ kind: 'info', icon: 'i', source: 's', title: 'n1' })
@@ -365,32 +394,6 @@ describe('C-H9 宿主文案纪律（方案期解释不得回接）', () => {
     expect(text, '「由应用提供」应删除').not.toContain('shell.home.slotsNote')
     expect(text, '「平台自带」应删除').not.toContain('shell.home.sysNote')
     expect(text, '「最近使用在前」应删除').not.toContain('shell.home.runningNote')
-  })
-})
-
-describe('C-H10 自定义壁纸图片层', () => {
-  it('should_renderAssetUrl_when_customWallpaperSelected', () => {
-    const prefs = useShellPreferences()
-    prefs.setWallpaperImage('/data/app/shell-assets/wallpaper/wallpaper-1.png')
-
-    const layer = mount(ShellHomeScreen).find('.shell-wallpaper')
-
-    expect(layer.attributes('style')).toContain(
-      'asset:///data/app/shell-assets/wallpaper/wallpaper-1.png',
-    )
-    prefs.setWallpaperImage(null)
-  })
-
-  it('should_notRenderImageLayer_when_builtinWallpaperSelected', () => {
-    const prefs = useShellPreferences()
-    prefs.setWallpaperImage('/data/app/x.png')
-    prefs.setWallpaper('reef')
-
-    const layer = mount(ShellHomeScreen).find('.shell-wallpaper')
-
-    expect(layer.attributes('style') ?? '').not.toContain('background-image')
-    prefs.setWallpaperImage(null)
-    prefs.setWallpaper('aurora')
   })
 })
 

@@ -29,6 +29,7 @@ vi.mock('@/shell/composables/useShellApps', () => ({
     displayStates: ref({}) as never,
     tones: ref({}) as never,
   }),
+  isServiceKind: (kind?: string) => kind === 'basic-service' || kind === 'internal-business',
 }))
 
 vi.mock('@/shell/composables/useShellState', () => ({
@@ -123,5 +124,81 @@ describe('主屏入口可见性（启用偏好）过滤', () => {
 
     expect(wrapper.text()).toContain('shell.home.noApps')
     expect(wrapper.text()).not.toContain('shell.home.noneEnabled')
+  })
+})
+
+describe('主屏宿主系统级服务（L1/L2 = 系统网格，不进应用网格）', () => {
+  beforeEach(() => {
+    mocks.homeQ = ref('')
+    mocks.plugins = ref([])
+    vi.clearAllMocks()
+  })
+
+  it('系统服务不出现在应用网格，作为系统入口住在「系统」区（本地化名）', () => {
+    mocks.plugins.value = [
+      entry({ id: 'com.wasmnest.auth-center', pluginId: 'com.wasmnest.auth-center', name: 'Auth Center', kind: 'internal-business', enabled: true }),
+      entry({ id: 'com.wasmnest.monitor', pluginId: 'com.wasmnest.monitor', name: 'MonitoringService', kind: 'internal-business', enabled: true }),
+      entry({ id: 'com.wasmnest.agent-hub', pluginId: 'com.wasmnest.agent-hub', name: 'Agent Hub', enabled: true }),
+    ]
+    const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
+
+    // 业务应用照常出现在应用网格；两个系统服务不在应用网格（也搜不到业务区）
+    expect(wrapper.text()).toContain('Agent Hub')
+    expect(wrapper.text()).not.toContain('Auth Center')
+    expect(wrapper.text()).not.toContain('MonitoringService')
+    // 系统区：宿主系统页 + 两个系统服务（本地化名 key，mock t 原样返回）
+    expect(wrapper.text()).toContain('shell.home.sysAuthCenter')
+    expect(wrapper.text()).toContain('shell.home.sysMonitor')
+  })
+
+  it('搜索命中系统服务 → 系统区条目出现；应用网格不因服务被搜到而出现', () => {
+    mocks.plugins.value = [
+      entry({ id: 'com.wasmnest.auth-center', pluginId: 'com.wasmnest.auth-center', name: 'Auth Center', kind: 'internal-business', enabled: true }),
+      entry({ id: 'com.wasmnest.agent-hub', pluginId: 'com.wasmnest.agent-hub', name: 'Agent Hub', enabled: true }),
+    ]
+    mocks.homeQ.value = 'Auth'
+    const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
+
+    // 搜索按宿主本地化名命中（mock t 返回 key：'shell.home.sysAuthCenter' 含 'Auth'）
+    expect(wrapper.text()).toContain('shell.home.sysAuthCenter')
+    expect(wrapper.text()).not.toContain('Agent Hub')
+  })
+
+  it('系统服务点击打开应用面（openApp），宿主系统页点击仍走 openSys', async () => {
+    mocks.plugins.value = [
+      entry({ id: 'com.wasmnest.auth-center', pluginId: 'com.wasmnest.auth-center', name: 'Auth Center', kind: 'internal-business', enabled: true }),
+    ]
+    const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
+
+    const serviceTile = wrapper
+      .findAll('.appicon')
+      .find((el) => el.text().includes('shell.home.sysAuthCenter'))
+    expect(serviceTile).toBeTruthy()
+    await serviceTile!.trigger('click')
+    expect(mocks.openApp).toHaveBeenCalledWith('com.wasmnest.auth-center')
+    expect(mocks.openSys).not.toHaveBeenCalledWith('com.wasmnest.auth-center')
+  })
+
+  it('只有系统服务、没有业务应用 → 应用网格 noApps 空态（不误报「全部停用」）', () => {
+    mocks.plugins.value = [
+      entry({ id: 'com.wasmnest.monitor', pluginId: 'com.wasmnest.monitor', name: 'Monitor', kind: 'internal-business', enabled: true }),
+    ]
+    const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
+
+    expect(wrapper.text()).toContain('shell.home.noApps')
+    expect(wrapper.text()).not.toContain('shell.home.noneEnabled')
+    // 系统区照常显示（服务仍在）
+    expect(wrapper.text()).toContain('shell.home.sysMonitor')
+  })
+
+  it('未知系统服务回退插件名与通用图标（不新增 i18n / 图标表外名）', () => {
+    mocks.plugins.value = [
+      entry({ id: 'com.wasmnest.unknown-svc', pluginId: 'com.wasmnest.unknown-svc', name: 'UnknownSvc', kind: 'basic-service', enabled: true }),
+    ]
+    const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
+
+    expect(wrapper.text()).toContain('UnknownSvc')
+    expect(wrapper.text()).not.toContain('shell.home.sysAuthCenter')
+    expect(wrapper.text()).not.toContain('shell.home.sysMonitor')
   })
 })

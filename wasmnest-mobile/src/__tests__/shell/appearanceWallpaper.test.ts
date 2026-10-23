@@ -1,5 +1,5 @@
 /**
- * 外观设置页「主屏背景」区块 契约测试
+ * 外观设置页「宿主背景」区块 契约测试
  * （2026-10-15 壁纸区块由壳设置页迁入本页，行为契约随迁——
  *  契约本体来自原 shellSettingsScreen.test.ts 的 C-ST4 / C-ST5）
  *
@@ -65,7 +65,7 @@ describe('壁纸档位分组（随壳设置页迁入）', () => {
   it('should_renderWallpaperOptionsAndDimSlider_when_mounted', () => {
     const wrapper = mount(AppearanceSettingsView)
 
-    expect(wrapper.text(), '应有主屏背景分组标题').toContain('settings.appearance.backgroundSection')
+    expect(wrapper.text(), '应有宿主背景分组标题').toContain('settings.appearance.backgroundSection')
     for (const key of [
       'settings.appearance.wallNone',
       'settings.appearance.wallAurora',

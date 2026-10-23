@@ -77,6 +77,22 @@
   --shell-tile-perms-glyph: var(--shell-brand-ink);
   --shell-tile-settings-bg: linear-gradient(135deg, var(--shell-brand-ink), var(--shell-brand-ink-deep));
   --shell-tile-settings-glyph: var(--shell-brand-glyph);
+  /* 宿主系统级服务瓦片：认证中心=靛（信任/凭证，与 data-palette violet 同源）、
+     运行监控=青（实时/运行，与 data-palette ocean 同源）。色相来自既有色板，
+     不引入第三种“新造色”；图形色按对比选墨/纸白（亮底墨、深底纸白，与
+     apps/perms 同一处置）。 */
+  --shell-tile-auth-bg: linear-gradient(
+    135deg,
+    color-mix(in srgb, #b9a6f7 82%, var(--mobile-bg-primary)),
+    color-mix(in srgb, #b9a6f7 58%, var(--mobile-bg-primary))
+  );
+  --shell-tile-auth-glyph: var(--shell-brand-ink);
+  --shell-tile-monitor-bg: linear-gradient(
+    135deg,
+    color-mix(in srgb, #5fd0e8 84%, var(--mobile-bg-primary)),
+    color-mix(in srgb, #5fd0e8 60%, var(--mobile-bg-primary))
+  );
+  --shell-tile-monitor-glyph: var(--shell-brand-ink);
   /* 快捷磁贴 hover 光晕：由强调色派生，随主题与色板变化（原为硬编码青色 rgba） */
   --shell-action-glow: 0 0 15px color-mix(in srgb, var(--mobile-accent) 12%, transparent);
 }
@@ -191,12 +207,11 @@
 }
 
 /* ============================================================================
-   全屏氛围底（主屏之外的各屏共用）
+   全屏氛围底（所有宿主屏共用）
    ----------------------------------------------------------------------------
-   主屏有自己的壁纸层；应用管理 / 权限 / 设置这些次级屏原本是纯底色，底部一大片
-   死黑，页面读起来像被截断。给根容器垫一层顶部渐隐的柔光，让各屏共享同一套
-   空气感、与主屏同源又不抢列表对比度（列表卡自带 --mobile-bg-card 表面）。
-   主屏不受影响：它的壁纸层是 .shell-ui 的子元素，本层在壁纸之下。
+   壁纸挂在壳根（ShellHost）；本层给纯色 / 壁纸之上的页面垫一层顶部渐隐柔光，
+   让列表页与主屏共享同一套空气感，又不抢列表对比度（列表卡自带 bg-card 表面）。
+   层序固定在壁纸之下：壁纸存在时本层被完全覆盖，仅 none 档可见。
    ============================================================================ */
 .shell-ui::before {
   content: '';
@@ -204,6 +219,7 @@
   inset: 0;
   top: calc(-1 * var(--shell-safe-top, 0px));
   height: calc(100% + var(--shell-safe-top, 0px));
+  z-index: -2;
   background: radial-gradient(
     132% 66% at 50% 0%,
     color-mix(in srgb, var(--mobile-accent) 7%, transparent) 0%,
@@ -241,6 +257,24 @@
 }
 .shell-screen-backward-leave-to {
   transform: translateX(100%);
+  opacity: 0;
+}
+
+/* 进出多任务：缩放 + 淡入淡出（安卓 recents 的缩放观感），不走横向滑动。
+   进入时当前屏缩下去、多任务屏放大浮现；退出时反向，卡片像从应用窗口拉开。 */
+.shell-screen-recents-enter-active,
+.shell-screen-recents-leave-active {
+  transition:
+    transform var(--shell-dur-base) var(--shell-ease-out),
+    opacity var(--shell-dur-base) var(--shell-ease-out);
+  transform-origin: center center;
+}
+.shell-screen-recents-enter-from {
+  transform: scale(0.9);
+  opacity: 0;
+}
+.shell-screen-recents-leave-to {
+  transform: scale(0.92);
   opacity: 0;
 }
 
@@ -324,6 +358,14 @@
   background: var(--shell-tile-settings-bg);
   color: var(--shell-tile-settings-glyph);
 }
+.shell-sys-tile[data-tile='auth-center'] {
+  background: var(--shell-tile-auth-bg);
+  color: var(--shell-tile-auth-glyph);
+}
+.shell-sys-tile[data-tile='monitor'] {
+  background: var(--shell-tile-monitor-bg);
+  color: var(--shell-tile-monitor-glyph);
+}
 
 /* 浅色主题：bg 变亮锚后逐瓦片重选混锚（绿向 accent 混深 / 琥珀向 bg 混亮），
    保持图形色全渐变 ≥3:1；品牌暖炭瓦片固定不翻。详见 --shell-tile-* 注释。 */
@@ -338,6 +380,21 @@ html:not(.dark) .shell-ui {
     color-mix(in srgb, var(--mobile-warning) 92%, var(--mobile-bg-primary)),
     color-mix(in srgb, var(--mobile-warning) 74%, var(--mobile-bg-primary))
   );
+  /* 系统服务瓦片浅色：底向 bg 混亮，靛/青主色取浅色主题变体（同 palette
+     浅色主色 #6d4fc6 / #0e7490），图形翻成纸白——深底纸白（与 perms 浅色处置
+     相反：那些是亮底墨字，这里主色变深后按深底选纸白）。 */
+  --shell-tile-auth-bg: linear-gradient(
+    135deg,
+    color-mix(in srgb, #6d4fc6 92%, var(--mobile-bg-primary)),
+    color-mix(in srgb, #6d4fc6 70%, var(--mobile-bg-primary))
+  );
+  --shell-tile-auth-glyph: var(--shell-brand-glyph);
+  --shell-tile-monitor-bg: linear-gradient(
+    135deg,
+    color-mix(in srgb, #0e7490 92%, var(--mobile-bg-primary)),
+    color-mix(in srgb, #0e7490 70%, var(--mobile-bg-primary))
+  );
+  --shell-tile-monitor-glyph: var(--shell-brand-glyph);
 }
 
 /* ============================================================================
@@ -633,8 +690,8 @@ html:not(.dark) .shell-ui {
   background: var(--mobile-bg-card);
   box-shadow: var(--mobile-card-shadow);
   overflow: hidden;
-  animation: shell-recents-in var(--shell-dur-base) var(--shell-ease-out) backwards;
-  animation-delay: calc(var(--i, 0) * 30ms);
+  animation: shell-recents-in var(--shell-dur-slow) var(--shell-ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 45ms);
   transition:
     transform var(--shell-dur-base) var(--shell-ease-standard),
     border-color var(--shell-dur-base) var(--shell-ease-standard);
@@ -768,10 +825,12 @@ html:not(.dark) .shell-ui {
   outline-offset: -4px;
 }
 
+/* 卡片缩放入场（安卓 recents）：从略小、略低处弹起，逐张错峰；
+   位移只走 transform / opacity，低端机不掉帧。 */
 @keyframes shell-recents-in {
   from {
     opacity: 0;
-    transform: scale(0.96) translateY(8px);
+    transform: scale(0.86) translateY(22px);
   }
   to {
     opacity: 1;
@@ -802,6 +861,8 @@ html:not(.dark) .shell-ui {
      极短而非归零，色变仍可见）。 */
   .shell-screen-enter-active,
   .shell-screen-leave-active,
+  .shell-screen-recents-enter-active,
+  .shell-screen-recents-leave-active,
   .shell-sheet-enter-active,
   .shell-sheet-leave-active,
   .shell-scrim-enter-active,

@@ -29,7 +29,7 @@ export default {
     },
     appearance: {
       title: '外观',
-      subtitle: '主题、语言、字体与主屏背景',
+      subtitle: '主题、语言、字体与宿主背景',
       theme: '主题',
       lightMode: '浅色模式',
       darkMode: '深色模式',
@@ -43,10 +43,11 @@ export default {
       fontXLarge: '超大',
       generalSection: '通用',
       displaySection: '显示',
-      // 主屏壁纸（2026-10-15 由壳设置页迁入：背景属外观配置，与主题深浅同屏；
-      // 档位渐变/遮罩预览逻辑在 styles/wallpaper.css，与主屏同源）
-      backgroundSection: '主屏背景',
-      backgroundNote: '仅主屏',
+      // 宿主壁纸（2026-10-15 由壳设置页迁入：背景属外观配置，与主题深浅同屏；
+      // 2026-10-23 起背景全宿主生效，与桌面壳同口径。档位渐变/遮罩预览逻辑
+      // 在 styles/wallpaper.css，与壳根同源）
+      backgroundSection: '宿主背景',
+      backgroundNote: '全宿主生效',
       wallNone: '无',
       wallAurora: '极光',
       wallDune: '沙丘',

@@ -111,6 +111,33 @@ describe('ShellNavigation 栈语义', () => {
     expect(nav.stack.value).toHaveLength(1)
   })
 
+  it('should_useRecentsZoomTransition_when_enteringOrLeavingSwitcher', () => {
+    // 普通屏仍按方向横向滑动
+    nav.navigate('apps')
+    expect(nav.transitionName.value).toBe('shell-screen-forward')
+
+    // 进入多任务：缩放过渡（安卓 recents）
+    nav.openSwitcher()
+    expect(nav.transitionName.value).toBe('shell-screen-recents')
+
+    // 退出多任务（回退到多任务下面那一屏）：仍是缩放过渡
+    nav.back()
+    expect(nav.transitionName.value).toBe('shell-screen-recents')
+
+    // 再回普通导航：恢复方向滑动，不把缩放过渡漏给后续屏
+    nav.navigate('settings')
+    expect(nav.transitionName.value).toBe('shell-screen-forward')
+  })
+
+  it('should_keepBackwardTransition_when_poppingBackOutsideSwitcher', () => {
+    nav.openApp('app-1')
+    nav.navigate('settings')
+    nav.openApp('app-1')
+
+    expect(nav.current.value.id).toBe('app-run')
+    expect(nav.transitionName.value).toBe('shell-screen-backward')
+  })
+
   it('should_dropRunScreenAndOverlays_when_closeAppRun', () => {
     nav.openApp('app-1')
     nav.openDetail('app-1')

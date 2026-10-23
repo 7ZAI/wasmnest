@@ -77,16 +77,16 @@
             class="appicon"
             role="listitem"
             tabindex="0"
-            :aria-label="`${t(sys.nameKey)}，${t(sys.descKey)}`"
-            @click="state.openSys(sys.id)"
-            @keydown.enter="state.openSys(sys.id)"
+            :aria-label="`${sys.nameKey ? t(sys.nameKey) : sys.name}，${sys.descKey ? t(sys.descKey) : ''}`"
+            @click="sys.isService ? state.openApp(sys.id) : state.openSys(sys.id)"
+            @keydown.enter="sys.isService ? state.openApp(sys.id) : state.openSys(sys.id)"
           >
             <span class="glyph-wrap">
               <span class="glyph-box tone-system icon-hover" style="width: 64px; height: 64px">
                 <ShellIcon :name="sys.icon" :size="28" :stroke-width="1.55" />
               </span>
             </span>
-            <span class="nm truncate">{{ t(sys.nameKey) }}</span>
+            <span class="nm truncate">{{ sys.nameKey ? t(sys.nameKey) : sys.name }}</span>
           </div>
         </div>
       </section>
@@ -108,10 +108,9 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SYS_PAGES, appDotState, chipMetaOf } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
-import { useShellApps } from '../composables/useShellApps'
+import { isServiceKind, useShellApps, type ShellAppEntry } from '../composables/useShellApps'
 import ShellIcon from './ShellIcon.vue'
 import ShellAppTile from './ShellAppTile.vue'
-import type { ShellAppEntry } from '../composables/useShellApps'
 
 const { t } = useI18n()
 const state = useShellState()
@@ -125,23 +124,77 @@ const matchQ = (s: string) => s.toLowerCase().includes(q.value.toLowerCase())
  * 主屏可见应用（启用 = 主屏入口可见性，用户裁决 2026-10-21）：
  * 停用（`plugin.enabled.{id}` = false）的应用从应用网格与搜索结果统一隐藏
  * （恢复入口在「应用管理」页）；运行中的实例不在此隐藏——它们由多任务层呈现。
+ * 宿主系统级服务（L1/L2）也从应用网格隐藏（2026-10-23 用户裁决）：它们作为
+ * 系统入口住在「系统」区，不是用户启动的业务应用。
  */
 const filterApps = computed(() => {
-  const visible = appsStore.plugins.value.filter((a) => a.enabled)
+  const visible = appsStore.plugins.value.filter((a) => a.enabled && !isServiceKind(a.kind))
   if (!q.value) return visible
   return visible.filter((a) => matchQ(a.name) || matchQ(a.id))
 })
 
+/** 宿主系统级服务在「系统」区的条目（点击打开应用面；图标用宿主系统风格） */
+type SysEntry = {
+  id: string
+  /** 宿主 i18n 显示名（系统服务用本地化名；无 key 时回退 name） */
+  nameKey: string | null
+  descKey: string | null
+  /** 非系统页条目的直接显示名（未知系统服务回退插件名） */
+  name: string | null
+  icon: string
+  isService: boolean
+}
+
+/** 系统服务 → 系统宫格图标（key = 插件 id；未知服务给通用 layers，不新增图标表外名） */
+const SYSTEM_SERVICE_ICONS: Record<string, string> = {
+  'com.wasmnest.auth-center': 'lock',
+  'com.wasmnest.monitor': 'pulse',
+}
+
+/** 系统服务显示名：已知两个服务走宿主 i18n（认证中心 / 运行监控）；未知服务显示插件名 */
+const SYSTEM_SERVICE_NAME_KEYS: Record<string, string> = {
+  'com.wasmnest.auth-center': 'shell.home.sysAuthCenter',
+  'com.wasmnest.monitor': 'shell.home.sysMonitor',
+}
+
+function sysEntryOf(app: ShellAppEntry): SysEntry {
+  const nameKey = SYSTEM_SERVICE_NAME_KEYS[app.id] ?? null
+  return {
+    id: app.id,
+    nameKey,
+    descKey: null,
+    name: nameKey ? null : app.name,
+    icon: SYSTEM_SERVICE_ICONS[app.id] ?? 'layers',
+    isService: true,
+  }
+}
+
+/**
+ * 系统区条目：宿主系统页（SYS_PAGES）在前，宿主系统级服务追加在后。
+ * 系统服务只在装配存在时出现（注册表投影），不硬编码常驻。
+ */
+const sysEntries = computed<SysEntry[]>(() => [
+  ...SYS_PAGES.map((p) => ({ id: p.id, nameKey: p.nameKey, descKey: p.descKey, name: null, icon: p.icon, isService: false })),
+  ...appsStore.plugins.value.filter((a) => isServiceKind(a.kind)).map(sysEntryOf),
+])
+
 const matchedSys = computed(() =>
-  q.value ? SYS_PAGES.filter((s) => matchQ(t(s.nameKey)) || matchQ(s.id)) : SYS_PAGES,
+  q.value
+    ? sysEntries.value.filter(
+        (s) => matchQ(s.nameKey ? t(s.nameKey) : (s.name ?? s.id)) || matchQ(s.id),
+      )
+    : sysEntries.value,
 )
 
 const apps = filterApps
 
-/** 空网格文案：搜索无匹配 → noApps；无搜索但全被停用 → noneEnabled（入口在应用管理可恢复） */
+/** 空网格文案：搜索无匹配 → noApps；无搜索但业务应用全被停用 → noneEnabled
+    （入口在应用管理可恢复）；连业务应用都没有（只有系统服务）→ noApps，
+    不误报「应用入口已全部停用」。 */
 const emptyAppsHint = computed(() => {
   if (q.value) return t('shell.home.noApps', { q: q.value })
-  return appsStore.plugins.value.length
+  const businessCount = appsStore.plugins.value.filter((a) => !isServiceKind(a.kind)).length
+  return businessCount
     ? t('shell.home.noneEnabled')
     : t('shell.home.noApps', { q: '' })
 })

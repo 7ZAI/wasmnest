@@ -44,6 +44,8 @@ export type ShellNavDirection = 'forward' | 'backward'
 
 const stack: Ref<ShellScreenEntry[]> = ref<ShellScreenEntry[]>([{ id: 'home', params: {} }])
 const direction: Ref<ShellNavDirection> = ref('forward')
+/** 上一屏 id（过渡选择用：进出多任务走缩放，其余按方向滑动） */
+const previousId: Ref<ShellScreenId> = ref('home')
 
 /** 当前屏 */
 const current: ComputedRef<ShellScreenEntry> = computed(
@@ -52,6 +54,16 @@ const current: ComputedRef<ShellScreenEntry> = computed(
 
 /** 当前屏参数 */
 const params: ComputedRef<Record<string, string>> = computed(() => current.value.params)
+
+/**
+ * 屏幕切换过渡名：进出多任务用缩放（安卓 recents 观感），其余按方向横向滑动。
+ * 进入时 current 是 switcher，退出时上一屏是 switcher——两个方向都取缩放。
+ */
+const transitionName: ComputedRef<string> = computed(() =>
+  current.value.id === 'switcher' || previousId.value === 'switcher'
+    ? 'shell-screen-recents'
+    : `shell-screen-${direction.value}`,
+)
 
 /** 是否可回退（栈深度 > 1） */
 const canBack: ComputedRef<boolean> = computed(() => stack.value.length > 1)
@@ -62,6 +74,13 @@ function sameParams(a: Record<string, string>, b: Record<string, string>): boole
   const kb = Object.keys(b)
   if (ka.length !== kb.length) return false
   return ka.every((k) => a[k] === b[k])
+}
+
+/** 统一提交栈变更：先记上一屏再换栈，方向与栈深始终同步 */
+function commit(next: ShellScreenEntry[], nextDirection: ShellNavDirection): void {
+  previousId.value = current.value.id
+  direction.value = nextDirection
+  stack.value = next
 }
 
 /**
@@ -75,20 +94,17 @@ function navigate(id: ShellScreenId, nextParams: Record<string, string> = {}): v
 
   const index = stack.value.findIndex((s) => s.id === id && sameParams(s.params, nextParams))
   if (index >= 0) {
-    direction.value = 'backward'
-    stack.value = stack.value.slice(0, index + 1)
+    commit(stack.value.slice(0, index + 1), 'backward')
     return
   }
 
-  direction.value = 'forward'
-  stack.value = [...stack.value, { id, params: nextParams }]
+  commit([...stack.value, { id, params: nextParams }], 'forward')
 }
 
 /** 回退一屏；已在根时无操作 */
 function back(): void {
   if (stack.value.length <= 1) return
-  direction.value = 'backward'
-  stack.value = stack.value.slice(0, -1)
+  commit(stack.value.slice(0, -1), 'backward')
 }
 
 /**
@@ -97,8 +113,7 @@ function back(): void {
  * 首页是平台根，始终重置为单屏栈；其余 Tab 同理，避免 Tab 之间来回切出深栈。
  */
 function switchTab(id: ShellScreenId): void {
-  direction.value = 'forward'
-  stack.value = [{ id, params: {} }]
+  commit([{ id, params: {} }], 'forward')
 }
 
 /** 回到平台首页（等价于退出所有应用与浮层） */
@@ -118,9 +133,8 @@ function goHome(): void {
 function closeAppRun(appId: string): void {
   const index = stack.value.findIndex((s) => s.id === 'app-run' && s.params.appId === appId)
   if (index < 0) return
-  direction.value = 'backward'
   // 命中必在 home 之后（app-run 只由 openApp 压入），slice 后至少留 home 一层
-  stack.value = stack.value.slice(0, index)
+  commit(stack.value.slice(0, index), 'backward')
 }
 
 /** 打开应用运行面 */
@@ -145,6 +159,7 @@ function openPermissions(): void {
 
 /** 供测试与 Hot Reload 复位 */
 function resetShellNavigation(): void {
+  previousId.value = 'home'
   direction.value = 'forward'
   stack.value = [{ id: 'home', params: {} }]
 }
@@ -160,6 +175,7 @@ export interface ShellNavigation {
   current: ComputedRef<ShellScreenEntry>
   params: ComputedRef<Record<string, string>>
   direction: ComputedRef<ShellNavDirection>
+  transitionName: ComputedRef<string>
   canBack: ComputedRef<boolean>
   navigate: typeof navigate
   back: typeof back
@@ -180,6 +196,7 @@ export function useShellNavigation(): ShellNavigation {
     current,
     params,
     direction: computed(() => direction.value),
+    transitionName,
     canBack,
     navigate,
     back,

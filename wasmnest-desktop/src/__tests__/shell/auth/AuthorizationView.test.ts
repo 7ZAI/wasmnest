@@ -18,6 +18,7 @@ import i18n from '@/i18n'
 import AuthorizationView from '@/shell/auth/AuthorizationView.vue'
 import { toast } from 'vue-sonner'
 import type { AuthRecord, PluginAuthOverview } from '@/shell/auth/authPolicy'
+import { useShellApps, type ShellAppEntry } from '@/shell/composables/useShellApps'
 
 const mockInvoke = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({
@@ -131,6 +132,8 @@ describe('AuthorizationView', () => {
     mockedToast.success.mockClear()
     overviewResult = []
     manageError = null
+    // 注册表投影是模块级单例：默认无服务，避免上一用例的 kind 漏到下一用例
+    useShellApps().plugins.value = []
     installInvokeMock()
   })
 
@@ -255,6 +258,27 @@ describe('AuthorizationView', () => {
     expect(message).not.toContain('sqlite')
     expect(rowTexts(wrapper)).toEqual([])
     expect(wrapper.text()).not.toContain('plugin_auth_records')
+  })
+
+  it('系统服务（kind L1/L2）不需要授权：不渲染行、不计入应用数', async () => {
+    useShellApps().plugins.value = [
+      { id: 'com.wasmnest.monitor', kind: 'internal-business' },
+      { id: 'com.wasmnest.auth-center', kind: 'basic-service' },
+      { id: 'com.wasmnest.bedcode', kind: 'business-app' },
+    ] as ShellAppEntry[]
+    overviewResult = [
+      app({ pluginId: 'com.wasmnest.monitor', name: 'Monitor' }),
+      app({ pluginId: 'com.wasmnest.auth-center', name: 'Auth Center' }),
+      app({ pluginId: 'com.wasmnest.bedcode', name: 'BedCode' }),
+    ]
+
+    const wrapper = await mountView()
+
+    expect(rowTexts(wrapper)).toHaveLength(1)
+    expect(rowOf(wrapper, 'BedCode')).not.toBe('')
+    expect(pageText(wrapper)).not.toContain('Monitor')
+    expect(pageText(wrapper)).not.toContain('AuthCenter')
+    expect(wrapper.text()).toContain(i18n.global.t('settings.authorization.appCount', { count: 1 }))
   })
 
   it('读模型命令带宿主凭证（授权记录不得被插件面枚举），且首次挂载只拉一次', async () => {

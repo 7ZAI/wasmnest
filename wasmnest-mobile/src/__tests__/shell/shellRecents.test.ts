@@ -723,6 +723,40 @@ describe('C-S20 底部切换条退役', () => {
   })
 })
 
+describe('C-S22 多任务缩放过渡（安卓 recents 观感）', () => {
+  const css = () => readFileSync(join(process.cwd(), 'src/shell/styles/shell.css'), 'utf8')
+
+  it('进出多任务用缩放 + 淡入淡出，不走横向滑动', () => {
+    const sheet = css()
+    expect(cssBlock(sheet, '.shell-screen-recents-enter-from')).toContain('scale(')
+    expect(cssBlock(sheet, '.shell-screen-recents-leave-to')).toContain('scale(')
+    // enter/leave 共用一条规则（逗号分组），cssBlock 单选择器匹配不到，按组匹配
+    expect(sheet).toMatch(
+      /\.shell-screen-recents-enter-active,[\s\S]*?\{[^}]*transform:[^}]*\}/,
+    )
+    // reduced-motion 下这些过渡也必须收敛
+    expect(sheet).toContain('.shell-screen-recents-enter-active,\n  .shell-screen-recents-leave-active')
+  })
+
+  it('卡片从略小 / 略低处缩放入场，逐张错峰', () => {
+    const sheet = css()
+    const keyframes = sheet.match(/@keyframes shell-recents-in\s*\{[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(keyframes).toContain('scale(')
+    expect(keyframes).toContain('translateY(')
+    const card = cssBlock(sheet, '.shell-recents-card')
+    expect(card).toContain('animation: shell-recents-in')
+    expect(card).toContain('animation-delay')
+  })
+
+  it('ShellHost 把导航过渡名接到屏幕栈 Transition', () => {
+    const host = readFileSync(
+      join(process.cwd(), 'src/shell/components/ShellHost.vue'),
+      'utf8',
+    )
+    expect(host).toContain(':name="transitionName"')
+  })
+})
+
 describe('C-S21 页头计数', () => {
   it('should_showCardCount_when_cardsExist', () => {
     pushRecent('a')

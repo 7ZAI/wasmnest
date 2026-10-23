@@ -167,6 +167,20 @@ describe('卡片缩略区接线应用预览面（spec 2026-10-20-app-preview-con
   })
 })
 
+describe('多任务缩放过渡（安卓 recents 观感）', () => {
+  it('卡片缩放上浮入场，退出时轻微缩回，并尊重 reduced-motion', () => {
+    const src = stripComments(read(SWITCHER))
+    const keyframes = src.match(/@keyframes ts-card-in\s*\{[\s\S]*?\n\}/)?.[0] ?? ''
+
+    expect(keyframes, '入场必须带缩放').toContain('scale(')
+    expect(keyframes, '入场必须带上浮').toContain('translateY(')
+    expect(src, '退出时卡片随全屏层缩回').toContain('.ts-fade-leave-to .ts-card')
+    expect(src, 'Teleport 到 body 的层必须自带 reduced-motion 覆盖').toContain(
+      'prefers-reduced-motion',
+    )
+  })
+})
+
 describe('命令面板退役（工具栏搜索入口按用户裁决移除）', () => {
   it('组件文件已删，壳内不再挂载 / 不再有开关', () => {
     expect(existsSync('src/shell/components/ShellCommandPalette.vue')).toBe(false)

@@ -369,8 +369,9 @@ function close(): void {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-card);
   overflow: hidden;
-  animation: ts-card-in var(--motion-duration-base) var(--motion-ease) backwards;
-  animation-delay: calc(var(--i, 0) * 35ms);
+  /* 安卓 recents 观感：卡片从略小、略低处缩放上浮，逐张错峰入场 */
+  animation: ts-card-in var(--motion-duration-slow) var(--motion-ease) backwards;
+  animation-delay: calc(var(--i, 0) * 45ms);
   transition:
     transform var(--motion-duration-base) var(--motion-ease),
     box-shadow var(--motion-duration-base) var(--motion-ease),
@@ -527,7 +528,7 @@ function close(): void {
 @keyframes ts-card-in {
   from {
     opacity: 0;
-    transform: scale(0.96) translateY(10px);
+    transform: scale(0.82) translateY(26px);
   }
   to {
     opacity: 1;
@@ -542,5 +543,29 @@ function close(): void {
 .ts-fade-enter-from,
 .ts-fade-leave-to {
   opacity: 0;
+}
+/* 退出：卡片随全屏层一起轻微缩回（反向的 recents 缩放），
+   先关掉入场 animation，避免它盖住 leave 过渡的 transform。 */
+.ts-fade-leave-active .ts-card {
+  animation: none;
+  transition:
+    transform var(--motion-duration-fast) var(--motion-ease-in),
+    opacity var(--motion-duration-fast) var(--motion-ease-in);
+}
+.ts-fade-leave-to .ts-card {
+  transform: scale(0.92) translateY(10px);
+  opacity: 0;
+}
+
+/* 多任务层 Teleport 到 body，壳根的统一 reduced-motion 规则够不到这里 */
+@media (prefers-reduced-motion: reduce) {
+  .ts-card {
+    animation: none;
+  }
+  .ts-fade-enter-active,
+  .ts-fade-leave-active,
+  .ts-fade-leave-active .ts-card {
+    transition-duration: 0.01ms;
+  }
 }
 </style>

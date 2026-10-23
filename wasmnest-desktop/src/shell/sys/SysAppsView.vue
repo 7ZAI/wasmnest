@@ -1,7 +1,8 @@
 <template>
   <div class="flex flex-col gap-2.5">
     <!-- 已安装应用清单（注册表投影：真实运行态 / 来源 / 启用 / 自启；动作走真实命令面）。
-         系统服务区按 manifest kind 分组：L1/L2 在前、L3 业务应用在后；没有服务时不渲染空标题。 -->
+         按 manifest kind 分组：业务应用在前、L1/L2 系统服务在后（2026-10-23 用户裁决）；
+         没有服务时不渲染空标题。 -->
     <template v-for="group in appGroups" :key="group.id">
       <div
         v-if="group.title"
@@ -134,20 +135,21 @@ const state = useShellState()
 const appsStore = useShellApps()
 
 /**
- * 系统服务 / 业务应用分组（唯一判据 = manifest kind；不在 UI 里硬编码 id）。
- * 服务按 L1 → L2 → 名称，应用保持原注册表顺序（运行态排序由主屏负责）。
+ * 业务应用 / 系统服务分组（唯一判据 = manifest kind；不在 UI 里硬编码 id）。
+ * 业务应用在前、系统服务在后（2026-10-23 用户裁决）；服务按 L1 → L2 → 名称，
+ * 应用保持原注册表顺序（运行态排序由主屏负责）。
  */
 const appGroups = computed(() => {
+  const apps = appsStore.plugins.value.filter((app) => !isServiceKind(app.kind))
   const services = appsStore.plugins.value
     .filter((app) => isServiceKind(app.kind))
     .sort((a, b) => {
       const rank = (kind?: string) => (kind === 'basic-service' ? 0 : 1)
       return rank(a.kind) - rank(b.kind) || a.name.localeCompare(b.name, 'zh-Hans-CN')
     })
-  const apps = appsStore.plugins.value.filter((app) => !isServiceKind(app.kind))
   return [
-    { id: 'services', title: services.length > 0 ? t('shell.apps.systemServices') : '', apps: services },
     { id: 'apps', title: apps.length > 0 ? t('shell.apps.businessApps') : '', apps },
+    { id: 'services', title: services.length > 0 ? t('shell.apps.systemServices') : '', apps: services },
   ].filter((group) => group.apps.length > 0)
 })
 

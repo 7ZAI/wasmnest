@@ -28,7 +28,7 @@
             : 'text-[calc(11px*var(--ui-scale))] text-[var(--text-tertiary)] shrink-0'
         "
       >
-        {{ $t('settings.authorization.appCount', { count: apps.length }) }}
+        {{ $t('settings.authorization.appCount', { count: visibleApps.length }) }}
       </span>
       <div class="flex items-center gap-2 ml-auto">
         <button class="wb-btn-ghost" :disabled="loading" @click="load()">
@@ -49,7 +49,7 @@
     <div :class="embedded ? '' : 'flex-1 overflow-auto p-5'">
       <div :class="embedded ? '' : 'max-w-3xl mx-auto'">
         <!-- 加载态：骨架（首次进入无数据时才显示，刷新时保留旧列表避免跳动） -->
-        <div v-if="loading && apps.length === 0" class="space-y-2">
+        <div v-if="loading && visibleApps.length === 0" class="space-y-2">
           <div
             v-for="i in 3"
             :key="i"
@@ -58,7 +58,7 @@
         </div>
 
         <!-- 空态：没有可管理的应用 -->
-        <div v-else-if="apps.length === 0" class="py-12 text-center">
+        <div v-else-if="visibleApps.length === 0" class="py-12 text-center">
           <ShellIcon
             name="shield"
             :size="34"
@@ -358,8 +358,9 @@
 /**
  * AuthorizationView — 设置页「应用授权」二级页（授权策略增强 · 票 01 / 02 / 03 / 04 / 05）
  *
- * 列出全部已安装 wasm 应用及其授权概览：每类受管资源（文件 / 网络）的策略档位徽标
- * + 记录条数，按风险排序（始终允许置顶，spec §9.1）。
+ * 列出需要用户授权的 wasm 应用及其授权概览：每类受管资源（文件 / 网络）的策略档位
+ * 徽标 + 记录条数，按风险排序（始终允许置顶，spec §9.1）。系统服务（manifest kind
+ * L1/L2）不需要用户授权，不进本页（2026-10-23 用户裁决）。
  *
  * 数据源是宿主唯一读模型命令 `plugin_auth_overview`（spec §9.3）：本页不另写查询。
  * 每行可展开：**策略档位控件**（票 03 三档，票 04 起「始终允许」可选但需二次确认）+
@@ -382,7 +383,7 @@ import { useI18n } from 'vue-i18n'
 import Button from '@/components/Button.vue'
 import Modal from '@/components/Modal.vue'
 import ShellAppTile from '@/shell/components/ShellAppTile.vue'
-import { useShellApps } from '@/shell/composables/useShellApps'
+import { isServiceKind, useShellApps } from '@/shell/composables/useShellApps'
 import AuthFirstPartyRow from '@/shell/auth/AuthFirstPartyRow.vue'
 import ShellIcon from '@/shell/components/ShellIcon.vue'
 import { authOverview, authRemoveRecord, authRevoke, authSetStrategy } from '@/utils/appCommands'
@@ -451,8 +452,21 @@ const toast = useToast()
 const apps = ref<PluginAuthOverview[]>([])
 const loading = ref(false)
 
+/**
+ * 系统服务（manifest kind L1/L2）不需要用户授权（2026-10-23 用户裁决）：
+ * 本页只列业务应用的策略与记录。kind 取自注册表投影（与主屏 / 应用管理同源），
+ * 读模型里查不到 kind 的应用保持展示（不因元数据缺失误藏）。
+ */
+const serviceIds = computed(
+  () =>
+    new Set(
+      appsStore.plugins.value.filter((p) => isServiceKind(p.kind)).map((p) => p.id),
+    ),
+)
+const visibleApps = computed(() => apps.value.filter((a) => !serviceIds.value.has(a.pluginId)))
+
 /** 按风险排序的展示序列（始终允许置顶；排序语义见 shell/auth/authPolicy） */
-const sortedApps = computed(() => sortAppsByRisk(apps.value))
+const sortedApps = computed(() => sortAppsByRisk(visibleApps.value))
 
 /** 返回设置页（本页是设置页的二级入口，返回目标确定，不用 history.back） */
 function goBack(): void {

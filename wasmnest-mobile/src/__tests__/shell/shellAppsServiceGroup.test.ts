@@ -1,10 +1,10 @@
 /**
  * 移动壳「应用管理」系统服务区（manifest kind 分组）行为锁
  *
- * 需求（spec `.scratch/2026-10-22-monitor-system-service` §3）：系统服务区由
- * **manifest kind** 判定（L1 basic-service / L2 internal-business），不硬编码 id；
- * 服务排在前、按 L1 → L2 → 名称；没有服务 / 没有应用时不渲染空分区；
- * 点行仍进详情页（详情页负责隐藏卸载入口，见 ShellAppDetailScreen）。
+ * 需求（spec `.scratch/2026-10-22-monitor-system-service` §3 + 2026-10-23 排序裁决）：
+ * 系统服务区由 **manifest kind** 判定（L1 basic-service / L2 internal-business），
+ * 不硬编码 id；业务应用在前、服务在后（服务内部按 L1 → L2 → 名称）；
+ * 没有服务 / 没有应用时不渲染空分区；点行仍进详情页（详情页负责隐藏卸载入口）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -72,7 +72,7 @@ beforeEach(() => {
 })
 
 describe('移动壳应用管理的系统服务区', () => {
-  it('服务区在前、按 L1 → L2 → 名称；应用区在后（不依赖数据源顺序）', () => {
+  it('应用区在前；服务区在后、按 L1 → L2 → 名称（不依赖数据源顺序）', () => {
     mocks.apps.value = [
       app({ id: 'com.wasmnest.bedcode', name: 'Zed App' }),
       app({ id: 'com.wasmnest.monitor', name: 'Monitor', kind: 'internal-business' }),
@@ -81,13 +81,13 @@ describe('移动壳应用管理的系统服务区', () => {
 
     const wrapper = mountScreen()
     expect(groupTitles(wrapper)).toEqual([
-      'shell.apps.systemServices',
       'shell.apps.businessApps',
+      'shell.apps.systemServices',
     ])
 
     const text = wrapper.text()
+    expect(text.indexOf('Zed App')).toBeLessThan(text.indexOf('Auth Center'))
     expect(text.indexOf('Auth Center')).toBeLessThan(text.indexOf('Monitor'))
-    expect(text.indexOf('Monitor')).toBeLessThan(text.indexOf('Zed App'))
   })
 
   it('没有系统服务时不渲染服务分区（不留空标题）', () => {
