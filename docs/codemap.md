@@ -12,11 +12,13 @@
 wasmnest/                                   # 平台仓根（本文件所在）
 ├─ AGENTS.md                                # 定位 / 冲突裁决 / 红线判据 / 导航骨架
 ├─ docs/                                    # ★ 本目录：AGENTS.md 的拆分文档（本文 + commands/architecture/…）
+│                                           #   + knowledge/（迁自旧仓的 wasm 应用开发检查清单，issue #14）
 ├─ wasmnest-desktop/                        # 桌面宿主（Tauri 2 + Vue 3）
 │   ├─ src/                                 # 宿主壳（ShellHost：主屏 + 系统页 + 挂载槽），见 §2.1
 │   ├─ src-tauri/                           # 桌面 Rust 宿主（插件机制接线 / 安全闸门 / 服务器），见 §2.2
 │   ├─ packages/plugin-sdk-desktop/         # 桌面端内 SDK（npm + crates；bin/ dev 工具与 tools/componentize 随包发布）
 │   ├─ packages/plugin-{bench-test,sdk-fixtures,system-test}/  # 宿主测试夹具包
+│   ├─ docs/                                # wasm 应用开发指南 + knowledge/ API 参考（迁自旧仓，issue #14）
 │   ├─ scripts/                             # dev-run / tauri-build / plugin-build / plugin-dev /
 │   │                                       # package-host / 图标生成 / target 治理
 │   ├─ e2e/ · bench/                        # WDIO E2E（smoke/bench）· 基准数据打包（驱动在 wasmnest-test/perf-tests）
@@ -26,12 +28,13 @@ wasmnest/                                   # 平台仓根（本文件所在）
 │   ├─ src-tauri/                           # 移动 Rust 宿主（含 gen/android 手写 Kotlin 面），见 §3.2
 │   ├─ packages/plugin-sdk-mobile/          # 移动端内 SDK（wasmnest-plugin-api-mobile）
 │   ├─ packages/plugin-component-test/      # 组合件桥测试夹具
+│   ├─ docs/                                # 移动 wasm 应用开发指南（迁自旧仓，issue #14）
 │   └─ scripts/                             # dev-run / plugin-build / android-dev-log / target 治理
 ├─ scripts/                                 # 根工具（见 §5）：compose-wit / app-paths / lib-paths / app-script /
 │                                           # adaptive-run / bump-version / package-sdks / target 治理 / wasip3-toolchain
 ├─ release-manifest.json                    # 跨仓版本唯一表达（判据见 docs/contracts.md §2.1）
 ├─ .cargo/config.toml                       # sccache 强制前置 + 并发兜底（未装 sccache 直接失败，显性设计）
-├─ .husky/pre-commit                        # WIT 漂移锁 + 暂存前端文件 eslint（见 docs/commands.md §7）
+├─ .husky/pre-commit                        # WIT 漂移锁 + 暂存前端文件 eslint + markdown 死链锁（见 docs/commands.md §7）
 └─ eslint.config.js                         # 双端共用前端静态锁（零资源访问红线，见 docs/frontend.md）
 ```
 
@@ -211,6 +214,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `pluginWatchCopy.test.ts` · `pluginPrecheck.test.ts` | `wasmnest-desktop/src/__tests__/scripts/` | 插件 watch 复制闭环；**dev 预检四步行为锁**（`scripts/plugin-precheck.mjs` 陈旧判定 / `--out` 直写 resources / `--rust-only` 快路径 / fail-fast / WASM→前端→清单→退役清理四步顺序，可注入依赖不触发真实构建）+ 接线锁只盯 `dev-run.js` 的 `runPluginPrecheck()` 先于宿主启动点（issue #12 / spec §4.1，内部函数名不再逐个点名） |
 | 移动壳系列锁：`shellConstraintLocks`（含 **L7 壳内自足**）、`retiredHostUIRetirementLocks`、`shellRegistry` / `shellPermissions` / `shellMechanisms` / `shellHostEvents` / `shellAppSurface` / `shellAppRunScreen` / `appSurfaceKeepAlive` / `useAppSurfaces` / `shellHomeScreen` 等 20+ | `wasmnest-mobile/src/__tests__/shell/` | 壳内自足（不依赖旧界面目录）、退役路由 / 符号不回接、壳迁移面不得缩水、注册表 / 权限 / 机制行为；**运行面保活**（运行屏只提供插槽、池按「打开过 ∩ 运行中」过滤、停用即出池、Teleport 前后台切换不重建） |
 | `crate-structure-lock.test.mjs` | 根 `scripts/`（`pnpm run test:run`） | 契约 crate 常量保持 node 正则可解析的字面量形状；能力仓（`../wasmnest-lib`）无逃出 crate 目录的 `include!` / `include_str!` / `bindgen!` 路径；双端 `compose.json` 声明的 WIT 路径存在 |
+| `check-markdown-links.mjs` | 根 `scripts/`（`pnpm run check:links`；husky pre-commit 暂存含 .md 时自动跑，issue #14） | 仓内跟踪 markdown 的**相对链接**（含图片）目标必须存在；外链 URL 与纯锚点不探测（跳过即明说，不做假绿）。挪动 / 改名 .md 或其链接目标时同一提交内过此锁 |
 | Rust 测试锁：`capabilities_lock.rs`（CSP）、`capability_crates_no_product_ids.rs`（零业务类型）、`capability_crates_unit_tests_only.rs`、`hot_path_logging_lock.rs`、`domain_contract_structure_locks.rs`、`empty_dir_lock.rs`、`lifecycle_command_registration_lock`、`command_registration_completeness_lock`（移动） | 双端 `src-tauri/tests/` | 见各自头注释（含「迁移锁后跑红一次」纪律，docs/testing.md §4） |
 
 **锁是契约清单，不是障碍**：你的合法改动若使某把锁的清单 / 白名单过期，必须**同一提交内同步更新该清单**（并在交付说明里点名）；禁止删锁、缩窄 glob、把断言改恒真来「变绿」。
@@ -226,6 +230,9 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | Rust 规范与注释命名 | `docs/backend.md` |
 | 安全与日志红线 | `docs/security.md` |
 | 单元测试 / 完成定义与验证 | `docs/testing.md` |
+| wasm 应用开发检查清单（双端红线，迁自旧仓 issue #14） | `docs/knowledge/wasm-app-development-checklist.md` |
+| 桌面 wasm 应用开发指南 / API 参考（迁自旧仓 issue #14；SDK README 死链的现去向） | `wasmnest-desktop/docs/wasm-app-dev-desktop.md`、`wasmnest-desktop/docs/knowledge/wasm-app-dev-guide.md` |
+| 移动 wasm 应用开发指南（迁自旧仓 issue #14） | `wasmnest-mobile/docs/wasm-app-dev-mobile.md` |
 | 提交回滚与 Git 规则 | `docs/git.md` |
 | 依赖方向 / 跨仓锁 / 禁行清单 | `docs/boundaries.md` |
 | 跨仓版本 / 发布装配 | `release-manifest.json`、`scripts/check-release-manifest.mjs`、`scripts/bump-version.mjs` |

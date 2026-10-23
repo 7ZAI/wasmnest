@@ -34,3 +34,20 @@ if [ -n "$STAGED" ]; then
     exit 1
   fi
 fi
+
+# ==================== markdown 死链锁（暂存含 .md 时全量跑）====================
+# 覆盖面 = 仓内跟踪 markdown 的相对链接（含图片）目标存在性；外链 URL 与纯锚点
+# 不探测（网络走代理不稳，跳过就明说，不做假绿）。详见 scripts/check-markdown-links.mjs
+# 头注释。触发条件 = 暂存文件里有 .md（控制钩子时长；全量扫描为毫秒级）。
+# node 缺失时跳过：本锁依赖 node，不依赖 pnpm 依赖树。
+STAGED_MD=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' || true)
+if [ -n "$STAGED_MD" ]; then
+  if command -v node >/dev/null 2>&1; then
+    if ! node "$(git rev-parse --show-toplevel)/scripts/check-markdown-links.mjs"; then
+      echo ":: markdown 死链检查未过，提交已阻断。修复链接后重新 git add。"
+      exit 1
+    fi
+  else
+    echo "node 不在 PATH，跳过 markdown 死链锁。"
+  fi
+fi

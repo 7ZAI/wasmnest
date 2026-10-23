@@ -23,6 +23,7 @@
 | `pnpm run check:wit` | WIT 拼装漂移锁（== husky 判据；改了契约真源后必跑） |
 | `node scripts/compose-wit.mjs --all` | 双端重拼 WIT 生成物（bump / 改真源后） |
 | `pnpm run check:manifest` | `release-manifest.json` 一致性（判据见 docs/contracts.md §1；含 `hostRuntime` 段） |
+| `pnpm run check:links` | markdown 死链锁（仓内跟踪 .md 的相对链接目标存在性；husky pre-commit 暂存含 .md 时自动跑；外链 / 锚点不探测——issue #14） |
 | `node scripts/check-release-manifest.mjs --print-hash` | 打印当前双端 WIT 指纹（更新 manifest 用） |
 | `node scripts/set-host-version.mjs <x.y.z>` | **发布时**同步宿主运行时版本三处（manifest `hostRuntime.version` / `tauri.conf.json` / `src-tauri/Cargo.toml`）；只写文件，不发布、不提交 |
 | `node scripts/update-host-runtime-artifacts.mjs --dir <资产目录>` | **发布后**把三平台真实 sha256 与 sourceCommit 写回 manifest（host-release workflow 用） |
