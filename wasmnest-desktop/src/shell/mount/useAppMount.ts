@@ -11,11 +11,15 @@
  * 但**不复活**贡献面 / 注册表 / 启停状态机。
  *
  * 每个 app 实例是独立 Vue 应用（自带 router/stores/i18n/样式，bundled 自身依赖）：
- * 卸载即销毁，宿主不持有 app 内部状态（§5.1 红线：宿主零业务状态）。
+ * **首次打开创建、切走保留、停用/卸载才销毁**（2026-10-23 表面保活裁决）：
+ * - 切走 = `detachAppBundle`：容器脱离文档、实例与 DOM 保留，后台不渲染（JS 定时器
+ *   继续），切回来 `attachAppSurface` 同一实例放回挂载槽；
+ * - 停用 / 卸载 = `disposeAppBundle`：才真正 unmount 并释放界面租约。
+ * 宿主只持有实例的**挂载容器与句柄**，不解释应用内部状态（§5.1 红线不变）。
  *
- * 界面挂载/卸载同时是**界面级服务租约**的信号（service-leases）：挂载 →
- * `plugin_surface_open` 为应用持有 `net.transport`（仅注册过 HTTP/WS 端点的应用），
- * 卸载 → `plugin_surface_close` 释放。端点注册只写路由表，不启动监听器。
+ * 界面租约（service-leases）随之从「每次挂载/卸载」改为「**首次创建 / 销毁**」：
+ * 首次打开 → `plugin_surface_open`；`disposeAppBundle` → `plugin_surface_close`。
+ * 端点注册只写路由表，不启动监听器。
  *
  * 例外由宿主判定：manifest `backgroundTransport: true` 的服务端型应用，租约跟
  * **应用运行期**走（启动成功 acquire，停用由内核回收），界面开关不再参与——
@@ -32,6 +36,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { join } from '@tauri-apps/api/path'
 import { logger } from '@/utils/frontendLogger'
 import { invoke } from '@/utils/invoke'
+import { appSurfaces, type AppSurfaceHandle } from './appSurfaceRegistry'
 
 // ==================== 挂载契约（宿主面声明；各 app entry.ts 同形重复——drift 锁钉住） ====================
 
@@ -119,6 +124,17 @@ export interface AppMountHandle {
   unmount(): Promise<void>
   /** 宿主路由变化通知（应用内存路由消化；未实现 = 不支持宿主内路由切换） */
   setRoute?(route: string): void
+  /**
+   * 前台 / 后台切换通知（可选，2026-10-23 表面保活契约）。
+   *
+   * `false` = 应用界面已切到后台：DOM 与实例仍在（切回来原样），但已脱离文档、
+   * 不再渲染；应用可据此暂停轮询 / 动画 / 高频定时器。
+   * `true` = 回到前台（同一实例，不会重新 mount）。
+   *
+   * 未实现 = 壳照常保活，只是应用自己继续按原节奏跑。新增可选成员属兼容变更，
+   * 不 bump {@link MOUNT_CONTRACT}。
+   */
+  setActive?(active: boolean): void
   /** 宿主面事实变更通知（语言 / 主题） */
   setLocale?(locale: string): void
   setTheme?(theme: string): void
@@ -147,7 +163,7 @@ export interface AppPreviewEnv {
   platform?: string
 }
 
-/** 应用预览句柄（卸载卡片时宿主调用；预览实例不登记到主应用 mounted 表） */
+/** 应用预览句柄（卸载卡片时宿主调用；预览实例不登记到主应用表面注册表） */
 export interface AppPreviewHandle {
   unmount(): Promise<void>
 }
@@ -167,8 +183,10 @@ export const PREVIEW_MOUNT_TIMEOUT_MS = 3000
 /** 装载超时（秒）；超时 = 包损坏 / 契约不匹配，显性报错不静默 */
 const MOUNT_TIMEOUT_MS = 8000
 
-/** 已挂载实例（appId → handle）；同一 app 重复挂载先卸载旧实例 */
-const mounted = new Map<string, AppMountHandle>()
+/**
+ * 表面实例注册表（`appSurfaces`，见 `appSurfaceRegistry.ts`）：
+ * 首次打开创建、切走 detach（保留）、停用 / 卸载 dispose（销毁）。
+ */
 
 /**
  * app 挂载包模块面：`mountApp` 必有（否则契约不匹配），`mountPreview` 可选。
@@ -248,31 +266,114 @@ async function notifySurfaceClose(appId: string): Promise<void> {
   }
 }
 
-/** 装载并挂载一个 app 前端到挂载槽元素 */
-export async function mountAppBundle(
-  slotEl: HTMLElement,
-  env: AppMountEnv,
-): Promise<AppMountHandle> {
-  const appId = env.appId
-  await unmountAppBundle(appId)
+/** 应用实例容器：跨挂载槽移动（应用包自己的 Vue 实例挂在它里面） */
+function createInstanceHost(): HTMLElement {
+  const host = document.createElement('div')
+  host.className = 'app-instance-host'
+  return host
+}
 
+/** 是否已有保活实例（切回来走 attach，不重新 mount） */
+export function hasAppSurface(appId: string): boolean {
+  return appSurfaces.has(appId)
+}
+
+/** 列出所有保活实例（`ShellHost` 停用回收用） */
+export function listAppSurfaces(): string[] {
+  return appSurfaces.list()
+}
+
+/** 把保活实例放回挂载槽（切回来）；返回 false = 没有实例（应走 mountAppBundle） */
+export function attachAppSurface(slotEl: HTMLElement, appId: string): boolean {
+  return appSurfaces.attach(appId, slotEl)
+}
+
+/**
+ * 切走：把实例容器从挂载槽移除，但**保留实例**（DOM / 组件状态 / 内存路由原样）。
+ *
+ * 不释放界面租约——应用仍在运行，只是不在前台；真正回收在
+ * [`disposeAppBundle`]（停用 / 卸载）。后台不渲染（容器脱离文档），JS 定时器继续。
+ */
+export function detachAppBundle(appId: string): boolean {
+  return appSurfaces.detach(appId)
+}
+
+/** 停用 / 卸载：真正销毁实例并释放界面租约（幂等） */
+export async function disposeAppBundle(appId: string): Promise<void> {
+  if (!appSurfaces.has(appId)) return
+  try {
+    await appSurfaces.dispose(appId)
+  } catch (e) {
+    logger.error(`[AppMount] dispose failed: ${appId}`, e)
+  }
+  await notifySurfaceClose(appId)
+}
+
+/** @deprecated 停用 / 卸载请用 {@link disposeAppBundle}；切走请用 {@link detachAppBundle} */
+export const unmountAppBundle = disposeAppBundle
+
+/** 在途首次装载（appId → promise；并发首次打开合并用） */
+const mounting = new Map<string, Promise<AppMountHandle>>()
+
+/**
+ * 装载并挂载一个 app 前端到挂载槽元素（首次打开）。
+ *
+ * 已有保活实例（切回来）不走这里：调用方先用 [`hasAppSurface`] +
+ * [`attachAppSurface`] 复用实例——**不能重复 mount**：会重建 DOM / 丢状态，
+ * 且 `refreshChannelToken` 会换发令牌、作废后台实例正在用的身份。
+ *
+ * 并发首次打开（用户快速切走再切回同一应用）合并为一次 mount：后到者等前一个
+ * 装载完成后直接 attach。否则两个 Vue 实例会争同一 appId 的记账（一个变孤儿、
+ * 界面租约被重复 acquire），这正是保活形态下最容易泄漏的路径。
+ */
+export function mountAppBundle(slotEl: HTMLElement, env: AppMountEnv): Promise<AppMountHandle> {
+  const appId = env.appId
+  const existing = appSurfaces.get(appId)
+  if (existing) {
+    appSurfaces.attach(appId, slotEl)
+    return Promise.resolve(existing.handle as AppMountHandle)
+  }
+
+  const pending = mounting.get(appId)
+  if (pending) {
+    return pending.then((handle) => {
+      // 先到的装载已把实例登记进注册表：本槽只做 attach，绝不再 mount 一份
+      appSurfaces.attach(appId, slotEl)
+      return handle
+    })
+  }
+
+  const started = mountAppSurface(slotEl, env).finally(() => {
+    if (mounting.get(appId) === started) mounting.delete(appId)
+  })
+  mounting.set(appId, started)
+  return started
+}
+
+/** 首次装载实体（`mountAppBundle` 已处理复用 / 合并，这里只管建实例） */
+async function mountAppSurface(slotEl: HTMLElement, env: AppMountEnv): Promise<AppMountHandle> {
+  const appId = env.appId
   const module = await loadAppModule(appId)
   assertMountContract(appId, module.mountContract)
   if (typeof module.mountApp !== 'function') {
     throw new Error(`app bundle "${appId}" does not export mountApp (contract mismatch)`)
   }
 
-  // 界面打开即租用传输面：先于 mount，让应用首屏的网络路径在服务就绪后运行；
-  // mount 失败释放，避免失败挂载留下租约。
+  // 界面首次打开即租用传输面：先于 mount，让应用首屏的网络路径在服务就绪后运行；
+  // mount 失败释放，避免失败挂载留下租约。切走 / 切回不再 acquire / release。
   await notifySurfaceOpen(appId)
+  const host = createInstanceHost()
+  slotEl.appendChild(host)
   let handle: AppMountHandle
   try {
-    handle = await module.mountApp(slotEl, env)
+    handle = await module.mountApp(host, env)
   } catch (e) {
+    host.remove()
     await notifySurfaceClose(appId)
     throw e
   }
-  mounted.set(appId, handle)
+  appSurfaces.register(appId, host, handle as AppSurfaceHandle)
+  appSurfaces.attach(appId, slotEl)
   logger.log(`[AppMount] mounted: ${appId}`)
   return handle
 }
@@ -282,7 +383,7 @@ export async function mountAppBundle(
  *
  * - 与主应用共用 {@link loadAppModule}：同一 bundle URL / 模块缓存，不重复下载；
  * - **不做超时**：3s 预览超时由调用方（AppPreviewTile）控制，只覆盖返回句柄；
- * - **不登记**到 {@link mounted}：预览实例与主应用实例生命周期独立，卸载由调用方
+ * - **不登记**到 {@link appSurfaces}：预览实例与主应用实例生命周期独立，卸载由调用方
  *   持有 handle 完成（同一 app 主实例可能正在遮罩后运行，两者不得互相踩）；
  * - **不换发通道令牌**：预览是旁路展示，改身份绑定会作废主实例正在用的令牌。
  *
@@ -334,25 +435,12 @@ export async function mountAppMonitorPanel(
   return handle
 }
 
-/** 卸载一个已挂载的 app 实例（幂等） */
-export async function unmountAppBundle(appId: string): Promise<void> {
-  const handle = mounted.get(appId)
-  if (!handle) return
-  mounted.delete(appId)
-  try {
-    await handle.unmount()
-  } catch (e) {
-    logger.error(`[AppMount] unmount failed: ${appId}`, e)
-  }
-  await notifySurfaceClose(appId)
-}
-
-/** 通知已挂载 app：宿主路由变化 */
+/** 通知已挂载 app：宿主路由变化（实例可能处于后台保活态，仍要同步） */
 export async function notifyAppRoute(appId: string, route: string): Promise<void> {
-  const handle = mounted.get(appId)
-  if (!handle) return
+  const surface = appSurfaces.get(appId)
+  if (!surface) return
   try {
-    handle.setRoute?.(route)
+    ;(surface.handle as AppMountHandle).setRoute?.(route)
   } catch (e) {
     logger.error(`[AppMount] setRoute failed: ${appId}`, e)
   }
@@ -407,5 +495,16 @@ function importWithTimeout(url: string, timeoutMs: number): Promise<unknown> {
 }
 
 export function useAppMount() {
-  return { mountAppBundle, unmountAppBundle, notifyAppRoute, mountAppPreview }
+  return {
+    mountAppBundle,
+    hasAppSurface,
+    attachAppSurface,
+    detachAppBundle,
+    disposeAppBundle,
+    /** @deprecated 用 disposeAppBundle（停用） / detachAppBundle（切走） */
+    unmountAppBundle,
+    listAppSurfaces,
+    notifyAppRoute,
+    mountAppPreview,
+  }
 }

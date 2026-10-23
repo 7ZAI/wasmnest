@@ -168,7 +168,9 @@
  *   ④ 点哪张进哪张、上滑关哪张；拖拽抬手后浏览器补的那次 click 必须吞掉，
  *      否则上滑关闭会顺手把应用打开。
  *
- * 卡片集合 = 运行中应用（MRU 优先）+ 最近使用但未运行的应用。关闭运行中的卡片 =
+ * 卡片集合 = 运行中应用（MRU 优先）+ 最近使用但未运行的应用；服务型应用（L1/L2）
+ * 两个来源都过滤、不进多任务（keepalive spec §3.3），关闭唯一入口 = 应用详情页「停用」。
+ * 关闭运行中的卡片 =
  * 停用实例并移出最近列表（不然它会以「未运行」身份原地复活，看起来像关不掉）。
  *
  * 已退役：底部「上一个 / 下一个 + 圆点 + 页码」切换条（用户 2026-10-21 裁决）。
@@ -181,6 +183,7 @@ import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
 import { useShellOpen } from '../../composables/useShellOpen'
 import { useShellRecent } from '../../composables/useShellRecent'
+import { isServiceKind } from '../../utils'
 import type { ShellApp } from '../../types'
 import ShellAppIcon from '../ShellAppIcon.vue'
 import ShellChip from '../ShellChip.vue'
@@ -203,8 +206,10 @@ function mruRank(app: ShellApp): number {
 }
 
 const cards = computed<RecentCard[]>(() => {
+  // 服务型应用（L1/L2）不进多任务（2026-10-23 裁决，keepalive spec §3.3）：
+  // 运行中与最近使用两个来源都过滤；关闭唯一入口 = 应用详情页「停用」。
   const running = apps.value
-    .filter((a) => a.state === 'running')
+    .filter((a) => a.state === 'running' && !isServiceKind(a.kind))
     .sort((a, b) => {
       const diff = mruRank(a) - mruRank(b)
       return diff !== 0 ? diff : a.name.localeCompare(b.name, 'zh-Hans-CN')
@@ -213,7 +218,10 @@ const cards = computed<RecentCard[]>(() => {
   // 最近使用但未运行：卡片保留在列表里（Android recents 的同一语义），点它即启动
   const dormant = recentIds.value
     .map((id) => apps.value.find((a) => a.id === id))
-    .filter((app): app is ShellApp => app !== undefined && !runningIds.has(app.id))
+    .filter(
+      (app): app is ShellApp =>
+        app !== undefined && !runningIds.has(app.id) && !isServiceKind(app.kind),
+    )
   return [
     ...running.map((app) => ({ app, running: true })),
     ...dormant.map((app) => ({ app, running: false })),

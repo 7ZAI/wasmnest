@@ -31,11 +31,12 @@
  * 生命周期（两种变化必须分开处理，混在一起就会出现「切了应用还是旧界面」）：
  * - **同一 app 内换页**（/sessions → /tasks）：props.route 变化 → notifyAppRoute →
  *   应用内存路由自己消化，实例不重建；
- * - **换 app**（bedcode ↔ ai-chatbox 等）：props.**appId** 变化 → 卸载旧实例 + 重挂新实例。
- *   注意壳里本组件只渲染一次（ShellHost 的应用分支），路由切换只换 props，**组件实例
- *   会被复用、onMounted 不会再跑**——所以 appId 必须有自己的 watcher；只靠路由 watcher
- *   会把旧 app 的 DOM 留在槽里、新 app 从未 mount。
- * - 离开应用面（回主屏 / 进系统页）→ 组件卸载 → onBeforeUnmount 卸载实例。
+ * - **换 app**（bedcode ↔ ai-chatbox 等）：props.**appId** 变化 → **摘掉旧实例**
+ *   （detach，不销毁）+ 复用 / 重挂新实例。注意壳里本组件常驻（`ShellHost` 不再按路由
+ *   分支销毁它），路由切换只换 props——所以 appId 必须有自己的 watcher。
+ * - **离开应用面**（回主屏 / 进系统页）：只 `detachAppBundle`（容器脱离文档、实例
+ *   与 DOM 保留），**不卸载**；停用 / 卸载由 `ShellHost` 的运行态 disposer 调
+ *   `disposeAppBundle`（唯一销毁点）。
  *
  * 布局：壳标题栏是常驻 chrome，槽只吃它以下的剩余高度（见 style 注释）；应用包
  * 的根元素由槽拉满，app 侧不应再按 100vh 定高，也不应自绘标题栏 / 窗口控制。
@@ -54,14 +55,19 @@ import {
   MOUNT_CONTRACT,
   mountAppMonitorPanel,
   type AppMountEnv,
-  type AppMountHandle,
   type MonitorPanelEnv,
 } from '@/shell/mount/useAppMount'
 import { MONITOR_PLUGIN_ID } from '@/shell/composables/useShellApps'
 import { rememberAppRoute } from '@/shell/mount/appSession'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlatform } from '@/composables/usePlatform'
-import { appInvoke, appStorageGet, appStorageSet, appStorageDelete, refreshChannelToken } from '@/utils/appCommands'
+import {
+  appInvoke,
+  appStorageGet,
+  appStorageSet,
+  appStorageDelete,
+  refreshChannelToken,
+} from '@/utils/appCommands'
 import { invoke } from '@/utils/invoke'
 import { logger } from '@/utils/frontendLogger'
 
@@ -72,11 +78,11 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const router = useRouter()
-const { mountAppBundle, unmountAppBundle, notifyAppRoute } = useAppMount()
+const { mountAppBundle, hasAppSurface, attachAppSurface, detachAppBundle, notifyAppRoute } =
+  useAppMount()
 
 const slotEl = ref<HTMLElement | null>(null)
 const status = ref<'idle' | 'loading' | 'mounted' | 'error'>('idle')
-let handle: AppMountHandle | null = null
 
 /**
  * 装载代次：连续切应用（多任务面板连点两张卡）时会有并发装载，
@@ -151,21 +157,35 @@ async function buildEnv(initialRoute: string, appId: string): Promise<AppMountEn
 }
 
 async function mount(initialRoute: string): Promise<void> {
-  if (!slotEl.value) return
-  const seq = ++loadSeq
-  // 捕获本次装载的 appId：await 期间 props 可能已经换成另一个应用
   const appId = props.appId
-  status.value = 'loading'
+  if (!slotEl.value || !appId) {
+    status.value = 'idle'
+    return
+  }
+  const seq = ++loadSeq
   try {
-    const env = await buildEnv(initialRoute, appId)
-    if (seq !== loadSeq) return // 期间已切到别的应用：本次装载作废
-    const next = await mountAppBundle(slotEl.value, env)
-    if (seq !== loadSeq) {
-      // 挂载完成时才发现过期：把刚挂上的实例卸掉，别让它盖住新应用
-      await unmountAppBundle(appId)
+    // 已保活实例（切回来）：同一实例放回槽位——不重建、不换发通道令牌、**不经过加载面**
+    // （保活的意义就是原样回来；闪一下加载面等于告诉用户它被重载了）
+    if (hasAppSurface(appId)) {
+      if (!attachAppSurface(slotEl.value, appId)) {
+        throw new Error(`app surface registry lost instance: ${appId}`)
+      }
+      if (seq !== loadSeq) return
+      status.value = 'mounted'
+      // 后台期间宿主路由可能变过：回来时先同步当前路由（实例内存路由自己消化）
+      await notifyAppRoute(appId, initialRoute)
       return
     }
-    handle = next
+
+    status.value = 'loading'
+    const env = await buildEnv(initialRoute, appId)
+    if (seq !== loadSeq) return // 期间已切到别的应用：本次装载作废
+    await mountAppBundle(slotEl.value, env)
+    if (seq !== loadSeq) {
+      // 挂载完成时才发现过期：实例已属于运行中的应用 → 只摘槽，不销毁
+      detachAppBundle(appId)
+      return
+    }
     status.value = 'mounted'
   } catch (e) {
     if (seq === loadSeq) status.value = 'error'
@@ -180,27 +200,27 @@ async function mount(initialRoute: string): Promise<void> {
 watch(
   () => props.route,
   (r) => {
-    if (status.value === 'mounted' && handle) {
+    // status = 'mounted' 即「本槽持有实例」（首次装载或保活 attach 都算）；
+    // 实例是否已被运行态 disposer 回收由 notifyAppRoute 内部判定，不在这里猜。
+    if (status.value === 'mounted' && props.appId) {
       void notifyAppRoute(props.appId, r)
     }
   },
 )
 
 /**
- * 换应用：卸载旧实例 + 装载新实例。
+ * 换应用：摘掉旧实例（保留）+ 复用 / 装载新实例。
  *
- * 必须单独盯 `props.appId`：ShellHost 里本组件只渲染一次，两个应用路由之间切换时
- * Vue 会**复用同一个实例**（只改 props，onMounted 不再触发）。此前把换应用交给
- * 「组件重建」处理，实际什么也没发生——旧 app 的 DOM 留在槽里、新 app 从未 mount，
- * 表现就是「在多任务里点了 ai-chatbox，界面还是 bedcode」。
+ * 必须单独盯 `props.appId`：ShellHost 里本组件常驻，两个应用路由之间切换时
+ * Vue 会**复用同一个实例**（只改 props，onMounted 不会触发）。
  */
 watch(
   () => props.appId,
   async (newId, oldId) => {
-    if (!oldId || newId === oldId) return
-    if (handle) {
-      handle = null
-      await unmountAppBundle(oldId)
+    if (oldId && oldId !== newId) detachAppBundle(oldId)
+    if (!newId) {
+      status.value = 'idle'
+      return
     }
     await mount(props.route)
   },
@@ -215,14 +235,9 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  // 作废在途装载：卸载后再落地的 mount 会把实例挂到一个已经不存在的槽上
+  // 作废在途装载，并把实例从槽里摘掉（保留实例：ShellHost 卸载 ≠ 应用停用）
   loadSeq += 1
-  // 卸载实例（离开应用面 / 关卡片）
-  if (handle) {
-    const appId = props.appId
-    handle = null
-    void unmountAppBundle(appId)
-  }
+  if (props.appId) detachAppBundle(props.appId)
 })
 
 defineExpose({ status })
@@ -301,5 +316,23 @@ defineExpose({ status })
 }
 .app-mount-retry:hover {
   background: var(--bg-hover);
+}
+</style>
+
+<style>
+/* 应用实例保活容器（`useAppMount` 创建；跨挂载槽移动，容器由独立 Vue 实例挂载，
+   节点不带本组件的 scoped 属性，故规则必须是全局的）。 */
+.app-instance-host {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+/* 应用包根元素拉满容器：app 侧的 height: 100% / h-full 才有确定参照 */
+.app-instance-host > * {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 </style>

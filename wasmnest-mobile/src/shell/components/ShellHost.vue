@@ -8,20 +8,11 @@
   >
     <!-- 宿主壁纸层（主屏 / 系统屏共用；应用运行面见下方底色层）。
          负层序落在壳根底色之上、全部内容之下；none 档不渲染空装饰层。 -->
-    <div
-      v-if="wallClass"
-      class="shell-wallpaper"
-      aria-hidden="true"
-      :style="wallImageStyle"
-    />
+    <div v-if="wallClass" class="shell-wallpaper" aria-hidden="true" :style="wallImageStyle" />
 
     <!-- 应用运行面底色层：进入应用时整个运行面（含顶部状态栏带）回落到默认
          页面底色，平台顶栏与应用界面因此处在同一层布局里，不再透出宿主壁纸。 -->
-    <div
-      class="shell-run-backdrop"
-      :class="{ 'is-active': isAppRun }"
-      aria-hidden="true"
-    />
+    <div class="shell-run-backdrop" :class="{ 'is-active': isAppRun }" aria-hidden="true" />
 
     <ShellStatusbar />
 
@@ -38,6 +29,20 @@
     <ShellCapsuleMenu />
     <ShellPermissionPrompt />
     <ShellNotificationShade />
+
+    <!-- 应用运行面保活池（2026-10-23）：打开过且仍在运行的应用，surface 组件常驻于此
+         （display:none，不渲染但状态保留）；当前应用经 Teleport 移到运行屏插槽。
+         移动 DOM 不重建组件实例——切回来是同一份界面状态。 -->
+    <div class="app-surface-pool hidden" aria-hidden="true">
+      <Teleport
+        v-for="app in surfaceApps"
+        :key="app.id"
+        :to="outletEl ?? 'body'"
+        :disabled="!outletEl || !isSurfaceActive(app.id)"
+      >
+        <ShellAppSurface :app-id="app.id" />
+      </Teleport>
+    </div>
   </div>
 </template>
 
@@ -64,13 +69,16 @@
  * 屏幕表是「屏幕 id → 组件」的纯映射：新增一个屏只需在表里加一行，
  * 导航与过渡机制不动。
  */
-import { computed, onMounted, onUnmounted, type Component } from 'vue'
+import { computed, onMounted, onUnmounted, watch, type Component } from 'vue'
 import { logger } from '@/utils/frontendLogger'
 import { toFileAssetUrl } from '@/plugin/assets'
 import { useShellPreferences } from '../composables/useShellPreferences'
+import { useShellApps } from '../composables/useShellApps'
+import { useAppSurfaces } from '../composables/useAppSurfaces'
 import { useShellNavigation, type ShellScreenId } from '../composables/useShellNavigation'
 import { useShellSystemBack } from '../composables/useShellSystemBack'
 import { startShellHostEvents } from '../composables/useShellHostEvents'
+import ShellAppSurface from './ShellAppSurface.vue'
 import ShellCapsuleMenu from './ShellCapsuleMenu.vue'
 import ShellNotificationShade from './ShellNotificationShade.vue'
 import ShellPermissionPrompt from './ShellPermissionPrompt.vue'
@@ -98,13 +106,42 @@ const nav = useShellNavigation()
 const { transitionName } = nav
 const { wallpaper, wallpaperImage, wallDim } = useShellPreferences()
 
+// ==================== 应用运行面保活池 ====================
+
+const { apps } = useShellApps()
+const { opened, outletEl, dropSurface, setActiveSurface, isSurfaceActive } = useAppSurfaces()
+
+/** 实例活着且打开过，才需要保活（从没打开过的运行中应用没有界面可保）。 */
+const RUNNING_APP_STATES = new Set(['running'])
+const surfaceApps = computed(() =>
+  apps.value.filter((a) => opened.value.has(a.id) && RUNNING_APP_STATES.has(a.state)),
+)
+
+/** 应用离开运行态（停用 / 卸载 / 错误终态）→ 移出保活池（组件卸载、下次全新） */
+watch(
+  () => apps.value.map((a) => `${a.id}:${a.state}`).join('|'),
+  () => {
+    const running = new Set(
+      apps.value.filter((a) => RUNNING_APP_STATES.has(a.state)).map((a) => a.id),
+    )
+    for (const appId of [...opened.value]) {
+      if (!running.has(appId)) dropSurface(appId)
+    }
+  },
+)
+
+/** 当前前台应用（surface 可通过 SURFACE_ACTIVE_KEY 注入判断；不在应用面 = 空串） */
+watch(
+  () => [nav.current.value.id, nav.params.value.appId] as const,
+  ([screenId, appId]) => setActiveSurface(screenId === 'app-run' ? (appId ?? '') : ''),
+  { immediate: true },
+)
+
 /** 当前是否在应用运行面：其底色层盖住壁纸（含状态栏带），只留默认页面底色 */
 const isAppRun = computed(() => nav.current.value.id === 'app-run')
 
 /** 壁纸档位类（none → 只保留壳根类；值与 shell.css / wallpaper.css 的 --wall-* 同源） */
-const wallClass = computed(() =>
-  wallpaper.value === 'none' ? '' : `wall-${wallpaper.value}`,
-)
+const wallClass = computed(() => (wallpaper.value === 'none' ? '' : `wall-${wallpaper.value}`))
 const wallRootClass = computed(() => ['shell-wall', wallClass.value].filter(Boolean).join(' '))
 
 /** 自定义壁纸图片层：路径来自宿主落盘结果，经 asset 协议取图（壳不直接读盘） */

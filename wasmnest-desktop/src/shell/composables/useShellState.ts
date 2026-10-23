@@ -3,7 +3,8 @@
  *
  * 2026-10-17 lifecycle-sync 改造后：
  * - 路由是唯一事实源：'/' = 主屏；'/sys/*' = 系统页全屏；app 路由 = 应用界面全屏；
- * - cards = 打开过的面清单（MRU，路由驱动；主屏不展示，工具栏多任务面板消费）；
+ * - cards = 打开过的面清单（MRU，路由驱动；主屏不展示，工具栏多任务面板消费；
+ *   服务型应用 L1/L2 不产卡，见 isServiceFace）；
  * - **打开 / 关闭走真实生命周期**：openApp = preauthorize → activate（真激活，
  *   仅当前会话，不写启动复活快照）+ 挂载运行面；closeCard / stopApp = deactivate
  *   （**真停用**）成功后才摘面
@@ -17,7 +18,7 @@ import i18n from '@/i18n'
 import router from '@/router'
 import { forgetAppRoute, lastRouteOf } from '../mount/appSession'
 import { appCardKey, cardId, cardKind, isHighRisk, mruActivate, mruRemove, notifCount, sysCardKey, sysPageOf } from './state'
-import { pluginIdOfAppRoute, useShellApps } from './useShellApps'
+import { isServiceKind, pluginIdOfAppRoute, useShellApps } from './useShellApps'
 import type { CardKey, HostNotif, ShellCtxMenu, ShellDialogKind, ShellScreen } from '../types'
 
 const toast = useToast()
@@ -128,6 +129,15 @@ function faceOfRoute(path: string): CardKey | null {
 }
 
 /**
+ * 服务型应用面（L1/L2，`isServiceKind`）不入卡（2026-10-23 裁决，keepalive spec §3.3）：
+ * 多任务切换器与「全部关闭」只消费 `cards`，服务型应用不产卡 → 不出现在切换器、
+ * 也不会被「全部关闭」误杀；关闭唯一入口 = 应用管理页的「停用」。
+ */
+function isServiceFace(key: CardKey | null): boolean {
+  return !!key && cardKind(key) === 'app' && isServiceKind(useShellApps().appOf(cardId(key))?.kind)
+}
+
+/**
  * 某应用当前是否有壳内会话（打开过且未真停用 = 卡片还在）。
  *
  * 主屏绿点的必要条件之一（`state.ts#appDotState`）：角色驱动的后台实例没有卡片，
@@ -153,9 +163,28 @@ function enterFace(key: CardKey | null): void {
   ctxMenu.value = null
 }
 
+/**
+ * 进入服务型应用面：与 enterFace 唯一差异 = 不动 `cards`（不产卡不重排）。
+ * 服务型应用回主屏后靠 home「服务」区 / 路由再次进入，不在多任务里切换。
+ */
+function enterServiceFace(key: CardKey): void {
+  activeCard.value = key
+  screen.value = 'card'
+  panelOpen.value = false
+  quickSettingsOpen.value = false
+  recentsOpen.value = false
+  ctxMenu.value = null
+}
+
 /** 路由变化 → 壳状态同步（ShellHost watch route.path 调用） */
 function syncFromRoute(path: string): void {
-  enterFace(faceOfRoute(path))
+  const key = faceOfRoute(path)
+  if (isServiceFace(key)) {
+    // 服务路由（含 openApp 的 router.push 回环、外部直达）：进全屏但不补卡
+    enterServiceFace(key)
+    return
+  }
+  enterFace(key)
 }
 
 /**
@@ -163,6 +192,7 @@ function syncFromRoute(path: string): void {
  * 产卡 + 进入应用界面路由。失败时按终态分流：NeedsApproval → 审批弹窗；其余 toast 错误。
  * 无宿主运行面的应用（如 ai-chatbox / file-transfer）只激活不产卡——壳诚实呈现
  * 「已运行但无挂载视图」（主屏网格状态 chip 可见）。
+ * 服务型应用（L1/L2）激活后进全屏面但**不产卡**（§3.3，见 isServiceFace）。
  *
  * 已在后台运行的应用再点图标 = **续接**：进入它上次停留的页面（app 自报记录），
  * 不重置到落地页——这是「记住运行中应用的状态」的落点。
@@ -191,7 +221,12 @@ async function openApp(appId: string): Promise<void> {
     return
   }
 
-  enterFace(appCardKey(appId))
+  // 服务型应用（L1/L2）不入卡：只进全屏面，多任务切换器 / 「全部关闭」都不见它
+  if (isServiceKind(app.kind)) {
+    enterServiceFace(appCardKey(appId))
+  } else {
+    enterFace(appCardKey(appId))
+  }
   void router.push(lastRouteOf(appId) ?? app.route)
 }
 

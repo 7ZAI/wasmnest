@@ -9,7 +9,7 @@
  * | C-R2 | 胶囊菜单 | 菜单键开覆盖层（平台项与应用项在同一张卡里） | overlays.openCapsule(appId) |
  * | C-R3 | 胶囊多任务 | 多任务键进叠放屏（底部系统条退役后的入口） | nav.openSwitcher |
  * | C-R4 | 胶囊回主屏 | home 图标（不是「退出应用」语义）回主屏 | nav.goHome |
- * | C-R5 | 运行面 | 应用运行面在胶囊之下挂载 | ShellAppSurface 在场 |
+ * | C-R5 | 运行面 | 应用运行面在胶囊之下挂载（surface 由壳的保活池 Teleport 进来） | 插槽在场 + 登记 opened / outlet，且不直接渲染 surface |
  * | C-R6 | 无底部导航条 | 平台导航条已退役，本屏不渲染系统条 | 页面无 shell-system-bar |
  * | C-R7 | 清单未落地不出空态 | 壳重挂载后清单要等 refresh，这段窗口 apps 为空 | 标题留空，**不**显示 notFound |
  */
@@ -21,6 +21,10 @@ import type { ShellApp } from '@/shell/types'
 const mockOpenCapsule = vi.fn()
 const mockOpenSwitcher = vi.fn()
 const mockGoHome = vi.fn()
+/** 运行屏只登记保活池状态（surface 由壳渲染并 Teleport 进来） */
+const mockMarkSurfaceOpened = vi.fn()
+const mockSetSurfaceOutlet = vi.fn()
+const mockReleaseSurfaceOutlet = vi.fn()
 const params = ref<Record<string, string>>({ appId: 'a' })
 
 const apps = ref<ShellApp[]>([])
@@ -46,8 +50,12 @@ vi.mock('@/shell/composables/useShellNavigation', () => ({
 vi.mock('@/shell/composables/useShellOverlays', () => ({
   useShellOverlays: () => ({ openCapsule: mockOpenCapsule }),
 }))
-vi.mock('@/shell/components/ShellAppSurface.vue', () => ({
-  default: { name: 'ShellAppSurface', props: ['appId'], template: '<div class="surface" />' },
+// 工厂里必须包一层闭包：vi.mock 提升到导入之前，直接引用 mock 变量会
+// 「Cannot access before initialization」（与上面几个 mock 同一写法）
+vi.mock('@/shell/composables/useAppSurfaces', () => ({
+  markSurfaceOpened: (...args: unknown[]) => mockMarkSurfaceOpened(...args),
+  setSurfaceOutlet: (...args: unknown[]) => mockSetSurfaceOutlet(...args),
+  releaseSurfaceOutlet: (...args: unknown[]) => mockReleaseSurfaceOutlet(...args),
 }))
 
 import ShellAppRunScreen from '@/shell/components/screens/ShellAppRunScreen.vue'
@@ -70,6 +78,9 @@ beforeEach(() => {
   mockOpenCapsule.mockClear()
   mockOpenSwitcher.mockClear()
   mockGoHome.mockClear()
+  mockMarkSurfaceOpened.mockClear()
+  mockSetSurfaceOutlet.mockClear()
+  mockReleaseSurfaceOutlet.mockClear()
 })
 
 describe('C-R1 应用身份', () => {
@@ -130,13 +141,41 @@ describe('C-R2..C-R4 胶囊（菜单 / 多任务 / 回主屏）', () => {
   })
 })
 
-describe('C-R5/C-R6 运行面与导航条', () => {
-  it('should_mountSurfaceUnderCapsule_when_rendered', () => {
+describe('C-R5 运行面插槽（surface 由壳的保活池 Teleport 进来）', () => {
+  it('should_provideSurfaceOutlet_when_rendered', () => {
     const wrapper = mount(ShellAppRunScreen)
 
-    expect(wrapper.find('.surface').exists(), '应用运行面应挂载').toBe(true)
+    expect(
+      wrapper.find('[data-testid="app-surface-outlet"]').exists(),
+      '运行屏只提供插槽，壳把保活 surface 移进来',
+    ).toBe(true)
   })
 
+  it('should_notRenderSurfaceDirectly_when_rendered', () => {
+    // 运行屏直接渲染 surface = 切走即卸载，保活失效（2026-10-23 表面保活）
+    const wrapper = mount(ShellAppRunScreen)
+
+    expect(wrapper.find('.surface').exists()).toBe(false)
+  })
+
+  it('should_markOpenedAndRegisterOutlet_when_mounted', () => {
+    mount(ShellAppRunScreen)
+
+    expect(mockMarkSurfaceOpened, '打开过运行面的应用才进保活池').toHaveBeenCalledWith('a')
+    expect(mockSetSurfaceOutlet).toHaveBeenCalledWith(expect.any(HTMLElement))
+  })
+
+  it('should_unregisterOutlet_when_unmounted', () => {
+    const wrapper = mount(ShellAppRunScreen)
+
+    wrapper.unmount()
+
+    // 切走：注销自己登记的插槽，surface 才会移回池而不是往已卸载 DOM 里 Teleport
+    expect(mockReleaseSurfaceOutlet).toHaveBeenCalledWith(expect.any(HTMLElement))
+  })
+})
+
+describe('C-R6 无底部导航条', () => {
   it('should_notRenderBottomSystemBar_when_rendered', () => {
     // 底部系统条整条退役：本屏不再有常驻导航条，导航只在胶囊里
     const wrapper = mount(ShellAppRunScreen)

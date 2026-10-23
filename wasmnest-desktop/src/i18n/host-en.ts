@@ -282,6 +282,7 @@ export default {
       kvType: 'Type',
       approveStart: 'Approve & start',
       stop: 'Stop',
+      stopService: 'Stop service',
       open: 'Open',
       startOpen: 'Start & open',
       uninstall: 'Uninstall',

@@ -39,17 +39,25 @@
  * 「查不到 app」分两态：清单还没拉完（listReady=false）走加载态，拉完仍查不到才走
  * 空态。两者混为一谈会让清单落地前的窗口闪一句「应用不存在」。
  */
-import { computed } from 'vue'
+import { computed, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useShellApps } from '../composables/useShellApps'
+import { SURFACE_ACTIVE_KEY, useAppSurfaces } from '../composables/useAppSurfaces'
 import ShellPlaceholderSurface from './ShellPlaceholderSurface.vue'
 
 const props = defineProps<{ appId: string }>()
 
 const { t } = useI18n()
 const { getApp, resolveSurface, listReady } = useShellApps()
+const { activeSignal } = useAppSurfaces()
 
 const app = computed(() => getApp(props.appId))
 /** 用 appId 而非 app 对象做依赖：应用停止/启动后对象会换，但解析入口不变 */
 const surface = computed(() => resolveSurface(props.appId))
+
+/**
+ * 前后台信号（可选契约）：应用 surface 可 `inject(SURFACE_ACTIVE_KEY)` 拿到
+ * 响应式 boolean，在后台暂停轮询 / 动画；不注入不影响保活。
+ */
+provide(SURFACE_ACTIVE_KEY, activeSignal(props.appId))
 </script>

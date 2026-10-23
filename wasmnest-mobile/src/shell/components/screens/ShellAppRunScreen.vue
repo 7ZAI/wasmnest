@@ -9,9 +9,7 @@
     -->
     <header class="flex items-center gap-2.5 px-3 pt-1.5 pb-1 flex-shrink-0">
       <ShellAppIcon v-if="app" :app="app" :size="30" />
-      <span
-        class="flex-1 min-w-0 shell-type-label text-[var(--mobile-text-primary)] truncate"
-      >
+      <span class="flex-1 min-w-0 shell-type-label text-[var(--mobile-text-primary)] truncate">
         <!-- 清单未落地时不出「应用不存在」：那是空态，不是加载态（见 useShellApps.listReady） -->
         {{ app?.name ?? (listReady ? t('shell.run.notFound') : '') }}
       </span>
@@ -37,7 +35,17 @@
           :aria-label="t('shell.run.recents')"
           @click="nav.openSwitcher()"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
             <rect x="7" y="3" width="14" height="14" rx="3" />
             <path d="M3 7v10a4 4 0 0 0 4 4h10" />
           </svg>
@@ -49,7 +57,17 @@
           :aria-label="t('shell.run.home')"
           @click="nav.goHome()"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
             <path d="M3 10.5L12 3l9 7.5" />
             <path d="M5 9.5V21h14V9.5" />
           </svg>
@@ -57,8 +75,10 @@
       </div>
     </header>
 
-    <!-- ==================== 应用运行面 ==================== -->
-    <ShellAppSurface :app-id="appId" />
+    <!-- ==================== 应用运行面 ====================
+         应用 surface 由壳的运行面保活池 Teleport 到这里：切走只移回池（不销毁），
+         本屏只提供插槽与登记/注销。 -->
+    <div ref="outletEl" class="flex flex-col flex-1 min-h-0" data-testid="app-surface-outlet" />
   </div>
 </template>
 
@@ -79,13 +99,17 @@
  * 标题取名时要看 listReady：壳先渲染、清单后到，这段窗口内 apps 为空，
  * 直接显示「应用不存在」是假空态。
  */
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
 import { useShellOverlays } from '../../composables/useShellOverlays'
+import {
+  markSurfaceOpened,
+  releaseSurfaceOutlet,
+  setSurfaceOutlet,
+} from '../../composables/useAppSurfaces'
 import ShellAppIcon from '../ShellAppIcon.vue'
-import ShellAppSurface from '../ShellAppSurface.vue'
 
 const { t } = useI18n()
 const nav = useShellNavigation()
@@ -94,4 +118,18 @@ const { getApp, listReady } = useShellApps()
 
 const appId = computed(() => nav.params.value.appId ?? '')
 const app = computed(() => getApp(appId.value))
+
+/** 运行面插槽：壳的保活池把当前应用的 surface Teleport 到这里 */
+const outletEl = ref<HTMLElement | null>(null)
+
+onMounted(() => {
+  if (appId.value) markSurfaceOpened(appId.value)
+  setSurfaceOutlet(outletEl.value)
+})
+
+onBeforeUnmount(() => {
+  // 只注销自己登记的插槽：过渡期新旧运行屏共存，新屏可能已经登记了它的插槽。
+  // 无条件清空会让当前应用退回隐藏池（运行面空白）。
+  releaseSurfaceOutlet(outletEl.value)
+})
 </script>

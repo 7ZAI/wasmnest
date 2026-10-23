@@ -1,10 +1,11 @@
 /**
  * 系统服务区（桌面「应用管理」）行为锁
  *
- * 需求（spec `.scratch/2026-10-22-monitor-system-service` §3 + 2026-10-23 排序裁决）：
+ * 需求（spec `.scratch/2026-10-22-monitor-system-service` §3 + 2026-10-23 裁决）：
  * 系统服务区由 **manifest kind** 判定（L1 basic-service / L2 internal-business），
  * 不硬编码 id；业务应用在前、服务在后（服务内部按 L1 → L2 → 名称）；服务不渲染
- * 卸载入口（即便 source 是用户安装）；自启开关仍然可用；没有服务时不渲染空分区标题。
+ * 卸载入口（即便 source 是用户安装）；自启开关仍然可用；没有服务时不渲染空分区标题；
+ * 停止动作按 kind 分词语：服务说「停止服务」（`shell.apps.stopService`）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -182,5 +183,31 @@ describe('系统服务区（manifest kind 分组）', () => {
     await toggle.trigger('click')
     expect(mocks.setAutostart).toHaveBeenCalledWith('com.wasmnest.monitor', false)
     expect(mocks.setEnabled).not.toHaveBeenCalled()
+  })
+
+  it('停止按钮按 kind 分词语：服务 = 停止服务，业务应用 = 停用', () => {
+    mocks.plugins.value = [
+      entry({
+        id: 'com.wasmnest.monitor',
+        pluginId: 'com.wasmnest.monitor',
+        name: 'Monitor',
+        kind: 'internal-business',
+        state: 'running',
+      }),
+      entry({
+        id: 'com.wasmnest.bedcode',
+        pluginId: 'com.wasmnest.bedcode',
+        name: 'BedCode',
+        state: 'running',
+      }),
+    ]
+
+    const wrapper = mountView()
+    const labels = wrapper.findAll('button').map((b) => b.text())
+    // 服务卡：停止服务（文案键）；应用卡：停用（不得误带服务词）
+    expect(labels.some((tx) => tx.includes('shell.apps.stopService'))).toBe(true)
+    expect(
+      labels.some((tx) => tx.includes('shell.apps.stop') && !tx.includes('shell.apps.stopService')),
+    ).toBe(true)
   })
 })

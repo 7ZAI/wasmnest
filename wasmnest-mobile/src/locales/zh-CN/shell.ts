@@ -72,6 +72,8 @@ export default {
       state: '运行状态',
       permissions: '权限',
       permissionsNote: '{granted} 项已授予 · {locked} 项默认',
+      /** 系统服务（L1/L2）不提供逐项开关：权限随包固定，只做只读呈现（2026-10-23 用户裁决） */
+      permissionServiceFixed: '系统服务的权限随包固定，不可逐项变更。',
       permissionLocked: '默认授予 · 不可关闭',
       permissionUnsupported: '当前后端不支持逐项开关权限',
       permissionToggleFailed: '权限变更未生效：{reason}',
@@ -81,6 +83,8 @@ export default {
       grantsNote: '近 7 天',
       grantsEmpty: '暂无授权记录',
       disable: '停用应用',
+      /** 停止动作按装配角色分词语：服务说「停止服务」（同一裁决） */
+      stopService: '停止服务',
       uninstall: '卸载并删除数据',
       version: 'v{version}',
     },
@@ -210,6 +214,8 @@ export default {
       permissions: '权限设置',
       about: '关于此应用',
       disable: '停用此应用',
+      /** 服务运行面的胶囊：停止动作按 kind 说「停止服务」 */
+      disableService: '停止服务',
     },
     permissionPrompt: {
       title: '{name} 申请权限',

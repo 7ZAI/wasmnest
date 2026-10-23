@@ -18,6 +18,7 @@ const HOME = 'src/shell/components/ShellHome.vue'
 const TOOLBAR = 'src/shell/components/ShellToolbar.vue'
 const HOST = 'src/shell/ShellHost.vue'
 const SWITCHER = 'src/shell/components/ShellTaskSwitcher.vue'
+const LAYOUT = 'src/shell/composables/recentsLayout.ts'
 const RETIRED_PANEL = 'src/shell/components/ShellRecentsPanel.vue'
 const ICONS = 'src/shell/components/ShellIcon.vue'
 
@@ -86,22 +87,25 @@ describe('全屏形态（安卓 recents：虚化背景 + 大卡片）', () => {
     )
   })
 
-  it('卡片是应用窗口形态（缩略区 16/10 + 自适应多行 + 超高滚动），不是列表行', () => {
+  it('卡片是应用窗口形态（缩略区撑满 + 卡片数决定尺寸 + 超高滚动），不是列表行', () => {
     const src = stripComments(read(SWITCHER))
     // 缩略区保持应用窗口比例（16/10），不是一行一个的列表行
     expect(src).toMatch(/\.ts-thumb\s*\{[^}]*flex:\s*1/)
-    // 卡片带 = 每行最多 3 张的换行布局（超 3 张换行、整组居中）；
-    // 卡片过多时超出高度滚动查看
-    expect(src).toMatch(/\.ts-cards\s*\{[^}]*flex-wrap:\s*wrap/)
+    // 卡片带 = 6 半轨网格（3 列，超 3 张换行、整组居中）；卡片过多时超出高度滚动
+    expect(src).toMatch(/\.ts-cards\s*\{[^}]*display:\s*grid/)
+    expect(src).toMatch(/\.ts-cards\s*\{[^}]*grid-template-columns:\s*repeat\(/)
     expect(src).toMatch(/\.ts-cards\s*\{[^}]*justify-content:\s*center/)
     expect(src).toMatch(/\.ts-cards\s*\{[^}]*overflow-y:\s*auto/)
-    // 卡宽自适应（2026-10-23 用户反馈：超过 3 张时最右一张被边界裁掉、关闭键不可见）：
-    // 宽度按可用宽度三等分、上限 420px，窗口变窄时整行等比缩小而不是溢出被裁。
-    // 固定 420px 轨道是回归点，锁死不许回来。
-    expect(src).toMatch(/\.ts-card\s*\{[^}]*flex:\s*0 0 calc\(\(100% - 34px\) \/ 3\)/)
-    expect(src).toMatch(/\.ts-card\s*\{[^}]*max-width:\s*420px/)
+    // 卡宽自适应（2026-10-23 用户裁决，替代上一版「三等分 + 420px 上限」）：
+    // 卡宽由 `--ts-card-w` 注入（composables/recentsLayout 按卡片数 + 带尺寸解算），
+    // 1 张 = 带内最大、越多越小、最小到 2 行 3 列的格，第 7 张起纵向滚动。
+    // 固定 420px 上限与固定 px 轨道都是回归点，锁死不许回来。
+    expect(src).toMatch(/\.ts-card\s*\{[^}]*grid-column:\s*span 2/)
     expect(src).toMatch(/\.ts-card\s*\{[^}]*aspect-ratio:\s*3\s*\/\s*4/)
     expect(src).toMatch(/\.ts-card\s*\{[^}]*box-sizing:\s*border-box/)
+    expect(src, '不许再给全卡设固定宽度上限（会把单卡压小）').not.toMatch(
+      /\.ts-card\s*\{[^}]*max-width:\s*\d+px/,
+    )
     expect(src, '不许回到固定 px 轨道（会把最右一张裁在边界外）').not.toMatch(
       /grid-template-columns:\s*repeat\(3,\s*\d+px\)/,
     )
@@ -116,6 +120,28 @@ describe('全屏形态（安卓 recents：虚化背景 + 大卡片）', () => {
     const src = stripComments(read(SWITCHER))
     expect(src).not.toContain('ts-foot')
     expect(src).not.toContain("t('shell.recents.resumedHint')")
+  })
+
+  it('卡宽解算走 recentsLayout 单一实现（1 张最大 → 2 行 3 列封底 → 溢出滚动）', () => {
+    const src = stripComments(read(SWITCHER))
+    // 卡宽 = 纯函数解算后经 --ts-card-w 注入：组件自己不做像素算术
+    expect(src).toContain('recentsCardWidth(')
+    expect(src).toContain('ref="bandEl"')
+    expect(src).toContain(':style="bandStyle"')
+    // 末行不满 3 张时由 recentsCardPlacement 注入行列（6 半轨才能精确居中）
+    expect(src).toContain('recentsCardPlacement(')
+    expect(src).toContain(':style="cardStyle(i)"')
+    // 尺寸随窗口 / 卡片数 / 滚动条变化而重算；关闭全屏层必须断开观察
+    expect(src).toContain('ResizeObserver')
+    expect(src).toContain("addEventListener('resize'")
+    expect(src).toContain('unobserveBand()')
+
+    // 产品口径常量锁在解算模块里：最多 3 列、可视 2 行 → 第 7 张起滚动
+    const layout = stripComments(read(LAYOUT))
+    expect(layout).toMatch(/RECENTS_MAX_COLS\s*=\s*3/)
+    expect(layout).toMatch(/RECENTS_MAX_VISIBLE_ROWS\s*=\s*2/)
+    expect(layout).toMatch(/RECENTS_CARD_ASPECT\s*=\s*3\s*\/\s*4/)
+    expect(layout).toMatch(/RECENTS_GRID_TRACKS\s*=\s*6/)
   })
 })
 

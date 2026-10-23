@@ -11,22 +11,36 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
  *
  * 本测试直接驱动 props：
  *   - 挂载时按 A 装载；
- *   - 换 appId 为 B → 必须 unmount(A) + mount(B)（反例：只改 props 也能"看起来正常"）；
+ *   - 换 appId 为 B → 必须 detach(A) + mount(B)（反例：只改 props 也能"看起来正常"）；
  *   - 同一 appId 内换 route → 只通知应用，不重建实例；
- *   - 卸载组件 → 卸载实例。
+ *   - 卸载组件 → 只摘槽（detach），**不销毁**（表面保活，2026-10-23）；
+ *   - 切回已保活实例 → attach 复用，不重新装载 / 不换发令牌 / 不闪加载面。
  */
 
 // ==================== 模块桩（挂载槽依赖宿主面 env 的全部取数口） ====================
-const unmountAppBundle = vi.hoisted(() => vi.fn(async () => {}))
 const mountAppBundle = vi.hoisted(() => vi.fn())
 const notifyAppRoute = vi.hoisted(() => vi.fn(async () => {}))
 const rememberAppRoute = vi.hoisted(() => vi.fn())
-// 挂载换发令牌（不信任页面内存缓存）：AppMountSlot 挂载前必经
+const hasAppSurface = vi.hoisted(() => vi.fn(() => false))
+const attachAppSurface = vi.hoisted(() => vi.fn(() => true))
+const detachAppBundle = vi.hoisted(() => vi.fn(() => true))
+const disposeAppBundle = vi.hoisted(() => vi.fn(async () => {}))
+const listAppSurfaces = vi.hoisted(() => vi.fn(() => [] as string[]))
+// 挂载换发令牌（不信任页面内存缓存）：AppMountSlot 首次装载前必经
 const refreshChannelToken = vi.hoisted(() => vi.fn(async () => {}))
 
 vi.mock('@/shell/mount/useAppMount', () => ({
-  useAppMount: () => ({ mountAppBundle, unmountAppBundle, notifyAppRoute }),
+  useAppMount: () => ({
+    mountAppBundle,
+    hasAppSurface,
+    attachAppSurface,
+    detachAppBundle,
+    disposeAppBundle,
+    listAppSurfaces,
+    notifyAppRoute,
+  }),
   MOUNT_CONTRACT: '1',
+  mountAppMonitorPanel: vi.fn(),
 }))
 vi.mock('@/shell/mount/appSession', () => ({ rememberAppRoute }))
 vi.mock('@/utils/appCommands', () => ({
@@ -68,11 +82,16 @@ describe('AppMountSlot 换应用（多任务切换）', () => {
   let wrapper: VueWrapper | null = null
 
   beforeEach(() => {
-    unmountAppBundle.mockClear()
     mountAppBundle.mockReset()
     notifyAppRoute.mockClear()
     rememberAppRoute.mockClear()
     refreshChannelToken.mockClear()
+    hasAppSurface.mockReset()
+    hasAppSurface.mockReturnValue(false)
+    attachAppSurface.mockClear()
+    detachAppBundle.mockClear()
+    disposeAppBundle.mockClear()
+    listAppSurfaces.mockClear()
     mountAppBundle.mockImplementation(async () => makeHandle())
   })
 
@@ -103,13 +122,14 @@ describe('AppMountSlot 换应用（多任务切换）', () => {
     expect(env.mountContract).toBe('1')
   })
 
-  it('换 appId（复用同一实例）→ 先卸载旧实例再装载新实例', async () => {
+  it('换 appId（复用同一实例）→ 先摘旧实例再装载新实例', async () => {
     await mountWith(APP_A, '/sessions')
 
     await wrapper!.setProps({ appId: APP_B, route: '/chat' })
     await flushPromises()
 
-    expect(unmountAppBundle, '旧应用必须卸载（否则旧 DOM 留在槽里）').toHaveBeenCalledWith(APP_A)
+    expect(detachAppBundle, '旧应用必须摘槽（否则旧 DOM 留在槽里）').toHaveBeenCalledWith(APP_A)
+    expect(disposeAppBundle, '切应用 ≠ 停用：不得销毁旧实例').not.toHaveBeenCalled()
     expect(mountAppBundle, '新应用必须重新装载').toHaveBeenCalledTimes(2)
     const env = mountAppBundle.mock.calls[1][1] as { appId: string; initialRoute: string }
     expect(env.appId).toBe(APP_B)
@@ -125,15 +145,49 @@ describe('AppMountSlot 换应用（多任务切换）', () => {
 
     expect(notifyAppRoute).toHaveBeenCalledWith(APP_A, '/tasks')
     expect(mountAppBundle, '同应用换页不该重新 mount').not.toHaveBeenCalled()
-    expect(unmountAppBundle).not.toHaveBeenCalled()
+    expect(detachAppBundle).not.toHaveBeenCalled()
+    expect(disposeAppBundle).not.toHaveBeenCalled()
   })
 
-  it('卸载组件 → 卸载当前实例', async () => {
+  it('卸载组件 → 只摘槽，不销毁当前实例（壳卸载 ≠ 应用停用）', async () => {
     await mountWith(APP_A, '/sessions')
     wrapper!.unmount()
     wrapper = null
     await flushPromises()
-    expect(unmountAppBundle).toHaveBeenCalledWith(APP_A)
+    expect(detachAppBundle).toHaveBeenCalledWith(APP_A)
+    expect(disposeAppBundle, '只有应用离开运行态才销毁').not.toHaveBeenCalled()
+  })
+
+  it('切回已保活实例 → attach 复用，不重新装载、不换发令牌', async () => {
+    hasAppSurface.mockReturnValue(true)
+
+    await mountWith(APP_A, '/sessions')
+
+    expect(attachAppSurface).toHaveBeenCalledWith(expect.any(HTMLElement), APP_A)
+    expect(mountAppBundle, '保活实例不得重复 mount（会丢状态 + 换令牌）').not.toHaveBeenCalled()
+    expect(refreshChannelToken, '切回不换发令牌（会作废实例正在用的身份）').not.toHaveBeenCalled()
+    // 后台期间宿主路由可能变过：回来仍要同步一次
+    expect(notifyAppRoute).toHaveBeenCalledWith(APP_A, '/sessions')
+  })
+
+  it('切回已保活实例不经过加载面（原样回来，不闪加载）', async () => {
+    hasAppSurface.mockReturnValue(true)
+
+    await mountWith(APP_A, '/sessions')
+
+    expect((wrapper!.vm as unknown as { status: string }).status).toBe('mounted')
+    expect(wrapper!.find('.app-mount-status').exists(), '保活切回不应出现加载 / 失败面').toBe(false)
+  })
+
+  it('离开应用面（appId 置空）→ 只摘槽，不销毁', async () => {
+    await mountWith(APP_A, '/sessions')
+
+    await wrapper!.setProps({ appId: '', route: '/' })
+    await flushPromises()
+
+    expect(detachAppBundle).toHaveBeenCalledWith(APP_A)
+    expect(disposeAppBundle).not.toHaveBeenCalled()
+    expect((wrapper!.vm as unknown as { status: string }).status).toBe('idle')
   })
 
   it('连续切换：过期代次的装载不得挂到界面上', async () => {
@@ -222,9 +276,6 @@ describe('AppMountSlot DOM 所有权（状态层不得与应用挂载容器同�
     // 挂载完成后状态层退场，但**宿主自己的 DOM 不得被应用清空带走**
     const slot = wrapper.find('.app-mount-slot')
     expect(slot.exists()).toBe(true)
-    expect(
-      wrapper.find('.app-mount-status').exists(),
-      '挂载完成后加载面应退场',
-    ).toBe(false)
+    expect(wrapper.find('.app-mount-status').exists(), '挂载完成后加载面应退场').toBe(false)
   })
 })

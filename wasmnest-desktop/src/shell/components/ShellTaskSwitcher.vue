@@ -33,20 +33,29 @@
             </button>
           </header>
 
-          <!-- 卡片带：自适应多行（2026-10-23 优化）。
-               每行最多 3 张卡、整组上下左右居中；卡宽按可用宽度三等分并封顶 420px，
-               窗口变窄时三张一起等比缩小（旧实现固定 420px 轨道，最右一张连同关闭键
-               会被 overflow-x:hidden 裁掉）；卡片过多时纵向滚动。
+          <!-- 卡片带：卡片数决定卡片尺寸（2026-10-23 用户裁决，修正上一版反方向）。
+               1 张 = 带内最大 3:4 卡居中；越多越小，最小只缩到「3 列 × 2 行」的格子；
+               第 7 张起不再缩小，改为纵向滚动（解算见 composables/recentsLayout.ts）。
                缩略区 = 应用可选导出的 mountPreview 自绘只读预览面；缺失 / 失败 /
-               超时回退品牌渐变 + 图标（机制 B：后台应用离开应用面即被卸载，没有 DOM
-               可截图，预览只能由应用重新画；见 .scratch/2026-10-20-app-preview-contract）。 -->
-          <div class="ts-cards" :class="{ 'is-empty': !state.cards.value.length }" role="list">
+               超时回退品牌渐变 + 图标（预览是应用自己重画的点时刻视图，宿主不抓主实例
+               DOM——表面保活后后台 DOM 仍在，但抓取会让旁路实例耦合主实例状态；
+               见 .scratch/2026-10-20-app-preview-contract）。 -->
+          <div
+            ref="bandEl"
+            class="ts-cards"
+            :class="{
+              'is-empty': !state.cards.value.length,
+              'is-scrolling': scrolls,
+            }"
+            :style="bandStyle"
+            role="list"
+          >
             <article
               v-for="(key, i) in state.cards.value"
               :key="key"
               class="ts-card"
               :class="{ active: key === state.activeCard.value }"
-              :style="{ '--i': i }"
+              :style="cardStyle(i)"
               role="listitem"
               data-ts-keep
             >
@@ -133,8 +142,9 @@
  *
  * 主屏不铺「正在运行」区（用户裁决 2026-10-17），打开过 / 后台运行的面统一在这个
  * 全屏层里呈现：背景是当前界面的**虚化**快照（backdrop blur），前景是每个应用一张
- * 大卡片（自适应多行网格），点卡片切回（应用续接离开时那一页），卡片顶部信息条
- * （图标 + 名称）右端 ✕ 关闭单个实例，头部「全部关闭」一键清场；点空白 / ✕ / Esc 收起。
+ * 大卡片（卡片数决定尺寸：少卡大、多卡小，见 `recentsLayout`），点卡片切回（应用续接
+ * 离开时那一页），卡片顶部信息条（图标 + 名称）右端 ✕ 关闭单个实例，头部「全部关闭」
+ * 一键清场；点空白 / ✕ / Esc 收起。
  *
  * 缩略区：app 卡交给 `AppPreviewTile`（应用可选导出 `mountPreview` 自绘只读预览面；
  * 未导出 / 失败 / 3s 超时回退品牌渐变 + 图标），系统页卡保持品牌渐变 + 36px glyph。
@@ -142,11 +152,20 @@
  * 归属（AGENTS §5.1）：纯注册表投影 + 动作机械转发；卡清单与关闭语义唯一实现在
  * `useShellState`（activateCard 带页面续接、closeCard = 真停用），本组件不复制编排。
  */
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SYS_PAGES, chipMetaOf, type AppTone } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
 import { useShellApps } from '../composables/useShellApps'
+import {
+  RECENTS_MAX_COLS,
+  RECENTS_MAX_VISIBLE_ROWS,
+  recentsCardHeight,
+  recentsCardPlacement,
+  recentsCardWidth,
+  recentsTrackCount,
+  type RecentsBand,
+} from '../composables/recentsLayout'
 import ShellIcon from './ShellIcon.vue'
 import ShellAppTile from './ShellAppTile.vue'
 import AppPreviewTile from '../mount/AppPreviewTile.vue'
@@ -160,6 +179,92 @@ const appsStore = useShellApps()
 
 const open = computed(() => state.recentsOpen.value)
 const rootEl = ref<HTMLElement | null>(null)
+const bandEl = ref<HTMLElement | null>(null)
+
+/**
+ * 卡片带可用尺寸（实测）。卡片宽度 = 数量 + 带尺寸的函数（`recentsLayout`），
+ * 所以窗口缩放 / 卡片增减 / 滚动条出现都只需重算一次 computed。
+ */
+const band = ref<RecentsBand>({ width: 0, height: 0, gap: 0 })
+/** 单卡宽度；0 = 还没量到带尺寸 → 交给 CSS 兜底（三等分） */
+const cardWidth = computed(() => recentsCardWidth(state.cards.value.length, band.value))
+/** 行高（卡高）：显式喂给 grid-auto-rows，避免引擎把溢出的行压扁 */
+const cardHeight = computed(() => recentsCardHeight(cardWidth.value))
+/** 超过可视 2 行 → 改滚动：必须置顶对齐，否则居中的首行会被滚出可视区 */
+const scrolls = computed(
+  () =>
+    state.cards.value.length > 0 &&
+    Math.ceil(state.cards.value.length / RECENTS_MAX_COLS) > RECENTS_MAX_VISIBLE_ROWS,
+)
+/** 注入 `--ts-card-w` / `--ts-card-h` / `--ts-tracks`：CSS 不重复尺寸算术 */
+const bandStyle = computed<Record<string, string>>(() =>
+  cardWidth.value > 0
+    ? {
+        '--ts-card-w': `${cardWidth.value}px`,
+        '--ts-card-h': `${cardHeight.value}px`,
+        '--ts-tracks': String(recentsTrackCount(state.cards.value.length)),
+      }
+    : {},
+)
+
+/**
+ * 单卡样式：入场错峰序号 + 末行不满时的显式居中位置
+ *
+ * 网格是 6 个半列轨道、每张卡跨 2 轨；末行不满 3 张时由 `recentsCardPlacement`
+ * 给出行列（末行 2 张各让半卡、1 张落在正中）。行号显式给，避免自动排布把
+ * 位置漂到上一行有空格的地方。
+ */
+function cardStyle(index: number): Record<string, string | number> {
+  const style: Record<string, string | number> = { '--i': index }
+  const placement = recentsCardPlacement(index, state.cards.value.length)
+  if (placement) {
+    style.gridRow = placement.row
+    style.gridColumn = `${placement.columnStart} / span 2`
+  }
+  return style
+}
+
+function px(value: string): number {
+  const n = Number.parseFloat(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+/**
+ * 量卡片带可用尺寸
+ *
+ * `clientWidth` / `clientHeight` 已扣滚动条，再扣自身内边距才是卡片真正能用的盒子
+ * （内边距留给悬停抬升与焦点环，不能让卡宽把它算进去）。gap 直接读计算值，避免
+ * 间距在 CSS / TS 两处各写一份。
+ *
+ * **不能**改成纯 CSS 的容器查询：WebKitGTK 下 `container-type: size` 的高度解析为 0，
+ * 卡片 flex-basis 归零、整层只剩标题（2026-10-23 实测，recentsWiring 锁同条）。
+ */
+function measureBand(): void {
+  const el = bandEl.value
+  if (!el) return
+  const cs = getComputedStyle(el)
+  band.value = {
+    width: el.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight),
+    height: el.clientHeight - px(cs.paddingTop) - px(cs.paddingBottom),
+    gap: px(cs.columnGap) || px(cs.rowGap),
+  }
+}
+
+/** 老 WebView 没有 ResizeObserver 时靠 window resize 兜底 */
+let bandObserver: ResizeObserver | null = null
+
+function observeBand(): void {
+  unobserveBand()
+  const el = bandEl.value
+  if (!el || typeof ResizeObserver === 'undefined') return
+  bandObserver = new ResizeObserver(() => measureBand())
+  bandObserver.observe(el)
+}
+
+function unobserveBand(): void {
+  bandObserver?.disconnect()
+  bandObserver = null
+}
 
 /**
  * 系统页卡缩略区品牌渐变底：tone 固定 system 的语义色（与 tone-system 类同源）。
@@ -172,11 +277,32 @@ function thumbStyle(): Record<string, string> {
   }
 }
 
-// 打开即把焦点收进全屏层：否则 Tab 还会走背后的工具栏 / 应用内容（全屏层是模态的）
-watch(open, async (isOpen) => {
-  if (!isOpen) return
-  await nextTick()
+/**
+ * 打开即量卡片带并跟踪尺寸变化，关闭即断开；顺便把焦点收进全屏层
+ * （否则 Tab 还会走背后的工具栏 / 应用内容——全屏层是模态的）。
+ */
+function syncBandAndFocus(): void {
+  if (!open.value) {
+    unobserveBand()
+    return
+  }
+  measureBand()
+  observeBand()
   rootEl.value?.focus()
+}
+
+// 开合时同步：`flush: 'post'` 保证 `v-if` 插入的元素在回调里已经存在（不用手工 nextTick）
+watch(open, syncBandAndFocus, { flush: 'post' })
+
+onMounted(() => {
+  window.addEventListener('resize', measureBand)
+  // 覆盖「挂载时全屏层已经打开」的形态（immediate 观感上拿不到 ref，交给挂载钩子）
+  syncBandAndFocus()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', measureBand)
+  unobserveBand()
 })
 
 // ---- 卡片 key 解析（面 key = 'app:<pluginId>' / 'sys:<pageId>'） ----
@@ -323,26 +449,39 @@ function close(): void {
   color: var(--text-primary);
 }
 
-/* 卡片带：自适应多行（与移动端 shell-recents-grid 同一条公式）。
-   卡宽由卡片自身按可用宽度三等分（上限 420px，见 .ts-card），窗口变窄时三张卡
-   一起等比缩小——而不是旧实现那样固定 420px 轨道 + overflow-x:hidden，把最右
-   一张连同关闭键裁在可视区外。1–2 张卡由 justify-content:center 整组居中
-   （固定三轨网格会把单张卡挤在左三分之一）。卡片过多 / 过高 → 纵向滚动。
+/* 卡片带：卡片数决定卡片尺寸（与移动端 recents 同一条产品口径）。
+   卡宽由卡片自身注入（`--ts-card-w`，见 composables/recentsLayout.ts）：1 张 =
+   带内最大 3:4 卡、居中；越多越小，最小缩到「3 列 × 2 行」的格子；第 7 张起
+   不再缩小，改为整带纵向滚动。
+   网格拆成 6 个半列轨道、每张卡跨 2 轨：(卡宽 - 间距) / 2 让「跨 2 轨 + 轨间
+   gap」恰好等于一张卡宽，6 轨总宽 = 3 张卡 + 2 个间距。半列的唯一目的是末行
+   不满 3 张时能精确居中（2 张各让半卡、1 张落在正中，见 recentsCardPlacement）。
    注意：这里**不能**加 container-type:size 去按 cqh 收敛卡片高度——WebKitGTK
    下容器查询高度解析为 0，卡片会塌成不可见（2026-10-23 实测）。 */
 .ts-cards {
+  --ts-gap: 16px;
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(
+    var(--ts-tracks, 6),
+    calc((var(--ts-card-w, calc((100% - var(--ts-gap) * 2) / 3)) - var(--ts-gap)) / 2)
+  );
   justify-content: center;
   align-items: center;
   align-content: center;
-  /* 卡片超高需要滚动时：safe 变体保证第一行不被居中裁掉（不支持的浏览器回落上一行） */
-  align-content: safe center;
+  /* 行高 = 卡高（由 --ts-card-h 显式给出）：交给 auto 时，Chromium 会在内容超过
+     带高的情况下把隐式行压扁去填满容器，卡片溢出到带顶之外、首行不可见。
+     2 行放得下时居中，超过 2 行（is-scrolling）必须置顶，否则首行滚不到。 */
+  grid-auto-rows: var(--ts-card-h, auto);
+  /* 必须显式 width:100%：.ts-inner 是列向 flex，而 margin:0 auto 会取消 stretch
+     （cross-axis auto margin 优先于 align-self:stretch）→ 不带 width 时卡片带会缩成
+     内容宽，卡宽再按带宽解算就成了循环依赖：单卡时带只有一张卡宽，卡越少越小。
+     2026-10-24 真浏览器实测（chrome-headless）：去掉这行，单卡带 = 137px。 */
+  width: 100%;
   max-width: 1320px;
   margin: 0 auto;
-  gap: 16px;
+  gap: var(--ts-gap);
   overflow-y: auto;
   overflow-x: hidden;
   padding: 4px 2px 12px;
@@ -352,18 +491,23 @@ function close(): void {
 .ts-cards.is-empty {
   align-content: center;
 }
+/* 超过 2 行：改成从头排（可滚动），首行不能被居中裁到带顶之外 */
+.ts-cards.is-scrolling {
+  align-content: start;
+}
 
-/* 卡片：竖版 3/4（缩略区 flex 撑满 + 顶部信息条），尺寸随卡片带自适应。
-   宽度 = 可用宽度三等分（34px = 两个 16px 间隙 + 2px 取整余量），上限 420px；
-   高度由 3/4 比例派生（窗口变窄时整卡等比缩小，不再固定 560px 高）。
-   box-sizing 必须 border-box：flex-basis 要含 1px 描边，否则三张卡各多 2px
-   会把第三张挤到下一行。 */
+/* 卡片：竖版 3/4（缩略区 flex 撑满 + 顶部信息条），尺寸随卡片数自适应。
+   宽度 = 跨 2 个半列轨道（轨道宽由 `--ts-card-w` 注入，见 recentsLayout）：
+   少卡大、多卡小，最小到 2 行 3 列的格，第 7 张起整带滚动；兜底（首帧测量前 /
+   无 ResizeObserver）是三等分，保证未测量时也不会溢出。
+   末行不满 3 张时 `cardStyle` 注入起始轨把它整组居中；其余卡片自动排布。
+   box-sizing 必须 border-box：卡宽含 1px 描边，否则轨宽按内容算会多 2px。
+   aspect-ratio 与 RECENTS_CARD_ASPECT 同源（改一处必须改另一处）。 */
 .ts-card {
   position: relative;
   box-sizing: border-box;
   min-width: 0;
-  flex: 0 0 calc((100% - 34px) / 3);
-  max-width: 420px;
+  grid-column: span 2;
   aspect-ratio: 3 / 4;
   display: flex;
   flex-direction: column;
@@ -496,8 +640,8 @@ function close(): void {
 }
 
 .ts-empty {
-  /* 空态独占一行（卡片带是 flex，不再有 grid 跨列） */
-  flex: 0 0 100%;
+  /* 空态独占一整行（网格 6 轨全跨） */
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   align-items: center;

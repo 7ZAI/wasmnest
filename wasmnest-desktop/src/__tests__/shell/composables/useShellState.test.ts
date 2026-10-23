@@ -20,7 +20,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 vi.mock('@/shell/composables/useShellApps', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/shell/composables/useShellApps')>()
   const st = {
-    plugins: { value: [] as Array<{ id: string; name: string; route?: string; state?: string; permissions?: string[] }> },
+    plugins: { value: [] as Array<{ id: string; name: string; route?: string; state?: string; permissions?: string[]; kind?: string }> },
     loading: { value: false },
     listReady: { value: false },
     busyId: { value: null as string | null },
@@ -100,9 +100,9 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
     clearAppRoutes()
   })
 
-  /** 种子：运行中应用（带挂载路由） */
-  function seedApp(id: string, name = id, route?: string) {
-    apps.plugins.value = [{ id, name, route, state: 'running' }]
+  /** 种子：运行中应用（带挂载路由）；kind = 装配角色（manifest），服务型应用传 L1/L2 */
+  function seedApp(id: string, name = id, route?: string, kind?: string) {
+    apps.plugins.value = [{ id, name, route, state: 'running', kind }]
     apps.displayStates.value = { [id]: 'running' }
   }
 
@@ -175,6 +175,52 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       expect(s.cards.value).toEqual([])
       expect(router.push).not.toHaveBeenCalled()
       expect(apps.activate).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('服务型应用不进多任务（keepalive spec §3.3）', () => {
+    const MONITOR_ID = 'com.wasmnest.monitor'
+
+    it('openApp：服务型应用（L1/L2）激活成功后进全屏面但不产卡', async () => {
+      const s = useShellState()
+      seedApp(MONITOR_ID, 'Monitor', '/monitor', 'internal-business')
+      await s.openApp(MONITOR_ID)
+      expect(apps.activate).toHaveBeenCalledWith(MONITOR_ID)
+      expect(s.screen.value, '服务面也是全屏应用面').toBe('card')
+      expect(s.activeCard.value).toBe(`app:${MONITOR_ID}`)
+      expect(s.cards.value, '不产卡：切换器与「全部关闭」只消费 cards').toEqual([])
+      expect(router.push).toHaveBeenCalledWith('/monitor')
+    })
+
+    it('syncFromRoute：直达服务路由（含 openApp 路由回环）不补卡', () => {
+      const s = useShellState()
+      seedApp(MONITOR_ID, 'Monitor', '/monitor', 'internal-business')
+      s.syncFromRoute('/monitor')
+      expect(s.screen.value).toBe('card')
+      expect(s.activeCard.value).toBe(`app:${MONITOR_ID}`)
+      expect(s.cards.value).toEqual([])
+    })
+
+    it('业务应用同路径仍产卡（守卫不外溢）', async () => {
+      const s = useShellState()
+      seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
+      s.syncFromRoute('/sessions')
+      expect(s.cards.value).toEqual([`app:${TERMINAL_PLUGIN_ID}`])
+    })
+
+    it('「全部关闭」只触达有卡应用，不误杀运行中的服务型应用', async () => {
+      const s = useShellState()
+      seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
+      await s.openApp(TERMINAL_PLUGIN_ID)
+      // 服务型应用运行中但无卡（openApp 不产卡，见上）
+      apps.plugins.value = [
+        ...apps.plugins.value,
+        { id: MONITOR_ID, name: 'Monitor', route: '/monitor', state: 'running', kind: 'internal-business' },
+      ]
+      await s.stopAllCards()
+      expect(apps.deactivate, '服务型应用无卡，不被全部关闭触达').toHaveBeenCalledTimes(1)
+      expect(apps.deactivate).toHaveBeenCalledWith(TERMINAL_PLUGIN_ID)
+      expect(apps.deactivate).not.toHaveBeenCalledWith(MONITOR_ID)
     })
   })
 

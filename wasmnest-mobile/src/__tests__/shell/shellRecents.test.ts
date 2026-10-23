@@ -28,6 +28,7 @@
  * | C-S21 | 页头计数 | 标题后显示卡片数（与桌面同一口径），空态不显示 | 有卡显示 N 个，无卡不显示 |
  * | C-S22 | 关闭最后一张卡 | 关闭动作把卡片清空 → 自动回主屏 | goHome；非最后一张不回 |
  * | C-S23 | 进入空多任务 | cards 为 0 本身不是返回信号 | 挂载后不回主屏 |
+ * | C-S24 | 服务型应用过滤 | 服务型（L1/L2）不进多任务：运行中与最近使用两个来源都过滤 | 服务应用无卡片；业务应用不受影响 |
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -66,7 +67,7 @@ vi.mock('@/shell/composables/useShellNavigation', () => ({
 
 import ShellSwitcherScreen from '@/shell/components/screens/ShellSwitcherScreen.vue'
 
-function app(id: string, state: ShellApp['state'], name = id): ShellApp {
+function app(id: string, state: ShellApp['state'], name = id, kind?: string): ShellApp {
   return {
     id,
     name,
@@ -74,6 +75,7 @@ function app(id: string, state: ShellApp['state'], name = id): ShellApp {
     state,
     permissions: [{ key: 'fs:read', granted: true }],
     contributions: {},
+    ...(kind ? { kind } : {}),
   }
 }
 
@@ -200,6 +202,28 @@ describe('C-S1 卡片集合与顺序', () => {
     // 与桌面一致：运行中不追加状态行（后台卡默认就在跑，重复一遍是噪声）
     expect(wrapper.find('.shell-recents-status').exists()).toBe(false)
     expect(wrapper.find('button[aria-label="shell.switcher.enterApp"]').exists()).toBe(true)
+  })
+})
+
+describe('C-S24 服务型应用不进多任务（keepalive spec §3.3）', () => {
+  it('should_filterRunningServiceApp_when_serviceKind', () => {
+    pushRecent('svc')
+    pushRecent('a')
+    apps.value = [app('svc', 'running', 'Monitor', 'internal-business'), app('a', 'running', 'AppA')]
+
+    const wrapper = mount(ShellSwitcherScreen)
+
+    expect(cardIds(wrapper), '运行中的服务应用不产卡，业务应用不受影响').toEqual(['a'])
+  })
+
+  it('should_filterDormantServiceApp_when_stoppedButRecent', () => {
+    pushRecent('svc')
+    apps.value = [app('svc', 'stopped', 'Monitor', 'basic-service')]
+
+    const wrapper = mount(ShellSwitcherScreen)
+
+    expect(cardIds(wrapper), '最近使用来源同样过滤：服务关闭唯一入口 = 详情页停用').toEqual([])
+    expect(wrapper.text()).toContain('shell.switcher.empty')
   })
 })
 

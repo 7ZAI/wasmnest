@@ -35,8 +35,9 @@
  * AppPreviewTile — 多任务卡片里的应用预览容器（规格：CONTRACT.md §3）
  *
  * 预览面由应用**自绘**：bundle 可选导出 `mountPreview(root, env)`，在自己的 Vue
- * 实例里画一张只读、点时刻的缩略视图（不是截图 / 不是 DOM 克隆——离开应用面即
- * 卸载实例，后台没有可抓取的 DOM，见 .scratch/2026-10-20-app-preview-contract）。
+ * 实例里画一张只读、点时刻的缩略视图（不是截图 / 不是 DOM 克隆——表面保活后后台
+ * DOM 仍在，但预览不得抓取主实例 DOM：旁路实例耦合主实例状态会互相踩，
+ * 见 .scratch/2026-10-20-app-preview-contract）。
  * 本组件只负责：给容器、构建收窄的只读环境、装载、3s 超时、卸载、回退品牌卡。
  *
  * 状态机（`data-preview-state`，测试依赖）：

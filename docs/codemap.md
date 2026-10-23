@@ -74,9 +74,9 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | --- | --- |
 | `main.ts` | 宿主入口（壳装配 / 路由 / i18n / 权限配置） |
 | `router/index.ts` | 路由真源之一：`/` 主屏、`/sys/:pageId` 系统页、各 app 路由（指向 `AppMountSlot`）、未匹配显性 not-found |
-| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`AppPreviewTile.vue` = 多任务卡的应用自绘预览面装载 / 3s 超时 / 回退品牌卡）；`sys/`（系统页）；`settings/`；`auth/`；`extensions/`（壳扩展点注册表：状态栏项 / 设置项 / 主题皮肤，只注册排序、不解释业务语义） |
+| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`appSurfaceRegistry.ts` = 表面实例记账（attach / detach / dispose，表面保活），`AppPreviewTile.vue` = 多任务卡的应用自绘预览面装载 / 3s 超时 / 回退品牌卡）；`sys/`（系统页）；`settings/`；`auth/`；`extensions/`（壳扩展点注册表：状态栏项 / 设置项 / 主题皮肤，只注册排序、不解释业务语义） |
 | `shell/composables/useShellApps.ts` | **应用路由真源**：`SURFACE_ROUTES`（新增桌面应用必须同步，见 §6） |
-| `shell/types.ts` · `state.ts` / `useShellState.ts` | 壳状态面（宿主零业务状态：装载即建、卸载即销毁） |
+| `shell/types.ts` · `state.ts` / `useShellState.ts` | 壳状态面（宿主零业务状态：首次打开创建、切走只藏、停用 / 卸载才销毁） |
 | `components/` · `composables/` · `stores/` | 宿主公共组件 / 逻辑 / 存储 |
 | `i18n/host-{zh-CN,en}.ts` | 宿主消息集（**与 bedcode 应用副本逐字一致**，`i18nDriftLock` 钉住） |
 | `utils/` | `frontendLogger.ts`（落盘差异见头注释）、`invoke.ts`（带超时 IPC，错误信封）、`appCommands.ts`、`userError.ts` 等 |
@@ -206,9 +206,10 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `i18nDriftLock.test.ts` | 同上 | 宿主 `src/i18n/host-{zh-CN,en}.ts` ↔ `apps/bedcode/desktop/src/i18n/host-{zh-CN,en}.ts` **逐字一致** |
 | `tailwindContentCoverage.test.ts` | 同上 | 宿主 Tailwind content 不得残留 app 路径 |
 | `appBundlePathLock.test.ts` · `appChromeLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 挂载包路径单一来源（`resources/plugins/desktop` 层级）；壳标题栏常驻、应用不得自绘标题栏/窗口控制/拖拽区 |
+| `appSurfaceKeepAlive.test.ts` · `useAppMountKeepAlive.test.ts` | `wasmnest-desktop/src/__tests__/shell/mount/` | **表面保活**：挂载槽常驻（`v-show`，不得回 `v-if` 分支）、销毁点唯一在 `ShellHost` 运行态 disposer、挂载槽切走只 `detach`、界面租约跟实例生命周期（首次创建 acquire / dispose release）、`setActive?` 是可选契约；装载层行为（复用不重建、detach 不销毁、并发首次 mount 合并为一次） |
 | `shellExtensions.test.ts` · `shellStatusBar.test.ts` · `shellExtensionWiring.test.ts` · `settings/settingsOrderLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 壳扩展点注册语义（排序 / 覆盖 / Disposable / 皮肤 token 校验）、状态栏分区与动作失败隔离、ShellHost 装配接线、设置页顺序（**关于固定最后**） |
 | `pluginWatchCopy.test.ts` | `wasmnest-desktop/src/__tests__/scripts/` | 插件 watch 复制闭环 |
-| 移动壳系列锁：`shellConstraintLocks`（含 **L7 壳内自足**）、`retiredHostUIRetirementLocks`、`shellRegistry` / `shellPermissions` / `shellMechanisms` / `shellHostEvents` / `shellAppSurface` / `shellAppRunScreen` / `shellHomeScreen` 等 20+ | `wasmnest-mobile/src/__tests__/shell/` | 壳内自足（不依赖旧界面目录）、退役路由 / 符号不回接、壳迁移面不得缩水、注册表 / 权限 / 机制行为 |
+| 移动壳系列锁：`shellConstraintLocks`（含 **L7 壳内自足**）、`retiredHostUIRetirementLocks`、`shellRegistry` / `shellPermissions` / `shellMechanisms` / `shellHostEvents` / `shellAppSurface` / `shellAppRunScreen` / `appSurfaceKeepAlive` / `useAppSurfaces` / `shellHomeScreen` 等 20+ | `wasmnest-mobile/src/__tests__/shell/` | 壳内自足（不依赖旧界面目录）、退役路由 / 符号不回接、壳迁移面不得缩水、注册表 / 权限 / 机制行为；**运行面保活**（运行屏只提供插槽、池按「打开过 ∩ 运行中」过滤、停用即出池、Teleport 前后台切换不重建） |
 | `crate-structure-lock.test.mjs` | 根 `scripts/`（`pnpm run test:run`） | 契约 crate 常量保持 node 正则可解析的字面量形状；能力仓（`../wasmnest-lib`）无逃出 crate 目录的 `include!` / `include_str!` / `bindgen!` 路径；双端 `compose.json` 声明的 WIT 路径存在 |
 | Rust 测试锁：`capabilities_lock.rs`（CSP）、`capability_crates_no_product_ids.rs`（零业务类型）、`capability_crates_unit_tests_only.rs`、`hot_path_logging_lock.rs`、`domain_contract_structure_locks.rs`、`empty_dir_lock.rs`、`lifecycle_command_registration_lock`、`command_registration_completeness_lock`（移动） | 双端 `src-tauri/tests/` | 见各自头注释（含「迁移锁后跑红一次」纪律，docs/testing.md §4） |
 

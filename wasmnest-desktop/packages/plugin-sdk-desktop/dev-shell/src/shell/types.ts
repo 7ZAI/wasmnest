@@ -78,6 +78,12 @@ export interface AppMountHandle {
   unmount(): Promise<void>
   /** 宿主路由变化通知（应用内存路由消化；未实现 = 不支持宿主内路由切换） */
   setRoute?(route: string): void
+  /**
+   * 前台 / 后台切换通知（可选）：`false` = 界面已切到后台，DOM 与实例保留但
+   * 脱离文档不再渲染；`true` = 回到前台（同一实例，不会重新 mount）。
+   * 表面保活（2026-10-23）契约，旧应用不实现零影响。
+   */
+  setActive?(active: boolean): void
   /** 宿主面事实变更通知（语言 / 主题） */
   setLocale?(locale: string): void
   setTheme?(theme: string): void

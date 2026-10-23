@@ -1,10 +1,12 @@
 /**
  * 移动壳「应用详情」系统服务守卫（manifest kind）
  *
- * 需求（spec `.scratch/2026-10-22-monitor-system-service` §3.2 / §3.3）：
+ * 需求（spec `.scratch/2026-10-22-monitor-system-service` §3.2 / §3.3 + 2026-10-23 裁决）：
  * - 系统服务（L1/L2）不渲染卸载入口，即便数据源声明支持卸载；
  * - 系统服务显示自启开关（默认开由宿主 `isAutostart` 给出，UI 不伪造）；
- * - 切换自启写偏好：成功后更新本地态，失败不改（不制造「看起来开了」的假成功）。
+ * - 切换自启写偏好：成功后更新本地态，失败不改（不制造「看起来开了」的假成功）；
+ * - 系统服务的权限随包固定：权限清单只读呈现，**不渲染任何逐项开关**；
+ * - 停止动作按 kind 分词语：服务说「停止服务」（`shell.detail.stopService`）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -66,7 +68,8 @@ function serviceApp(kind = 'internal-business'): ShellApp {
     version: '0.1.0',
     state: 'disabled',
     kind,
-    permissions: [],
+    // 带一条真实声明：服务仍展示权限清单，但不得渲染任何开关
+    permissions: [{ key: 'metrics:read', granted: true }],
     contributions: {},
   }
 }
@@ -101,6 +104,11 @@ function autostartCheckbox(wrapper: Awaited<ReturnType<typeof mountDetail>>) {
   return group ? wrapper.findAll('input[type="checkbox"]').find((el) => group.contains(el.element)) ?? null : null
 }
 
+/** 详情页全部开关（Toggle 一律渲染为 checkbox：自启 + 权限逐项） */
+function allToggles(wrapper: Awaited<ReturnType<typeof mountDetail>>) {
+  return wrapper.findAll('input[type="checkbox"]')
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.params = ref({ appId: 'com.wasmnest.monitor' })
@@ -116,7 +124,7 @@ describe('系统服务详情：不可卸载 + 自启可关', () => {
   it('服务不渲染卸载入口（即便数据源声明可卸载）', async () => {
     const wrapper = await mountDetail()
     expect(wrapper.text()).not.toContain('shell.detail.uninstall')
-    expect(wrapper.text()).toContain('shell.detail.disable')
+    expect(wrapper.text()).toContain('shell.detail.stopService')
   })
 
   it('业务应用仍渲染卸载入口', async () => {
@@ -163,5 +171,33 @@ describe('系统服务详情：不可卸载 + 自启可关', () => {
 
     const wrapper = await mountDetail()
     expect(wrapper.text()).not.toContain('shell.apps.autostart')
+  })
+
+  it('服务详情不渲染任何权限开关：清单只读 + 说明权限随包固定', async () => {
+    const wrapper = await mountDetail()
+    // 只剩自启一个开关；声明的 metrics:read 仍以只读行呈现（信息不隐藏）
+    expect(allToggles(wrapper)).toHaveLength(1)
+    expect(wrapper.text()).toContain('metrics:read')
+    expect(wrapper.text()).toContain('shell.detail.permissionServiceFixed')
+    expect(wrapper.text()).not.toContain('shell.detail.permissionUnsupported')
+  })
+
+  it('业务应用仍按权限逐项渲染开关（服务守卫不外溢）', async () => {
+    mocks.params.value = { appId: 'com.wasmnest.file-transfer' }
+    mocks.app = { ...businessApp(), permissions: [{ key: 'fs:write', granted: true }] }
+
+    const wrapper = await mountDetail()
+    expect(allToggles(wrapper)).toHaveLength(2)
+    expect(wrapper.text()).toContain('shell.detail.permissionsNote')
+    expect(wrapper.text()).not.toContain('shell.detail.permissionServiceFixed')
+  })
+
+  it('业务应用的停止按钮仍为「停用应用」', async () => {
+    mocks.params.value = { appId: 'com.wasmnest.file-transfer' }
+    mocks.app = businessApp()
+
+    const wrapper = await mountDetail()
+    expect(wrapper.text()).toContain('shell.detail.disable')
+    expect(wrapper.text()).not.toContain('shell.detail.stopService')
   })
 })

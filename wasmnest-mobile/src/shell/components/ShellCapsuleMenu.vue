@@ -53,6 +53,7 @@ import { useI18n } from 'vue-i18n'
 import { useShellApps } from '../composables/useShellApps'
 import { useShellNavigation } from '../composables/useShellNavigation'
 import { useShellOverlays } from '../composables/useShellOverlays'
+import { isServiceKind } from '../utils'
 import ShellGroupCard from './ShellGroupCard.vue'
 import ShellSheet from './ShellSheet.vue'
 
@@ -91,7 +92,10 @@ const items = computed<CapsuleEntry[]>(() => {
     },
     {
       id: 'platform:disable',
-      label: t('shell.capsule.disable'),
+      // 停止动作按装配角色分词语：系统服务说「停止服务」（2026-10-23 用户裁决）
+      label: isServiceKind(app.value?.kind)
+        ? t('shell.capsule.disableService')
+        : t('shell.capsule.disable'),
       icon: 'M12 4V2m0 20v-2M4 12H2m20 0h-2 M12 7a5 5 0 100 10 5 5 0 000-10z M15.5 8.5L20 4M8.5 15.5L4 20',
       order: 30,
       danger: true,

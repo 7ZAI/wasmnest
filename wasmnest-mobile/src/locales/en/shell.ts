@@ -74,6 +74,8 @@ export default {
       state: 'Runtime state',
       permissions: 'Permissions',
       permissionsNote: '{granted} granted · {locked} by default',
+      permissionServiceFixed:
+        'System service permissions are fixed by the bundled manifest and cannot be changed.',
       permissionLocked: 'Granted by default · cannot be turned off',
       permissionUnsupported: 'Per-permission toggles are not supported by the current backend',
       permissionToggleFailed: 'Permission change not applied: {reason}',
@@ -83,6 +85,7 @@ export default {
       grantsNote: 'Last 7 days',
       grantsEmpty: 'No grant records',
       disable: 'Disable app',
+      stopService: 'Stop service',
       uninstall: 'Uninstall and delete data',
       version: 'v{version}',
     },
@@ -213,6 +216,7 @@ export default {
       permissions: 'Permission settings',
       about: 'About this app',
       disable: 'Disable this app',
+      disableService: 'Stop service',
     },
     permissionPrompt: {
       title: '{name} requests permissions',

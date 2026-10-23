@@ -28,8 +28,11 @@
          （bareWindow：该路由由宿主另开窗口装载，窗口 chrome 由应用自持）。 -->
     <template v-else>
       <ShellToolbar v-if="!isBareWindow" />
-      <AppMountSlot :app-id="currentAppId" :route="route.fullPath" />
     </template>
+
+    <!-- 常驻应用挂载槽（2026-10-23 表面保活）：切走只 `v-show` 隐藏（实例 / DOM 保留），
+         不再随路由分支销毁；停用 / 卸载由下方运行态 disposer 调 disposeAppBundle。 -->
+    <AppMountSlot v-show="isAppRoute" :app-id="currentAppId" :route="route.fullPath" />
 
     <!-- ============ 平台状态栏（壳常驻 chrome；独立窗口除外） ============
          只承载宿主机制事实与扩展注册项，位于路由内容之后、覆层之下。 -->
@@ -107,6 +110,7 @@ import { Toaster, type ToasterProps } from 'vue-sonner'
 import SplashLoading from '@/components/SplashLoading.vue'
 import { SPLASH_DRAW_TOTAL_MS, SPLASH_HOLD_AFTER_DRAW_MS } from '@/components/splashTiming'
 import AppMountSlot from '@/shell/mount/AppMountSlot.vue'
+import { disposeAppBundle, listAppSurfaces } from '@/shell/mount/useAppMount'
 import { useTheme } from '@/composables/useTheme'
 import { useFontSize } from '@/composables/useFontSize'
 import { usePlatform } from '@/composables/usePlatform'
@@ -211,6 +215,27 @@ const isBareWindow = computed(() => route.meta.bareWindow === true)
 
 /** 应用面标题（当前路由属主的显示名；缺省回落主屏名） */
 const currentAppId = computed(() => pluginIdOfAppRoute(path.value) ?? '')
+/** 是否处在应用面（常驻挂载槽的显隐判据） */
+const isAppRoute = computed(() => currentAppId.value !== '')
+
+/**
+ * 表面实例回收：应用离开运行态（停用 / 卸载 / 错误终态）→ dispose。
+ *
+ * 保活实例跟着**应用运行态**走，而不是路由：切走只 detach（AppMountSlot），
+ * 真正销毁只在这里——停用命令（应用管理 / 全部关闭 / 卸载）更新清单后触发。
+ */
+const RUNNING_DISPLAY_STATES = new Set(['running', 'degraded'])
+watch(
+  () => appsStore.plugins.value.map((p) => `${p.id}:${p.state}`).join('|'),
+  () => {
+    const running = new Set(
+      appsStore.plugins.value.filter((p) => RUNNING_DISPLAY_STATES.has(p.state)).map((p) => p.id),
+    )
+    for (const appId of listAppSurfaces()) {
+      if (!running.has(appId)) void disposeAppBundle(appId)
+    }
+  },
+)
 
 /** 壳覆层是否开着（Esc 先收覆层的判据；应用态下也生效——覆层属壳 chrome） */
 const hasOverlay = computed(

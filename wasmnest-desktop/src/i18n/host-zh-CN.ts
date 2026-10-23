@@ -275,6 +275,8 @@ export default {
       kvType: '类型',
       approveStart: '批准并启动',
       stop: '停用',
+      // 停止动作按装配角色分词语：系统服务（L1/L2）说「停止服务」（2026-10-23 用户裁决）
+      stopService: '停止服务',
       open: '打开',
       startOpen: '启动并打开',
       uninstall: '卸载',

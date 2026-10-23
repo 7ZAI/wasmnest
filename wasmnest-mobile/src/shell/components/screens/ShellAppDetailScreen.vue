@@ -105,7 +105,9 @@
         </div>
       </template>
 
-      <!-- ==================== 权限 ==================== -->
+      <!-- ==================== 权限 ====================
+           系统服务（L1/L2）的权限随包固定、不经用户授权：保留只读清单，
+           但不渲染任何逐项开关（2026-10-23 用户裁决；同一裁决已把服务移出权限总览）。 -->
       <ShellSection :title="t('shell.detail.permissions')" :note="permissionsNote" />
       <div class="px-4 pb-1">
         <ShellGroupCard v-if="permissionGroups.length > 0">
@@ -138,8 +140,9 @@
               </div>
               <!-- 锁定项：不给开关，只标徽标——隐藏会让用户误以为应用没有该能力 -->
               <ShellChip v-if="grant.locked" :label="t('shell.detail.permissionLocked')" tone="neutral" />
+              <!-- 系统服务不给开关（分区 note 已说明权限随包固定）；业务应用保持逐项开关 -->
               <Toggle
-                v-else
+                v-else-if="!isService"
                 :model-value="grant.granted"
                 :disabled="!permissionControlEnabled"
                 @update:model-value="(next: boolean) => handleToggle(grant.key, next)"
@@ -153,9 +156,10 @@
         >
           {{ t('mobile.plugin.noPermissions') }}
         </p>
-        <!-- 能力缺失要显性说明：把开关置灰却不解释，用户会以为是应用的问题 -->
+        <!-- 能力缺失要显性说明：把开关置灰却不解释，用户会以为是应用的问题。
+             系统服务的「无开关」由分区 note 解释，不走这条后端能力提示。 -->
         <p
-          v-if="!permissionControlEnabled"
+          v-if="!permissionControlEnabled && !isService"
           class="mt-2 px-1 shell-type-caption text-[var(--mobile-text-secondary)]"
         >
           {{ t('shell.detail.permissionUnsupported') }}
@@ -198,7 +202,8 @@
           class="w-full rounded-[10px] border border-[var(--mobile-border)] px-4 py-3 shell-type-label text-[var(--mobile-text-primary)] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)] min-h-[var(--mobile-touch-target-min)]"
           @click="handleStop"
         >
-          {{ t('shell.detail.disable') }}
+          <!-- 停止动作按装配角色分词语：系统服务说「停止服务」（2026-10-23 用户裁决） -->
+          {{ isService ? t('shell.detail.stopService') : t('shell.detail.disable') }}
         </button>
         <button
           v-if="canRemove"
@@ -300,7 +305,14 @@ const permissionGroups = computed(() =>
   groupPermissions(app.value?.permissions ?? [], 'shell.permission.group.other'),
 )
 
+/**
+ * 权限分区说明
+ *
+ * 系统服务没有逐项开关（权限随包固定），这里说明「为什么没有开关」，
+ * 而不是继续报授予计数——否则用户会去别处找本不存在的控制项。
+ */
 const permissionsNote = computed(() => {
+  if (isService.value) return t('shell.detail.permissionServiceFixed')
   const list = app.value?.permissions ?? []
   const granted = list.filter((p) => p.granted).length
   const locked = list.filter((p) => p.locked).length

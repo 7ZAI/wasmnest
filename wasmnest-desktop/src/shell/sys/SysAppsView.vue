@@ -76,7 +76,9 @@
             :disabled="busy(app.id)"
             @click="void state.stopApp(app.id)"
           >
-            <ShellIcon name="stop" :size="13" /> {{ t('shell.apps.stop') }}
+            <!-- 停止动作按装配角色分词语：系统服务（L1/L2）说「停止服务」（2026-10-23 用户裁决） -->
+            <ShellIcon name="stop" :size="13" />
+            {{ isServiceKind(app.kind) ? t('shell.apps.stopService') : t('shell.apps.stop') }}
           </button>
           <button
             v-else

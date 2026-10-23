@@ -9,7 +9,7 @@
       @contextmenu.prevent
     >
       <button
-        v-if="running"
+        v-if="running && !service"
         class="it"
         role="menuitem"
         @click="act(stopApp)"
@@ -17,7 +17,8 @@
         <ShellIcon name="stop" :size="13" />
         {{ t('shell.ctx.stop') }}
       </button>
-      <button v-else class="it" role="menuitem" @click="act(openApp)">
+      <!-- 启动只看运行态（服务未运行照样可开）；运行中的服务应用两个启停项都不渲染 -->
+      <button v-else-if="!running" class="it" role="menuitem" @click="act(openApp)">
         <ShellIcon name="play" :size="13" />
         {{ t('shell.ctx.startOpen') }}
       </button>
@@ -48,11 +49,15 @@
  * 2026-10-17 lifecycle-sync 改造后：停用 / 卸载语义**复活为真实动作**（D2）——
  * 停用 = deactivate 真停用 + 摘运行面；卸载 = 数据清理确认弹窗（仅用户安装）。
  * 运行中的应用不可卸载（后端门禁同口径，前端先行置灰避免无反馈点击）。
+ *
+ * 服务型应用（L1/L2，`isServiceKind`）不渲染「停用」（2026-10-23 裁决，
+ * keepalive spec §3.3）：关闭唯一入口 = 应用管理页；「启动」只看运行态不受限，
+ * 运行中的服务应用两个启停项都不渲染。
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useShellState } from '../composables/useShellState'
-import { useShellApps } from '../composables/useShellApps'
+import { isServiceKind, useShellApps } from '../composables/useShellApps'
 import ShellIcon from './ShellIcon.vue'
 
 const { t } = useI18n()
@@ -64,6 +69,7 @@ const app = computed(() => (menu.value ? appsStore.appOf(menu.value.appId) : nul
 const running = computed(
   () => app.value?.state === 'running' || app.value?.state === 'degraded',
 )
+const service = computed(() => isServiceKind(app.value?.kind))
 const userInstalled = computed(() => app.value?.source === 'user-installed')
 /** 贴边约束（菜单不超出视口） */
 const left = computed(() => {
