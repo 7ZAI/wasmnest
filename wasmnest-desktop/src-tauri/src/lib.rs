@@ -657,7 +657,9 @@ pub fn run() {
             // 应用作用域服务注册表：传输面 + 对等网络节点。必须在 `PluginHost::new`
             // 之前完成注册与注入——角色驱动组件 / 应用 activate 可能请求 peer 节点
             // 服务（acquire），内核生命周期回收也需要同一份注册表。
-            // 传输面本身不在 boot 启动：端点注册只预登记，应用界面挂载时才 acquire。
+            // 传输面 boot 不无条件启动：端点注册只预登记；界面租约（普通应用）在
+            // 挂载时才 acquire，服务端型应用（manifest `backgroundTransport`）由内核
+            // 在各自启动成功后 acquire（含 `PluginHost::new` 内角色激活的 L1/L2）。
             let service_registry = Arc::new(wasmnest_server_base::service::ServiceRegistry::new());
             wasmnest_server_core::service::TransportService::register(&service_registry)
                 .expect("register net.transport service (duplicate key = assembly bug)");

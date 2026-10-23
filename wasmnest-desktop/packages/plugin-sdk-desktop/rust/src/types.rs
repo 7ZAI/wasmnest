@@ -144,6 +144,23 @@ pub struct PluginManifest {
     /// 不做「静默当常驻处理」——那会让作者以为 worker 已生效。
     #[serde(default, skip_serializing_if = "InstanceLifecycle::is_persistent")]
     pub lifecycle: InstanceLifecycle,
+    /// 运行期传输租约声明（manifest `backgroundTransport`，桌面服务端型应用）
+    ///
+    /// `true` = 应用**运行期间**（启动成功 → 停用 / Error）持有宿主传输面
+    /// （`net.transport`：WS + HTTP 同端口 + mDNS 广播）的应用作用域租约；
+    /// **界面挂载 / 卸载不再是其生死开关**。代价是整段运行期对外可达，故必须
+    /// 显式 opt-in，并在 `permissions` 声明 `ws:server` / `network:http` 至少
+    /// 一个——构建期（`bin/manifest-validate.js`）与宿主加载期
+    /// （`manager/validation.rs`）双侧校验，缺权限即拒。
+    ///
+    /// 缺省 `false` = 既有行为：界面打开才 acquire，关闭最后一个界面即停播。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub background_transport: bool,
+}
+
+/// `skip_serializing_if` 辅助：布尔 `false` 不写入序列化输出（与中性 manifest 同形）
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// 单插件 Store 资源上限覆盖请求（manifest `resourceOverrides`）

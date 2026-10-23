@@ -12,7 +12,10 @@
 //! 6. 释放最后引用 → 停服 + 注销广播 + 新连接被拒；
 //! 7. 再次 acquire → 可复用重新启动；
 //! 8. 插件路径：activate 注册端点**只预登记**（不启动）；界面打开 acquire →
-//!    服务启动；界面关闭 release → 服务停；deactivate 回收 holder。
+//!    服务启动；界面关闭 release → 服务停；deactivate 回收 holder；
+//! 9. 运行期租约（manifest `backgroundTransport: true`）：启动成功即持有传输面，
+//!    界面打开 / 关闭均为宿主侧 no-op（不再决定 8775 生死），停用由
+//!    `release_all_for` 回收。
 //!
 //! 串行化：本文件只含一个 `#[tokio::test]`（tests/ 下每文件独立进程，AppContext /
 //! server ports / WebSocketManager 等进程级单例天然隔离）。
@@ -41,6 +44,8 @@ use wasmnest_server_core::supervisor::ServerSupervisor;
 use wasmnest_server_websocket::WebSocketManager;
 
 const HTTP_PLUGIN_ID: &str = "com.wasmnest.http-test";
+/// 同一 wasm 产物的「运行期传输租约」变体（manifest `backgroundTransport: true`）
+const BG_HTTP_PLUGIN_ID: &str = "com.wasmnest.http-bg-test";
 const HTTP_PLUGIN_LIB: &str = "wasmnest_plugin_http_test";
 const HTTP_FIXTURE_MANIFEST: &str = include_str!("../../packages/plugin-sdk-fixtures/http.json");
 
@@ -50,10 +55,23 @@ fn pick_free_port() -> u16 {
 }
 
 /// 写入 http fixture 插件包（manifest 复用夹具真源；wasm 产物只读 keeper 输出）
-fn write_http_fixture_package(plugins_dir: &Path) {
-    let dir = plugins_dir.join(HTTP_PLUGIN_ID);
+///
+/// `background` = 生成「运行期持有传输租约」变体：同一 wasm、只改 id 与
+/// `backgroundTransport` 声明，覆盖「服务端属性跟应用启动走」的验收。
+fn write_http_fixture_package(plugins_dir: &Path, plugin_id: &str, background: bool) {
+    let dir = plugins_dir.join(plugin_id);
     std::fs::create_dir_all(&dir).expect("create fixture plugin dir");
-    std::fs::write(dir.join("plugin.json"), HTTP_FIXTURE_MANIFEST).expect("write fixture manifest");
+    let mut manifest: serde_json::Value =
+        serde_json::from_str(HTTP_FIXTURE_MANIFEST).expect("fixture manifest must be valid json");
+    manifest["id"] = serde_json::Value::String(plugin_id.to_string());
+    if background {
+        manifest["backgroundTransport"] = serde_json::Value::Bool(true);
+    }
+    std::fs::write(
+        dir.join("plugin.json"),
+        serde_json::to_string_pretty(&manifest).expect("serialize fixture manifest"),
+    )
+    .expect("write fixture manifest");
     std::fs::write(
         dir.join(format!("{HTTP_PLUGIN_LIB}.wasm")),
         sdk_fixture_artifact_bytes("http"),
@@ -105,7 +123,8 @@ async fn service_lease_lifecycle_flow() {
     let user_plugins_dir = tmp.path().join("user-plugins");
     std::fs::create_dir_all(&plugins_dir).expect("create plugins dir");
     std::fs::create_dir_all(&user_plugins_dir).expect("create user plugins dir");
-    write_http_fixture_package(&plugins_dir);
+    write_http_fixture_package(&plugins_dir, HTTP_PLUGIN_ID, false);
+    write_http_fixture_package(&plugins_dir, BG_HTTP_PLUGIN_ID, true);
 
     let db = Arc::new(std::sync::Mutex::new(
         Database::new(Path::new(":memory:")).expect("create in-memory db"),
@@ -262,6 +281,68 @@ async fn service_lease_lifecycle_flow() {
         .expect("deactivate http fixture");
     let snapshot = registry.snapshot().await;
     assert!(snapshot[0].holders.is_empty(), "停用后 holder 必须清空");
+
+    // ==================== 8. backgroundTransport：租约跟运行期，不跟界面 ====================
+    // 服务端型应用：启动成功即持有传输面；界面打开 / 关闭都不改变租约，
+    // 停用由内核 `release_all_for` 统一回收。
+    let lifecycle =
+        wasmnest_desktop_lib::plugin::lifecycle::PluginLifecycleManager::new(plugin_host.clone());
+    lifecycle
+        .activate_after_preauth(BG_HTTP_PLUGIN_ID)
+        .await
+        .expect("activate background-transport fixture");
+    let snapshot = registry.snapshot().await;
+    assert_eq!(
+        snapshot[0].holders,
+        vec![BG_HTTP_PLUGIN_ID.to_string()],
+        "backgroundTransport 应用启动成功后必须持有传输租约"
+    );
+    assert!(
+        supervisor.is_running().await,
+        "运行期租约必须拉起传输面（无需打开界面）"
+    );
+    assert!(
+        mdns_advertiser.read().await.is_advertising().await,
+        "运行期租约必须登记广播"
+    );
+
+    // 界面关闭：宿主命令层对运行期租约应用 no-op（界面不再决定 8775 生死）
+    wasmnest_desktop_lib::commands::plugin_surface_close(BG_HTTP_PLUGIN_ID.to_string())
+        .await
+        .expect("surface close on background app must be a no-op success");
+    let snapshot = registry.snapshot().await;
+    assert_eq!(
+        snapshot[0].holders,
+        vec![BG_HTTP_PLUGIN_ID.to_string()],
+        "界面关闭不得释放运行期租约"
+    );
+    assert!(
+        supervisor.is_running().await,
+        "界面关闭后传输面必须继续运行"
+    );
+
+    // 界面打开同样不重复记账（幂等 no-op）
+    wasmnest_desktop_lib::commands::plugin_surface_open(BG_HTTP_PLUGIN_ID.to_string())
+        .await
+        .expect("surface open on background app must be a no-op success");
+    assert_eq!(
+        registry.snapshot().await[0].holders,
+        vec![BG_HTTP_PLUGIN_ID.to_string()],
+        "界面打开不得产生第二个 holder"
+    );
+
+    // 停用：release_all_for 兜住回收（停服 + 停播）
+    lifecycle
+        .deactivate(BG_HTTP_PLUGIN_ID)
+        .await
+        .expect("deactivate background fixture");
+    let snapshot = registry.snapshot().await;
+    assert!(snapshot[0].holders.is_empty(), "停用后 holder 必须清空");
+    assert!(
+        !supervisor.is_running().await,
+        "停用后传输面必须关停（release_all_for 兜底）"
+    );
+    assert!(!mdns_advertiser.read().await.is_advertising().await);
 
     // 兜底：即使断言中途失败，也不把进程级服务留给后续用例
     let _ = registry.shutdown_all().await;

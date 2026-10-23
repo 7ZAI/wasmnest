@@ -62,6 +62,7 @@
 - `contributes` / `permissions` 可按源码自动填充（本端 SDK `bin/manifest-gen.js` 等）；**自动填充是便利不是真源**，声明仍须与实际调用一致。
 - `wasmHash` 由桌面构建链注入**产物目录**的 `plugin.json`（按 `<rustLibrary>.wasm` 现算 SHA-256）；**源清单不写该键**。
 - **移动端清单扩展**：`preauthDirs`（预授权目录，支持 `${downloads}` 等占位）/ `preauthUrls`（出站 URL 白名单 glob），宿主在 preauthorize 阶段收齐后一次弹窗；**桌面上这两个键无效**。
+- **桌面端清单扩展**：`backgroundTransport`（布尔，缺省 false）——服务端型应用在**运行期**（启动成功 → 停用 / Error）持有 `net.transport`（WS + HTTP + mDNS），界面挂载 / 卸载不决定其生死；代价是整段运行期对外可达，故必须同时声明 `ws:server` / `network:http` 至少一个（构建期 `manifest-validate.js` + 加载期 `wasm-core/manager/validation.rs` 双侧拒绝）。只在界面打开时供服的应用不要声明。
 
 ### 5.2 SDK（端内包，随端走）
 

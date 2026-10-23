@@ -198,6 +198,29 @@ export function validateManifest(dir) {
     }
   }
 
+  // backgroundTransport（2026-10-23 用户裁决）：运行期持有传输租约 = 应用整段
+  // 运行期对外可达（端口监听 + mDNS 广播）。必须与入站权限位同声明——没有
+  // ws:server / network:http 的应用既注册不出端点，也不该凭一个布尔位持续对外
+  // 广播。宿主加载期同规则（wasm-core `manager/validation.rs`），两侧都判死，
+  // 避免产出「装了必被拒」的包。
+  if (manifest.backgroundTransport !== undefined && manifest.backgroundTransport !== null) {
+    if (typeof manifest.backgroundTransport !== 'boolean') {
+      errors.push(
+        `backgroundTransport 形态非法（须为布尔值）: ${JSON.stringify(manifest.backgroundTransport)}`,
+      )
+    } else if (manifest.backgroundTransport) {
+      const INBOUND_SERVER_PERMISSIONS = ['ws:server', 'network:http']
+      const declared = Array.isArray(manifest.permissions) ? manifest.permissions : []
+      if (!INBOUND_SERVER_PERMISSIONS.some((permission) => declared.includes(permission))) {
+        errors.push(
+          'backgroundTransport=true 但 permissions 未声明入站权限位' +
+            `（${INBOUND_SERVER_PERMISSIONS.join(' / ')} 至少一个）：` +
+            '运行期持有传输租约会让应用整段运行期对外可达，必须与对应的服务端权限一起声明',
+        )
+      }
+    }
+  }
+
   // main 产物存在性（未构建仅警告）
   const distMain = join(dir, 'dist', manifest.main || 'index.js')
   if (!existsSync(distMain)) {

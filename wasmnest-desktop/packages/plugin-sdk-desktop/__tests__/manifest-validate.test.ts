@@ -565,3 +565,59 @@ describe('platform 校验（必填适配平台）', () => {
     }
   })
 })
+
+// ==================== backgroundTransport（2026-10-23 运行期传输租约）====================
+
+/**
+ * 行为契约（来源：bin/manifest-validate.js 分支 + wasm-core `manager/validation.rs`）：
+ * - B-V1 缺省 / null / 显式 false 都是「未 opt-in」，零错误（既有 manifest 零迁移）；
+ * - B-V2 true 必须与入站权限位同声明（ws:server / network:http 至少一个）——
+ *   运行期持有传输租约 = 应用整段运行期对外可达，缺权限即构建失败；
+ * - B-V3 非布尔值（"true" / 1）即拒，不得静默当成 false 或 true；
+ * - B-V4 只有出站 ws:client 不算入站权限，仍拒绝。
+ */
+describe('backgroundTransport（运行期传输租约 opt-in）', () => {
+  function withBackgroundTransport(value: unknown, permissions: string[] = []): string[] {
+    const manifest: Record<string, unknown> = {
+      id: 'com.example.test',
+      name: 'Test Plugin',
+      version: '1.0.0',
+      platform: 'desktop',
+      main: 'index.js',
+      pluginType: 'rust-ts',
+      rustLibrary: 'test_plugin',
+      permissions,
+      contributes: {},
+    }
+    if (value !== undefined) manifest.backgroundTransport = value
+    writeFileSync(join(cwd, 'plugin.json'), JSON.stringify(manifest, null, 2), 'utf-8')
+    const { errors } = validateManifest(cwd)
+    return errors.filter((e) => e.includes('backgroundTransport'))
+  }
+
+  it('B-V1 缺省 / null / false 都是未 opt-in，零错误', () => {
+    expect(withBackgroundTransport(undefined)).toEqual([])
+    expect(withBackgroundTransport(null)).toEqual([])
+    expect(withBackgroundTransport(false)).toEqual([])
+  })
+
+  it('B-V2 true + 任一入站权限位合法（ws:server / network:http）', () => {
+    expect(withBackgroundTransport(true, ['ws:server'])).toEqual([])
+    expect(withBackgroundTransport(true, ['network:http'])).toEqual([])
+  })
+
+  it('B-V2 true 但无入站权限位即构建失败，错误点名缺失的权限位', () => {
+    for (const permissions of [[], ['storage'], ['ws:client']]) {
+      const errors = withBackgroundTransport(true, permissions)
+      expect(errors.length, `permissions=${permissions.join(',')} 必须被拒`).toBe(1)
+      expect(errors[0]).toContain('ws:server')
+      expect(errors[0]).toContain('network:http')
+    }
+  })
+
+  it('B-V3 非布尔值即拒，不静默回落', () => {
+    for (const bad of ['true', 1, {}, []]) {
+      expect(withBackgroundTransport(bad, ['ws:server']), `取值 ${JSON.stringify(bad)} 应被拒`).toHaveLength(1)
+    }
+  })
+})

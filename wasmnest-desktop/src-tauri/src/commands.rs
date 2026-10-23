@@ -665,13 +665,34 @@ pub use crate::wasm_core::api_bridge::*;
 // 启停 / 重启 / 自启动命令已退役（service-leases §7.2）：它们能在没有任何应用
 // 持有服务时把传输面拉起来，绕过引用记账（违反 Q1/Q4）。
 //
-// 端点注册只写路由表，不启动监听器；传输面由**应用界面打开**驱动：外壳挂载
-// 应用整包 → `plugin_surface_open`，卸载 → `plugin_surface_close`。这使 boot 期
-// 注册路由的基础设施应用（认证中心等）不会仅因注册就对外广播。
+// 端点注册只写路由表，不启动监听器；传输面由**应用运行期**驱动：
+// - 服务端型应用（manifest `backgroundTransport: true`）的内核在启动成功后建
+//   运行期租约，停用由 `release_all_for` 回收——**界面挂载 / 卸载不参与**
+//   （服务端属性跟应用启动走，不跟界面槽走）；
+// - 其余应用仍由**界面打开**驱动：外壳挂载应用整包 → `plugin_surface_open`，
+//   卸载 → `plugin_surface_close`。
+// 这使 boot 期注册路由的基础设施应用（认证中心等）不会仅因注册就对外广播。
+
+/// 该应用是否声明「运行期持有传输租约」（manifest `backgroundTransport`）
+///
+/// 未加载 / 已卸载的 id 返回 false（命令走界面租约路径 → 端点不存在时 no-op）。
+async fn declares_background_transport(app_id: &str) -> bool {
+    crate::system::app_context::AppContext::global()
+        .plugin_host()
+        .get_plugin(app_id)
+        .await
+        .map(|info| info.background_transport)
+        .unwrap_or(false)
+}
 
 /// 应用界面打开：为该应用持有 `net.transport`（无传输端点的应用为 no-op）
+///
+/// 声明了 `backgroundTransport` 的应用租约跟运行期走，界面打开不再参与。
 #[tauri::command]
 pub async fn plugin_surface_open(app_id: String) -> Result<()> {
+    if declares_background_transport(&app_id).await {
+        return Ok(());
+    }
     let ctx = crate::system::app_context::AppContext::global();
     crate::plugin::services::acquire_for_surface(ctx.service_registry(), &app_id, "plugin_surface_open")
         .await
@@ -679,8 +700,18 @@ pub async fn plugin_surface_open(app_id: String) -> Result<()> {
 }
 
 /// 应用界面关闭：释放该应用的 `net.transport` 引用（未持有 = 幂等成功）
+///
+/// 声明了 `backgroundTransport` 的应用在界面卸载时仍处于运行期：**不得释放**
+/// （否则又回到「挂载决定传输面生死」的旧病）；停用时的回收由 `release_all_for` 兜底。
 #[tauri::command]
 pub async fn plugin_surface_close(app_id: String) -> Result<()> {
+    if declares_background_transport(&app_id).await {
+        tracing::debug!(
+            plugin_id = %app_id,
+            "surface close ignored: backgroundTransport lease follows app runtime"
+        );
+        return Ok(());
+    }
     let ctx = crate::system::app_context::AppContext::global();
     crate::plugin::services::release_for_surface(ctx.service_registry(), &app_id, "plugin_surface_close")
         .await

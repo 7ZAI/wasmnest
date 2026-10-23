@@ -135,6 +135,10 @@ struct SlotState {
 
 ### 4.1 acquire（谁表达了「我需要这个服务」）
 
+> **修订（2026-10-23）**：`net.transport` 的 acquire 点按服务端属性拆分——声明
+> `backgroundTransport: true` 的应用改「运行期租约」（启动即持有，见 §14）；
+> 本节下述「界面租约」只适用于**未声明**的普通应用。`net.peer-node` 不受影响。
+
 **认证中心拆出后的修订（2026-10-22 用户裁决）**：端点注册只写宿主内存路由表，
 **不启动监听器**；`net.transport` 的需求信号 = **应用界面打开**（外壳挂载应用整包），
 由外壳调用 `plugin_surface_open` / `plugin_surface_close` 驱动。这样 L2 基础设施
@@ -479,3 +483,48 @@ pnpm run check:manifest   # 依赖 lib tag 钉版；tag 未推送时按既有环
    要求回退，导致平台工作区继续生成 0.0.2。现已回退（能力仓 `6ab6cc5`；平台工作区
    同步回退为 0.0.1）。后续遇到版本字段变更，一律先查版本规范再决定，不由提交者
    自行 bump。
+
+## 14. 修订（2026-10-23 用户裁决）：服务端型应用改「运行期租约」
+
+**问题**：§4.1 / §13 把 `net.transport` 的生死绑在**界面挂载**上。BedCode 这类
+「服务端」应用在后台仍有运行实例（可能已回主屏、界面已卸载），但传输面随界面
+卸载一起停：移动端立刻看不见它，而它实际上还在跑、还能服务。给挂载槽加
+KeepAlive 不解决「应用在跑但界面没挂」的形态，也与桌面「卸载即销毁」的宿主
+口径冲突。
+
+**裁决**（替换 §4.1 中 `net.transport` 的 acquire 点；`net.peer-node` 不变）：
+
+1. **清单声明**：`backgroundTransport: true`（camelCase，缺省 `false`，桌面语义）。
+   声明后应用**运行期间**（启动成功 → 停用 / 进入 Error）持有 `net.transport`；
+   代价是该期间传输面持续对外可达（端口监听 + mDNS 广播）。
+2. **术语**：这类应用的租约跟「启动 / 运行期」走，不再用「激活期」描述——
+   没有独立于启动的「激活」阶段；「应用被停用」= 实例离开运行态 = 租约必然释放。
+   （内核机制 API 仍叫 `activate_plugin` / `deactivate_plugin`，本修订不改机制命名。）
+3. **acquire 点**（唯一，机制层）：`wasm-core` 的 `PluginHost::activate_plugin`
+   成功分支建租约。挂在这里的理由是它覆盖**全部**启动入口（壳 `plugin_activate`
+   走的 api_bridge、自启 `apply_autostart`、`PluginHost::new` 内角色激活的
+   L1/L2、审批后启动），宿主不需要在各命令里各补一次（补漏一处就是静默失租）。
+   前置三条：本端注册表 `has(TRANSPORT_SERVICE_KEY)`（移动端没有传输面 → 跳过）、
+   manifest 声明、启动链路内已注册 HTTP/WS 端点（无端面不建租，避免空壳广播）。
+   键常量真源随之下移到 `wasmnest-server-base::service`（内核不能依赖
+   `server-core` 的 actix 实现），`server-core` 再导出，宿主 import 路径不变。
+4. **release 点**：不变——内核 `release_all_for` 在「停用成功 / 启动失败 /
+   Error」三条离开运行态的路径统一回收；宿主退出 `shutdown_all`。应用不必主动
+   release，也不接受「界面卸载 → release」。
+5. **界面租约只服务未声明应用**：`plugin_surface_open` / `plugin_surface_close`
+   对 `backgroundTransport` 应用在宿主命令层直接 no-op（前端照常调用两条命令，
+   不新增前端分支；判定真源在宿主 manifest 投影）。
+6. **门禁（双层，fail-visible）**：
+   - 声明 `true` 必须同时声明入站权限位 `ws:server` / `network:http` 至少一个：
+     构建期 `plugin-sdk-desktop/bin/manifest-validate.js` 与加载期
+     `wasm-core/manager/validation.rs` 双侧拒绝，错误点名缺失权限位；
+   - acquire 复用端点注册表事实源（`server-http::registry` /
+     `server-websocket::endpoint` 的 `count_by_owner`）：声明了却没有任何
+     HTTP/WS 端点的应用**不建租约**并 `warn` 留痕——不制造「广播了却连不上」
+     的空壳设备（端点应在启动链路内注册完毕）。
+7. **不做**：不给挂载槽加 KeepAlive；不新增 acquire 原语 / WIT / 权限位；
+   不改变「零应用 = 零广播」（未声明应用仍按界面租约启停）。
+
+**验收**：桌面 `tests/service_lease_lifecycle.rs` 第 9 段（真实组件：启动即持有 →
+界面 close/open 均为 no-op → 停用停服停播）；`tests/service_lease_assembly_lock.rs`
+钉接线顺序与命令层拦截；manifest 形状 / 权限门禁在能力仓与 SDK 双侧单测。

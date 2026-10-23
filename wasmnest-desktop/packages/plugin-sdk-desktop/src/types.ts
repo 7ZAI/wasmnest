@@ -83,6 +83,18 @@ export interface PluginManifest {
    */
   lifecycle?: InstanceLifecycle
   /**
+   * 运行期传输租约声明（manifest `backgroundTransport`，服务端型应用）
+   *
+   * `true` = 应用**运行期间**（启动成功 → 停用 / Error）持有宿主传输面
+   * （`net.transport`：WS + HTTP 同端口 + mDNS 广播）租约；**界面挂载 / 卸载
+   * 不再是其生死开关**（服务端属性跟应用启动走，不跟界面槽走）。代价是整段
+   * 运行期对外可达，故必须显式 opt-in，并在 `permissions` 声明 `ws:server` /
+   * `network:http` 至少一个——构建期与宿主加载期双侧校验，缺权限即拒。
+   *
+   * 缺省 `false` = 既有行为：界面打开才 acquire，关闭最后一个界面即停播。
+   */
+  backgroundTransport?: boolean
+  /**
    * 能力依赖声明（应用插件消费的能力名，WIT host-* 接口名）
    *
    * 宿主激活时校验：每个依赖必须已有提供者（宿主原语或已激活的 L1 基础服务），

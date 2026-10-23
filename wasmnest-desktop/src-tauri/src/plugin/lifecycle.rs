@@ -12,6 +12,9 @@
 //!   ——**只在当前会话运行**：关闭宿主 / 重启后不复活。跨启动启动由显式
 //!   `plugin.autostart.{id}` 偏好决定（用户 2026-10-20 裁决：打开过的应用不能
 //!   在下次启动变成「没打开却显示运行中」）；
+//! - **服务端型应用**（manifest `backgroundTransport: true`）：内核在启动成功后
+//!   建 `net.transport` 运行期租约（界面挂载 / 卸载不参与其生死），停用 /
+//!   启动失败 / Error 由内核 `release_all_for` 回收——本编排层不重复该机制。
 //! - **关闭** = `deactivate` → wasm-core `deactivate_plugin(id, persist=true)`
 //!   ——**真停用**：guest deactivate + 权限 `revoke_all` + 消息总线退订 + 注册表/
 //!   令牌/互调 API 注销 + store 随实例回收（机制已证，见 wasm-core

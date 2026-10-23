@@ -18,6 +18,12 @@ fn read(rel: &str) -> String {
     std::fs::read_to_string(root().join(rel)).unwrap_or_else(|e| panic!("读取 {rel} 失败：{e}"))
 }
 
+/// 读跨仓 sibling（能力仓）源码：`CARGO_MANIFEST_DIR/../..` = 平台仓根
+fn read_workspace(rel: &str) -> String {
+    let path = root().join("../..").join(rel);
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{} 不可读：{e}", path.display()))
+}
+
 /// 首次出现位置（缺即红，避免拼写漂移让断言静默失效）
 fn pos(haystack: &str, needle: &str, file: &str) -> usize {
     haystack
@@ -181,6 +187,66 @@ fn shutdown_chain_runs_scoped_service_reclamation() {
     assert!(
         lifecycle.contains("shutdown_all()"),
         "退出链必须调用注册表 shutdown_all（兜住 Error 态 / stop 失败的 running 槽）"
+    );
+}
+
+/// `backgroundTransport` 的运行期租约：内核在**启动成功**后 acquire、停用由
+/// `release_all_for` 回收，界面开关在宿主命令层被拦截（界面不再决定传输面生死）。
+///
+/// 变异判据：删掉内核的 `acquire_background_transport` 调用 / commands 的 guard，
+/// 本测试转红；行为验收在 `service_lease_lifecycle.rs` 第 9 段（真实组件）。
+#[test]
+fn background_transport_lease_follows_runtime_not_surface() {
+    // 内核（能力仓）：启动成功分支 acquire，失败分支保持既有 release 补偿
+    let activation = read_workspace("../wasmnest-lib/wasmnest-wasm-core/src/manager/host/activation.rs");
+    assert!(
+        activation.contains("acquire_background_transport(plugin_id)"),
+        "wasm-core 启动成功路径必须建运行期传输租约（backgroundTransport 漂移）"
+    );
+    let activate_at = pos(&activation, "pub async fn activate_plugin(", "activation.rs");
+    let acquire_at = pos(
+        &activation,
+        "acquire_background_transport(plugin_id)",
+        "activation.rs",
+    );
+    let release_at = pos(&activation, "release_services_for(plugin_id, \"activation failed\")", "activation.rs");
+    assert!(
+        activate_at < acquire_at && acquire_at < release_at,
+        "acquire 必须在启动成功后（失败分支的 release 补偿之前）——顺序漂移会让失败激活也留租"
+    );
+    assert!(
+        activation.contains("registry.has(wasmnest_server_base::service::TRANSPORT_SERVICE_KEY)"),
+        "内核必须按「本端是否装配传输面」跳过（移动端没有 net.transport），不得把 UnknownService 当成功"
+    );
+    assert!(
+        activation.contains("count_by_owner(plugin_id)"),
+        "运行期租约必须复用端点事实源（无端点应用不得制造空壳广播）"
+    );
+
+    // 宿主命令层：界面开关对运行期租约应用 no-op
+    let commands = read("src/commands.rs");
+    let close_at = pos(&commands, "pub async fn plugin_surface_close(", "commands.rs");
+    let close_body = &commands[close_at..];
+    let guard = pos(close_body, "declares_background_transport(&app_id)", "commands.rs");
+    let release = pos(close_body, "release_for_surface", "commands.rs");
+    assert!(
+        guard < release,
+        "plugin_surface_close 必须在 release 前拦截 backgroundTransport 应用\
+         （界面卸载不得关掉运行期租约）"
+    );
+    assert!(
+        commands.contains("pub async fn plugin_surface_open(")
+            && commands[pos(&commands, "pub async fn plugin_surface_open(", "commands.rs")..].contains(
+                "declares_background_transport(&app_id)"
+            ),
+        "plugin_surface_open 也必须识别运行期租约应用（不重复记账）"
+    );
+
+    // 界面租约薄壳只服务未声明应用：运行期租约不在宿主重复实现
+    let services = read("src/plugin/services.rs");
+    assert!(
+        !services.contains("acquire_for_runtime"),
+        "运行期租约只允许内核建（宿主重复实现会分裂租约真源）"
     );
 }
 
