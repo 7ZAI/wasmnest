@@ -49,12 +49,6 @@ import ShellTaskSwitcher from '@/shell/components/ShellTaskSwitcher.vue'
 
 let wrapper: VueWrapper | null = null
 
-/** 重开全屏层并等 DOM 就位（关闭后 v-if 会把整棵子树摘掉） */
-async function openSwitcher(): Promise<void> {
-  shellState.recentsOpen.value = true
-  await nextTick()
-}
-
 function el(selector: string): HTMLElement {
   const node = document.body.querySelector(selector)
   expect(node, `找不到 ${selector}（全屏层没渲染？）`).toBeTruthy()
@@ -88,12 +82,8 @@ describe('多任务全屏层：点非卡片区域退出', () => {
     expect(shellState.recentsOpen.value).toBe(false)
   })
 
-  it('点卡片之间的空隙 / 底部说明 → 退出（旧实现失效的那片区域）', async () => {
+  it('点卡片之间的空隙 → 退出（旧实现失效的那片区域）', async () => {
     await click('.ts-cards')
-    expect(shellState.recentsOpen.value).toBe(false)
-
-    await openSwitcher()
-    await click('.ts-foot')
     expect(shellState.recentsOpen.value).toBe(false)
   })
 

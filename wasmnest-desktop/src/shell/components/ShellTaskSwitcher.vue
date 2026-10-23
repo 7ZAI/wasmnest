@@ -33,8 +33,10 @@
             </button>
           </header>
 
-          <!-- 卡片带：自适应多行网格（2026-10-19 优化）。
-               每行最多 3 张卡、整组上下左右居中，卡片过多时纵向滚动。
+          <!-- 卡片带：自适应多行（2026-10-23 优化）。
+               每行最多 3 张卡、整组上下左右居中；卡宽按可用宽度三等分并封顶 420px，
+               窗口变窄时三张一起等比缩小（旧实现固定 420px 轨道，最右一张连同关闭键
+               会被 overflow-x:hidden 裁掉）；卡片过多时纵向滚动。
                缩略区 = 应用可选导出的 mountPreview 自绘只读预览面；缺失 / 失败 /
                超时回退品牌渐变 + 图标（机制 B：后台应用离开应用面即被卸载，没有 DOM
                可截图，预览只能由应用重新画；见 .scratch/2026-10-20-app-preview-contract）。 -->
@@ -119,10 +121,6 @@
               <p class="ts-empty-t">{{ t('shell.recents.empty') }}</p>
             </div>
           </div>
-
-          <footer class="ts-foot">
-            {{ t('shell.recents.resumedHint') }}
-          </footer>
         </div>
       </div>
     </Transition>
@@ -325,24 +323,26 @@ function close(): void {
   color: var(--text-primary);
 }
 
-/* 卡片带：自适应多行网格。列宽随窗口自适应（minmax 200–260px），放不下自动换行；
-   卡片过多 → 纵向滚动查看（flex 容器内 grid 由 .ts-inner 决定高度，溢出滚动） */
+/* 卡片带：自适应多行（与移动端 shell-recents-grid 同一条公式）。
+   卡宽由卡片自身按可用宽度三等分（上限 420px，见 .ts-card），窗口变窄时三张卡
+   一起等比缩小——而不是旧实现那样固定 420px 轨道 + overflow-x:hidden，把最右
+   一张连同关闭键裁在可视区外。1–2 张卡由 justify-content:center 整组居中
+   （固定三轨网格会把单张卡挤在左三分之一）。卡片过多 / 过高 → 纵向滚动。
+   注意：这里**不能**加 container-type:size 去按 cqh 收敛卡片高度——WebKitGTK
+   下容器查询高度解析为 0，卡片会塌成不可见（2026-10-23 实测）。 */
 .ts-cards {
   flex: 1;
   min-height: 0;
-  display: grid;
-  /* 每行最多 3 张卡；整组在卡片带里**上下左右都居中**（用户 2026-10-19）：
-     轨道用固定宽 420px（= 卡片高 560 × 3/4）而不是 1fr——1fr 轨道会铺满整行，
-     `justify-content: center` 居中不了任何东西，1 张卡时仍贴在左端；
-     固定宽轨道下，1 张卡 = 单轨道被居中，3 张卡 = 三轨道整体居中。 */
-  grid-template-columns: repeat(3, 420px);
-  max-width: 1320px;
-  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 16px;
+  align-items: center;
   align-content: center;
   /* 卡片超高需要滚动时：safe 变体保证第一行不被居中裁掉（不支持的浏览器回落上一行） */
   align-content: safe center;
+  max-width: 1320px;
+  margin: 0 auto;
+  gap: 16px;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 4px 2px 12px;
@@ -353,15 +353,18 @@ function close(): void {
   align-content: center;
 }
 
-/* 卡片：竖版 3/4（缩略区 flex 撑满 + 底部信息条） */
+/* 卡片：竖版 3/4（缩略区 flex 撑满 + 顶部信息条），尺寸随卡片带自适应。
+   宽度 = 可用宽度三等分（34px = 两个 16px 间隙 + 2px 取整余量），上限 420px；
+   高度由 3/4 比例派生（窗口变窄时整卡等比缩小，不再固定 560px 高）。
+   box-sizing 必须 border-box：flex-basis 要含 1px 描边，否则三张卡各多 2px
+   会把第三张挤到下一行。 */
 .ts-card {
   position: relative;
-  /* 初始版比例（3/4 竖版）放大一档：固定高 560px → 宽 ≈ 420px。
-     不能用 `min(100%, 560px)`——网格项的高度百分比对着 auto 轨道解析不出来，
-     会被当成 auto，aspect-ratio 随之失效，卡片缩成内容大小（2026-10-19 实测）。 */
-  height: 560px;
+  box-sizing: border-box;
+  min-width: 0;
+  flex: 0 0 calc((100% - 34px) / 3);
+  max-width: 420px;
   aspect-ratio: 3 / 4;
-  justify-self: center;
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-sheet);
@@ -493,7 +496,8 @@ function close(): void {
 }
 
 .ts-empty {
-  grid-column: 1 / -1;
+  /* 空态独占一行（卡片带是 flex，不再有 grid 跨列） */
+  flex: 0 0 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -514,14 +518,6 @@ function close(): void {
 .ts-empty-t {
   font-size: calc(13px * var(--ui-scale));
   color: var(--text-secondary);
-  text-align: center;
-}
-
-.ts-foot {
-  flex-shrink: 0;
-  padding: 8px 2px 0;
-  font-size: calc(11.5px * var(--ui-scale));
-  color: var(--text-tertiary);
   text-align: center;
 }
 

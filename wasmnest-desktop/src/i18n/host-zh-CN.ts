@@ -21,12 +21,13 @@ export default {
       installed: '已安装',
       noApps: '没有匹配「{q}」的应用',
       noneEnabled: '没有已启用的应用（在应用管理中重新启用）',
+      servicesTitle: '服务',
       sysTitle: '系统',
       sysHint: '全局管理页面（从后台应用面板打开）',
-      /* 宿主系统级服务的系统宫格条目（auth-center / monitor）：
-         主屏应用网格不显示系统服务，它们作为系统入口住在“系统”区。 */
-      sysAuthCenter: '认证中心',
-      sysMonitor: '运行监控',
+      /* 宿主系统级服务在「服务」区的条目（auth-center / monitor）：
+         主屏应用网格与系统区都不显示服务，它们住在应用下方的“服务”区。 */
+      serviceAuthCenter: '认证中心',
+      serviceMonitor: '运行监控',
       matches: '个匹配',
     },
     // 多任务面板（工具栏入口）：打开过 / 后台运行的面在此切换与关闭
@@ -41,7 +42,6 @@ export default {
       stopInstance: '停止实例',
       closePage: '关闭页面',
       sysPage: '系统页',
-      resumedHint: '应用实例留在后台运行，点按会回到它上次停留的页面；✕ 是真正关闭实例。',
     },
     state: {
       running: '运行中',
@@ -53,8 +53,8 @@ export default {
     nav: {
       back: '返回',
       backTitle: '返回（Esc）',
-      tasks: '后台应用',
-      tasksTitle: '后台应用：{count} 个在运行',
+      tasks: '切换应用',
+      tasksTitle: '切换应用：{count} 个在运行',
       home: '主屏',
       homeTitle: '回到主屏（应用继续在后台运行）',
     },

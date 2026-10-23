@@ -25,12 +25,14 @@ export default {
       installed: 'installed',
       noApps: 'No apps match "{q}"',
       noneEnabled: 'No enabled apps (re-enable them in App management)',
+      servicesTitle: 'Services',
       sysTitle: 'System',
       sysHint: 'Global management pages (open from Background apps)',
-      /* Host-level system services as System-grid entries (auth-center / monitor):
-         the home app grid hides system services; they live in the System section. */
-      sysAuthCenter: 'Auth Center',
-      sysMonitor: 'Monitor',
+      /* Host-level system services in the Services section (auth-center / monitor):
+         neither the app grid nor the System section lists services; they sit in
+         their own Services section below Apps. */
+      serviceAuthCenter: 'Auth Center',
+      serviceMonitor: 'Monitor',
       matches: 'matches',
     },
     // Recent-tasks panel (toolbar entry): opened / background faces switch and close here
@@ -45,8 +47,6 @@ export default {
       stopInstance: 'Stop instance',
       closePage: 'Close page',
       sysPage: 'System page',
-      resumedHint:
-        'App instances keep running in the background; tapping one returns to the page it was last on. ✕ really closes the instance.',
     },
     state: {
       running: 'Running',
@@ -58,8 +58,8 @@ export default {
     nav: {
       back: 'Back',
       backTitle: 'Back (Esc)',
-      tasks: 'Background',
-      tasksTitle: 'Background apps: {count} running',
+      tasks: 'Switch apps',
+      tasksTitle: 'Switch apps: {count} running',
       home: 'Home',
       homeTitle: 'Home: apps keep running in the background',
     },

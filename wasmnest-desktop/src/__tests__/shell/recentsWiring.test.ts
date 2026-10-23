@@ -86,16 +86,36 @@ describe('全屏形态（安卓 recents：虚化背景 + 大卡片）', () => {
     )
   })
 
-  it('卡片是应用窗口形态（缩略区 16/10 + 自适应多行网格 + 超高滚动），不是列表行', () => {
+  it('卡片是应用窗口形态（缩略区 16/10 + 自适应多行 + 超高滚动），不是列表行', () => {
     const src = stripComments(read(SWITCHER))
     // 缩略区保持应用窗口比例（16/10），不是一行一个的列表行
     expect(src).toMatch(/\.ts-thumb\s*\{[^}]*flex:\s*1/)
-    // 卡片带 = 每行最多 3 张的多行网格（超 3 张换行、整组居中），
-    // 放不下自动换行；卡片过多时超出高度滚动查看
-    // 每行最多 3 张卡（用户 2026-10-19 裁决：超 3 张换行，整组居中）
-    expect(src).toMatch(/\.ts-cards\s*\{[^}]*grid-template-columns:\s*repeat\(3,/)
+    // 卡片带 = 每行最多 3 张的换行布局（超 3 张换行、整组居中）；
+    // 卡片过多时超出高度滚动查看
+    expect(src).toMatch(/\.ts-cards\s*\{[^}]*flex-wrap:\s*wrap/)
+    expect(src).toMatch(/\.ts-cards\s*\{[^}]*justify-content:\s*center/)
     expect(src).toMatch(/\.ts-cards\s*\{[^}]*overflow-y:\s*auto/)
+    // 卡宽自适应（2026-10-23 用户反馈：超过 3 张时最右一张被边界裁掉、关闭键不可见）：
+    // 宽度按可用宽度三等分、上限 420px，窗口变窄时整行等比缩小而不是溢出被裁。
+    // 固定 420px 轨道是回归点，锁死不许回来。
+    expect(src).toMatch(/\.ts-card\s*\{[^}]*flex:\s*0 0 calc\(\(100% - 34px\) \/ 3\)/)
+    expect(src).toMatch(/\.ts-card\s*\{[^}]*max-width:\s*420px/)
+    expect(src).toMatch(/\.ts-card\s*\{[^}]*aspect-ratio:\s*3\s*\/\s*4/)
+    expect(src).toMatch(/\.ts-card\s*\{[^}]*box-sizing:\s*border-box/)
+    expect(src, '不许回到固定 px 轨道（会把最右一张裁在边界外）').not.toMatch(
+      /grid-template-columns:\s*repeat\(3,\s*\d+px\)/,
+    )
+    // 反面教材（2026-10-23 实测）：container-type:size + cqh 收敛高度时，
+    // WebKitGTK 把容器高度解析为 0，卡片 flex-basis 归零、整层只剩标题。
+    expect(src).not.toContain('container-type')
+    expect(src).not.toContain('cqh')
     expect(src).toContain('role="listitem"')
+  })
+
+  it('不再有底部说明文案（2026-10-23 用户裁决：信息条 + ✕ 已自解释）', () => {
+    const src = stripComments(read(SWITCHER))
+    expect(src).not.toContain('ts-foot')
+    expect(src).not.toContain("t('shell.recents.resumedHint')")
   })
 })
 
