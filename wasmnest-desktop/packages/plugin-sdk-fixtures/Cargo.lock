@@ -423,10 +423,6 @@ name = "wasmnest-link-crypto"
 version = "0.0.1"
 
 [[patch.unused]]
-name = "wasmnest-peer-net"
-version = "0.0.1"
-
-[[patch.unused]]
 name = "wasmnest-pty-engine"
 version = "0.0.1"
 
