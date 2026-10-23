@@ -14,12 +14,14 @@
  * | C-H8 | 应用分组头 | 只留标题：计数与管理图标均已退役（管理入口在系统宫格） | 无 manageApps 按钮、无计数文案 |
  * | C-H9 | 文案纪律 | 不渲染方案期解释（由应用提供 / 平台自带 / 最近使用在前） | 三个退役 key 缺席 |
  * | C-H11 | 多任务入口 | 主屏头部图标与铃铛同档，点击进多任务 | openSwitcher 被调用 |
- * | C-H12 | 系统宫格瓦片样式 | 启动器风格：.shell-sys-tile + data-tile=entry.id，SVG 为 24 画框实心块面（fill + evenodd 挖空），不再是 stroke 线稿 | 类名 / data-tile / fill 属性按入口在场 |
+ * | C-H12 | 系统宫格图标 | 与桌面 ShellIcon 同口径：.shell-sys-tile + data-tile=entry.id，SVG 为 24 画框 stroke 线稿（fill=none / 1.55），路径逐字对齐桌面 | 类名 / data-tile / stroke 属性；双端路径一致性锁 |
  * | C-H13 | 运行带退役 | 主屏不再渲染运行卡片与停止按钮 | 无 article / 无 stopInstance / 无 runningTitle |
  * | C-H14 | 壁纸上的浮空文字 | 壁纸上的标题挂 .shell-text-over-wall（底色描边护对比度）；shell.css 里该类的描边色由 token 派生 | 头部标题与应用分组头均带类；CSS 含 text-shadow + color-mix |
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { computed, ref } from 'vue'
 import { resetShellNotifications, useShellNotifications } from '@/shell/composables/useShellNotifications'
 import { clearRecent } from '@/shell/composables/useShellRecent'
@@ -215,11 +217,13 @@ describe('C-H4 系统宫格', () => {
   })
 })
 
-describe('C-H12 系统宫格瓦片样式（启动器风格）', () => {
+describe('C-H12 系统宫格图标（与桌面 ShellIcon 一致）', () => {
   /** 系统宫格按钮（可访问名即入口文案，三个入口三种 key） */
   const SYS_KEYS = ['shell.home.sysApps', 'shell.home.sysPermissions', 'shell.home.sysSettings']
-  /** entry.id → data-tile → shell.css 的 --shell-tile-* 选色（ids 与 CSS 属性选择器必须一致） */
+  /** entry.id → data-tile（测试锚点；样式不再按 id 上色） */
   const EXPECTED_TILES = ['apps', 'permissions', 'settings']
+
+  const css = () => readFileSync(join(process.cwd(), 'src/shell/styles/shell.css'), 'utf8')
 
   it('should_markEachEntryWithTileId_when_sysGridRendered', () => {
     const buttons = SYS_KEYS.map((key) =>
@@ -228,34 +232,70 @@ describe('C-H12 系统宫格瓦片样式（启动器风格）', () => {
 
     buttons.forEach((button, i) => {
       const tile = button.find('.shell-sys-tile')
-      expect(tile.exists(), `${SYS_KEYS[i]} 应渲染启动器瓦片`).toBe(true)
+      expect(tile.exists(), `${SYS_KEYS[i]} 应渲染系统瓦片`).toBe(true)
       expect(tile.attributes('data-tile'), `${SYS_KEYS[i]} 的 data-tile`).toBe(EXPECTED_TILES[i])
     })
   })
 
-  it('should_drawFilledGlyphsOnTwentyFourCanvas_when_sysTileRendered', () => {
+  it('should_useStrokeGlyphsOnTwentyFourCanvas_when_sysTileRendered', () => {
     const tile = mount(ShellHomeScreen).find('.shell-sys-tile')
     const svg = tile.find('svg')
-    const path = svg.find('path')
 
-    // 实心块面：fill=当前色（瓦片按 data-tile 给的颜色），镂空靠 evenodd
-    expect(svg.attributes('fill')).toBe('currentColor')
-    expect(svg.attributes('fill-rule')).toBe('evenodd')
-    // 24 画框 = ShellAppIcon path 态同规格（旧 stroke 版为 20px）
+    // 与桌面 ShellIcon 同一套 stroke 线稿（不是启动器实心块面）
+    expect(svg.attributes('fill')).toBe('none')
+    expect(svg.attributes('stroke')).toBe('currentColor')
+    expect(svg.attributes('stroke-width')).toBe('1.55')
+    expect(svg.attributes('stroke-linecap')).toBe('round')
+    expect(svg.attributes('stroke-linejoin')).toBe('round')
     expect(svg.attributes('width')).toBe('24')
     expect(svg.attributes('height')).toBe('24')
-    expect(svg.attributes('stroke')).toBeUndefined()
-    expect(path.attributes('d')).toBeTruthy()
+    // 首个入口 = 应用管理（grid，四条独立方框路径）
+    expect(svg.findAll('path')).toHaveLength(4)
+  })
+
+  it('should_matchDesktopShellIconPaths_when_systemGlyphsChanged', () => {
+    const mobile = readFileSync(
+      join(process.cwd(), 'src/shell/components/screens/ShellHomeScreen.vue'),
+      'utf8',
+    )
+    const desktop = readFileSync(
+      join(process.cwd(), '../wasmnest-desktop/src/shell/components/ShellIcon.vue'),
+      'utf8',
+    )
+    // 移动端图标表里所有 SVG path 字符串都必须逐字存在于桌面 ShellIcon
+    const paths = [...mobile.matchAll(/'([Mm][^']*)'/g)]
+      .map((m) => m[1])
+      .filter((d) => /\d/.test(d))
+
+    expect(
+      paths.length,
+      '至少覆盖 grid / shield / gear / lock / pulse / layers',
+    ).toBeGreaterThanOrEqual(6)
+    for (const d of paths) {
+      expect(desktop.includes(d), `系统图标路径未在桌面 ShellIcon 中找到：${d}`).toBe(true)
+    }
+  })
+
+  it('should_useNeutralTileSurface_when_sysTileRendered', () => {
+    const sheet = css()
+    const block = sheet.match(/\.shell-sys-tile\s*\{[^}]*\}/)?.[0] ?? ''
+
+    expect(block, '中性 card 表面（桌面 .tone-system 同口径）').toContain(
+      'background: var(--mobile-bg-card)',
+    )
+    expect(block).toContain('border: 1px solid var(--mobile-border)')
+    expect(block).toContain('color: var(--mobile-text-primary)')
+    expect(sheet, '不再保留按入口上色的启动器渐变 token').not.toContain('--shell-tile-')
   })
 })
 
-describe('宿主系统级服务（L1/L2 = 系统宫格，不进应用宫格）', () => {
+describe('宿主系统级服务（L1/L2 = 服务宫格，不进应用 / 系统宫格）', () => {
   function service(id: string, kind: string, name = id): ShellApp {
     const s = app(id, 'running', name)
     return { ...s, kind }
   }
 
-  it('系统服务不出现在应用宫格，作为系统入口住在系统宫格（本地化名 + 专属瓦片）', () => {
+  it('系统服务不出现在应用宫格，住在独立的服务宫格（本地化名 + 专属瓦片）', () => {
     apps.value = [
       service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
       service('com.wasmnest.monitor', 'internal-business', 'MonitoringService'),
@@ -268,22 +308,43 @@ describe('宿主系统级服务（L1/L2 = 系统宫格，不进应用宫格）',
     expect(wrapper.text()).not.toContain('Auth Center')
     expect(wrapper.text()).not.toContain('MonitoringService')
 
-    // 系统宫格：静态三入口 + 两个系统服务瓦片（本地化 key 回显 + 专属 data-tile）
-    const auth = wrapper.find('button[aria-label="shell.home.sysAuthCenter"]')
-    const monitor = wrapper.find('button[aria-label="shell.home.sysMonitor"]')
+    // 服务宫格：标题 + 两个服务瓦片（本地化 key 回显 + data-tile 锚点）
+    expect(wrapper.text()).toContain('shell.home.servicesTitle')
+    const auth = wrapper.find('button[aria-label="shell.home.serviceAuthCenter"]')
+    const monitor = wrapper.find('button[aria-label="shell.home.serviceMonitor"]')
     expect(auth.exists()).toBe(true)
     expect(monitor.exists()).toBe(true)
     expect(auth.find('.shell-sys-tile').attributes('data-tile')).toBe('auth-center')
     expect(monitor.find('.shell-sys-tile').attributes('data-tile')).toBe('monitor')
   })
 
-  it('点击系统服务瓦片打开应用面（open），不是系统页导航', async () => {
+  it('分区顺序固定为 应用 → 服务 → 系统', () => {
+    apps.value = [
+      service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
+      app('com.wasmnest.agent-hub', 'running', 'Agent Hub'),
+    ]
+    const wrapper = mount(ShellHomeScreen)
+
+    const titles = wrapper
+      .findAll('h2.shell-type-section')
+      .map((h) => h.text())
+      .filter((text) =>
+        ['shell.home.appsTitle', 'shell.home.servicesTitle', 'shell.home.sysTitle'].includes(text),
+      )
+    expect(titles).toEqual([
+      'shell.home.appsTitle',
+      'shell.home.servicesTitle',
+      'shell.home.sysTitle',
+    ])
+  })
+
+  it('点击服务瓦片打开应用面（open），不是系统页导航', async () => {
     apps.value = [
       service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
     ]
     const wrapper = mount(ShellHomeScreen)
 
-    await wrapper.find('button[aria-label="shell.home.sysAuthCenter"]').trigger('click')
+    await wrapper.find('button[aria-label="shell.home.serviceAuthCenter"]').trigger('click')
     expect(mockOpen).toHaveBeenCalledWith('com.wasmnest.auth-center')
     expect(mockNavigate).not.toHaveBeenCalledWith('apps')
   })
@@ -302,8 +363,8 @@ describe('宿主系统级服务（L1/L2 = 系统宫格，不进应用宫格）',
     const wrapper = mount(ShellHomeScreen)
 
     expect(wrapper.text()).toContain('shell.home.emptyAppsHint')
-    // 系统服务仍在系统宫格
-    expect(wrapper.find('button[aria-label="shell.home.sysMonitor"]').exists()).toBe(true)
+    // 服务仍在服务宫格
+    expect(wrapper.find('button[aria-label="shell.home.serviceMonitor"]').exists()).toBe(true)
   })
 })
 

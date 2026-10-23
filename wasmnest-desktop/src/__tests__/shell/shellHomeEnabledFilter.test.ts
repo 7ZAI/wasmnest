@@ -127,14 +127,14 @@ describe('主屏入口可见性（启用偏好）过滤', () => {
   })
 })
 
-describe('主屏宿主系统级服务（L1/L2 = 系统网格，不进应用网格）', () => {
+describe('主屏宿主系统级服务（L1/L2 = 服务网格，不进应用 / 系统网格）', () => {
   beforeEach(() => {
     mocks.homeQ = ref('')
     mocks.plugins = ref([])
     vi.clearAllMocks()
   })
 
-  it('系统服务不出现在应用网格，作为系统入口住在「系统」区（本地化名）', () => {
+  it('系统服务不出现在应用 / 系统网格，住在独立的「服务」区（本地化名）', () => {
     mocks.plugins.value = [
       entry({ id: 'com.wasmnest.auth-center', pluginId: 'com.wasmnest.auth-center', name: 'Auth Center', kind: 'internal-business', enabled: true }),
       entry({ id: 'com.wasmnest.monitor', pluginId: 'com.wasmnest.monitor', name: 'MonitoringService', kind: 'internal-business', enabled: true }),
@@ -142,16 +142,37 @@ describe('主屏宿主系统级服务（L1/L2 = 系统网格，不进应用网�
     ]
     const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
 
-    // 业务应用照常出现在应用网格；两个系统服务不在应用网格（也搜不到业务区）
+    // 业务应用照常出现在应用网格；两个系统服务不在应用网格（也不以插件名出现）
     expect(wrapper.text()).toContain('Agent Hub')
     expect(wrapper.text()).not.toContain('Auth Center')
     expect(wrapper.text()).not.toContain('MonitoringService')
-    // 系统区：宿主系统页 + 两个系统服务（本地化名 key，mock t 原样返回）
-    expect(wrapper.text()).toContain('shell.home.sysAuthCenter')
-    expect(wrapper.text()).toContain('shell.home.sysMonitor')
+    // 服务区：标题 + 两个服务（本地化名 key，mock t 原样返回）
+    expect(wrapper.text()).toContain('shell.home.servicesTitle')
+    expect(wrapper.text()).toContain('shell.home.serviceAuthCenter')
+    expect(wrapper.text()).toContain('shell.home.serviceMonitor')
   })
 
-  it('搜索命中系统服务 → 系统区条目出现；应用网格不因服务被搜到而出现', () => {
+  it('分区顺序固定为 应用 → 服务 → 系统', () => {
+    mocks.plugins.value = [
+      entry({ id: 'com.wasmnest.auth-center', pluginId: 'com.wasmnest.auth-center', name: 'Auth Center', kind: 'internal-business', enabled: true }),
+      entry({ id: 'com.wasmnest.agent-hub', pluginId: 'com.wasmnest.agent-hub', name: 'Agent Hub', enabled: true }),
+    ]
+    const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
+
+    const titles = wrapper
+      .findAll('.home-sec h2')
+      .map((h) => h.text())
+      .filter((text) =>
+        ['shell.home.appsTitle', 'shell.home.servicesTitle', 'shell.home.sysTitle'].includes(text),
+      )
+    expect(titles).toEqual([
+      'shell.home.appsTitle',
+      'shell.home.servicesTitle',
+      'shell.home.sysTitle',
+    ])
+  })
+
+  it('搜索命中服务 → 服务区条目出现；应用网格不因服务被搜到而出现', () => {
     mocks.plugins.value = [
       entry({ id: 'com.wasmnest.auth-center', pluginId: 'com.wasmnest.auth-center', name: 'Auth Center', kind: 'internal-business', enabled: true }),
       entry({ id: 'com.wasmnest.agent-hub', pluginId: 'com.wasmnest.agent-hub', name: 'Agent Hub', enabled: true }),
@@ -159,12 +180,12 @@ describe('主屏宿主系统级服务（L1/L2 = 系统网格，不进应用网�
     mocks.homeQ.value = 'Auth'
     const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
 
-    // 搜索按宿主本地化名命中（mock t 返回 key：'shell.home.sysAuthCenter' 含 'Auth'）
-    expect(wrapper.text()).toContain('shell.home.sysAuthCenter')
+    // 搜索按宿主本地化名命中（mock t 返回 key：'shell.home.serviceAuthCenter' 含 'Auth'）
+    expect(wrapper.text()).toContain('shell.home.serviceAuthCenter')
     expect(wrapper.text()).not.toContain('Agent Hub')
   })
 
-  it('系统服务点击打开应用面（openApp），宿主系统页点击仍走 openSys', async () => {
+  it('服务点击打开应用面（openApp），宿主系统页点击仍走 openSys', async () => {
     mocks.plugins.value = [
       entry({ id: 'com.wasmnest.auth-center', pluginId: 'com.wasmnest.auth-center', name: 'Auth Center', kind: 'internal-business', enabled: true }),
     ]
@@ -172,7 +193,7 @@ describe('主屏宿主系统级服务（L1/L2 = 系统网格，不进应用网�
 
     const serviceTile = wrapper
       .findAll('.appicon')
-      .find((el) => el.text().includes('shell.home.sysAuthCenter'))
+      .find((el) => el.text().includes('shell.home.serviceAuthCenter'))
     expect(serviceTile).toBeTruthy()
     await serviceTile!.trigger('click')
     expect(mocks.openApp).toHaveBeenCalledWith('com.wasmnest.auth-center')
@@ -187,8 +208,8 @@ describe('主屏宿主系统级服务（L1/L2 = 系统网格，不进应用网�
 
     expect(wrapper.text()).toContain('shell.home.noApps')
     expect(wrapper.text()).not.toContain('shell.home.noneEnabled')
-    // 系统区照常显示（服务仍在）
-    expect(wrapper.text()).toContain('shell.home.sysMonitor')
+    // 服务区照常显示（服务仍在）
+    expect(wrapper.text()).toContain('shell.home.serviceMonitor')
   })
 
   it('未知系统服务回退插件名与通用图标（不新增 i18n / 图标表外名）', () => {
@@ -198,7 +219,7 @@ describe('主屏宿主系统级服务（L1/L2 = 系统网格，不进应用网�
     const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
 
     expect(wrapper.text()).toContain('UnknownSvc')
-    expect(wrapper.text()).not.toContain('shell.home.sysAuthCenter')
-    expect(wrapper.text()).not.toContain('shell.home.sysMonitor')
+    expect(wrapper.text()).not.toContain('shell.home.serviceAuthCenter')
+    expect(wrapper.text()).not.toContain('shell.home.serviceMonitor')
   })
 })

@@ -29,14 +29,16 @@ export default {
       appAria: '{name}, {state}',
       emptyApps: 'No WASM app installed',
       emptyAppsHint: 'Install or enable an app in "App manager" and its entry shows up here',
+      servicesTitle: 'Services',
       sysTitle: 'System',
       sysApps: 'App manager',
       sysPermissions: 'Permissions',
       sysSettings: 'Settings',
-      /* Host-level system services as System-grid entries (auth-center / monitor):
-         the home app grid hides system services; they live in the System section. */
-      sysAuthCenter: 'Auth Center',
-      sysMonitor: 'Monitor',
+      /* Host-level system services in the Services grid (auth-center / monitor):
+         neither the app grid nor the System grid lists services; they sit in
+         their own Services grid below Apps. */
+      serviceAuthCenter: 'Auth Center',
+      serviceMonitor: 'Monitor',
     },
     apps: {
       title: 'WASM apps',

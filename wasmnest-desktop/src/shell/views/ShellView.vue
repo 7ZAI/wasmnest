@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 /**
- * ShellView — 壳主屏（方案 C：主屏 = 应用网格 + 系统网格 + type-to-search）
+ * ShellView — 壳主屏（方案 C：主屏 = 应用网格 + 服务网格 + 系统网格 + type-to-search）
  *
  * 2026-10-17 壳恢复后收窄为主屏专用：全局覆层（多任务 / 通知 / 右键 / 弹窗 /
  * 启动屏）与键盘处理提升到 ShellHost（任何面可用）；路由 '/' 挂载本组件。

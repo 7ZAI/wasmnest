@@ -1,5 +1,5 @@
 <template>
-  <!-- 主屏：应用网格 + 系统网格；壁纸由 ShellHost 壳根统一铺（所有宿主面共用），
+  <!-- 主屏：应用网格 + 服务网格 + 系统网格；壁纸由 ShellHost 壳根统一铺（所有宿主面共用），
        主屏自身保持透明。打开过 / 后台运行的面不在这里铺开（见工具栏「多任务」面板）。 -->
   <section class="home-scroll" :aria-label="t('shell.home.aria')">
     <h1 class="sr-only">{{ t('shell.home.aria') }}</h1>
@@ -9,14 +9,15 @@
       <ShellIcon name="search" :size="13" />
       <span class="q font-semibold">{{ q }}</span>
       <span class="n"
-        >{{ filterApps.length + matchedSys.length }} {{ t('shell.home.matches') }}</span
+        >{{ filterApps.length + matchedServices.length + matchedSys.length }}
+        {{ t('shell.home.matches') }}</span
       >
       <kbd class="k">Enter</kbd>
     </div>
 
     <div class="home-col">
       <!-- 这里不再有「正在运行」卡片带：打开过 / 后台运行的应用统一收进工具栏的
-           多任务全屏层（ShellTaskSwitcher），主屏只留应用与系统网格。 -->
+           多任务全屏层（ShellTaskSwitcher），主屏只留应用 / 服务 / 系统网格。 -->
 
       <!-- ======== 应用网格 ======== -->
       <section class="home-sec">
@@ -64,6 +65,35 @@
         </div>
       </section>
 
+      <!-- ======== 服务网格 ======== -->
+      <!-- 宿主系统级服务（manifest kind = basic-service / internal-business）的固定分区；
+           未来新增 wasm 服务类型只要声明服务 kind 就落在这里，不硬编码插件 id。 -->
+      <section v-if="matchedServices.length" class="home-sec">
+        <div class="sec-h">
+          <h2 class="t">{{ t('shell.home.servicesTitle') }}</h2>
+          <span class="n">{{ matchedServices.length }}</span>
+        </div>
+        <div class="appgrid" role="list" :aria-label="t('shell.home.servicesTitle')">
+          <div
+            v-for="svc in matchedServices"
+            :key="svc.id"
+            class="appicon"
+            role="listitem"
+            tabindex="0"
+            :aria-label="svc.nameKey ? t(svc.nameKey) : (svc.name ?? svc.id)"
+            @click="state.openApp(svc.id)"
+            @keydown.enter="state.openApp(svc.id)"
+          >
+            <span class="glyph-wrap">
+              <span class="glyph-box tone-system icon-hover" style="width: 64px; height: 64px">
+                <ShellIcon :name="svc.icon" :size="28" :stroke-width="1.55" />
+              </span>
+            </span>
+            <span class="nm truncate">{{ svc.nameKey ? t(svc.nameKey) : svc.name }}</span>
+          </div>
+        </div>
+      </section>
+
       <!-- ======== 系统网格 ======== -->
       <section v-if="matchedSys.length" class="home-sec">
         <div class="sec-h">
@@ -77,16 +107,16 @@
             class="appicon"
             role="listitem"
             tabindex="0"
-            :aria-label="`${sys.nameKey ? t(sys.nameKey) : sys.name}，${sys.descKey ? t(sys.descKey) : ''}`"
-            @click="sys.isService ? state.openApp(sys.id) : state.openSys(sys.id)"
-            @keydown.enter="sys.isService ? state.openApp(sys.id) : state.openSys(sys.id)"
+            :aria-label="t(sys.nameKey)"
+            @click="state.openSys(sys.id)"
+            @keydown.enter="state.openSys(sys.id)"
           >
             <span class="glyph-wrap">
               <span class="glyph-box tone-system icon-hover" style="width: 64px; height: 64px">
                 <ShellIcon :name="sys.icon" :size="28" :stroke-width="1.55" />
               </span>
             </span>
-            <span class="nm truncate">{{ sys.nameKey ? t(sys.nameKey) : sys.name }}</span>
+            <span class="nm truncate">{{ t(sys.nameKey) }}</span>
           </div>
         </div>
       </section>
@@ -96,7 +126,7 @@
 
 <script setup lang="ts">
 /**
- * ShellHome — 主屏（spec-c）：应用网格 + 系统网格 + type-to-search。
+ * ShellHome — 主屏（spec-c）：应用网格 + 服务网格 + 系统网格 + type-to-search。
  *
  * 归属（AGENTS §5.1）：注册表投影的纯呈现，无业务编排；打开动作委托 useShellState
  * （dormant 即点即启 / approval 进审批屏卡）。**打开过 / 后台运行的面不在这里**：
@@ -124,8 +154,8 @@ const matchQ = (s: string) => s.toLowerCase().includes(q.value.toLowerCase())
  * 主屏可见应用（启用 = 主屏入口可见性，用户裁决 2026-10-21）：
  * 停用（`plugin.enabled.{id}` = false）的应用从应用网格与搜索结果统一隐藏
  * （恢复入口在「应用管理」页）；运行中的实例不在此隐藏——它们由多任务层呈现。
- * 宿主系统级服务（L1/L2）也从应用网格隐藏（2026-10-23 用户裁决）：它们作为
- * 系统入口住在「系统」区，不是用户启动的业务应用。
+ * 宿主系统级服务（L1/L2）也从应用网格隐藏（2026-10-23 用户裁决）：它们住在
+ * 「服务」区，不是用户启动的业务应用。
  */
 const filterApps = computed(() => {
   const visible = appsStore.plugins.value.filter((a) => a.enabled && !isServiceKind(a.kind))
@@ -133,57 +163,57 @@ const filterApps = computed(() => {
   return visible.filter((a) => matchQ(a.name) || matchQ(a.id))
 })
 
-/** 宿主系统级服务在「系统」区的条目（点击打开应用面；图标用宿主系统风格） */
-type SysEntry = {
+/** 宿主系统级服务在「服务」区的条目（点击打开应用面；图标用宿主系统风格） */
+type ServiceEntry = {
   id: string
-  /** 宿主 i18n 显示名（系统服务用本地化名；无 key 时回退 name） */
+  /** 宿主 i18n 显示名（已知服务走本地化名） */
   nameKey: string | null
-  descKey: string | null
-  /** 非系统页条目的直接显示名（未知系统服务回退插件名） */
+  /** 未知服务的回退显示名（插件名） */
   name: string | null
   icon: string
-  isService: boolean
 }
 
-/** 系统服务 → 系统宫格图标（key = 插件 id；未知服务给通用 layers，不新增图标表外名） */
-const SYSTEM_SERVICE_ICONS: Record<string, string> = {
+/** 服务宫格图标（key = 插件 id；未知服务给通用 layers，不新增图标表外名） */
+const SERVICE_ICONS: Record<string, string> = {
   'com.wasmnest.auth-center': 'lock',
   'com.wasmnest.monitor': 'pulse',
 }
 
-/** 系统服务显示名：已知两个服务走宿主 i18n（认证中心 / 运行监控）；未知服务显示插件名 */
-const SYSTEM_SERVICE_NAME_KEYS: Record<string, string> = {
-  'com.wasmnest.auth-center': 'shell.home.sysAuthCenter',
-  'com.wasmnest.monitor': 'shell.home.sysMonitor',
+/** 服务显示名：已知两个服务走宿主 i18n（认证中心 / 运行监控）；未知服务显示插件名 */
+const SERVICE_NAME_KEYS: Record<string, string> = {
+  'com.wasmnest.auth-center': 'shell.home.serviceAuthCenter',
+  'com.wasmnest.monitor': 'shell.home.serviceMonitor',
 }
 
-function sysEntryOf(app: ShellAppEntry): SysEntry {
-  const nameKey = SYSTEM_SERVICE_NAME_KEYS[app.id] ?? null
+function serviceEntryOf(app: ShellAppEntry): ServiceEntry {
+  const nameKey = SERVICE_NAME_KEYS[app.id] ?? null
   return {
     id: app.id,
     nameKey,
-    descKey: null,
     name: nameKey ? null : app.name,
-    icon: SYSTEM_SERVICE_ICONS[app.id] ?? 'layers',
-    isService: true,
+    icon: SERVICE_ICONS[app.id] ?? 'layers',
   }
 }
 
 /**
- * 系统区条目：宿主系统页（SYS_PAGES）在前，宿主系统级服务追加在后。
- * 系统服务只在装配存在时出现（注册表投影），不硬编码常驻。
+ * 服务区条目：装配角色为系统服务（basic-service / internal-business）的全部应用。
+ * 只在装配存在时出现（注册表投影），不硬编码常驻；未来 wasm 服务类型自动落位。
  */
-const sysEntries = computed<SysEntry[]>(() => [
-  ...SYS_PAGES.map((p) => ({ id: p.id, nameKey: p.nameKey, descKey: p.descKey, name: null, icon: p.icon, isService: false })),
-  ...appsStore.plugins.value.filter((a) => isServiceKind(a.kind)).map(sysEntryOf),
-])
+const serviceEntries = computed<ServiceEntry[]>(() =>
+  appsStore.plugins.value.filter((a) => isServiceKind(a.kind)).map(serviceEntryOf),
+)
 
-const matchedSys = computed(() =>
+const matchedServices = computed(() =>
   q.value
-    ? sysEntries.value.filter(
+    ? serviceEntries.value.filter(
         (s) => matchQ(s.nameKey ? t(s.nameKey) : (s.name ?? s.id)) || matchQ(s.id),
       )
-    : sysEntries.value,
+    : serviceEntries.value,
+)
+
+/** 系统区条目：宿主系统页（SYS_PAGES），按搜索词过滤 */
+const matchedSys = computed(() =>
+  q.value ? SYS_PAGES.filter((s) => matchQ(t(s.nameKey)) || matchQ(s.id)) : SYS_PAGES,
 )
 
 const apps = filterApps
