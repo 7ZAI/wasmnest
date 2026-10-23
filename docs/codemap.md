@@ -219,6 +219,61 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 **锁是契约清单，不是障碍**：你的合法改动若使某把锁的清单 / 白名单过期，必须**同一提交内同步更新该清单**（并在交付说明里点名）；禁止删锁、缩窄 glob、把断言改恒真来「变绿」。
 
+### 8.1 源码文本锁盘点清单（owner + 处置，issue #18，2026-10-24）
+
+上表之外的逐文件盘点：所有**读仓内源码 / 配置 / 清单文本做断言**的测试文件（判据：`readFileSync` 源文件并对文本做 `toContain` / 正则断言；读临时目录 fixture 的纯行为测试不在列）。新增源码文本锁的准入门槛见 docs/testing.md §4；本清单过期与代码同批更新。
+
+**owner 一律 `binblink`**（现状无人认领）。性质三档：**边界契约**（跨构建单元 / 跨仓 / 发布面 / 退役面 / 安全红线，无编译期约束只能文本比对）、**接线锁**（入口真的调用了共享模块，应保持单条轻量）、**源码文本锁**（裁决 / 样式 / 结构事实——部分给出豁免理由保留，给不出理由的标待改造）。
+
+| 锁文件（端） | 锁对象 | 性质 | 处置方向 | 为何不能用行为测试表达 |
+| --- | --- | --- | --- | --- |
+| `hostAppBoundaryLock.test.ts`（桌面） | 宿主零 app 源码 import / 零 `__WASMNEST_SHARED__`；`mountApp` / `mountPreview` 契约逐字同形 | 边界契约 | 保留 | 宿主与独立挂载包是运行时装载关系，无编译期约束；契约漂移只在文本可比对时可见 |
+| `i18nDriftLock.test.ts`（桌面） | 宿主 ↔ bedcode 两份 host 消息集逐字一致 | 边界契约 | 保留 | 两份独立构建的消息集副本无共享真源，漂移即用户可见断裂，只能逐字比对 |
+| `tailwindContentCoverage.test.ts`（桌面） | Tailwind content 只扫宿主源码 + SDK 组件 | 边界契约 | 保留 | 被测对象就是 `tailwind.config.js` 的扫描范围文本本身 |
+| `appBundlePathLock.test.ts`（桌面） | 挂载包路径单一来源；禁 `plugins/desktop` 落点字面量 | 边界契约 | 保留 | 同一路径约定前后端各写一遍的事故只能靠禁字面量防复发 |
+| `i18nTemplateKeys.test.ts`（桌面） | 全壳 `t('字面量')` key 必须在 zh-CN 与 en 消息集存在 | 边界契约 | 保留（含防空转断言） | 跨全部模板与两套消息集的交叉一致性，无单点行为可测 |
+| `style/pageTransition.test.ts`（桌面） | 过渡统一：退役过渡名零残留、命名唯一、无 out-in、token 单一来源 | 边界契约（行为面已提纯函数） | 保留 | 跨 6 文件的统一性契约（同 i18nDriftLock）；效果切换已行为化（`applyPageTransitionEffect`） |
+| `shell/mount/appSurfaceKeepAlive.test.ts`（桌面） | 销毁点唯一、挂载槽常驻 `v-show`、租约跟实例生命周期 | 源码文本（结构事实） | 保留（头注释已述理由） | 覆盖停用 / 全部关闭 / 卸载 / 错误终态全路径的组件测试不现实；结构性事实是跨组件装配不变量 |
+| `shell/shellExtensionWiring.test.ts`（桌面） | ShellHost 真的挂状态栏 / 皮肤 token 接壳根 | 接线锁 | 保留单条轻量 | 组件测试全绿而装配缺失的场景无运行时覆盖；接线点唯一 |
+| `shell/shellStyleWiring.test.ts`（桌面） | 入口接线 shell.css（含顺序）+ 被消费共享类仍在 | 接线锁 | 保留单条轻量 | 零引用死样式静默失效教训：类名照写而 CSS 没进构建，组件测试测不出 |
+| `shell/recentsWiring.test.ts`（桌面） | 多任务四处装配点（主屏无运行区 / 工具栏入口 / 全屏层 / Host 挂载） | 源码文本（逐调用点） | **待改造（Phase 2 首批）** | 无——81 处 `toContain` 逐调用点，#12 样板反例；收敛为状态收敛 + ≤2 条接线 |
+| `shell/recentsLayout.test.ts`（桌面） | 卡片尺寸方向 / 几何（纯函数行为测试在场）+ 组件接线 3 条 | 接线锁（混合） | 收敛：接线 3 条 → 1 条 | 方向 / 几何已行为化；接线断言只证 `ShellTaskSwitcher` 真的用了 `recentsLayout` |
+| `shell/settings/settingsOrderLock.test.ts`（桌面） | 设置分组顺序（关于固定最后） | 源码文本（裁决） | **待改造（Phase 2 首批）**：mount 断言分组 DOM 顺序 | 无——顺序在渲染结果里可断言，源码顺序正则是绕路 |
+| `shell/selectionStyle.test.ts`（桌面） | 选中态两套语言（勾章 / 黑底白字） | 源码文本（样式裁决） | 保留 | happy-dom 不计算 scoped CSS，选中填充色是样式表事实 |
+| `shell/surfaceLadder.test.ts`（桌面） | 透明度三档阶梯（92% / 96%+blur / 实心） | 源码文本（样式裁决） | 保留 | 同上：透明度 / blur 是 CSS 事实，DOM 断言不可达 |
+| `shell/wallpaperScope.test.ts`（桌面） | 壁纸挂壳根、宿主页面不得自铺底色 | 源码文本（裁决） | 保留 | 挂载层级与背景归属是渲染结构事实；「不得存在」的禁令只能扫描 |
+| `shell/appChromeLock.test.ts`（桌面） | 壳标题栏常驻、应用不得自绘标题栏 / 窗口控制 / 拖拽区 | 源码文本（裁决 + 禁字面量） | 保留（改 bedcode 时同批维护） | 「不得出现标题栏 / 100vh」是宿主与 app 双侧禁令，禁字面量形态只能文本断言 |
+| `shell/sysPermsChrome.test.ts`（桌面） | 系统页 chrome 常驻、权限页去「页中页」、SVG 图标重画 | 源码文本（裁决） | 保留（图标在场可随 Phase 2 顺带行为化） | 分层越界（fixed 悬浮胶囊压图标）是布局事实；SVG path 是品牌几何延续 |
+| `shell/toolbarThemeToggle.test.ts`（桌面） | 主题切换按钮图标画当前态、文案说目标态 | 源码文本 | **待改造（Phase 2 首批）**：mount + 切主题断言图标与 aria-label | 无——组件挂载即可断言渲染结果 |
+| `shell/customWallpaper.test.ts`（桌面） | 偏好只存文件名 / URL 防穿越（行为测试在场）+ 命令调用落点 3 处 | 接线锁（混合） | 收敛：调用点 3 条 → 单条 | 行为部分已行为化；调用落点只证接线唯一性 |
+| `brandMark.test.ts`（桌面） | 品牌位全仓 2 处、笔画与 icon.svg 逐字同源、旧笔画零残留 | 源码文本（品牌几何） | 保留 | SVG 描边曲线与图标的逐字同源是渲染资产事实，DOM 比对不了 path 数据 |
+| `components/SplashLoading.test.ts`（桌面） | 绘画动画行为 + 尺寸 clamp 与 rAF 内联样式字符串 2 条 | 源码文本（混合） | **待改造（Phase 2 首批）**：rAF 字符串断言提纯函数或收敛 | 无——`strokeDashoffset` 赋值字符串是实现细节，格式化 / 重命名即红 |
+| `components/SplashLoadingTheme.test.ts`（桌面） | 开屏双主题四条不变量（SFC + 静态首屏 css + index.html 接线） | 源码文本（样式裁决） | 保留 | happy-dom 不解析 scoped CSS 变量；静态首屏在 JS 挂载前，只有文本可断言 |
+| `scripts/pluginWatchCopy.test.ts`（桌面） | copyIfChanged / copyManifestIfChanged 行为（已行为化）+ 接线组：watch 2 条、dev-run 1 条、bedcode build.js 1 条 | 接线锁（混合） | **收敛（Phase 2 首批）**：watch 2 条与 build.js 正则按 #12 样板收敛；dev-run 单条保留 | dev-run 单条理由成立（预检先于宿主启动点）；watch 两条断言 `copyStep('复制 index.js'` 等调用点字面量，无豁免理由 |
+| `scripts/runtimeCrateGate.test.ts`（桌面） | runtime crate 打包门禁纯函数行为 + Cargo.toml crate 身份（包名 / 二进制名 / git tag 依赖） | 边界契约（发布面） | 保留（tag 升级同批更新） | crate 身份就是 Cargo.toml 文本事实，`cargo package` / install 契约无行为替身 |
+| `package-contents.test.ts`（桌面 SDK） | SDK 发布内容自足（files / exports / bin / 工具落点） | 边界契约（发布面） | 保留 | 「npm 包里必须有什么」本身就是包清单文本契约 |
+| `composables/useLinkEncryption.test.ts`（移动） | 配置持久化 / 子开关行为 + WS 加密退役零残留扫描 | 边界契约（退役面） | 保留退役面 | 退役面 fail-visible：残留以任何形式回接即违规，只能扫描源码面 |
+| `shell/appSurfaceKeepAlive.test.ts`（移动） | 池常驻渲染 + Teleport 移动不重建 +「打开过 ∩ 运行中」过滤 | 源码文本（结构事实） | 保留（头注释已述理由） | 同桌面保活锁：Teleport 前后台全路径组件测试不现实 |
+| `shell/retiredHostUIRetirementLocks.test.ts`（移动） | 旧宿主 UI 退役路由 / 符号零回接 + 正面钉（mobile-shell 默认路由在位） | 边界契约（退役面） | 保留 | 退役面防回接 = 禁字面量扫描；测试期门禁与 ESLint 分工（防 ignores 改窄） |
+| `shell/shellConstraintLocks.test.ts`（移动） | L1–L7 壳层约束（零资源访问 / 裸 invoke / 授权弹窗单挂载 / 无静默 catch / i18n / token-bound / 壳内自足） | 边界契约（安全红线） | 保留 | 安全三层封锁与壳内自足是禁区扫描不是行为；与 ESLint 分工为测试期门禁 |
+| `shell/shellHomeScreen.test.ts`（移动） | 主屏行为契约 + 跨端系统图标 path 与桌面 ShellIcon 逐字一致 | 边界契约（跨端，行为面不动） | 保留跨端契约 | 移动 / 桌面两套独立构建的图标资产无共享真源，一致性只有文本可比对 |
+| `shell/shellNotifications.test.ts`（移动） | 通知行为契约 + 滑动指示层 color-mix 派生 1 条 | 源码文本（样式，单条） | 保留 | happy-dom 不解析 CSS，color-mix 派生色是样式表事实 |
+| `shell/shellRecents.test.ts`（移动） | 多任务行为契约 + CSS 视觉裁决 + 退役 key 零残留 + ShellHost 过渡名接线 1 条 | 源码文本（混合） | 保留（CSS 与退役面有理由；接线单条合规） | CSS 视觉事实同上；退役 key 零残留同退役面；接线单条符合门槛 |
+| `shell/wallpaperScope.test.ts`（移动） | 壁纸挂宿主根 + 运行面例外（app-run 底色层） | 源码文本（裁决） | 保留 | 同桌面壁纸作用域锁（双端同口径镜像） |
+| `cli.test.ts`（移动 SDK） | validate 权限白名单子进程回归 + CLI 常量 ↔ `rust/src/permission.rs` 双真源同步 | 边界契约（副本同步） | 保留 | JS 硬编码白名单与 Rust 真源无编译期约束，漂移只有双文本比对可断言 |
+| `componentize-manifest.test.ts`（移动 SDK） | 组件化工具落点（桌面 SDK exports + CLI 搜索链） | 边界契约（发布面） | 保留 | 跨包发布落点是 package.json exports 文本契约 |
+| `contractDrift.test.ts`（移动 dev-shell） | dev-shell mini 壳 ↔ 宿主壳 types / nav 同形 | 边界契约（同构漂移） | 保留 | npm 自包含同构实现无编译期约束（头注释已述） |
+| `visualParity.test.ts`（移动 dev-shell） | dev-shell ↔ 宿主视觉真源（token / Tailwind 主题）同源 | 边界契约（同构漂移） | 保留 | 同上；视觉漂移事故（墨纸体系）实证 |
+| `crate-structure-lock.test.mjs`（根） | 契约 crate 字面量形状 / 无 `include!` 逃逸 / compose.json WIT 路径存在 | 边界契约（结构） | 保留（已在上表登记） | 字面量形状是给 node 正则消费的构建契约，非运行时行为 |
+
+**Phase 2 首批改造建议（误红风险最高，均桌面端，均未动手——改造随 #12 样板推广执行）**：
+
+1. `shell/recentsWiring.test.ts`：81 处逐调用点断言，是全仓最重的旧写法；合法重排装配顺序 / 重命名局部变量即红。
+2. `scripts/pluginWatchCopy.test.ts` watch 组 2 条 + bedcode `build.js` 1 条：断言 `copyStep('复制 index.js'` 等调用点字面量，改步骤文案即红；`copyIfChanged` 纯函数行为测试已在其位，接线可收敛。
+3. `shell/settings/settingsOrderLock.test.ts`：源码顺序正则锁可由 mount 断言分组 DOM 顺序替代（行为可表达）。
+4. `shell/toolbarThemeToggle.test.ts`：纯源码断言可由 mount + 切主题断言图标 / aria-label 替代。
+5. `components/SplashLoading.test.ts` rAF / clamp 2 条：断言内联样式精确字符串，格式化即红；时序计算已有导出常量可提纯函数。
+
 ## 9. 文档索引
 
 | 需求 | 入口 |
