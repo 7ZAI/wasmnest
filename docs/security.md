@@ -14,6 +14,11 @@
 - 调试面（bench channel、wdio 插件注册等）必须 `cfg(debug_assertions)` 门控，并有锁证明 release 不含。
 - egress / 文件系统授权链的 fail-closed 口径见 docs/architecture.md §5（无 app_handle 的无头 / 测试上下文收紧为「判定失败」）。
 
+### 1.1 前端信任边界（威胁模型真源 → ADR 0058）
+
+- **当前真实边界 = 「后端按应用沙箱，前端同可信域」**：wasm 应用逻辑面的 wasmtime 沙箱成立；插件前端与宿主同 webview、共享 Tauri IPC 命令面，**不是**沙箱边界。事实基础、威胁声明与裁决（措辞诚实 + Rust 侧命令门禁 + `withGlobalTauri=false` spike；独立 webview 强隔离仅以「引入不可信第三方应用」为触发条件）逐条带代码证据落 **[ADR 0058](adr/0058-frontend-trust-boundary-and-command-surface-threat-model.md)**——本节只挂真源不复制。
+- 与 §1 其余条目的分工：本节管「前端 JS 能触达什么」；三层封锁（docs/frontend.md §1）封的是前端直连网络 / 文件 / 导航原语，IPC `invoke` 不在其封锁面内。
+
 ## 2. 日志
 
 - 统一 `tracing`：运行细节 `debug!` / 关键生命周期 `info!` / 可恢复异常 `warn!` / 影响功能的失败 `error!`。

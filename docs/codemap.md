@@ -229,6 +229,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 前端规范（零资源访问三层封锁 / 挂载包形态 / 移动壳优先 / i18n） | `docs/frontend.md` |
 | Rust 规范与注释命名 | `docs/backend.md` |
 | 安全与日志红线 | `docs/security.md` |
+| 决策记录（ADR 索引；0055–0057 出处登记 / 0058 前端信任边界威胁模型） | `docs/adr/README.md` |
 | 单元测试 / 完成定义与验证 | `docs/testing.md` |
 | wasm 应用开发检查清单（双端红线，迁自旧仓 issue #14） | `docs/knowledge/wasm-app-development-checklist.md` |
 | 桌面 wasm 应用开发指南 / API 参考（迁自旧仓 issue #14；SDK README 死链的现去向） | `wasmnest-desktop/docs/wasm-app-dev-desktop.md`、`wasmnest-desktop/docs/knowledge/wasm-app-dev-guide.md` |
@@ -240,7 +241,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 应用侧硬约束（业务主场） | `../wasmnest-apps/AGENTS.md` + 各 app `plugin.json` / `scripts/build.js` |
 | 能力仓（引擎 / 契约真源） | `../wasmnest-lib/`（`wasmnest-wasm-core/wit/core.wit`、各域 `wit/<domain>.wit`、`wasmnest-contract/`；平台侧唯一 resolver = `scripts/lib-paths.mjs`） |
 | 跨端互连测试 | `../wasmnest-test/cross-end-tests/` |
-| 旧仓（代码冻结 · 文档真源与回退点） | `../../BedCode/`：`docs/adr/`（ADR 0017/0019/0022/0030/0033/0051/0052/0056/0057 等）、`docs/knowledge/`（build-process / wasip3-toolchain / logging / plugin 清单等）、`docs/commands.md`、两端 `docs/code-map.md`——引用时注意旧仓代码与三仓现状有差异，机制以新仓代码为准 |
+| 旧仓（代码冻结 · 文档真源与回退点） | `../../BedCode/`：`docs/adr/`（ADR 0017/0019/0022/0030/0033/0051/0052 等，冻结于 0054；0055–0057 正文未成文，出处登记在本仓 `docs/adr/README.md`）、`docs/knowledge/`（build-process / wasip3-toolchain / logging / plugin 清单等）、`docs/commands.md`、两端 `docs/code-map.md`——引用时注意旧仓代码与三仓现状有差异，机制以新仓代码为准 |
 | 桌面 SDK | `wasmnest-desktop/packages/plugin-sdk-desktop/`（README 有已知漂移，docs/contracts.md §5.2） |
 | 移动 SDK / 运行面类型 | `wasmnest-mobile/packages/plugin-sdk-mobile/`（`src/types.ts` = `UIRegistry` 真源） |
 | 宿主构建 / dev 脚本 | 各端 `scripts/`（头注释自解释）+ 根 `scripts/{app-paths,app-script,adaptive-run}.mjs` |

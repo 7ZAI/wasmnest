@@ -14,7 +14,7 @@
 
 WasmNest 是一个基于 [WebAssembly Component Model](https://component-model.bytecodealliance.org/) 的双端 wasm 应用宿主：桌面端 Tauri 2 + Vue 3（Windows / macOS / Linux），移动端 Tauri 2（Android）+ Vue 3。
 
-它解决的核心问题是**把产品能力从宿主代码中彻底解耦**：终端、AI 对话、文件传输、Agent 管理等产品能力不写进宿主，而是作为独立的 wasm 应用，在 wasmtime 沙箱中按权限装载；应用不被停用就继续运行，停用 / 卸载才是唯一销毁点。宿主只提供通用引擎、安全闸门与装配机制——应用可以自由生长，宿主保持极简。
+它解决的核心问题是**把产品能力从宿主代码中彻底解耦**：终端、AI 对话、文件传输、Agent 管理等产品能力不写进宿主，而是作为独立的 wasm 应用装载——应用逻辑（wasm Component）在 wasmtime 沙箱中按权限运行，应用前端与宿主同 webview、同可信域（信任边界详见 [ADR 0058](docs/adr/0058-frontend-trust-boundary-and-command-surface-threat-model.md)）；应用不被停用就继续运行，停用 / 卸载才是唯一销毁点。宿主只提供通用引擎、安全闸门与装配机制——应用可以自由生长，宿主保持极简。
 
 ## 目标
 
@@ -26,7 +26,7 @@ WasmNest 致力于让人快速构建**属于个人的本地「小程序」**，�
 
 | 用什么技术 | 达到什么效果 | 解决什么问题 |
 | --- | --- | --- |
-| **wasmtime 沙箱**：每个应用独立 Component 实例 + 显式能力导入 | 应用默认零系统能力，只拿得到被批准的文件、网络等资源 | 应用失控或含恶意代码时，影响半径被压到最小 |
+| **wasmtime 沙箱（应用逻辑面）**：每个应用的 wasm Component 独立实例 + 显式能力导入；应用前端不在此沙箱内——与宿主同 webview、同可信域（[ADR 0058](docs/adr/0058-frontend-trust-boundary-and-command-surface-threat-model.md)） | 应用逻辑默认零系统能力，只拿得到被批准的文件、网络等资源 | 应用逻辑失控或含恶意代码时，影响半径被压到最小 |
 | **WIT / Component Model 跨语言契约**：宿主与应用只通过接口对话，不共享代码 | 应用可用任何能产出 wasm Component 的语言编写，宿主不在意语言与构建链 | 插件生态被锁死在宿主的语言和运行时上 |
 | **能力即权限**：`plugin.json` 声明 ∩ 用户批准，无默认授予 | 应用能做什么由用户逐项决定，高风险能力按域细分 | 「装一个应用 = 交出全部权限」 |
 | **独立构建的应用包 + 装配机制** | 新增、更换、下架能力不动宿主；停用 / 卸载才销毁回收 | 功能耦合进宿主，改一点就要重发一版 |
@@ -48,7 +48,7 @@ WasmNest 致力于让人快速构建**属于个人的本地「小程序」**，�
 | --- | --- | --- |
 | 宿主 | Tauri 2 + Vue 3（Windows / macOS / Linux） | Tauri 2 + Vue 3（Android） |
 | 应用装载 | 同一窗口全屏挂载独立构建的应用包 | 宿主壳注册运行面 |
-| 应用隔离 | wasmtime 沙箱实例 + 显式能力导入 | 同左，另加内容绑定审批 |
+| 应用隔离 | 应用逻辑 wasmtime 沙箱实例 + 显式能力导入；应用前端与宿主同 webview、同可信域（[ADR 0058](docs/adr/0058-frontend-trust-boundary-and-command-surface-threat-model.md)） | 同左，另加内容绑定审批 |
 
 应用不被停用就继续运行——切走只是藏起来（DOM / 组件实例保留），停用 / 卸载才是唯一销毁点；宿主壳不持有任何应用内部状态。双端装配细节见 [`docs/architecture.md`](docs/architecture.md) 与 [`docs/frontend.md`](docs/frontend.md)。
 
@@ -215,7 +215,7 @@ wasmnest/
 
 - **权限**：无默认授予，未声明即拒；高风险面按域拆分（`pty:spawn` / `pty:io`、`ws:client` / `ws:server`、`fs:pick` / `fs:read` / `fs:write` 等）。
 - **出站**：三层判定（目标白名单 → 声明 URL → 记忆）+ 未命中一次授权；无 `AppHandle` 的无头 / 测试上下文 fail-closed。
-- **前端**：Tauri ACL + CSP + 静态 lint 三层封锁，前端不能直连网络 / 文件 / 导航原语。
+- **前端**：Tauri ACL + CSP + 静态 lint 三层封锁，前端不能直连网络 / 文件 / 导航原语；三层封锁不含 IPC——同 webview 内的插件前端可经 `invoke` 触达宿主命令面，命令面信任边界与收敛裁决见 [ADR 0058](docs/adr/0058-frontend-trust-boundary-and-command-surface-threat-model.md)。
 - **错误信封**：跨进程失败统一为 `{ code, request_id, params? }`，`code` 即前端 i18n key；技术细节只进宿主日志。
 
 ### 测试与锁

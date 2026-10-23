@@ -14,7 +14,7 @@ English | [简体中文](README.md)
 
 WasmNest is a dual-end wasm application host built on the [WebAssembly Component Model](https://component-model.bytecodealliance.org/): Tauri 2 + Vue 3 (Windows / macOS / Linux) on desktop, Tauri 2 (Android) + Vue 3 on mobile.
 
-The core problem it solves: **decoupling product capabilities from host code entirely**. Terminals, AI chat, file transfer, agent management — none of them live in the host. Each ships as an independent wasm app that runs in a wasmtime sandbox and is loaded under explicit permissions; an app keeps running until it is disabled — switching away only hides it, and disable / uninstall is the only destroy point. The host only provides the generic engine, security gates and assembly — apps can grow freely while the host stays minimal.
+The core problem it solves: **decoupling product capabilities from host code entirely**. Terminals, AI chat, file transfer, agent management — none of them live in the host. Each ships as an independently loaded wasm app: the app logic (wasm Component) runs in a wasmtime sandbox under explicit permissions, while the app frontend shares the host's webview and trust domain (see [ADR 0058](docs/adr/0058-frontend-trust-boundary-and-command-surface-threat-model.md)); an app keeps running until it is disabled — switching away only hides it, and disable / uninstall is the only destroy point. The host only provides the generic engine, security gates and assembly — apps can grow freely while the host stays minimal.
 
 ## Goal
 
@@ -26,7 +26,7 @@ WasmNest is committed to making it fast to build **personal local "mini-programs
 
 | Technology | Effect | Problem it solves |
 | --- | --- | --- |
-| **wasmtime sandbox**: one isolated Component instance per app, explicit capability imports | Apps start with zero system capabilities and only get the file / network access they were approved for | A runaway or malicious app is contained to the smallest possible radius |
+| **wasmtime sandbox (app logic)**: one isolated Component instance per app with explicit capability imports; the app frontend is not sandboxed — it shares the host's webview and trust domain ([ADR 0058](docs/adr/0058-frontend-trust-boundary-and-command-surface-threat-model.md)) | App logic starts with zero system capabilities and only gets the file / network access it was approved for | A runaway or malicious app has its logic contained to the smallest possible radius |
 | **WIT / Component Model cross-language contracts**: host and app talk only through interfaces, sharing no code | Apps can be written in any language that can emit a wasm Component; the host doesn't care about language or toolchain | Plugin ecosystems locked to the host's language and runtime |
 | **Capability is permission**: `plugin.json` declarations ∩ user approval, nothing granted by default | What an app can do is decided by the user, with high-risk abilities split by domain | Installing an app means handing over all permissions |
 | **Independently built app bundles + assembly mechanism** | Add, swap or remove capabilities without touching the host; apps are destroyed only on disable / uninstall | Features coupled into the host, forcing a full release for every change |
@@ -48,7 +48,7 @@ WasmNest is committed to making it fast to build **personal local "mini-programs
 | --- | --- | --- |
 | Host | Tauri 2 + Vue 3 (Windows / macOS / Linux) | Tauri 2 + Vue 3 (Android) |
 | App loading | Full-screen mount of an independently built app bundle in the same window | Runtime surface registration in the host shell |
-| App isolation | wasmtime sandbox instance + explicit capability imports | Same, plus content-bound approval on Android |
+| App isolation | App logic: wasmtime sandbox instance + explicit capability imports; app frontend shares the host's webview and trust domain ([ADR 0058](docs/adr/0058-frontend-trust-boundary-and-command-surface-threat-model.md)) | Same, plus content-bound approval on Android |
 
 An app keeps running as long as it is not disabled — switching away only hides it (DOM / component instances are retained); disable / uninstall is the only destroy point, and the host shell holds no app-internal state. Assembly details: [`docs/architecture.md`](docs/architecture.md), [`docs/frontend.md`](docs/frontend.md).
 
@@ -215,7 +215,7 @@ The contract version is part of the wasm import name. If host and guest versions
 
 - **Permissions**: nothing is granted by default; undeclared means denied. High-risk surfaces are split by domain (`pty:spawn` / `pty:io`, `ws:client` / `ws:server`, `fs:pick` / `fs:read` / `fs:write`, etc.).
 - **Egress**: three-layer decision (target allowlist → declared URL → memory) plus a one-time grant prompt on a miss; headless / test contexts without an `AppHandle` fail closed.
-- **Frontend**: Tauri ACL + CSP + static lint form a three-layer blockade; frontend code cannot touch network / file / navigation primitives directly.
+- **Frontend**: Tauri ACL + CSP + static lint form a three-layer blockade; frontend code cannot touch network / file / navigation primitives directly. The blockade does not cover IPC — plugin frontends in the same webview can reach the host command surface via `invoke`; the trust boundary and its convergence ruling are documented in [ADR 0058](docs/adr/0058-frontend-trust-boundary-and-command-surface-threat-model.md).
 - **Error envelope**: cross-process failures use `{ code, request_id, params? }`, where `code` is the frontend i18n key; technical details stay in host logs.
 
 ### Tests and Locks
