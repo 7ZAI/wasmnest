@@ -79,9 +79,10 @@
         :style="{ animationDelay: '160ms' }"
       />
       <div class="px-4">
-        <!-- gap-3 = 12px：ui-ux-pro-max `--domain ux / Touch Spacing` 要求相邻触控目标
-     间距 ≥8px，原 gap-1(4px) 既低于门槛、又让四列图标挤成一团。 -->
-        <div v-if="businessApps.length > 0" class="grid grid-cols-4 gap-3 shell-reveal" role="list" :style="{ animationDelay: '200ms' }">
+        <!-- gap-4 = 16px：在相邻触控目标间距 ≥8px（ui-ux-pro-max Touch Spacing）
+     门槛之上对齐 Android 启动器的 4/8dp 栅格节奏；与下方服务 / 系统宫格同 gap，
+     同屏同层必须同栅格（2026-10-24 用户反馈优化）。 -->
+        <div v-if="businessApps.length > 0" class="grid grid-cols-4 gap-4 shell-reveal" role="list" :style="{ animationDelay: '200ms' }">
           <ShellAppCell v-for="app in businessApps" :key="app.id" :app="app" @open="open" />
         </div>
         <!-- 空态给出下一步（安装入口在应用管理页），而不是只留一句「暂无应用」 -->
@@ -97,7 +98,7 @@
       <template v-if="serviceEntries.length > 0">
         <ShellSection :title="t('shell.home.servicesTitle')" class="shell-reveal shell-text-over-wall" :style="{ animationDelay: '240ms' }" />
         <div class="px-4">
-          <div class="grid grid-cols-4 gap-3 shell-reveal" role="list" :style="{ animationDelay: '280ms' }">
+          <div class="grid grid-cols-4 gap-4 shell-reveal" role="list" :style="{ animationDelay: '280ms' }">
             <button
               v-for="entry in serviceEntries"
               :key="entry.id"
@@ -133,7 +134,7 @@
       <!-- ======== 系统宫格（平台自有面，与应用同层） ======== -->
       <ShellSection :title="t('shell.home.sysTitle')" class="shell-reveal shell-text-over-wall" :style="{ animationDelay: '320ms' }" />
       <div class="px-4">
-        <div class="grid grid-cols-4 gap-3 shell-reveal" role="list" :style="{ animationDelay: '360ms' }">
+        <div class="grid grid-cols-4 gap-4 shell-reveal" role="list" :style="{ animationDelay: '360ms' }">
           <button
             v-for="entry in sysEntries"
             :key="entry.id"

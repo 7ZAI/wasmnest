@@ -87,14 +87,14 @@ const apps: ComputedRef<ShellApp[]> = computed(() => registry.appsRef.value)
 /** 打开记录（useAppSurfaces 模块单例）：销毁对账的判据之一 */
 const { opened } = useAppSurfaces()
 
-/** 展示排序：运行中优先，其次按名称（中文用 localeCompare，避免拼音序错乱） */
+/**
+ * 展示排序：按名称（中文用 localeCompare，避免拼音序错乱）。
+ * 不做「运行中优先」（2026-10-24 用户裁决删除）：launch 乐观置 running 会让刚
+ * 点击的应用立刻跳到宫格首位，位置漂移破坏找图标的肌肉记忆；权限页为同一理由
+ * 早已独立用名称序（见 ShellPermissionsScreen）。运行状态由角标表达，不靠位置。
+ */
 const sortedApps: ComputedRef<ShellApp[]> = computed(() =>
-  [...apps.value].sort((a, b) => {
-    const aRunning = a.state === 'running' ? 0 : 1
-    const bRunning = b.state === 'running' ? 0 : 1
-    if (aRunning !== bRunning) return aRunning - bRunning
-    return a.name.localeCompare(b.name, 'zh-Hans-CN')
-  }),
+  [...apps.value].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN')),
 )
 
 /** 运行中应用（多任务页消费） */

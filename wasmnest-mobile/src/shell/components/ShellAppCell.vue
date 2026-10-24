@@ -1,12 +1,12 @@
 <template>
   <button
     type="button"
-    class="flex flex-col items-center gap-1.5 py-2 rounded-[12px] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)] active:opacity-70"
+    class="flex flex-col items-center gap-2 py-2 rounded-[12px] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)] active:opacity-70"
     :aria-label="label"
     @click="$emit('open', app.id)"
   >
     <span class="relative flex-shrink-0">
-      <ShellAppIcon :app="app" :size="44" />
+      <ShellAppIcon :app="app" :size="48" />
       <!-- 状态标记锚定图标右上角（随图标，不随名称宽度漂移）。
            待审批用「!」而不是小圆点：它需要用户动作，不是纯状态读数 -->
       <span
@@ -37,6 +37,9 @@
  * 状态标记三档：待审批（! 角标，需要动作）/ 运行中（绿点）/ 失败（红点）；
  * 其余（已停止、已停用）不占角标——宫格里绝大多数应用是静默状态，全画标记
  * 反而让真正需要注意的那个看不出来。
+ *
+ * 图标 48px = Android 触达目标下限（ui-ux-pro-max Touch Target；44pt 是 iOS 口径）；
+ * 图标与名称 8px、宫格 gap 16px（同屏三宫格同栅格，见 ShellHomeScreen）。
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'

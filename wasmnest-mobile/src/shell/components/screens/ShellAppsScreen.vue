@@ -164,7 +164,7 @@ const { sortedApps, stats, supportsInstall, installFromLocalPackage, refresh } =
 /**
  * 业务应用 / 系统服务分组（唯一判据 = manifest kind；不在 UI 里硬编码 id）。
  * 业务应用在前、系统服务在后（2026-10-23 用户裁决）；服务按 L1 → L2 → 名称，
- * 应用保持现有运行中优先 + 名称排序。
+ * 应用按名称排序（sortedApps 同序，2026-10-24 起不再运行中优先）。
  */
 const appGroups = computed(() => {
   const apps = sortedApps.value.filter((app) => !isServiceKind(app.kind))

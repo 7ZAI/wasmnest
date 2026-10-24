@@ -266,8 +266,9 @@ const pendingApps = computed(() =>
 /**
  * 应用权限清单（按应用视图）
  *
- * 名称序而非 sortedApps 的运行优先：审计面要求顺序稳定，运行状态变化不应
- * 让整页重新排。待审批应用由上方审批卡承担展示位，列表不重复出现。
+ * 名称序：审计面要求顺序稳定，运行状态变化不应让整页重新排（不消费
+ * sortedApps，展示排序怎么变都不影响本页）。待审批应用由上方审批卡承担
+ * 展示位，列表不重复出现。
  */
 const appRows = computed<ShellApp[]>(() =>
   [...visibleApps.value]
