@@ -204,7 +204,7 @@ export default {
       },
       stopService: {
         title: '停止服务「{name}」？',
-        body: '服务将停止对外提供能力，可在应用管理中重新启动。',
+        body: '将停止服务「{name}」。服务停止后将不再对外提供能力，可在应用管理中重新启动。',
         confirm: '停止服务',
       },
       exit: {

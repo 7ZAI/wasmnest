@@ -210,7 +210,7 @@ export default {
       },
       stopService: {
         title: 'Stop service "{name}"?',
-        body: 'The service will stop providing its capability; restart it from App management.',
+        body: 'Stop service "{name}"? It will stop providing its capability; restart it from App management.',
         confirm: 'Stop service',
       },
       exit: {

@@ -93,8 +93,12 @@
               </button>
             </div>
             <div class="dlg-b">
-              <p class="note">{{ t('shell.dialog.stopService.body') }}</p>
-              <div class="perm-line mono">{{ app?.pluginId }}</div>
+              <p class="note">{{ t('shell.dialog.stopService.body', { name: app?.name ?? app?.pluginId ?? '' }) }}</p>
+              <!-- 明确显示要停的服务名称（不是包名）：用户决定的是「停哪个服务」 -->
+              <div class="shell-rec">
+                <span class="tg">{{ app?.name ?? app?.pluginId }}</span>
+                <span class="shell-chip warn">{{ t('shell.state.running') }}</span>
+              </div>
             </div>
             <div class="dlg-f">
               <button class="shell-btn ghost" @click="close">{{ t('shell.dialog.cancel') }}</button>
