@@ -1,6 +1,7 @@
 # 质量收口：CI 门禁、前端信任边界与测试策略 — 实施规格
 
 > 状态：**建议已登记，未实施（2026-10-23）**。
+> 修订：**2026-10-24 审核修订**——§2 证据表逐项复核（绝大多数精确吻合，多处行号 / 行数到个位一致），落六处修订：① 桌面套件 flaky 治理升为 CI 前置（§4.1 / §4.3 / §10）；② 平台 CI 能力仓检出口径改「跟 ref 不钉 tag」（§4.2）；③ ws-client-engine 归因修正——非「对齐桌面」（§7.1）；④ SDK README 实为**双死链**、真源在冻结旧仓（§2 / §9.2）；⑤ ADR 落点明确为本仓新开 `docs/adr/`（§5.4）；⑥ 验收数字去钉死、改「以实施时基线为准」（§4.3 / §10 / §11）。复核命令与结果见 §14 尾。
 > 本文档只记录评估结论、建议方案与验收口径，**不等于已排期**；每条实施前需用户确认优先级与范围。
 > 关系：不改 `docs/testing.md` §3 迁移期口径（用户 2026-10-18）的收口承诺，而是给「收口」补上门禁、安全与测试策略的落地路径。
 > 阅读前提：`AGENTS.md` §0–§2（定位 / 薄壳红线）、`docs/testing.md` §3–§4（完成定义 / Seam 3）、`docs/security.md`（安全红线）。
@@ -17,10 +18,11 @@
 
 | 检查项 | 结果 | 证据 | 类型 |
 | --- | --- | --- | --- |
-| 根 `pnpm run test:run` | 124/124 通过 | 评估时执行 | 实测 |
-| 桌面 `pnpm run test:run` | **714/716，2 个失败** | `src/__tests__/scripts/pluginWatchCopy.test.ts` 的「接线」组 2 条用例红 | 实测 |
+| 根 `pnpm run test:run` | 124/124 通过（2026-10-24 复核：绿） | 评估时执行 | 实测 |
+| 桌面 `pnpm run test:run` | **714/716，2 个失败**（2026-10-24 复核：756 条中同 2 条稳定红——总数随 keepalive 增测漂移，验收以实施时基线为准） | `src/__tests__/scripts/pluginWatchCopy.test.ts` 的「接线」组 2 条用例红 | 实测 |
 | 2 个红测试根因 | 实现已重构、锁没跟着走 | `199d1e8` 把预检抽到 `scripts/plugin-precheck.mjs`；`dev-run.js` 已改为 `import { runPluginPrecheck } from './plugin-precheck.mjs'`（开发期调用还在、且仍先于宿主 spawn），但测试仍在 `dev-run.js` 源码里 `indexOf('ensurePluginWasm()')` 等旧调用点（该测试文件 L202–L218 区域） | 实测（复跑 + 失败堆栈定位） |
-| 移动 `pnpm run test:run` | 814/814 通过 | 评估时执行 | 实测 |
+| **桌面套件 flaky（2026-10-24 复核新增）** | 同一工作树两次全量结果漂移：3 红/754 条（`src/__tests__/shell/recentsLayout.test.ts`「网格轨道数与 RECENTS_GRID_TRACKS 一致」红）vs 2 红/756 条（仅 pluginWatchCopy 对）——红绿与**总条数**都不稳定 | 两次 `pnpm -C wasmnest-desktop run test:run` 实跑对比 | 实测（2026-10-24） |
+| 移动 `pnpm run test:run` | 814/814 通过（2026-10-24 复核：816/816 绿） | 评估时执行 | 实测 |
 | 桌面 `vue-tsc --noEmit` | exit 0 | 评估时执行 | 实测 |
 | 根 ESLint（双端 `src`） | exit 0 | 评估时执行 | 实测 |
 | 桌面 Rust `cargo test --test capability_crates_no_product_ids` | 6/6 通过 | 评估时执行 | 实测 |
@@ -32,13 +34,15 @@
 | 桌面宿主体量 | 桌面 Rust ≈ 14,323 行 | 行数统计 | 静态阅读 |
 | 前端信任边界 | 双端 `withGlobalTauri: true`；`AppMountEnv.invoke` 是原始 `invoke` 透传（`useAppMount.ts` 头注释自述「无附加凭证」）；插件前端与宿主同 webview；`api_bridge.rs` 的 `plugin_uninstall` / `plugin_install_from_file` 无凭证参数（仅 `plugin_id` / `path` + State） | `tauri.conf.json:12`（双端）、`useAppMount.ts` L58–L60、`../wasmnest-lib/.../manager/host/api_bridge.rs` L679–L697 | 静态阅读 |
 | 命令隔离现状 | Tauri `invoke_handler` 注册的命令对 webview 内所有 JS 一视同仁，不按应用隔离（Tauri 2 默认行为） | Tauri 2 机制 | 静态阅读 |
-| Rust panic 面 | 宿主安全路径测试区外 ≈ 121 处 `unwrap/expect/panic`（多为 `RwLock`）；移动 `egress.rs` 1515 行 ≈ 30 处 `RwLock.unwrap()`；`plugin/manager.rs` 2432 行 | `rg 'unwrap\|expect\|panic'` 计数 | 静态阅读 |
+| Rust panic 面 | 宿主（双端 src）**行内测试区外** ≈ 121 处 `unwrap/expect/panic`（多为 `RwLock`；2026-10-24 复核：119，复现命令见 §14）；移动 `egress.rs` 1515 行 ≈ 30 处 `RwLock.unwrap()`（复核：测试区外 34）；`plugin/manager.rs` 2432 行 | 剔除行内 `#[cfg(test)]` 区后 `rg` 计数（裸 rg 会把行内测试一起算） | 静态阅读 |
 | Rust 工具链门禁 | 无 `clippy -D warnings`、无 `cargo audit` / `cargo deny` | 各 crate 无对应配置 / CI 缺失（见上） | 静态阅读 |
 | SSRF 判据 | `is_private_ip` 只判字面 IP，DNS 解析到私网 / 元数据地址不拦；URL 解析为自研 `parse_url_lite` | `wasmnest-mobile/src-tauri/src/egress.rs`、`commands/http_proxy.rs` | 静态阅读 |
 | 文档漂移 1 | `README.md` L53「桌面应用离开应用面即被卸载，宿主不持有任何应用内部状态」与 `AGENTS.md` §2 / `docs/architecture.md` 的 2026-10-23 口径「切走只藏、停用才销毁」**直接矛盾**（keepalive 已实施） | README L53 实读 | 实测（文件核对） |
-| 文档漂移 2 | 桌面 SDK README 链 `../../wasm-app-dev-desktop.md` 与 `../../../wasmnest-desktop/docs/knowledge/wasm-app-dev-guide.md`，后者目录不存在 | `packages/plugin-sdk-desktop/README.md:7`、`ls wasmnest-desktop/docs/knowledge` 404 | 实测（ls） |
+| 文档漂移 2 | 桌面 SDK README **双死链**：`../../wasm-app-dev-desktop.md`（解析为 `wasmnest-desktop/wasm-app-dev-desktop.md`）与 `../../../wasmnest-desktop/docs/knowledge/wasm-app-dev-guide.md` 目标**均**不存在；真源在冻结旧仓 `../../BedCode/`（`bedcode-desktop/wasm-app-dev-desktop.md`、`docs/knowledge/`），未随四仓拆分迁入 | `packages/plugin-sdk-desktop/README.md:7`、`ls wasmnest-desktop/docs` 404、三仓 `find -name 'wasm-app-dev*'` 为空、旧仓实存 | 实测（ls；2026-10-24 复核补全为双死链） |
 | 发布面 | `release-manifest.json` 的 `hostRuntime.artifacts` 为空；产品版本 `0.0.1` alpha，无真实用户 | manifest 实读 | 实测 |
 | 历史口径 | 平台仓 94 提交、初始提交 255,169 行；旧仓 BedCode 2026-05-02 → 2026-10-18、1927 提交。**定性：长期演进后的四仓拆分，不是「6 天写完」** | `git log` 统计 | 实测 |
+
+> **2026-10-24 审核复核注**：上表逐项复核，绝大多数精确吻合（四仓 workflow 清单、双端 `withGlobalTauri: true`（`tauri.conf.json:12`）、`egress.rs` 1515 / `manager.rs` 2432 / 移动 Rust 25,842 / 桌面 14,323 行、桌面 Rust 测试 44 文件 13 lock / 移动 37 文件 25 lock、README L17/L32/L53、`api_bridge.rs` 两命令无凭证、移动旧前端五目录 13,516 行、`check:manifest` 判据 2/6 描述等均一致）。修正两处：§7.1 ws-client-engine 归因（桌面不依赖该引擎）、本表文档漂移 2 实为双死链。「前端 1326」为评估时汇总口径（非文件数——现 138；非现用例数——桌面 756 + 移动 816），实施时以 reporter 汇总为准。
 
 ## 3. 优先级总览
 
@@ -46,7 +50,7 @@
 
 | # | 优先级 | 工作流 | 目标 | 收益 | 粗估 | 依赖 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | P0 | 恢复测试 CI 门禁 | 三仓 PR 必须过 lint / typecheck / 单测 / 锁 | 重构错误当场红，兜底四仓拆分后的验证债 | 3–5 天 | 依赖 §4.1（先修红测试） |
+| 1 | P0 | 恢复测试 CI 门禁 | 平台 / 能力 / 跨端三仓新增 + 应用仓对齐；PR 必须过 lint / typecheck / 单测 / 锁 | 重构错误当场红，兜底四仓拆分后的验证债 | 3–5 天 | 依赖 §4.1（先修红测试 + flaky 治理） |
 | 2 | P0 | 前端信任边界与命令隔离 | 插件前端拿不到宿主管理命令 | 补上评估发现的**最大安全缺口** | 5–10 天 | threat model 先裁决（§5） |
 | 3 | P1 | 测试策略再平衡 | 源码文本锁 → 行为 / 契约测试 | 重构不再误红（`pluginWatchCopy` 即实证） | 5–8 天 | 1 之后见效 |
 | 4 | P1 | 移动宿主瘦身 / 例外登记 | B1–B6 业务面迁出或登记例外 | 薄壳红线从文档落到代码 | 10–20 天 | 需应用仓同步 |
@@ -55,9 +59,9 @@
 
 另有 4 项**长期风险**（单一作者 / bus factor、自研协议与加密面未外部审计、性能只有测试没有基线、发布面未验证）登记在 §13.1，不列入本期工作量，需另立票。
 
-## 4. P0-1 恢复测试 CI 门禁（三仓）
+## 4. P0-1 恢复测试 CI 门禁（三仓新增 + 应用仓对齐）
 
-### 4.1 先修两个红测试（前置）
+### 4.1 前置：修两个红测试 + flaky 治理
 
 `wasmnest-desktop/src/__tests__/scripts/pluginWatchCopy.test.ts` 的「接线（dev 脚本必须真的用上内容感知复制）」组：当前在 `scripts/dev-run.js` 源码里找旧函数名调用点（`ensurePluginWasm()` / `ensurePluginFrontends()` / `ensurePluginManifests()` 的行首 / indexOf 断言）。重构后这些调用已收进 `plugin-precheck.mjs`（`dev-run.js` 只 `import { runPluginPrecheck }`，并在 `const host = start(` 之前同步调用 `runPluginPrecheck()`）——**行为没退化，锁过时了**。
 
@@ -67,11 +71,13 @@
 2. 接线面：把「dev-run 真的调用预检且先于宿主启动」改写为**一条**对 `dev-run.js` 源码的轻量断言：`runPluginPrecheck` 出现在 `scripts/dev-run.js` 中、且其调用位置先于 `start(` 宿主启动点（匹配现调用形态 `runPluginPrecheck()`）；或在 `dev-run.js` 保留一句显式注释 `// PRECHECK-WIRE` 并断言它——**接线锁允许存在，但不允许同时盯三个内部函数名**。
 3. 删除对 `ensurePlugin*()` 三个旧调用点的逐个断言（这些内部顺序已由 `plugin-precheck.mjs` 的行为测试承载）。
 
-### 4.2 三仓 CI 编排
+**flaky 治理（2026-10-24 复核新增，required checks 的前置）**：同一工作树两次桌面全量结果漂移——第一次 3 红/754 条（`src/__tests__/shell/recentsLayout.test.ts`「网格轨道数与 RECENTS_GRID_TRACKS 一致」红），第二次 2 红/756 条（仅 pluginWatchCopy 对）；红绿与**总条数**（754 vs 756）都不稳定。required checks 上线前必须：① 查明 `recentsLayout` 非确定根因（样式同源断言疑似对执行顺序 / 并行收集敏感）并修复或隔离；② 查明总条数漂移来源（754 vs 756，疑有用例被随机跳过或收集不稳）；③ 落 flaky 策略（quarantine 清单 / 重试上限），保证 §4.3 的「Seam 3 跑红」验证不被随机红污染。
+
+### 4.2 三仓 CI 编排（应用仓对齐）
 
 | 仓 | workflow | 内容 | 触发 |
 | --- | --- | --- | --- |
-| 平台 `wasmnest` | 新增 `test.yml`（或按 job 拆分层） | ① 根 `pnpm run check:wit`（需 checkout 时把能力仓检出到 `../wasmnest-lib`，按 manifest `repos.lib.tag` 钉版，见下）；② 双端 `vue-tsc --noEmit` + 根 eslint；③ 各端 `pnpm run test:run`；④ Rust 分层 job：单测 / 锁层全跑，需随包产物的 e2e（pty / ws / http / app-bundle 等）标记为收口手跑或单独 nightly（不进 PR 阻断） | PR + main 推送 |
+| 平台 `wasmnest` | 新增 `test.yml`（或按 job 拆分层） | ① 根 `pnpm run check:wit`（能力仓检出**跟 ref 不钉 tag**：默认 `dev`、可配 `WASMNEST_LIB_REF`，与应用仓 `ci.yml` 头注释的 ref 口径一致——CI 只做校验，按 manifest tag 钉住是发布流水线的事；开发期钉 tag 会让依赖未发 tag 的 lib 改动长期误红 `check:wit`）；② 双端 `vue-tsc --noEmit` + 根 eslint；③ 各端 `pnpm run test:run`；④ Rust 分层 job：单测 / 锁层全跑，需随包产物的 e2e（pty / ws / http / app-bundle 等）标记为收口手跑或单独 nightly（不进 PR 阻断） | PR + main 推送 |
 | 能力 `wasmnest-lib` | 新增 `ci.yml` | **无根 workspace**，按 crate 遍历：`for d in */Cargo.toml; do cargo test --manifest-path "$d"; done`（`cargo fmt --check` 同样按 crate 遍历；P2-1 落地后追加 clippy / audit） | PR + main |
 | 跨端 `wasmnest-test` | 新增 `ci.yml` | `cross-end-tests`（同进程 path 依赖两端 `src-tauri`）；需两端可构建，允许按目录过滤 | PR（允许 nightly 全量） |
 | 应用 `wasmnest-apps` | 已有 `ci.yml` | 对齐即可：补 Rust `cargo test` job（若无），核对触发条件 | 核对 |
@@ -84,7 +90,8 @@
 
 ### 4.3 验收
 
-- [ ] 桌面 `pnpm run test:run` 716/716 全绿（2 个红例已按 §4.1 修）。
+- [ ] 桌面 `pnpm run test:run` 全绿（2 个红例已按 §4.1 修；基线以实施时为准——2026-10-24 为 756 条）。
+- [ ] flaky 治理落地：`recentsLayout` 类非确定红有根因结论与隔离 / 重试策略；required checks 上线前桌面连续多次全量跑，红绿与总条数均稳定。
 - [ ] 三仓各有一个测试类 workflow 在 PR 上运行；平台仓 PR 的 required checks 至少含：`check:wit`、双端前端测试、Rust 分层 job。`check:manifest` 放在发布 / tag 流水线（或按钉住 tag 检出后运行），不作为日常 PR required check（见 §4.2 说明）。
 - [ ] **Seam 3 跑红一次**：故意提交一个让锁红 / 让 `check:wit` 红的 PR，确认 CI 阻断（证明锁不空转），结果记录在本文或 PR 描述。
 - [ ] 时长目标（粗）：平台 node 层 ≤ 10 分钟；Rust job 首跑不设上限、缓存后 ≤ 30 分钟；达不到就先拆 job 再谈优化。
@@ -128,7 +135,7 @@
 
 ### 5.4 验收
 
-- [ ] threat model 文档落 `docs/security.md`（或 ADR，编号接 `docs/` 现有 ADR 序列）；
+- [ ] threat model 文档落 `docs/security.md`（或 ADR。**ADR 落点（2026-10-24 复核明确）**：本仓 `docs/` 现无 adr 目录；旧仓 `../../BedCode/docs/adr/` 冻结于 0054；0055–0057 已被本仓 docs / 代码注释引用（0055 i18n 下沉撤销、0056 插件 id 改名、0057 机制 B 挂载包）但正文散落、无集中落点——新 ADR 落本仓**新开** `docs/adr/`，从现被引用最大编号续号；开目录时补一条索引把已引用编号与其正文出处对上，不回写冻结旧仓）；
 - [ ] 恶意插件前端（测试中模拟）无法调用插件管理类命令：Rust 门禁单测（无 session / session 错 app → Err）+ 前端代理单测（白名单外命令被拒且 fail-visible）；
 - [ ] README「wasmtime 沙箱」表述与实现一致（后端沙箱成立 / 前端边界如实）；
 - [ ] `withGlobalTauri=false` spike 有结论：要么双端关闭并跑绿，要么记录逐条依赖点（不接受「默认保留」）；
@@ -173,7 +180,7 @@ WIT 漂移锁（`check:wit`）、能力 crate 无产品 id（`capability_crates_
 
 移动 Rust ≈ 25,842 行中，先按「机制重复 / 宿主适配 / 产品语义」分桶，**不要把所有命中词都当业务**（对照桌面宿主：桌面没有 `auth/`、`connection/` 顶层业务模块，等价机制已在能力仓）：
 
-- **机制重复**：`connection/*`（4,422 行）、`auth/*`（1,082 行）与桌面已收敛到 `wasmnest-ws-client-engine` / host-kit 的机制重叠——优先用能力仓引擎替换后删除，而不是搬去应用仓；
+- **机制重复**：`connection/*`（4,422 行）、`auth/*`（1,082 行）与能力仓 `wasmnest-ws-client-engine` 已提供的机制重叠。**注意这不是「对齐桌面」**（2026-10-24 复核修正：桌面是服务端，`Cargo.toml` 不依赖 ws-client-engine，依赖的是 server-core / server-base / host-kit / pty-engine；移动端自己链接了该引擎（`Cargo.toml` L132）但只用于 `plugin/host_domains/ws.rs` 插件能力面，宿主 `connection/` 是另养的一套）——收敛到引擎是**新的替换动作**，优先替换后删除重复实现，而不是搬去应用仓；
 - **宿主适配 / 平台缝**：`peer/*`（1,139 行）、`file_service/*`（516 行）、`plugin/android_plugins`、SAF 属「离宿主无法实现」的装配与平台能力，保留在宿主；
 - **产品语义**：`enums/session.rs`、`model/message.rs`、旧前端业务视图（FileExplorer / CodeExplorer / 连接与认证设置页）——删除或迁应用仓。
 
@@ -182,7 +189,7 @@ WIT 漂移锁（`check:wit`）、能力 crate 无产品 id（`capability_crates_
 | 目录 / 文件 | 疑似判据 | 处置方向 |
 | --- | --- | --- |
 | `enums/session.rs`、`model/message.rs` | B1 产品类型 | 先查消费者：当前多为 legacy 测试 / 协议收尾 → 优先删；若被 WIT / 传输机制依赖则迁应用仓 |
-| `connection/manager.rs` | B2 业务编排（机制重复） | 对齐桌面：替换为能力仓 `wasmnest-ws-client-engine` / host-kit 后删除重复实现 |
+| `connection/manager.rs` | B2 业务编排（机制重复） | 替换为能力仓 `wasmnest-ws-client-engine` 后删除重复实现（**新收敛动作，非对齐桌面**——桌面不依赖该引擎，见上） |
 | `auth/manager.rs` | B2/B3 业务编排 + 真源 | 先评估能否抽成认证能力 crate（桌面/移动共用）；否则迁应用仓，不留在宿主 |
 | `peer/*` | 宿主适配 + 平台缝 | 保留为 `wasmnest-server-peer-net` 的宿主适配面；审计 `transfer/receive/remote` 是否藏业务状态，有则迁 file-transfer 共享核 |
 | `file_service/*` | Android SAF 机制 | 保留（平台缝）；若出现第二消费者再抽 host-kit |
@@ -214,7 +221,7 @@ WIT 漂移锁（`check:wit`）、能力 crate 无产品 id（`capability_crates_
 
 ### 8.1 安全路径零 panic
 
-- 安全路径（权限检查、`egress.rs`、`frontend_channel.rs`、命令门禁）的 `RwLock.unwrap()`（移动 `egress.rs` ≈ 30 处，全宿主 ≈ 121 处 unwrap/expect/panic）改为 `unwrap_or_else(|e| { log; e.into_inner() })`（毒锁放行 + 结构化日志，与 docs/security.md「tracing 分级 / 结构化字段」一致）或显式错误返回；**锁中毒后是放行进读 / 收敛为 Err，逐处按该数据的角色裁决，不机械替换**。
+- 安全路径（权限检查、`egress.rs`、`frontend_channel.rs`、命令门禁）的 `RwLock.unwrap()`（移动 `egress.rs` ≈ 30 处，全宿主 ≈ 121 处 unwrap/expect/panic——双端 src 行内测试区外口径，2026-10-24 复核 119 / `egress.rs` 34，复现命令见 §14）改为 `unwrap_or_else(|e| { log; e.into_inner() })`（毒锁放行 + 结构化日志，与 docs/security.md「tracing 分级 / 结构化字段」一致）或显式错误返回；**锁中毒后是放行进读 / 收敛为 Err，逐处按该数据的角色裁决，不机械替换**。
 - 新增一条锁：安全路径目录清单内禁止 `unwrap()/expect()/panic!`（文本锁，但此处红线性质、不允许「用行为测试表达」——锁新增理由按 §6.2 格式写明）。
 
 ### 8.2 超大文件拆分（行为不变）
@@ -248,7 +255,7 @@ WIT 漂移锁（`check:wit`）、能力 crate 无产品 id（`capability_crates_
 ## 9. P2-2 文档真源与维护性
 
 1. **修 README L53**：改为与 `AGENTS.md` §2 / keepalive spec 一致的口径：「应用不被停用就继续运行——切走只是藏起来，停用 / 卸载才是唯一销毁点」。同时复核 README 全文与 keepalive 实施后的其他表述（「离开即卸载」出现在 L17 与 L32 的特性表）。
-2. **修桌面 SDK README 死链**（`packages/plugin-sdk-desktop/README.md:7`）：链接指向的 `../../../wasmnest-desktop/docs/knowledge/wasm-app-dev-guide.md` 不存在——核实文档真实位置（可能在应用仓 / 平台根 docs / 已被删），指向真实处或删除链接并说明去哪找。
+2. **修桌面 SDK README 双死链**（`packages/plugin-sdk-desktop/README.md:7`）：两个链接的目标**均**不存在——`../../wasm-app-dev-desktop.md`（解析为 `wasmnest-desktop/wasm-app-dev-desktop.md`）与 `../../../wasmnest-desktop/docs/knowledge/wasm-app-dev-guide.md`（整个 `wasmnest-desktop/docs/` 不存在）。2026-10-24 已核实真源在冻结旧仓 `../../BedCode/`（`bedcode-desktop/wasm-app-dev-desktop.md`、`docs/knowledge/`），未随四仓拆分迁入。修法二选一：把开发指南迁入本仓（推荐——SDK 文档不应依赖冻结仓），或改指旧仓并注明冻结口径。
 3. **加 markdown link check**（CI 或本地脚本入 husky）：四仓统一脚本即可，不引第三方重型工具。
 4. **单一真源口径**：README 只做入口与概括，机制细节链 docs；同一口径禁止在 README / docs / AGENTS 多处复制（现状反例即 keepalive 口径两处不一致）。
 5. **文档分级**：常青文档住 `docs/`；决策住 ADR；一次性住 `.scratch/`（本期本 spec 即一次性——收口完成后本文件应归档或删除）；`.scratch` 过期项定期清理。
@@ -261,7 +268,7 @@ WIT 漂移锁（`check:wit`）、能力 crate 无产品 id（`capability_crates_
 
 | Phase | 时间 | 内容 | 出口条件（可独立验收） |
 | --- | --- | --- | --- |
-| **Phase 0** | 0–3 天 | §4.1 修 2 个红测试；平台 / 能力 / 跨端 CI 上线（§4.2）；README L53 + SDK README 死链修复（§9.1–9.2） | 桌面 716/716；三仓 PR 有 required checks 且跑红验证过一次（Seam 3）；link check 上线 |
+| **Phase 0** | 0–3 天 | §4.1 修 2 个红测试 + flaky 治理；平台 / 能力 / 跨端 CI 上线（§4.2，应用仓对齐）；README L53 + SDK README 双死链修复（§9.1–9.2） | 桌面全绿且多次全量结果稳定（基线以实施时为准——2026-10-24 为 756 条）；三仓（+应用仓对齐）PR 有 required checks 且跑红验证过一次（Seam 3）；link check 上线 |
 | **Phase 1** | 1–2 周 | threat model 成文 + **用户裁决 A/B/C**（§5.2）；app-scoped invoke 设计（§5.3）；测试锁盘点成清单（§6.2）；移动 B1–B6 盘点 + 例外表（§7.1）；应用仓 ci.yml 对齐 | threat model 有裁决结论；锁清单与例外表进入 `docs/`；设计评审通过（用户点头） |
 | **Phase 2** | 2–6 周 | 前端边界落地（§5.3–§5.4，含 Rust 门禁）；源码锁改造首批（§6.2，含 `pluginWatchCopy` 修法推广）；移动旧前端清理（§7.3）+ host 锁（§7.2）；clippy / fmt / audit（§8.3）；覆盖率软阈值（§6.3）；开始按例外表迁业务面 | 总验收清单 §11 逐项可通过或标注「另立票并说明原因」 |
 
@@ -269,16 +276,16 @@ WIT 漂移锁（`check:wit`）、能力 crate 无产品 id（`capability_crates_
 
 ## 11. 总验收清单（Definition of Done）
 
-- [ ] 平台仓：双端 `pnpm run test:run` 全绿（桌面 716/716）+ 根 `pnpm exec eslint .` 0 error + 双端 `vue-tsc --noEmit` exit 0。
+- [ ] 平台仓：双端 `pnpm run test:run` 全绿（桌面基线以实施时为准——2026-10-24 为 756 条）+ 根 `pnpm exec eslint .` 0 error + 双端 `vue-tsc --noEmit` exit 0。
 - [ ] 根 `pnpm run check:wit` 全绿（CI 有对应 required check）；`pnpm run check:manifest` 在发布 / tag 流水线全绿（或 CI 按钉住 tag 检出后运行），不作为日常 PR 门禁。
 - [ ] 平台 Rust：`cd wasmnest-desktop/src-tauri && cargo test` 全绿 + `wasmnest-mobile/src-tauri` 同（收口整个清单时补跑全量）。部分桌面 Rust e2e（pty / ws / http / app-bundle 等）需先 `pnpm run plugins:build` 准备随包插件产物；纯锁层与单测不需要。
-- [ ] 三仓 CI 上线且 PR 阻断生效（含 Seam 3 跑红记录各一次）。
+- [ ] 三仓新增 CI + 应用仓对齐，PR 阻断生效（含 Seam 3 跑红记录各一次；required checks 上线前桌面套件多次全量跑结果稳定——红绿与总条数都不漂移）。
 - [ ] §5 威胁边界：恶意前端调 `plugin_uninstall` / `plugin_install_from_file` 等管理命令被拒（有测试）；threat model 落 `docs/security.md`。
 - [ ] 安全路径零 panic 锁绿；clippy / fmt / audit 门禁在 CI（存量 allow 有登记）。
 - [ ] `parse_url_lite` property 测试 + SSRF 判据补齐。
 - [ ] 锁清单（owner + 新锁门槛）入 `docs/codemap.md` §8；覆盖率软阈值上报 CI。
 - [ ] 移动宿主例外表成文 + host 侧产品词汇锁绿 + 旧前端目录清理达标。
-- [ ] README L53 / SDK 死链修复 + link check 0 死链。
+- [ ] README L53 / SDK 双死链修复 + link check 0 死链。
 - [ ] `docs/testing.md` §3 与 `AGENTS.md` §5 中「无 CI workflow」表述更新。
 
 ## 12. 非目标
@@ -332,4 +339,23 @@ grep "withGlobalTauri" */src-tauri/tauri.conf.json           # 双端 true（L12
 sed -n '53p' README.md                   # 「离开应用面即被卸载」（与 keepalive 口径矛盾）
 ls wasmnest-desktop/docs/knowledge      # 不存在（SDK README 死链）
 find ../*/.github -type f               # 平台/能力/跨端无测试类 workflow；应用仓有 ci.yml
+```
+
+**2026-10-24 审核复核**（修订依据，全部实跑 / 实查）：
+
+```text
+# 三端测试基线（含未提交 keepalive 改动的工作树）
+pnpm -C wasmnest-desktop run test:run   # 第一次：3 红/754 条（recentsLayout 红）；第二次：2 红/756 条
+                                        # —— 红绿与总条数漂移（flaky，见 §2 新行与 §4.1）
+pnpm -C wasmnest-mobile run test:run    # 816/816 绿
+pnpm run test:run                       # 绿（exit 0）
+
+# 「≈121 处 unwrap/expect/panic（测试区外）」复现口径：剔除各文件首个 #[cfg(...test...)] 之后的
+# 行内测试区再计数（裸 rg 会连行内测试一起算，远大于 121；剔除后实测 119）
+find wasmnest-desktop/src-tauri/src wasmnest-mobile/src-tauri/src -name '*.rs' \
+  -exec awk 'FNR==1{t=0} /#\[cfg\(.*test/{t=1} !t' {} + | rg -c 'unwrap\(\)|\.expect\(|panic!'
+
+# SDK README 双死链核实：本仓 + 应用仓 + 能力仓 find -name 'wasm-app-dev*' 为空；
+# 真源在冻结旧仓 ../../BedCode/（bedcode-desktop/wasm-app-dev-desktop.md、docs/knowledge/）
+# ADR 序列：../../BedCode/docs/adr/ 实存 48 个文件、最新 0054；本仓引用 0055–0057 但无集中正文
 ```

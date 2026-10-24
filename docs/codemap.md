@@ -302,6 +302,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 应用侧硬约束（业务主场） | `../wasmnest-apps/AGENTS.md` + 各 app `plugin.json` / `scripts/build.js` |
 | 能力仓（引擎 / 契约真源） | `../wasmnest-lib/`（`wasmnest-wasm-core/wit/core.wit`、各域 `wit/<domain>.wit`、`wasmnest-contract/`；平台侧唯一 resolver = `scripts/lib-paths.mjs`） |
 | 跨端互连测试 | `../wasmnest-test/cross-end-tests/` |
+| 本机环境：LayerFS 部署事实 + MCP 工具面（唯一 12 工具 / 多 agent 接入与超时 / 排障） | `docs/layerfs.md` |
 | 旧仓（代码冻结 · 文档真源与回退点） | `../../BedCode/`：`docs/adr/`（ADR 0017/0019/0022/0030/0033/0051/0052 等，冻结于 0054；0055–0057 正文未成文，出处登记在本仓 `docs/adr/README.md`）、`docs/knowledge/`（build-process / wasip3-toolchain / logging / plugin 清单等）、`docs/commands.md`、两端 `docs/code-map.md`——引用时注意旧仓代码与三仓现状有差异，机制以新仓代码为准 |
 | 桌面 SDK | `wasmnest-desktop/packages/plugin-sdk-desktop/`（README 有已知漂移，docs/contracts.md §5.2） |
 | 移动 SDK / 运行面类型 | `wasmnest-mobile/packages/plugin-sdk-mobile/`（`src/types.ts` = `UIRegistry` 真源） |
