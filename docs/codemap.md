@@ -217,6 +217,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 移动壳系列锁：`shellConstraintLocks`（含 **L7 壳内自足**）、`retiredHostUIRetirementLocks`、`shellRegistry` / `shellPermissions` / `shellMechanisms` / `shellHostEvents` / `shellAppSurface` / `shellAppRunScreen` / `appSurfaceKeepAlive` / `useAppSurfaces` / `shellHomeScreen` 等 20+ | `wasmnest-mobile/src/__tests__/shell/` | 壳内自足（不依赖旧界面目录）、退役路由 / 符号不回接、壳迁移面不得缩水、注册表 / 权限 / 机制行为；**运行面保活**（运行屏只提供插槽、池按「打开过 ∩ 运行中」过滤、停用即出池、Teleport 前后台切换不重建） |
 | `crate-structure-lock.test.mjs` | 根 `scripts/`（`pnpm run test:run`） | 契约 crate 常量保持 node 正则可解析的字面量形状；能力仓（`../wasmnest-lib`）无逃出 crate 目录的 `include!` / `include_str!` / `bindgen!` 路径；双端 `compose.json` 声明的 WIT 路径存在 |
 | `check-markdown-links.mjs` | 根 `scripts/`（`pnpm run check:links`；husky pre-commit 暂存含 .md 时自动跑，issue #14） | 仓内跟踪 markdown 的**相对链接**（含图片）目标必须存在；外链 URL 与纯锚点不探测（跳过即明说，不做假绿）。挪动 / 改名 .md 或其链接目标时同一提交内过此锁 |
+| `with-global-tauri-lock.test.mjs`（issue #22 / #16 / ADR 0058） | 根 `scripts/`（`pnpm run test:run`） | 双端 `tauri.conf.json` 的 `app.withGlobalTauri === false`（纯配置项无行为面，文本断言是唯一防回归手段；Seam 3 已跑红一次） |
 | Rust 测试锁：`capabilities_lock.rs`（CSP）、`capability_crates_no_product_ids.rs`（零业务类型）、`capability_crates_unit_tests_only.rs`、`hot_path_logging_lock.rs`、`domain_contract_structure_locks.rs`、`empty_dir_lock.rs`、`lifecycle_command_registration_lock`、`command_registration_completeness_lock`（移动） | 双端 `src-tauri/tests/` | 见各自头注释（含「迁移锁后跑红一次」纪律，docs/testing.md §4） |
 
 **锁是契约清单，不是障碍**：你的合法改动若使某把锁的清单 / 白名单过期，必须**同一提交内同步更新该清单**（并在交付说明里点名）；禁止删锁、缩窄 glob、把断言改恒真来「变绿」。
@@ -258,6 +259,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `shell/appSurfaceKeepAlive.test.ts`（移动） | 池常驻渲染 + Teleport 移动不重建 +「打开过 ∩ 运行中」过滤 | 源码文本（结构事实） | 保留（头注释已述理由） | 同桌面保活锁：Teleport 前后台全路径组件测试不现实 |
 | `shell/retiredHostUIRetirementLocks.test.ts`（移动） | 旧宿主 UI 退役路由 / 符号零回接 + 正面钉（mobile-shell 默认路由在位） | 边界契约（退役面） | 保留 | 退役面防回接 = 禁字面量扫描；测试期门禁与 ESLint 分工（防 ignores 改窄） |
 | `shell/shellConstraintLocks.test.ts`（移动） | L1–L7 壳层约束（零资源访问 / 裸 invoke / 授权弹窗单挂载 / 无静默 catch / i18n / token-bound / 壳内自足） | 边界契约（安全红线） | 保留 | 安全三层封锁与壳内自足是禁区扫描不是行为；与 ESLint 分工为测试期门禁 |
+| `with-global-tauri-lock.test.mjs`（根 scripts） | 双端 `tauri.conf.json` 的 `app.withGlobalTauri === false`（issue #22 / #16 / ADR 0058，2026-10-24） | 边界契约（暴露面收缩 + 跨构建单元） | 保留（Seam 3 已跑红一次） | 纯配置项无行为面：其全部效果恰是「`window.__TAURI__` 全局永不注入」这个否定事实，行为测试只能断言在场行为、断言不了缺席；conf 是 Rust 侧构建输入，改它不经任何编译检查。owner=binblink（平台仓）。已知例外：wdio 手动 harness（`@wdio/tauri-plugin` 1.4.0 webview execute 硬依赖该全局）属仓外测试基础设施、不进 CI 门禁，不构成回开理由 |
 | `shell/shellHomeScreen.test.ts`（移动） | 主屏行为契约 + 跨端系统图标 path 与桌面 ShellIcon 逐字一致 | 边界契约（跨端，行为面不动） | 保留跨端契约 | 移动 / 桌面两套独立构建的图标资产无共享真源，一致性只有文本可比对 |
 | `shell/shellNotifications.test.ts`（移动） | 通知行为契约 + 滑动指示层 color-mix 派生 1 条 | 源码文本（样式，单条） | 保留 | happy-dom 不解析 CSS，color-mix 派生色是样式表事实 |
 | `shell/shellRecents.test.ts`（移动） | 多任务行为契约 + CSS 视觉裁决 + 退役 key 零残留 + ShellHost 过渡名接线 1 条 | 源码文本（混合） | 保留（CSS 与退役面有理由；接线单条合规） | CSS 视觉事实同上；退役 key 零残留同退役面；接线单条符合门槛 |

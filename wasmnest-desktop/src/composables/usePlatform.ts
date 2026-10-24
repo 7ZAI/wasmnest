@@ -8,6 +8,13 @@
 //!
 //! 生产环境 (Tauri):
 //!   - 使用 @tauri-apps/plugin-os 获取真实平台信息
+//!
+//! 运行时判定（issue #22 / ADR 0058，2026-10-24）：不再读 `window.__TAURI__`
+//! 注入全局——withGlobalTauri=false 后该全局不存在（#16 依赖点 #1 解除）。与
+//! 移动端壳内机制副本 `wasmnest-mobile/src/shell/composables/usePlatform.ts`
+//! 同形：判定真源是 plugin-os 插件调用本身，插件模块任何环境都能 import，只有
+//! 在 Tauri WebView 里带 IPC 桥才会返回已知平台名；名字不在已知集合内一律视为
+//! 探测不可信，回落浏览器模拟（行为与旧实现一致）。
 
 import { ref, readonly, onMounted } from 'vue'
 import { logger } from '@/utils/frontendLogger'
@@ -36,37 +43,60 @@ const platformInfo = ref<PlatformInfo>({
 let initialized = false
 let initPromise: Promise<PlatformInfo> | null = null
 
-function isTauriRuntime(): boolean {
-  return typeof window !== 'undefined' && '__TAURI__' in window
+/** 已知平台名（与 Platform 类型同集合）：返回值不在其中即视为探测不可信 */
+const KNOWN_PLATFORMS: readonly string[] = ['windows', 'macos', 'linux', 'android', 'ios']
+
+/**
+ * 探测运行时平台名。
+ *
+ * 返回 `null` = 不在 Tauri 运行时（浏览器 / dev 预览）或插件不可用；调用方据此
+ * 落到模拟模式。IPC 桥缺失时拿到的是 undefined / 异常，这类值绝不能被当成
+ * 真实平台。
+ */
+async function detectRuntimePlatform(): Promise<Platform | null> {
+  try {
+    const { platform } = await import('@tauri-apps/plugin-os')
+    const name = platform()
+    if (typeof name === 'string' && KNOWN_PLATFORMS.includes(name)) return name as Platform
+    logger.log('[Platform] runtime platform unavailable, fall back to browser simulation:', name)
+    return null
+  } catch (e) {
+    logger.log('[Platform] Tauri OS plugin unavailable, fall back to browser simulation:', e)
+    return null
+  }
 }
 
+/** 从 Tauri OS 插件取完整平台信息；非 Tauri 运行时返回 null */
 async function detectFromTauri(): Promise<PlatformInfo | null> {
-  try {
-    const { platform, arch, version, type } = await import('@tauri-apps/plugin-os')
+  const platformName = await detectRuntimePlatform()
+  if (platformName === null) return null
 
-    const platformResult = platform()
+  try {
+    const { arch, version, type } = await import('@tauri-apps/plugin-os')
     const archResult = arch()
     const versionResult = version()
     const typeResult = type()
 
-    const isDesktop = platformResult !== null && !['android', 'ios'].includes(platformResult)
-    const isMobile = platformResult !== null && ['android', 'ios'].includes(platformResult)
+    const isDesktop = !['android', 'ios'].includes(platformName)
+    const isMobile = ['android', 'ios'].includes(platformName)
 
-    return {
-      platform: platformResult as Platform | null,
-      arch: archResult as Arch | null,
-      osVersion: versionResult,
-      osType: typeResult,
+    const info: PlatformInfo = {
+      platform: platformName,
+      arch: (archResult as Arch | null) ?? null,
+      osVersion: versionResult ?? null,
+      osType: typeResult ?? null,
       isDesktop,
       isMobile,
-      isWindows: platformResult === 'windows',
-      isMacos: platformResult === 'macos',
-      isLinux: platformResult === 'linux',
-      isAndroid: platformResult === 'android',
-      isIos: platformResult === 'ios',
+      isWindows: platformName === 'windows',
+      isMacos: platformName === 'macos',
+      isLinux: platformName === 'linux',
+      isAndroid: platformName === 'android',
+      isIos: platformName === 'ios',
     }
+    logger.log('[Platform] Detected (Tauri):', info)
+    return info
   } catch (e) {
-    logger.warn('[Platform] Tauri OS plugin not available:', e)
+    logger.warn('[Platform] Tauri OS plugin metadata unavailable:', e)
     return null
   }
 }
@@ -106,18 +136,7 @@ export function usePlatform() {
       return
     }
 
-    let info: PlatformInfo | null = null
-
-    if (isTauriRuntime()) {
-      info = await detectFromTauri()
-      if (info) {
-        logger.log('[Platform] Detected (Tauri):', info)
-      }
-    }
-
-    if (!info) {
-      info = simulateForBrowser()
-    }
+    const info = (await detectFromTauri()) ?? simulateForBrowser()
 
     platformInfo.value = info
     initialized = true
@@ -143,18 +162,7 @@ export async function initPlatform(): Promise<PlatformInfo> {
   }
 
   initPromise = (async () => {
-    let info: PlatformInfo | null = null
-
-    if (isTauriRuntime()) {
-      info = await detectFromTauri()
-      if (info) {
-        logger.log('[Platform] Detected (Tauri) via initPlatform:', info)
-      }
-    }
-
-    if (!info) {
-      info = simulateForBrowser()
-    }
+    const info = (await detectFromTauri()) ?? simulateForBrowser()
 
     platformInfo.value = info
     initialized = true

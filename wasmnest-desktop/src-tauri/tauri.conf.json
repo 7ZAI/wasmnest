@@ -9,7 +9,7 @@
     "frontendDist": "shell-dist"
   },
   "app": {
-    "withGlobalTauri": true,
+    "withGlobalTauri": false,
     "windows": [
       {
         "title": "WasmNest",

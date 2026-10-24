@@ -13,9 +13,11 @@ const prettier = require('eslint-config-prettier')
 // egress / approval 闸门）。前端直连 = 绕过权限闸门，故在此静态禁止：
 //   · 网络原语：fetch / XMLHttpRequest / WebSocket / EventSource / sendBeacon
 //   · 带网络或文件能力的 Tauri 插件：plugin-http / plugin-fs / plugin-shell / plugin-updater
-//   · 全局 Tauri 句柄 __TAURI__（两端 withGlobalTauri = true，经它调用就绕开了
-//     no-restricted-imports；改用 ES import 才可被静态拦截。宿主探测写法
-//     `'__TAURI__' in window` 不是 MemberExpression，不受影响）
+//   · 全局 Tauri 句柄 __TAURI__（withGlobalTauri 已置 false——issue #22，配置锁
+//     scripts/with-global-tauri-lock.test.mjs 钉住双端 conf；本禁令保留为纵深防御：
+//     一旦回开，经全局调用就绕开了 no-restricted-imports，改用 ES import 才可被
+//     静态拦截。旧宿主探测 `'__TAURI__' in window` 已随 #22 退役，双端探测改经
+//     plugin-os 插件调用）
 // 唯一放行：convertFileSrc —— 插件前端包 / 图标的既定加载路径，受 assetProtocol.scope 约束。
 // 确需豁免时在违规行写 eslint-disable-next-line 并注明理由：豁免随 code review 可见，不静默放行。
 

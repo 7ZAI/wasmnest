@@ -1,5 +1,6 @@
 import { browser, expect } from '@wdio/globals'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -62,6 +63,57 @@ function webviewScript(body: string) {
 /** 毫秒格式化（读数用） */
 function ms(value: number): string {
   return `${value.toFixed(3)} ms`
+}
+
+/**
+ * 从打包的 @tauri-apps/api 源码重建 Channel 类源（issue #22 / #16 依赖点 #3）。
+ *
+ * withGlobalTauri=false 后 webview 不再注入 window.__TAURI__，全局 bundle 的
+ * core 段（含 Channel）消失；而动态注入的脚本不经 vite 依赖解析，裸 specifier
+ * （@tauri-apps/api/core）在 webview 里解析不了——故由 node 侧读打包产物源码、
+ * 剥掉 ESM import / export 后经 JSON 字符串嵌进注入脚本，在 webview 内
+ * `new Function` 求值取回 Channel。类源与 app 同版本同包。
+ *
+ * dist 形态注意：@tauri-apps/api 2.x 的 ESM dist 把类私有字段降级成模块级
+ * WeakMap（`_Channel_*` 声明 + tslib 的 `__classPrivateFieldGet/Set`），
+ * `Channel.toString()` **不自包含**（单独求值后构造即 ReferenceError），必须把
+ * core.js 连同其相对依赖一起内联。模块运行时只依赖 `__TAURI_INTERNALS__`
+ * （Tauri 无论开关恒注入的 IPC 内部桥），CSP script-src 已含 `'unsafe-eval'`。
+ */
+function buildChannelRebuildSource(): string {
+  const nodeRequire = createRequire(import.meta.url)
+  const apiCorePath = resolve(dirname(nodeRequire.resolve('@tauri-apps/api/package.json')), 'core.js')
+  const apiCoreDir = dirname(apiCorePath)
+  const source = readFileSync(apiCorePath, 'utf8')
+    // 内联相对导入（2.x dist 仅 tslib 一条）：import 行替换为依赖模块本体（去 export）
+    .replace(/^import\s*{[^}]*}\s*from\s*'(\.[^']*)';?/m, (_whole, spec: string) =>
+      readFileSync(resolve(apiCoreDir, spec), 'utf8').replace(/export\s*{[^}]*};?/g, ''),
+    )
+    // 剥掉末尾 export 语句：函数体内以 `return Channel` 取回类
+    .replace(/export\s*{[^}]*};?\s*$/, '')
+  return `${source}\nreturn Channel;`
+}
+
+const CHANNEL_REBUILD_SOURCE = buildChannelRebuildSource()
+
+// 自检（fail-visible）：重建源必须在裸 Function 里取回**可构造**的 Channel——
+// dist 形态一旦变化（换原生私有字段 / 增减相对依赖），这里先红，而不是等 e2e
+// 跑起来后才在 webview 里报 ReferenceError。stub `__TAURI_INTERNALS__` 仅覆盖
+// 构造期 transformCallback 的注册回调。
+{
+  const holder = globalThis as { window?: unknown }
+  const prevWindow = holder.window
+  holder.window = { __TAURI_INTERNALS__: { transformCallback: () => 1, unregisterCallback: () => {} } }
+  try {
+    // eslint-disable-next-line no-new-func
+    const Probe = new Function(CHANNEL_REBUILD_SOURCE)() as new () => { onmessage: unknown }
+    const probe = new Probe()
+    if (typeof probe.onmessage !== 'function') {
+      throw new Error('重建后的 Channel 缺少 onmessage 存取器（dist 形态变化？）')
+    }
+  } finally {
+    holder.window = prevWindow
+  }
 }
 
 describe('桥接基准 · webview 层（wasm → 宿主 → 前端）', () => {
@@ -222,14 +274,16 @@ describe('桥接基准 · webview 层（wasm → 宿主 → 前端）', () => {
   })
 
   it('W5 · Channel 上行：同一批字节经 tauri::ipc::Channel 推送（三种载荷形态）', async () => {
-    const result = (await browser.tauri.execute(
-      webviewScript(`
-        // Channel 构造器从**全局** window.__TAURI__.core 取（app 配了 withGlobalTauri: true，
-        // 全局 bundle 的 core 段含 Channel）；动态注入的脚本不经 vite 依赖解析，
-        // 裸 specifier（@tauri-apps/api/core）在这里解析不了，故不走 import。
-        const ChannelCtor = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.Channel
-        if (!ChannelCtor) throw new Error('window.__TAURI__.core.Channel 不可用（withGlobalTauri 未生效？）')
-
+    // Channel 取用方式变更（issue #22 / #16 依赖点 #3）：withGlobalTauri=false 后
+    // 全局 window.__TAURI__ 不再注入，改从打包的 @tauri-apps/api 源码重建
+    // Channel——类源与 app 同版本同包。dist 把类私有字段降级成模块级 WeakMap，
+    // Channel.toString() 不自包含，不能只嵌类体：node 侧读包源码、剥 ESM
+    // import/export（见 CHANNEL_REBUILD_SOURCE，已带构造自检），经 JSON 字符串
+    // 安全嵌入，webview 内 new Function 求值取回。注入脚本不经 vite 依赖解析，
+    // 裸 specifier（@tauri-apps/api/core）在这里解析不了，故不走 import。
+    const w5Body =
+      `const ChannelCtor = new Function(${JSON.stringify(CHANNEL_REBUILD_SOURCE)})()\n` +
+      `
         // 载荷形态识别：tauri 2.11 的 IpcResponse 有泛型 blanket impl，
         // Channel<Vec<u8>> 会被 serde 序列化成 **JSON 数字数组**（[object Array]），
         // Channel<Response>(Raw) 才是真字节（Uint8Array / ArrayBuffer），
@@ -293,7 +347,9 @@ describe('桥接基准 · webview 层（wasm → 宿主 → 前端）', () => {
         // text（Channel<String>，与事件面同形态）
         rows.push(await round('text 1 MiB / 16 KiB', 'bench_channel_stream_text', 1048576, 16384, 64, 8000))
         return rows
-      `),
+      `
+    const result = (await browser.tauri.execute(
+      webviewScript(w5Body),
     )) as {
       label: string
       received: number

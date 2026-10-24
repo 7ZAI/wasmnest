@@ -54,3 +54,5 @@
 3. **登记入清单**：入 docs/codemap.md §8.1 源码文本锁盘点清单，标注 owner 与豁免理由；锁清单过期与代码同批更新。
 
 存量源码文本锁的逐个处置（保留 / 收敛 / 待改造与 Phase 2 首批）见 docs/codemap.md §8.1。
+
+按上述门槛登记的新锁：`with-global-tauri-lock.test.mjs`（根 `scripts/`，`pnpm run test:run`，issue #22 / #16 / ADR 0058，2026-10-24）——钉双端 `tauri.conf.json` 的 `app.withGlobalTauri === false`，owner=binblink（平台仓）；豁免理由（纯配置项无行为面）与 Seam 3 跑红记录见锁头注释，盘点行在 docs/codemap.md §8 / §8.1。
