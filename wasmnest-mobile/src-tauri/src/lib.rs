@@ -263,6 +263,15 @@ pub fn run() {
         // bootstrap 会在导入任何插件模块之前重新取得密钥，「域内首个调用者生效」恒由
         // 宿主前端赢得；dev 下页面刷新也能重新取得（否则刷新后宿主面命令全数被拒）。
         .on_page_load(|webview, payload| {
+            // 只认 Started：本钩子对每次页面加载触发两次（Started / Finished）。移动宿主
+            // bootstrap 在页面加载期间（loader.ts loadAll 首行 ensureHostCredential）就会
+            // 签发密钥并进前端模块缓存，若 Finished 再重置，本页刚签发的密钥即被作废、
+            // 缓存变死值——此后所有宿主面命令 fail-closed（2026-10-25 回归实况：
+            // plugin_preauthorize 全拒，所有应用无法打开）。新页 Started 时该页 JS 尚未
+            // 运行，「刷新后可重新取得」的重置语义只由它承担。
+            if !matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+                return;
+            }
             let Some(channel) = webview
                 .app_handle()
                 .try_state::<Arc<wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry>>()

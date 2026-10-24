@@ -175,6 +175,14 @@ pub struct AppStartTime(std::time::Instant);
 fn frontend_channel_session_hook() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri::plugin::Builder::<tauri::Wry>::new("wasmnest-frontend-channel")
         .on_page_load(|webview, payload| {
+            // 只认 Started：本钩子对每次页面加载触发两次（Started / Finished），Finished
+            // 时本页 JS 已运行——此刻重置会把 bootstrap 刚签发、已进前端模块缓存的密钥
+            // 作废（移动端 bootstrap 在页面加载期间签发，2026-10-25 即因此全量拒启）。
+            // 桌面当前 activate 懒取凭证不受影响，同守卫保证双端语义一致：新页开始 =
+            // 旧域作废，且只发生一次。
+            if !matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+                return;
+            }
             let Some(plugin_host) = webview
                 .app_handle()
                 .try_state::<std::sync::Arc<crate::wasm_core::manager::host::PluginHost>>()
