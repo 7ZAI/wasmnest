@@ -33,6 +33,10 @@
  *      （connection / authentication / egress——零导航源，业务真源已按票 2026-10-10 C4
  *      下沉 bedcode 应用）+ 五个零消费者孤儿 UI 组件 + components/index.ts 桶导出
  *      （零 import，且引用三个早已不存在的 Terminal 组件）。
+ *   R7 #24 §4.2 迁移批次（2026-10-24）：宿主提供组件五件套（FileExplorer / FileSidebar /
+ *      FileViewerModal / CodeViewerSettingsModal / codeViewer store）连同闭包随唯一
+ *      消费者 bedcode 迁入应用仓 fileExplorer 域；provide 契约 wasmnestHostComponents
+ *      整面退役，宿主侧文件不在场 + 契约符号不回接双钉。
  *
  * 扫描一律跳过注释行：注释里出现退役字面量（如「旧宿主 MobileLayout 退役后……」）不应
  * 判违规——否则说明文字自身会触发红，还会诱导删注释。
@@ -197,6 +201,35 @@ const RETIRED_24_FILES = [
  */
 const R6_ALLOWED_FILES = ['src/__tests__/composables/useLinkEncryption.test.ts']
 
+/**
+ * R7（issue #24 host-exceptions §4.2 FileExplorer 行）宿主提供组件五件套迁移退役面：
+ * FileExplorer / FileSidebar / FileViewerModal / CodeViewerSettingsModal / codeViewer
+ * store 随唯一消费者 bedcode 迁入应用仓（`apps/bedcode/mobile/src/fileExplorer/`），
+ * 连同仅为其存活的闭包（FileTreeItem / 3 个文件域 icon / useFileTree / useCodeHighlight /
+ * useSwipeTabs / clipboard / themeLabel）一并自宿主删除；provide 契约
+ * `wasmnestHostComponents` 同步整面退役（App.vue 不再 provide，应用侧直接 import）。
+ * 路径级不在场 + 契约符号不回接双钉；应用侧承接为跨仓事实，本锁只钉宿主侧。
+ */
+const RETIRED_HOST_PROVIDED_FILES = [
+  'src/components/FileExplorer.vue',
+  'src/components/FileSidebar.vue',
+  'src/components/FileViewerModal.vue',
+  'src/components/CodeViewerSettingsModal.vue',
+  'src/components/FileTreeItem.vue',
+  'src/components/icons/FolderOpenIcon.vue',
+  'src/components/icons/FolderClosedIcon.vue',
+  'src/components/icons/FileIcon.vue',
+  'src/stores/codeViewer.ts',
+  'src/composables/useFileTree.ts',
+  'src/composables/useCodeHighlight.ts',
+  'src/composables/useSwipeTabs.ts',
+  'src/utils/clipboard.ts',
+  'src/utils/themeLabel.ts',
+]
+
+/** R7 退役契约符号：provide/inject 键（宿主不再提供，应用侧不再注入） */
+const RETIRED_HOST_PROVIDED_SYMBOLS = ['wasmnestHostComponents']
+
 /** 壳等价物：退役面的正面替代——缺件即红，防「删新面绕过退役锁」 */
 const REQUIRED_SHELL_FILES = [
   'src/shell/views/ShellView.vue',
@@ -284,6 +317,25 @@ describe('R6 #24 死码批次：死路由视图 / 路由名 / 孤儿组件不回
     for (const file of RETIRED_24_FILES) {
       expect(existsSync(join(process.cwd(), file)), `${file} 应已删除（#24 死码批次）`).toBe(false)
     }
+  })
+})
+
+describe('R7 #24 §4.2 迁移批次：宿主提供组件五件套不回接', () => {
+  it('should_notExistOnDisk_when_hostProvidedComponentsMigrated', () => {
+    for (const file of RETIRED_HOST_PROVIDED_FILES) {
+      expect(
+        existsSync(join(process.cwd(), file)),
+        `${file} 应已删除（随唯一消费者 bedcode 迁应用仓，见 docs/host-exceptions.md §4.2）`,
+      ).toBe(false)
+    }
+  })
+
+  it('should_notContainHostProvidedContractSymbol_when_srcScanned', () => {
+    const hits = scan(
+      new RegExp(`['"](${RETIRED_HOST_PROVIDED_SYMBOLS.join('|')})['"]`),
+      SRC_CODE_FILES,
+    )
+    expect(hits).toEqual([])
   })
 })
 

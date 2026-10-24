@@ -29,13 +29,14 @@
  *   · LetterAvatar 的六组渐变色 → `styles/shell.css` 的 `.shell-avatar-g*`（颜色只落样式表）
  *
  * 待迁（本批未含，属业务组件或需先引机制，见落地说明的「待迁清单」）：
- *   终端域（Terminal*）、文件域（FileExplorer 及 icons/*）、任务域（Task*）、
+ *   终端域（Terminal*）、任务域（Task*）、
  *   启动域（SplashScreen*）、设置脚手架（SettingsSubPage，需壳内导航语义确定后落）
  *
  * 票 2026-10-10 批次 D1：原清单里的 DeviceCard / SessionListItem / RepeatableToggle /
  * PluginIcon 已**从宿主删除**——它们在 wasm-apps 下各有自持副本，宿主侧是死代码。
- * 会话/设备域 UI 归 bedcode 应用（spec §2），文件域按裁决留宿主但走
- * `wasmnestHostComponents` 注入（见 src/App.vue），不进壳的公共组件面。
+ * 会话/设备域 UI 归 bedcode 应用（spec §2）；文件域五件套随唯一消费者 bedcode 迁入
+ * 应用仓 fileExplorer 域、宿主提供面 `wasmnestHostComponents` 整面退役（issue #24，
+ * 见 docs/host-exceptions.md §4.2），不进壳的公共组件面。
  */
 
 export { default as Button } from './Button.vue'

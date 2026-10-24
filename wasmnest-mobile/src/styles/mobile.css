@@ -886,7 +886,8 @@ html:not(.dark) {
  * （8px 参与布局）既挤窄内容区又无视觉价值：整个移动端统一隐藏。
  *
  * 覆盖规则（与隐藏同源冲突时，显式样式的更高特异性优先）：
- *  - 代码查看器（FileViewerModal .viewer-body）保留 4px 细条滚动条——
+ *  - 代码查看器（bedcode fileExplorer 域 FileViewerModal 的 .viewer-body，随
+ *    issue #24 迁应用仓；其 DOM 仍在本宿主文档内，本规则继续覆盖）保留 4px 细条滚动条——
  *    其规则只覆盖 width/height，故本规则不用 display:none（display 无竞争对手
  *    会被继承生效、连带把细条也藏掉），只用 width:0/height:0 归零，细条规则
  *    靠更高特异性覆盖回 4px；
