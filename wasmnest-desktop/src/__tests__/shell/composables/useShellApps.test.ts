@@ -24,6 +24,13 @@ vi.mock('vue-sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }))
 
+// 管理命令已加宿主面凭证门（ADR 0058 方案 A）：凭证取用单独 mock——真实实现
+// 会经 plugin_frontend_loader_session 再走一轮 invoke，把本文件的 mock 序列搅乱
+vi.mock('@/utils/appCommands', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/appCommands')>()),
+  ensureHostCredential: vi.fn(async () => 'test-host-credential'),
+}))
+
 import { invoke } from '@tauri-apps/api/core'
 import {
   TERMINAL_PLUGIN_ID,
@@ -204,8 +211,14 @@ describe('生命周期动作（真实命令面）', () => {
       .mockResolvedValue(false)
     const ok = await apps.activate('com.wasmnest.test-app')
     expect(ok).toBe(true)
-    expect(mockedInvoke).toHaveBeenCalledWith('plugin_preauthorize', { pluginId: 'com.wasmnest.test-app' })
-    expect(mockedInvoke).toHaveBeenCalledWith('plugin_activate', { pluginId: 'com.wasmnest.test-app' })
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin_preauthorize', {
+      pluginId: 'com.wasmnest.test-app',
+      credential: expect.any(String),
+    })
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin_activate', {
+      pluginId: 'com.wasmnest.test-app',
+      credential: expect.any(String),
+    })
     expect(apps.lastError.value).toBeNull()
   })
 
@@ -232,7 +245,10 @@ describe('生命周期动作（真实命令面）', () => {
       .mockResolvedValue(false)
     const ok = await apps.deactivate('com.wasmnest.test-app')
     expect(ok).toBe(true)
-    expect(mockedInvoke).toHaveBeenCalledWith('plugin_deactivate', { pluginId: 'com.wasmnest.test-app' })
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin_deactivate', {
+      pluginId: 'com.wasmnest.test-app',
+      credential: expect.any(String),
+    })
     expect(apps.plugins.value[0].state).toBe('dormant')
   })
 
@@ -244,14 +260,20 @@ describe('生命周期动作（真实命令面）', () => {
       .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })])
       .mockResolvedValue(false)
     expect(await apps.approve('com.wasmnest.test-app')).toBe(true)
-    expect(mockedInvoke).toHaveBeenCalledWith('plugin_approve', { pluginId: 'com.wasmnest.test-app' })
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin_approve', {
+      pluginId: 'com.wasmnest.test-app',
+      credential: expect.any(String),
+    })
 
     mockedInvoke
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce([])
       .mockResolvedValue(false)
     expect(await apps.uninstall('com.wasmnest.test-app')).toBe(true)
-    expect(mockedInvoke).toHaveBeenCalledWith('plugin_uninstall', { pluginId: 'com.wasmnest.test-app' })
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin_uninstall', {
+      pluginId: 'com.wasmnest.test-app',
+      credential: expect.any(String),
+    })
 
     mockedInvoke
       .mockResolvedValueOnce(undefined)

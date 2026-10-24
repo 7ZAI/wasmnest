@@ -177,6 +177,16 @@ pub fn run() {
             let plugin_manager = crate::state::init_plugin_manager(Arc::new(plugin_manager));
             app.manage(plugin_manager.clone());
 
+            // 移动宿主面凭证域（ADR 0058 方案 A：移动半场，issue #21）：管理类命令
+            // （plugin_preauthorize / activate / deactivate / approve / install /
+            // uninstall / download / reload）只认宿主前端 loader 会话凭证。与桌面
+            // lib PluginHost 的 channel 同机制（wasm-core FrontendChannelRegistry），
+            // 但移动命令面（plugin/commands.rs）独立持有自己的实例——移动不经
+            // 桌面的 api_bridge 装配链，registry 随 lib.rs setup 显式装配。
+            app.manage(Arc::new(
+                wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry::new(),
+            ));
+
             // 应用作用域服务注册表：`net.peer-node` 服务经管理器的注册表注册
             // （管理器在 init_wasm_runtime 时把同一份注入 wasm 宿主上下文；
             // 节点状态容器已在上方托管，peer_ctx 可安全装配）
@@ -244,6 +254,27 @@ pub fn run() {
 
             tracing::info!("WasmNest Mobile started successfully!");
             Ok(())
+        })
+        // 页面加载钩子（ADR 0058 方案 A；桌面同机制钩子见 wasmnest-desktop lib.rs 的
+        // frontend_channel_session_hook）：重置**该 webview** 的前端通道会话——宿主前端
+        // bootstrap 会在导入任何插件模块之前重新取得密钥，「域内首个调用者生效」恒由
+        // 宿主前端赢得；dev 下页面刷新也能重新取得（否则刷新后宿主面命令全数被拒）。
+        .on_page_load(|webview, payload| {
+            let Some(channel) = webview.app_handle().try_state::<Arc<
+                wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry,
+            >>() else {
+                // 页面加载早于 setup 装配（不应发生）：留痕不 panic（与桌面钩子同口径）
+                tracing::warn!(
+                    "[PluginChannel] page load before FrontendChannelRegistry managed, session not reset"
+                );
+                return;
+            };
+            tracing::debug!(
+                webview = %webview.label(),
+                url = %payload.url(),
+                "[PluginChannel] 页面加载，重置该窗口的前端通道会话"
+            );
+            channel.reset(webview.label());
         })
         .invoke_handler(tauri::generate_handler![
             // Token Commands (merged into connection)
@@ -325,6 +356,8 @@ pub fn run() {
             //    共享根镜像 / 浏览 / 拉取）与 host-platform 选源原语。
             // 防回接锁：tests/retired_mobile_peer_transfer_command_face_lock.rs
             // Plugin Commands
+            // 宿主面凭证签发（ADR 0058 方案 A：前端 bootstrap 首个调用，先于插件模块 import）
+            crate::plugin::commands::plugin_frontend_loader_session,
             crate::plugin::commands::plugin_list_loaded,
             crate::plugin::commands::plugin_get_info,
             crate::plugin::commands::plugin_preauthorize,

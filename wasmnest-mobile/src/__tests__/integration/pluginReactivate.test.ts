@@ -81,6 +81,9 @@ describe('插件重新激活循环（loader 路径）', () => {
     const info = makePluginInfo()
     mockInvoke.mockImplementation((cmd: string) => {
       switch (cmd) {
+        case 'plugin_frontend_loader_session':
+          // 固定假凭证（ADR 0058：管理类命令上送宿主面凭证）
+          return Promise.resolve('test-host-loader-session-credential')
         case 'plugin_list_loaded':
           return Promise.resolve([info])
         case 'plugin_is_autostart':
@@ -123,5 +126,14 @@ describe('插件重新激活循环（loader 路径）', () => {
     await flushAsync(3)
     expect(mockModule.activateCallCount).toBe(2)
     expect(registry.getApp('mock-plugin')?.contributions.surface).toBeTruthy()
+
+    // 宿主面凭证随管理类命令上送（ADR 0058：激活是宿主职权，Rust 侧过凭证门）
+    const activatePayloads = mockInvoke.mock.calls
+      .filter(([c]) => c === 'plugin_activate')
+      .map(([, a]) => a as Record<string, unknown>)
+    expect(activatePayloads).toHaveLength(2)
+    for (const payload of activatePayloads) {
+      expect(payload.credential).toBe('test-host-loader-session-credential')
+    }
   })
 })

@@ -6,6 +6,7 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import type { PluginInfo } from './types'
+import { ensureHostCredential } from './credentials'
 
 /** 获取所有已加载插件信息 */
 export async function pluginListLoaded(): Promise<PluginInfo[]> {
@@ -22,19 +23,24 @@ export async function pluginGetInfo(pluginId: string): Promise<PluginInfo | null
  *
  * 时序契约：toggle 启用时先调本命令（此阶段不显示 LoadingDialog，授权弹窗
  * 可正常交互）→ 通过后再显示 loading 并调 pluginActivate；拒绝则直接失败
+ *
+ * 宿主面凭证已绑定（ADR 0058）
  */
 export async function pluginPreauthorize(pluginId: string): Promise<void> {
-  return await invoke('plugin_preauthorize', { pluginId })
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_preauthorize', { pluginId, credential })
 }
 
-/** 激活插件 */
+/** 激活插件（宿主面凭证已绑定，ADR 0058） */
 export async function pluginActivate(pluginId: string): Promise<void> {
-  return await invoke('plugin_activate', { pluginId })
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_activate', { pluginId, credential })
 }
 
-/** 停用插件 */
+/** 停用插件（宿主面凭证已绑定，ADR 0058） */
 export async function pluginDeactivate(pluginId: string): Promise<void> {
-  return await invoke('plugin_deactivate', { pluginId })
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_deactivate', { pluginId, credential })
 }
 
 /** 查询插件启用状态 */
@@ -67,9 +73,10 @@ export async function pluginReportReady(pluginId: string): Promise<void> {
   return await invoke('plugin_report_ready', { pluginId })
 }
 
-/** 批准插件权限（人工审批：记录权限清单 + 目录内容哈希钉扎） */
+/** 批准插件权限（人工审批：记录权限清单 + 目录内容哈希钉扎；宿主面凭证已绑定，ADR 0058） */
 export async function pluginApprove(pluginId: string): Promise<void> {
-  return await invoke('plugin_approve', { pluginId })
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_approve', { pluginId, credential })
 }
 
 /** 获取插件存储值 */
@@ -97,19 +104,22 @@ export async function pluginInvoke(pluginId: string, command: string, args: any 
   return await invoke('plugin_invoke', { pluginId, command, args })
 }
 
-/** 从本地 zip 插件包安装 */
+/** 从本地 zip 插件包安装（宿主面凭证已绑定，ADR 0058） */
 export async function pluginInstallFromFile(path: string): Promise<string> {
-  return await invoke('plugin_install_from_file', { path })
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_install_from_file', { path, credential })
 }
 
-/** 从 URL 下载 zip 插件包安装 */
+/** 从 URL 下载 zip 插件包安装（宿主面凭证已绑定，ADR 0058） */
 export async function pluginDownload(zipUrl: string): Promise<string> {
-  return await invoke('plugin_download', { zipUrl })
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_download', { zipUrl, credential })
 }
 
-/** 卸载插件（仅用户安装的插件） */
+/** 卸载插件（仅用户安装的插件；宿主面凭证已绑定，ADR 0058） */
 export async function pluginUninstall(pluginId: string): Promise<void> {
-  return await invoke('plugin_uninstall', { pluginId })
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_uninstall', { pluginId, credential })
 }
 
 /** 用系统查看器打开已下载文件（需 system:open 权限） */

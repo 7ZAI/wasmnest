@@ -68,7 +68,7 @@ import {
   appStorageDelete,
   refreshChannelToken,
 } from '@/utils/appCommands'
-import { invoke } from '@/utils/invoke'
+import { whitelistedHostInvoke } from '@/shell/mount/invokeWhitelist'
 import { logger } from '@/utils/frontendLogger'
 
 const props = defineProps<{
@@ -101,7 +101,7 @@ async function buildEnv(initialRoute: string, appId: string): Promise<AppMountEn
   return {
     appId,
     mountContract: MOUNT_CONTRACT,
-    invoke: (command, args) => invoke(command, args ?? {}),
+    invoke: (command, args) => whitelistedHostInvoke(command, args),
     appInvoke: (command, ...args) => appInvoke(appId, command, ...args),
     appStorageGet: (key) => appStorageGet(appId, key),
     appStorageSet: (key, value) => appStorageSet(appId, key, value),

@@ -59,6 +59,9 @@ beforeEach(() => {
   // 默认 mock 行为：所有命令静默返回，plugin_is_autostart=true
   mockInvoke.mockImplementation((cmd: string) => {
     switch (cmd) {
+      case 'plugin_frontend_loader_session':
+        // 固定假凭证（ADR 0058：loadAll bootstrap 先取宿主面凭证）
+        return Promise.resolve('test-host-loader-session-credential')
       case 'plugin_list_loaded':
         return Promise.resolve([])
       case 'plugin_is_autostart':
@@ -99,6 +102,9 @@ describe('pluginLoader.loadAll 启动加载门禁', () => {
     const DEGRADED_REASON = 'startup init failed: db migration error'
 
     mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'plugin_frontend_loader_session') {
+        return Promise.resolve('test-host-loader-session-credential')
+      }
       if (cmd === 'plugin_list_loaded') {
         return Promise.resolve([
           makePluginInfo({

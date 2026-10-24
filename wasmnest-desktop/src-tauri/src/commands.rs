@@ -658,6 +658,27 @@ pub fn report_frontend_log(logs: Vec<FrontendLogEntry>) {
 
 pub use crate::wasm_core::api_bridge::*;
 
+/// app 前端 env.invoke 白名单（ADR 0058 方案 A：审计/DX 面，非安全边界）
+///
+/// 真源语义：app 挂载环境的 `env.invoke` 只放行本表命令；安全边界仍在 Rust 命令门禁
+/// （管理类命令的宿主面凭证门，见 wasm-core api_bridge）。来源 = 2026-10-24 全仓盘点
+///（issue #21）：auth-center / monitor 调 plugin_list_loaded，bedcode 调设置三命令。
+pub const APP_FRONTEND_INVOKE_WHITELIST: &[&str] = &[
+    "plugin_list_loaded",
+    "get_app_settings",
+    "update_server_port",
+    "get_server_network_config",
+];
+
+/// app 前端查询 env.invoke 白名单（前端代理启动时取用；公开只读面）
+#[tauri::command]
+pub fn plugin_frontend_invoke_whitelist() -> Vec<String> {
+    APP_FRONTEND_INVOKE_WHITELIST
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
 // ==================== Server Control Commands ====================
 
 // ==================== App Surface Service Leases ====================

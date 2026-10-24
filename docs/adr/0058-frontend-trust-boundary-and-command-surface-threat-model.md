@@ -1,7 +1,8 @@
 # ADR 0058：前端信任边界与命令面威胁模型（后端按应用沙箱，前端同可信域）
 
-- 状态：**已裁决（2026-10-24，用户按 spec §13 Q1 推荐项裁决）**；Phase 2 实施拆票见
-  issue #19（质量收口 Phase 2 协调）。Rust 命令门禁**本 ADR 只定边界、不实施**。
+- 状态：**已裁决（2026-10-24，用户按 spec §13 Q1 推荐项裁决）；A 命令门禁已落地
+  （2026-10-24，issue #21）**——实施记录见文末「实施记录」。Phase 2 拆票见
+  issue #19 / #27（质量收口协调）。
 - 日期：2026-10-24
 - 相关：`docs/security.md` §1.1（前端信任边界，本文档的链接落点）、
   `docs/architecture.md` §2（桌面挂载形态）/ §5（权限与安全闸门总览）、
@@ -124,3 +125,33 @@ UI 交互另立票。
 - **已知残留风险（接受并登记）**：同窗互探（F5）；Phase 2 门禁落地前无凭证
   管理命令保持可达（窗口期由本 ADR 与 issue #15 评论如实声明）。
 - **登记义务**：引入不可信第三方应用前必须先重开 B（前端强隔离）裁决。
+
+## 实施记录（2026-10-24，issue #21）
+
+裁决 A 已落地，范围比 F3 证据面**扩了两处**（口径：F3 推论 1「任何无凭证参数的
+Tauri 命令都必须按任意前端 JS 可调用设防」，实施盘点发现的新事实按同判据收编）：
+
+1. **门禁命令面 = 6 条**（F3 点名的四条生命周期命令 + F3 同段点名无凭证的
+   `plugin_preauthorize` + 实施盘点补齐的 `plugin_approve`——后者是审批门禁的
+   放行操作，敏感度高于 activate，同样零凭证）。真源：`wasm-core`
+   `FrontendChannelRegistry::require_host_identity`（宿主 loader 会话放行；插件
+   令牌即使目标是自己也拒——与 `authorize` 的关键差别）+ `api_bridge.rs` 六命令
+   接门，denial 文案 fail-visible。桌面 lib 测试 586 绿（含 4 条新门禁用例）。
+2. **移动端同判据落地**（F3 证据面只盘了 lib api_bridge 桌面面；实施时发现移动
+   宿主自有命令面 `plugin/commands.rs` **完全无凭证机制**，威胁同型且更大）：
+   移动持独立 `FrontendChannelRegistry` state + 同名命令
+   `plugin_frontend_loader_session` + on_page_load 域重置；八条管理命令接门
+   （上述 6 条 + 移动特有的 `plugin_download` 远程安装 / `reload_wasm_plugin`
+   热重载）。前端 `ensureHostCredential()` 在 `loader.ts loadAll()` 首行 bootstrap
+   （先于任何插件模块 import，域内首个调用者生效）。
+3. **桌面 `env.invoke` 收窄白名单代理**（审计/DX 面，非安全边界，F2 不变）：
+   白名单真源 = 桌面 `src-tauri APP_FRONTEND_INVOKE_WHITELIST`（4 条，来源 =
+   2026-10-24 全仓盘点：`plugin_list_loaded`（auth-center / monitor）、
+   `get_app_settings` / `update_server_port` / `get_server_network_config`
+   （bedcode）），经 `plugin_frontend_invoke_whitelist` 命令暴露，前端代理
+   `invokeWhitelist.ts` fail-visible 拒绝名单外命令。挂载契约形状不变（同签名，
+   收窄语义），不 bump `MOUNT_CONTRACT`。
+4. **遗留（另票登记，不在 #21）**：移动命令面其余无身份绑定面——`plugin_invoke`
+   （任何前端可驱动任意应用命令）、`plugin_storage_*`（跨应用读写）、偏好命令
+   （set_enabled / set_autostart）。收敛需移动全命令面接入通道令牌（SDK 面联动），
+   与 #25（connection/auth 引擎收敛）对移动 manager 的拆解有交叠，单独裁决。

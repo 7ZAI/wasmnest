@@ -59,8 +59,16 @@ function invokeCalls(cmd: string): unknown[][] {
   return mockInvoke.mock.calls.filter(([c]) => c === cmd).map((call) => call.slice(1))
 }
 
+/** 固定假凭证（ADR 0058：plugin_frontend_loader_session 的 mock 返回值） */
+const FAKE_HOST_CREDENTIAL = 'test-host-loader-session-credential'
+
 function installDefaultInvoke(): void {
-  mockInvoke.mockImplementation(() => Promise.resolve(undefined))
+  mockInvoke.mockImplementation((cmd: string) => {
+    if (cmd === 'plugin_frontend_loader_session') {
+      return Promise.resolve(FAKE_HOST_CREDENTIAL)
+    }
+    return Promise.resolve(undefined)
+  })
 }
 
 /** 前端可加载插件的 manifest（wasm 类型 + ui 权限 + 可成功导入的 mock 模块路径） */
@@ -104,6 +112,9 @@ describe('loader activate/deactivate 对称拆解', () => {
   it('连续 activate/deactivate 交替 3 次：入口 0/1 严格跟随，无残留旧引用、无重复', async () => {
     const info = makeFrontendInfo()
     mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'plugin_frontend_loader_session') {
+        return Promise.resolve(FAKE_HOST_CREDENTIAL)
+      }
       if (cmd === 'plugin_get_info') return Promise.resolve(info)
       return Promise.resolve(undefined)
     })
@@ -148,6 +159,9 @@ describe('loader activate/deactivate 对称拆解', () => {
   it('前端模块加载失败：plugin_deactivate 先于 plugin_mark_error，注册表与 Map 无残留', async () => {
     const info = makeFrontendInfo({ extensionPath: '/plugins/mock-broken' })
     mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === 'plugin_frontend_loader_session') {
+        return Promise.resolve(FAKE_HOST_CREDENTIAL)
+      }
       if (cmd === 'plugin_get_info') return Promise.resolve(info)
       return Promise.resolve(undefined)
     })

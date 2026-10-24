@@ -22,7 +22,7 @@
 import { computed, ref } from 'vue'
 import { invoke } from '@/utils/invoke'
 import { logger } from '@/utils/frontendLogger'
-import { invalidateChannelToken } from '@/utils/appCommands'
+import { ensureHostCredential, invalidateChannelToken } from '@/utils/appCommands'
 import { HOST_INTERNAL_CODE, parseInvokeError, showUserError } from '@/utils/userError'
 import { toneOf, type AppTone } from './state'
 import type { AppDisplayState } from '../types'
@@ -341,9 +341,11 @@ async function activate(appId: string): Promise<boolean> {
     return false
   }
   return runAction(appId, 'activate', true, async () => {
+    // 管理命令宿主面凭证门（ADR 0058 方案 A）：一个动作内两条命令共用一次取用
+    const credential = await ensureHostCredential()
     // 一个动作内串行两条命令：preauthorize 拒绝直接抛错，不进入 activate
-    await invoke('plugin_preauthorize', { pluginId: appId })
-    await invoke('plugin_activate', { pluginId: appId })
+    await invoke('plugin_preauthorize', { pluginId: appId, credential })
+    await invoke('plugin_activate', { pluginId: appId, credential })
   })
 }
 
@@ -351,7 +353,8 @@ async function activate(appId: string): Promise<boolean> {
 async function deactivate(appId: string): Promise<boolean> {
   if (!appOf(appId)) return false
   return runAction(appId, 'deactivate', true, async () => {
-    await invoke('plugin_deactivate', { pluginId: appId })
+    const credential = await ensureHostCredential()
+    await invoke('plugin_deactivate', { pluginId: appId, credential })
     // 停用即回收通道令牌（宿主 frontend_channel 同口径）：同步清前端缓存，
     // 防止同页后续调用带着已作废令牌（挂载路径另有强制换发兜底）
     invalidateChannelToken(appId)
@@ -362,7 +365,8 @@ async function deactivate(appId: string): Promise<boolean> {
 async function approve(appId: string): Promise<boolean> {
   if (!appOf(appId)) return false
   return runAction(appId, 'approve', true, async () => {
-    await invoke('plugin_approve', { pluginId: appId })
+    const credential = await ensureHostCredential()
+    await invoke('plugin_approve', { pluginId: appId, credential })
   })
 }
 
@@ -370,7 +374,8 @@ async function approve(appId: string): Promise<boolean> {
 async function uninstall(appId: string): Promise<boolean> {
   if (!appOf(appId)) return false
   return runAction(appId, 'uninstall', true, async () => {
-    await invoke('plugin_uninstall', { pluginId: appId })
+    const credential = await ensureHostCredential()
+    await invoke('plugin_uninstall', { pluginId: appId, credential })
     // 卸载同样回收通道令牌：清前端缓存，防残留死令牌
     invalidateChannelToken(appId)
   })

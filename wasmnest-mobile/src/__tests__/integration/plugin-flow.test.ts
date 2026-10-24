@@ -64,10 +64,15 @@ function invokeCalls(cmd: string): unknown[][] {
   return mockInvoke.mock.calls.filter(([c]) => c === cmd).map((call) => call.slice(1))
 }
 
+/** 固定假凭证（ADR 0058：plugin_frontend_loader_session 的 mock 返回值） */
+const FAKE_HOST_CREDENTIAL = 'test-host-loader-session-credential'
+
 /** 默认 invoke 分发：plugin_list_loaded 空列表 + 其他安全值 */
 function installInvokeMock(manifests: () => PluginInfo[]) {
   mockInvoke.mockImplementation((cmd: string, args: Record<string, unknown>) => {
     switch (cmd) {
+      case 'plugin_frontend_loader_session':
+        return Promise.resolve(FAKE_HOST_CREDENTIAL)
       case 'plugin_list_loaded':
         return Promise.resolve(manifests())
       case 'plugin_is_autostart':
@@ -138,6 +143,8 @@ describe('插件流：pluginLoader × registry', () => {
     installInvokeMock(() => manifests)
     mockInvoke.mockImplementation((cmd: string) => {
       switch (cmd) {
+        case 'plugin_frontend_loader_session':
+          return Promise.resolve(FAKE_HOST_CREDENTIAL)
         case 'plugin_list_loaded':
           return Promise.resolve(manifests)
         case 'plugin_is_autostart':

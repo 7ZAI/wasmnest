@@ -1,6 +1,17 @@
 //! Mobile Plugin Commands
 //!
 //! 暴露插件操作为 Tauri invoke 命令
+//!
+//! ## 宿主面凭证门（ADR 0058 方案 A，2026-10-24 / issue #21）
+//!
+//! 管理类命令（plugin_preauthorize / plugin_activate / plugin_deactivate /
+//! plugin_approve / plugin_install_from_file / plugin_uninstall / plugin_download /
+//! reload_wasm_plugin）只认宿主前端凭证（loader 会话密钥）：激活 / 停用 / 安装 /
+//! 卸载 / 审批 / 下载 / 热重载是宿主职权，凭证判定委托 wasm-core
+//! `security::frontend_channel::FrontendChannelRegistry::require_host_identity`
+//! （与桌面 lib PluginHost 的 channel 同机制；registry 实例由 lib.rs setup 托管，
+//! 命令面独立持有）。存量身份缺口（plugin_invoke / storage / 偏好命令无身份绑定）
+//! 已另票登记，不在本批。
 
 use crate::plugin::manager::PluginManager;
 use crate::plugin::types::MobilePluginInfo;
@@ -8,6 +19,38 @@ use crate::Result;
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::Manager;
+use wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry;
+
+// ==================== Host Surface Credential（ADR 0058 方案 A） ====================
+
+/// 宿主前端 bootstrap：取得本次页面加载的 loader 会话密钥（域内首个调用者生效）
+/// （ADR 0058 方案 A：移动宿主面凭证签发；桌面同型命令在 wasm-core api_bridge）
+#[tauri::command]
+pub async fn plugin_frontend_loader_session(
+    webview: tauri::Webview,
+    channel: tauri::State<'_, Arc<FrontendChannelRegistry>>,
+) -> Result<String> {
+    let session = channel.issue_loader_session(webview.label())?;
+    tracing::info!(
+        webview = %webview.label(),
+        "[API] plugin_frontend_loader_session: 宿主面凭证已签发"
+    );
+    Ok(session)
+}
+
+/// 宿主面命令门（ADR 0058 方案 A）：管理类命令只认宿主前端凭证
+fn require_host_surface(
+    channel: &FrontendChannelRegistry,
+    webview_label: &str,
+    command: &str,
+    credential: &str,
+    denial: &str,
+) -> Result<()> {
+    channel
+        .require_host_identity(webview_label, credential, command)
+        .map_err(|_| crate::AppError::Plugin(denial.to_string()))
+}
+
 // ==================== Plugin Lifecycle Commands ====================
 
 /// 获取所有已加载插件信息
@@ -31,14 +74,38 @@ pub async fn plugin_get_info(app_handle: tauri::AppHandle, plugin_id: String) ->
 /// 不进入激活流程。`activate` 内部的 preauthorize 保留为兜底（启动
 /// auto-activate 无头场景 + 已授权路径短路无二次弹窗）。
 #[tauri::command]
-pub async fn plugin_preauthorize(app_handle: tauri::AppHandle, plugin_id: String) -> Result<()> {
+pub async fn plugin_preauthorize(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_preauthorize",
+        &credential,
+        "plugin preauthorization must be requested by the host frontend",
+    )?;
     let manager = app_handle.state::<Arc<PluginManager>>();
     manager.preauthorize_plugin(&plugin_id).await
 }
 
 /// 激活插件
 #[tauri::command]
-pub async fn plugin_activate(app_handle: tauri::AppHandle, plugin_id: String) -> Result<()> {
+pub async fn plugin_activate(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_activate",
+        &credential,
+        "plugin activation must be requested by the host frontend",
+    )?;
     let manager = app_handle.state::<Arc<PluginManager>>();
     // 前端 toggle 已先行调 plugin_preauthorize（无遮罩弹窗），此处跳过 step 0.5
     // 重复预授权弹窗，避免授权弹窗与 loading 遮罩同现（activate_after_preauth）
@@ -47,7 +114,19 @@ pub async fn plugin_activate(app_handle: tauri::AppHandle, plugin_id: String) ->
 
 /// 停用插件
 #[tauri::command]
-pub async fn plugin_deactivate(app_handle: tauri::AppHandle, plugin_id: String) -> Result<()> {
+pub async fn plugin_deactivate(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_deactivate",
+        &credential,
+        "plugin deactivation must be requested by the host frontend",
+    )?;
     let manager = app_handle.state::<Arc<PluginManager>>();
     manager.deactivate(&plugin_id).await
 }
@@ -102,7 +181,19 @@ pub async fn plugin_report_ready(app_handle: tauri::AppHandle, plugin_id: String
 /// 仅用户安装插件（file-install / remote-download）需要审批；
 /// 内置插件（apk-asset）调用返回错误。批准成功后状态 NeedsApproval → Loaded。
 #[tauri::command]
-pub async fn plugin_approve(app_handle: tauri::AppHandle, plugin_id: String) -> Result<()> {
+pub async fn plugin_approve(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_approve",
+        &credential,
+        "plugin permission approval must be granted by the host frontend",
+    )?;
     let manager = app_handle.state::<Arc<PluginManager>>();
     manager.approve(&plugin_id).await
 }
@@ -139,7 +230,19 @@ pub async fn plugin_storage_delete(app_handle: tauri::AppHandle, plugin_id: Stri
 
 /// 下载并安装远程 zip 插件包
 #[tauri::command]
-pub async fn plugin_download(app_handle: tauri::AppHandle, zip_url: String) -> Result<String> {
+pub async fn plugin_download(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    zip_url: String,
+    credential: String,
+) -> Result<String> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_download",
+        &credential,
+        "plugin download must be requested by the host frontend",
+    )?;
     let manager = app_handle.state::<Arc<PluginManager>>();
     let plugins_dir = manager.plugins_dir().clone();
 
@@ -154,7 +257,19 @@ pub async fn plugin_download(app_handle: tauri::AppHandle, zip_url: String) -> R
 
 /// 从本地 zip 插件包安装
 #[tauri::command]
-pub async fn plugin_install_from_file(app_handle: tauri::AppHandle, path: String) -> Result<String> {
+pub async fn plugin_install_from_file(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    path: String,
+    credential: String,
+) -> Result<String> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_install_from_file",
+        &credential,
+        "plugin installation must be requested by the host frontend",
+    )?;
     let manager = app_handle.state::<Arc<PluginManager>>();
     let plugins_dir = manager.plugins_dir().clone();
 
@@ -168,14 +283,38 @@ pub async fn plugin_install_from_file(app_handle: tauri::AppHandle, path: String
 
 /// 卸载插件（仅用户安装的插件；内置插件拒绝）
 #[tauri::command]
-pub async fn plugin_uninstall(app_handle: tauri::AppHandle, plugin_id: String) -> Result<()> {
+pub async fn plugin_uninstall(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_uninstall",
+        &credential,
+        "plugin uninstallation must be requested by the host frontend",
+    )?;
     let manager = app_handle.state::<Arc<PluginManager>>();
     manager.uninstall(&plugin_id).await
 }
 
 /// 重新加载 WASM 插件（热重载）
 #[tauri::command]
-pub async fn reload_wasm_plugin(app_handle: tauri::AppHandle, plugin_id: String) -> Result<()> {
+pub async fn reload_wasm_plugin(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "reload_wasm_plugin",
+        &credential,
+        "plugin reload must be requested by the host frontend",
+    )?;
     let manager = app_handle.state::<Arc<PluginManager>>();
 
     // 先停用

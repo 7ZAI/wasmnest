@@ -16,6 +16,7 @@ import { nextTick } from 'vue'
 import i18n from '@/locales'
 import { logger } from '@/utils/frontendLogger'
 import * as pluginCmds from './commands'
+import { ensureHostCredential } from './credentials'
 import { toPluginAssetUrl } from './assets'
 import { createPluginContext } from './context'
 import { clearPluginEvents } from './events'
@@ -52,6 +53,10 @@ class PluginLoaderClass {
    * 其余应用由用户在宿主壳里点击后经 `activate()` 加载（后端激活 + 前端模块）。
    */
   async loadAll(): Promise<void> {
+    // 先于任何插件模块 import：loader 会话域内首个调用者生效（ADR 0058）——
+    // 插件代码只在模块被导入后才开始运行，宿主前端 bootstrap 必须先占住
+    // 本页面加载的密钥位，否则插件前端可抢先自取宿主面凭证
+    await ensureHostCredential()
     const manifests = await pluginCmds.pluginListLoaded()
     logger.log(`[PluginLoader] Found ${manifests.length} plugin(s)`)
     await this.loadManifests(manifests)
