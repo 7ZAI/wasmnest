@@ -140,7 +140,6 @@ describe('贡献描述符共用 SDK 真源', () => {
     'ShellSurfaceContribution',
     'ShellSlotContribution',
     'ShellCapsuleItem',
-    'ShellSettingsEntry',
   ])('should_reuseSdkDeclaration_when_%sIsLocal', (name) => {
     // dev-shell 不得重定义贡献描述符：重定义就等于第三处可能漂移的地方
     expect(localTypes).not.toContain(`interface ${name}`)

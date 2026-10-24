@@ -16,9 +16,6 @@
  *
  * // 胶囊附加项：插在平台项之间（平台项 order：权限 10 / 停用 30）
  * registerCapsuleItem(appId, { id: 'settings', label: '应用设置', order: 20 })
- *
- * // 平台设置入口
- * registerSettingsEntry(appId, { id: 'account', label: '账号', onSelect: open })
  * ```
  *
  * 返回值都是 Disposable：应用停用时 dispose 即摘除，不留残桩。
@@ -33,7 +30,6 @@ export type {
   ShellSlotContribution,
   ShellSurfaceContribution,
   ShellCapsuleItem,
-  ShellSettingsEntry,
   ShellAppContributions,
 } from './types'
 
@@ -56,7 +52,7 @@ export { useShellOpen, openShellApp } from './composables/useShellOpen'
 export { createPluginAppSource, PLUGIN_APP_SOURCE_ID, toShellApp } from './adapters/pluginAppSource'
 
 import type { Disposable } from './types'
-import type { ShellCapsuleItem, ShellSettingsEntry, ShellSlotContribution, ShellSurfaceContribution } from './types'
+import type { ShellCapsuleItem, ShellSlotContribution, ShellSurfaceContribution } from './types'
 import { getShellRegistry } from './registry'
 
 /**
@@ -77,9 +73,4 @@ export function registerSlot(appId: string, slot: ShellSlotContribution): Dispos
 /** 注册胶囊菜单附加项 */
 export function registerCapsuleItem(appId: string, item: ShellCapsuleItem): Disposable {
   return getShellRegistry().registerCapsuleItem(appId, item)
-}
-
-/** 注册平台设置入口 */
-export function registerSettingsEntry(appId: string, entry: ShellSettingsEntry): Disposable {
-  return getShellRegistry().registerSettingsEntry(appId, entry)
 }

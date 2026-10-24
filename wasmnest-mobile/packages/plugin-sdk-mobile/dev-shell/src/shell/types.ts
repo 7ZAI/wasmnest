@@ -19,14 +19,12 @@
 import type { Component } from 'vue'
 import type {
   ShellCapsuleItem,
-  ShellSettingsEntry,
   ShellSlotContribution,
   ShellSurfaceContribution,
 } from '../../../src/types'
 
 export type {
   ShellCapsuleItem,
-  ShellSettingsEntry,
   ShellSlotContribution,
   ShellSurfaceContribution,
 }
@@ -66,7 +64,6 @@ export interface ShellAppContributions {
   slots?: ShellSlotContribution[]
   surface?: ShellSurfaceContribution
   capsuleItems?: ShellCapsuleItem[]
-  settingsEntries?: ShellSettingsEntry[]
 }
 
 /** 宿主壳中的应用模型 */

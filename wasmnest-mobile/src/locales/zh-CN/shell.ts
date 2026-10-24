@@ -191,7 +191,6 @@ export default {
       // 各应用自持）；2026-10-15：出站策略入口一并移除（用户指令，旧实现页与路由暂留，
       // 见 revision-2.md R11）。
       about: '关于 WasmNest',
-      appSettings: '应用设置',
       runtime: 'WasmNest Mobile {version}',
     },
     permissions: {

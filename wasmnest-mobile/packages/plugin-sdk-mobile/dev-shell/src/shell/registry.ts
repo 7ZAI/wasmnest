@@ -18,7 +18,6 @@ import type {
   ShellApp,
   ShellAppSource,
   ShellCapsuleItem,
-  ShellSettingsEntry,
   ShellSlotContribution,
   ShellSurfaceContribution,
 } from './types'
@@ -27,7 +26,6 @@ import type {
 interface ContributionStore {
   slots: Map<string, ShellSlotContribution>
   capsuleItems: Map<string, ShellCapsuleItem>
-  settingsEntries: Map<string, ShellSettingsEntry>
   surface?: ShellSurfaceContribution
 }
 
@@ -38,7 +36,7 @@ interface AppRecord {
 }
 
 function emptyContributions(): ContributionStore {
-  return { slots: new Map(), capsuleItems: new Map(), settingsEntries: new Map() }
+  return { slots: new Map(), capsuleItems: new Map() }
 }
 
 /** 宿主壳注册表 */
@@ -159,14 +157,6 @@ class ShellRegistryClass {
     return { dispose: () => this.drop(store.capsuleItems, item.id) }
   }
 
-  /** 注册平台设置入口 */
-  registerSettingsEntry(appId: string, entry: ShellSettingsEntry): Disposable {
-    const store = this.storeFor(appId)
-    store.settingsEntries.set(entry.id, entry)
-    this.publish()
-    return { dispose: () => this.drop(store.settingsEntries, entry.id) }
-  }
-
   // ==================== 内部 ====================
 
   private storeFor(appId: string): ContributionStore {
@@ -185,7 +175,6 @@ class ShellRegistryClass {
       store.slots.set(slot.id, { ...slot, component: markRaw(slot.component) })
     }
     for (const item of c.capsuleItems ?? []) store.capsuleItems.set(item.id, item)
-    for (const entry of c.settingsEntries ?? []) store.settingsEntries.set(entry.id, entry)
     if (c.surface) {
       store.surface = { ...c.surface, component: markRaw(c.surface.component) }
     }
@@ -206,7 +195,6 @@ class ShellRegistryClass {
         slots: [...store.slots.values()].sort(byOrder),
         surface: store.surface,
         capsuleItems: [...store.capsuleItems.values()].sort(byOrder),
-        settingsEntries: [...store.settingsEntries.values()].sort(byOrder),
       },
     }
   }

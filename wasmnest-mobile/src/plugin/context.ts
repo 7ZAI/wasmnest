@@ -27,7 +27,6 @@ import type {
   ShellSurfaceContribution,
   ShellSlotContribution,
   ShellCapsuleItem,
-  ShellSettingsEntry,
   MonitorPanelHandle,
 } from './types'
 import { hasPermissionForApi } from './permission'
@@ -205,11 +204,6 @@ export function createPluginContext(
     },
     registerCapsuleItem(item: ShellCapsuleItem): Disposable {
       const disposable = getShellRegistry().registerCapsuleItem(info.id, item)
-      disposables.push(disposable)
-      return disposable
-    },
-    registerSettingsEntry(entry: ShellSettingsEntry): Disposable {
-      const disposable = getShellRegistry().registerSettingsEntry(info.id, entry)
       disposables.push(disposable)
       return disposable
     },

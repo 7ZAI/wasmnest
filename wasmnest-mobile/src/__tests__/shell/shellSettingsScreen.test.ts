@@ -2,7 +2,8 @@
  * 壳设置屏 行为契约测试
  * （票 2026-10-09 阶段 B 前置：壳必须覆盖旧宿主设置的全部门类，否则退役旧宿主=功能回归；
  *  2026-10-14 二改：连接 / 认证入口删除、危险区迁「关于」、背景支持自定义壁纸
- *  2026-10-15 三改：出站策略入口删除、背景（壁纸）整体迁外观设置页（契约随迁））
+ *  2026-10-15 三改：出站策略入口删除、背景（壁纸）整体迁外观设置页（契约随迁）
+ *  2026-10-25 四改：应用设置贡献面整面退役（registerSettingsEntry）——壳设置页只陈列平台项）
  *
  * 被测：`src/shell/components/screens/ShellSettingsScreen.vue`
  *
@@ -11,7 +12,6 @@
  * | C-ST1 | platformEntries | 平台项 = 外观 / 权限 / 关于；出站·背景·连接·认证不在宿主 | 文案键在场 + 缺席键不出现 |
  * | C-ST2 | 入口跳转 | 三项走既有设置页路由，权限走壳内屏，返回走 nav.back | push / openPermissions / back |
  * | C-ST3 | 危险区归属 | 擦除入口已迁「关于 WasmNest」，一级页不得再有 | 文案键缺席 |
- * | C-ST6 | 应用设置项兜底 | 应用没给 onSelect 时落应用详情 | nav.openDetail |
  * | C-ST7 | 双语 | 平台项与背景档文案键在 zh-CN / en 都在场 | 两棵树都能解析 |
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -19,13 +19,10 @@ import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import zhShell from '@/locales/zh-CN/shell'
 import enShell from '@/locales/en/shell'
-import type { ShellApp } from '@/shell/types'
 
 const mockPush = vi.fn()
 const mockOpenPermissions = vi.fn()
 const mockNavBack = vi.fn()
-const mockOpenDetail = vi.fn()
-const apps = ref<ShellApp[]>([])
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -36,15 +33,11 @@ vi.mock('vue-router', () => ({
 vi.mock('@/shell/composables/useShellNavigation', () => ({
   useShellNavigation: () => ({
     openPermissions: mockOpenPermissions,
-    openDetail: mockOpenDetail,
     back: mockNavBack,
   }),
 }))
 vi.mock('@/shell/composables/usePlatform', () => ({
   usePlatform: () => ({ platformInfo: ref({ platform: 'android', osType: 'android' }) }),
-}))
-vi.mock('@/shell/composables/useShellApps', () => ({
-  useShellApps: () => ({ apps }),
 }))
 import ShellSettingsScreen from '@/shell/components/screens/ShellSettingsScreen.vue'
 
@@ -62,8 +55,6 @@ beforeEach(async () => {
   mockPush.mockClear()
   mockOpenPermissions.mockClear()
   mockNavBack.mockClear()
-  mockOpenDetail.mockClear()
-  apps.value = []
 })
 
 describe('C-ST1 平台设置门类', () => {
@@ -78,7 +69,8 @@ describe('C-ST1 平台设置门类', () => {
     ]) {
       expect(text, `缺少平台设置项 ${key}`).toContain(key)
     }
-    // 2026-10-15：出站策略入口已移除、背景迁外观设置页——壳设置页只剩平台项与应用设置
+    // 2026-10-15：出站策略入口已移除、背景迁外观设置页；2026-10-25：应用设置贡献面
+    // 整面退役（registerSettingsEntry）——壳设置页只剩平台项
     expect(text, '出站策略入口不应回接').not.toContain('shell.settings.egress')
     expect(text, '背景区块不应回接').not.toContain('shell.settings.background')
     wrapper.unmount()
@@ -140,31 +132,9 @@ describe('C-ST2 入口跳转口径', () => {
   })
 })
 
-describe('C-ST6 应用设置项兜底', () => {
-  it('should_openAppDetail_when_entryHasNoHandler', async () => {
-    apps.value = [
-      {
-        id: 'app-1',
-        name: 'AppOne',
-        version: '1.0.0',
-        state: 'stopped',
-        permissions: [],
-        contributions: { settingsEntries: [{ id: 'e1', label: '无处理器的入口' }] },
-      },
-    ]
-    const wrapper = mount(ShellSettingsScreen)
-
-    await entryButton(wrapper, '无处理器的入口')!.trigger('click')
-
-    expect(mockOpenDetail, '没有 onSelect 时落应用详情，不留死点击').toHaveBeenCalledWith('app-1')
-    wrapper.unmount()
-  })
-})
-
 describe('C-ST7 设置项文案双语在场', () => {
   const KEYS = [
     'about',
-    'appSettings',
     'runtime',
     'appearance',
     'appearanceHint',
@@ -185,8 +155,8 @@ describe('C-ST7 设置项文案双语在场', () => {
   })
 
   it('should_notKeepRetiredSettingsKeys_when_localesLoaded', () => {
-    // 连接 / 认证 / 出站策略 / 背景迁走后，文案键一并删除——留着会诱导下一个人
-    // 「反正有 key」把入口接回来
+    // 连接 / 认证 / 出站策略 / 背景 / 应用设置区迁走或退役后，文案键一并删除——
+    // 留着会诱导下一个人「反正有 key」把入口接回来
     for (const locale of [((zhShell as any).shell.settings), ((enShell as any).shell.settings)]) {
       for (const key of [
         'connection', 'connectionHint',
@@ -196,6 +166,7 @@ describe('C-ST7 设置项文案双语在场', () => {
         'background', 'backgroundNote',
         'wallNone', 'wallAurora', 'wallDune', 'wallReef',
         'wallCustom', 'wallPick', 'wallReplace', 'wallRemove', 'wallPickFailed', 'wallDim',
+        'appSettings',
       ]) {
         expect(locale[key], `退役 key shell.settings.${key} 不应保留`).toBeUndefined()
       }

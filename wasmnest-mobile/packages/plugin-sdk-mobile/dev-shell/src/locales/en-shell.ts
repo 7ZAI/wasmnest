@@ -177,7 +177,6 @@ export const enShell = {
       permissions: 'Permission overview',
       permissionsHint: 'Group apps by permission',
       about: 'About WasmApp',
-      appSettings: 'App settings',
       runtime: 'WasmApp Mobile {version}',
       devShellHint: 'Browser debug environment · WASM backend does not run here',
       language: 'Language',

@@ -37,6 +37,10 @@
  *      FileViewerModal / CodeViewerSettingsModal / codeViewer store）连同闭包随唯一
  *      消费者 bedcode 迁入应用仓 fileExplorer 域；provide 契约 wasmnestHostComponents
  *      整面退役，宿主侧文件不在场 + 契约符号不回接双钉。
+ *   R8 应用设置贡献面退役（2026-10-25 用户裁决：宿主设置页不再陈列应用项，设置一律
+ *      应用自持）：registerSettingsEntry 注册 API（壳 registry / 壳公共入口 / 插件
+ *      context.ui 三落点）与 ShellSettingsEntry 类型整面删除，不得回接。桌面端的
+ *      同名扩展点是另一套机制（wasmnest-desktop），不在本锁范围。
  *
  * 扫描一律跳过注释行：注释里出现退役字面量（如「旧宿主 MobileLayout 退役后……」）不应
  * 判违规——否则说明文字自身会触发红，还会诱导删注释。
@@ -132,6 +136,9 @@ const RETIRED_SYMBOLS = [
   'registerSettingsSection',
   // 2026-10-14 二改：底部系统条退役（入口收进各屏页头 + 应用运行页胶囊）
   'ShellSystemBar',
+  // 2026-10-25 R8：应用设置贡献面退役（宿主设置页只陈列平台项，设置归应用自持）
+  'registerSettingsEntry',
+  'ShellSettingsEntry',
 ]
 
 /** 票 2026-10-10 C1/C2/C4 退役的旧嵌入扩展点与其宿主 UI 组件 */

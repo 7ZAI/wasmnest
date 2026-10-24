@@ -5,7 +5,7 @@
  *
  * 高内聚低耦合的两个落点：
  *   1. 应用清单由 ShellAppSource 写入（数据源可插拔：插件 / WASM 应用 / 内置）
- *   2. 界面贡献（首页卡片 / 运行面 / 胶囊项 / 设置项）由应用运行时增量注册，
+ *   2. 界面贡献（首页卡片 / 运行面 / 胶囊项）由应用运行时增量注册，
  *      与清单下发等价——两种路径在 registry 内合并成同一份视图，UI 无需区分。
  *
  * 顺序是展示层的关注点，这里保持注册/写入顺序，排序交给 useShellApps。
@@ -17,7 +17,6 @@ import type {
   ShellApp,
   ShellAppSource,
   ShellCapsuleItem,
-  ShellSettingsEntry,
   ShellSlotContribution,
   ShellSurfaceContribution,
 } from './types'
@@ -26,7 +25,6 @@ import type {
 interface ContributionStore {
   slots: Map<string, ShellSlotContribution>
   capsuleItems: Map<string, ShellCapsuleItem>
-  settingsEntries: Map<string, ShellSettingsEntry>
   surface?: ShellSurfaceContribution
 }
 
@@ -37,7 +35,7 @@ interface AppRecord {
 }
 
 function emptyContributions(): ContributionStore {
-  return { slots: new Map(), capsuleItems: new Map(), settingsEntries: new Map() }
+  return { slots: new Map(), capsuleItems: new Map() }
 }
 
 /** 宿主壳注册表 */
@@ -163,14 +161,6 @@ class ShellRegistryClass {
     return { dispose: () => this.drop(store.capsuleItems, item.id) }
   }
 
-  /** 注册平台设置入口 */
-  registerSettingsEntry(appId: string, entry: ShellSettingsEntry): Disposable {
-    const store = this.storeFor(appId)
-    store.settingsEntries.set(entry.id, entry)
-    this.publish()
-    return { dispose: () => this.drop(store.settingsEntries, entry.id) }
-  }
-
   // ==================== 内部 ====================
 
   private storeFor(appId: string): ContributionStore {
@@ -189,7 +179,6 @@ class ShellRegistryClass {
       store.slots.set(slot.id, { ...slot, component: markRaw(slot.component) })
     }
     for (const item of c.capsuleItems ?? []) store.capsuleItems.set(item.id, item)
-    for (const entry of c.settingsEntries ?? []) store.settingsEntries.set(entry.id, entry)
     if (c.surface) {
       store.surface = { ...c.surface, component: markRaw(c.surface.component) }
     }
@@ -210,7 +199,6 @@ class ShellRegistryClass {
         slots: [...store.slots.values()].sort(byOrder),
         surface: store.surface,
         capsuleItems: [...store.capsuleItems.values()].sort(byOrder),
-        settingsEntries: [...store.settingsEntries.values()].sort(byOrder),
       },
     }
   }

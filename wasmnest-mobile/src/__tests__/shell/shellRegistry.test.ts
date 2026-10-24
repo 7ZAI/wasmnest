@@ -142,7 +142,6 @@ describe('ShellRegistry 界面贡献', () => {
     registry.upsertApps(sourceId, [app('a1')])
     registry.registerSurface('a1', { component: comp('Surface') })
     registry.registerCapsuleItem('a1', { id: 'c1', label: 'x' })
-    registry.registerSettingsEntry('a1', { id: 'e1', label: 'y' })
     expect(registry.getApp('a1')?.contributions.surface).toBeDefined()
 
     registry.clearApp('a1')

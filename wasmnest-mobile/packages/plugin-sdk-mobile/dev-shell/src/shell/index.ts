@@ -25,7 +25,6 @@ export type {
   ShellAppSource,
   ShellCapsuleItem,
   ShellPermissionGrant,
-  ShellSettingsEntry,
   ShellSlotContribution,
   ShellSurfaceContribution,
 } from './types'
@@ -68,7 +67,6 @@ export {
 import type {
   Disposable,
   ShellCapsuleItem,
-  ShellSettingsEntry,
   ShellSlotContribution,
   ShellSurfaceContribution,
 } from './types'
@@ -87,9 +85,4 @@ export function registerSlot(appId: string, slot: ShellSlotContribution): Dispos
 /** 注册胶囊菜单附加项 */
 export function registerCapsuleItem(appId: string, item: ShellCapsuleItem): Disposable {
   return getShellRegistry().registerCapsuleItem(appId, item)
-}
-
-/** 注册平台设置入口 */
-export function registerSettingsEntry(appId: string, entry: ShellSettingsEntry): Disposable {
-  return getShellRegistry().registerSettingsEntry(appId, entry)
 }

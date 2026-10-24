@@ -212,18 +212,6 @@ export interface ShellCapsuleItem {
   onSelect?: (appId: string) => void | Promise<void>
 }
 
-/** 宿主壳平台设置入口 */
-export interface ShellSettingsEntry {
-  id: string
-  label: string
-  /** 右侧摘要文案 */
-  hint?: string
-  /** SVG path d（24×24 视框） */
-  icon?: string
-  order?: number
-  onSelect?: () => void | Promise<void>
-}
-
 /** 日志 API */
 export interface LoggerAPI {
   info(message: string): void
@@ -600,8 +588,6 @@ export interface UIRegistry {
   registerSlot(slot: ShellSlotContribution): Disposable
   /** 宿主壳胶囊菜单附加项（appId 由宿主代填） */
   registerCapsuleItem(item: ShellCapsuleItem): Disposable
-  /** 宿主壳平台设置入口（appId 由宿主代填） */
-  registerSettingsEntry(entry: ShellSettingsEntry): Disposable
   /** 动态注册插件路由（宿主 addRoute 至 /mobile/plugins/{pluginId}/{id}；Disposable.dispose = removeRoute 撤销） */
   registerRoute(route: PluginRouteDescriptor): Disposable
   /** 整体跳转到本插件已注册路由；返回入口页用 goBack 或宿主页头返回按钮 */

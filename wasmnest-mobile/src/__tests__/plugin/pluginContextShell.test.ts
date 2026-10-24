@@ -3,7 +3,7 @@
  * （票 2026-10-09-mobile-host-into-wasm-apps，阶段 A2：插件前端可注册壳运行面）
  *
  * 被测：`src/plugin/context.ts` 的 `ui.registerSurface / registerSlot /
- * registerCapsuleItem / registerSettingsEntry`（壳侧落点 `src/shell/registry.ts`）。
+ * registerCapsuleItem`（壳侧落点 `src/shell/registry.ts`）。
  *
  * | 契约 | 来源 | 规则 | 预期 |
  * |---|---|---|---|
@@ -11,7 +11,7 @@
  * | C-S2 | 运行面包装 | 壳直渲染运行面时插件组件仍能拿到 pluginContext | 探针渲染出 ctx:<插件 id> |
  * | C-S3 | dispose 语义 | 返回值入 `_disposables`（loader 统一回收）且 dispose 即时摘除 | 壳侧解析不到运行面 |
  * | C-S4 | 免权限 | 运行面注册不做 ui:* 权限快速失败（不触发宿主能力） | 无权限不抛；同上下文旧嵌入面仍抛 |
- * | C-S5 | 三面贡献 | slot / capsule / settings 落到壳注册表对应集合 | 各集合含注册 id，order 透传 |
+ * | C-S5 | 两面贡献 | slot / capsule 落到壳注册表对应集合 | 各集合含注册 id，order 透传 |
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { defineComponent, h, inject } from 'vue'
@@ -181,28 +181,22 @@ describe('C-S6 已退役扩展点显性抛错（票 2026-10-10 C2 fail-visible�
   })
 })
 
-describe('C-S5 slot / capsule / settings 三面贡献', () => {
+describe('C-S5 slot / capsule 两面贡献', () => {
   it('should_routeContributionsToShellRegistry_when_registered', () => {
     const ctx = makeContext()
 
     const slot = ctx.ui.registerSlot({ id: 'host-sessions', component: CtxProbe, order: 10 })
     const capsule = ctx.ui.registerCapsuleItem({ id: 'cap-1', label: 'Capsule', order: 20 })
-    const entry = ctx.ui.registerSettingsEntry({ id: 'set-1', label: 'Entry', hint: 'hint' })
 
     const contributions = shell.getApp(PLUGIN_ID)?.contributions
     expect(contributions?.slots?.map((s) => s.id)).toEqual(['host-sessions'])
     expect(contributions?.slots?.[0].order).toBe(10)
     expect(contributions?.capsuleItems?.map((c) => c.id)).toEqual(['cap-1'])
-    expect(contributions?.settingsEntries?.map((e) => e.id)).toEqual(['set-1'])
 
-    // 逐项摘除（撤回一条不影响其余两条）
+    // 逐项摘除（撤回一条不影响其余一条）
     slot.dispose()
     expect(shell.getApp(PLUGIN_ID)?.contributions.slots).toEqual([])
     expect(shell.getApp(PLUGIN_ID)?.contributions.capsuleItems?.map((c) => c.id)).toEqual(['cap-1'])
-    expect(shell.getApp(PLUGIN_ID)?.contributions.settingsEntries?.map((e) => e.id)).toEqual([
-      'set-1',
-    ])
     capsule.dispose()
-    entry.dispose()
   })
 })

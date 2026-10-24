@@ -176,16 +176,14 @@ describe('贡献注册与摘除', () => {
     expect(slots[0].component).not.toBeUndefined()
   })
 
-  it('should_exposeCapsuleAndSettingsEntries_when_registered', () => {
+  it('should_exposeCapsuleEntries_when_registered', () => {
     const id = nextSourceId()
     registry.upsertApps(id, [app('a1')])
 
     registry.registerCapsuleItem('a1', { id: 'c1', label: 'Capsule' })
-    registry.registerSettingsEntry('a1', { id: 'e1', label: 'Entry' })
 
     const view = registry.getApp('a1')
     expect(view?.contributions.capsuleItems?.map((c) => c.id)).toEqual(['c1'])
-    expect(view?.contributions.settingsEntries?.map((e) => e.id)).toEqual(['e1'])
   })
 
   it('should_keepComponentsNonReactive_when_registered', () => {

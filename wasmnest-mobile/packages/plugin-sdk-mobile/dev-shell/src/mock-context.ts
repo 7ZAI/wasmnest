@@ -126,9 +126,6 @@ export function createMockContext(pluginId: string): PluginContext {
     registerCapsuleItem(item) {
       return track(shellRegistry.registerCapsuleItem(pluginId, item))
     },
-    registerSettingsEntry(entry) {
-      return track(shellRegistry.registerSettingsEntry(pluginId, entry))
-    },
     registerRoute(route) {
       // 与宿主 routes.ts 同款：vue-router addRoute 承载整页跳转，注册表只做解析真源
       const router = getSharedModule('router')

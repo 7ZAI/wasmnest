@@ -80,24 +80,11 @@ export interface ShellCapsuleItem {
   onSelect?: (appId: string) => void | Promise<void>
 }
 
-/** 应用贡献给「平台设置」的入口 */
-export interface ShellSettingsEntry {
-  id: string
-  label: string
-  /** 右侧摘要文案 */
-  hint?: string
-  /** SVG path d（24×24 视框） */
-  icon?: string
-  order?: number
-  onSelect?: () => void | Promise<void>
-}
-
 /** 应用对宿主壳的全部贡献（可整体随清单下发，也可运行时逐项注册） */
 export interface ShellAppContributions {
   slots?: ShellSlotContribution[]
   surface?: ShellSurfaceContribution
   capsuleItems?: ShellCapsuleItem[]
-  settingsEntries?: ShellSettingsEntry[]
 }
 
 /** 宿主壳中的应用模型 */

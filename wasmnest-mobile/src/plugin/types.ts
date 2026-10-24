@@ -26,7 +26,6 @@ export type {
   ShellSurfaceContribution,
   ShellSlotContribution,
   ShellCapsuleItem,
-  ShellSettingsEntry,
   RouteContribution,
   PluginDialogAction,
   PluginDialogOptions,

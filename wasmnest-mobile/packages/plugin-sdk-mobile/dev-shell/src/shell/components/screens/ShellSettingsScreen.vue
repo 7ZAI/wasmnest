@@ -102,30 +102,6 @@
         </ShellGroupCard>
       </div>
 
-      <!-- ==================== 应用贡献的设置入口 ==================== -->
-      <ShellSection v-if="appEntries.length > 0" :title="t('shell.settings.appSettings')" />
-      <div v-if="appEntries.length > 0" class="px-4 pb-2">
-        <ShellGroupCard>
-          <button
-            v-for="entry in appEntries"
-            :key="entry.key"
-            type="button"
-            class="flex items-center gap-3 w-full px-3 py-3 text-left transition-colors duration-200 active:bg-[var(--mobile-group-row-active)] min-h-[var(--mobile-touch-target-min)]"
-            @click="onAppEntrySelect(entry)"
-          >
-            <svg class="flex-shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" :style="{ color: 'var(--mobile-text-secondary)' }">
-              <path :d="entry.entry.icon ?? DEFAULT_ENTRY_ICON" />
-            </svg>
-            <span class="flex-1 min-w-0 text-[var(--font-size-base)] text-[var(--mobile-text-primary)] truncate">
-              {{ entry.entry.label }}
-            </span>
-            <span v-if="entry.entry.hint" class="flex-shrink-0 text-[var(--font-size-sm)] text-[var(--mobile-text-secondary)] truncate">
-              {{ entry.entry.hint }}
-            </span>
-          </button>
-        </ShellGroupCard>
-      </div>
-
       <!-- ==================== 调试数据 ==================== -->
       <!-- 替代宿主的「危险操作 · 擦除本机数据」：dev-shell 的本机数据只有 localStorage
            里的调试键（插件 storage / 最近使用 / 语言），清掉即回到首次打开的状态。 -->
@@ -160,15 +136,13 @@
 /**
  * 我的 / 平台设置（宿主 ShellSettingsScreen.vue 的 dev-shell 同形实现）
  * -----------------------------------------------------------------------------
- * 结构与宿主一致：调试环境标识 + 平台项 + 应用贡献项。差异只在「平台项」的内容——
+ * 结构与宿主一致：调试环境标识 + 平台项。差异只在「平台项」的内容——
  * 宿主那一版是链路加密 / 生物凭证 / 出站授权 / 连接 / 认证（都是真机安全闸门，
  * 浏览器里没有），这里换成预览环境真正能改的面：权限总览、调试对象清单、清理调试数据。
  *
  * 外观 / 语言两项在宿主是「跳既有设置页」，在 dev-shell 直接就地切换（工具条里也有，
  * 两处同源：同一个 theme.ts / locale.ts）。
  *
- * 应用项来自各应用的 registerSettingsEntry——与平台项在同一张卡里按「平台项在前」排列，
- * 新增应用设置不需要改本文件。
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -182,10 +156,6 @@ import ShellChip from '../ShellChip.vue'
 import ShellGroupCard from '../ShellGroupCard.vue'
 import ShellSection from '../ShellSection.vue'
 
-/** 应用未自带图标时的通用图标（齿轮） */
-const DEFAULT_ENTRY_ICON =
-  'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z'
-
 interface PlatformEntry {
   id: string
   label: string
@@ -197,7 +167,7 @@ interface PlatformEntry {
 const { t, locale } = useI18n()
 const nav = useShellNavigation()
 const toast = useToast()
-const { apps, sortedApps } = useShellApps()
+const { sortedApps } = useShellApps()
 const { theme, setTheme } = useDevTheme()
 
 const platformEntries = computed<PlatformEntry[]>(() => [
@@ -235,26 +205,6 @@ const localeOptions: { value: DevLocale; label: string }[] = [
 function setLocale(next: DevLocale): void {
   locale.value = next
   saveLocale(next)
-}
-
-/** 应用贡献的设置入口（按应用顺序展开，带 appId 用于打断言） */
-const appEntries = computed(() =>
-  apps.value.flatMap((app) =>
-    (app.contributions.settingsEntries ?? []).map((entry) => ({
-      key: `${app.id}:${entry.id}`,
-      appId: app.id,
-      entry,
-    })),
-  ),
-)
-
-/** 选中应用设置项：有应用自己的入口就走它，否则落应用详情（不留点了没反应的死行） */
-function onAppEntrySelect(item: { appId: string; entry: { onSelect?: () => void | Promise<void> } }): void {
-  if (item.entry.onSelect) {
-    void item.entry.onSelect()
-    return
-  }
-  nav.openDetail(item.appId)
 }
 
 /**

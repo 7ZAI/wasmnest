@@ -193,7 +193,6 @@ export default {
       // app). 2026-10-15: the egress policy entry was removed too (user request; legacy
       // page and route stay until retired, see revision-2.md R11).
       about: 'About WasmNest',
-      appSettings: 'App settings',
       runtime: 'WasmNest Mobile {version}',
     },
     permissions: {

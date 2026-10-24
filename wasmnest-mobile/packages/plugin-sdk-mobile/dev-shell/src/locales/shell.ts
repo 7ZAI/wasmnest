@@ -177,7 +177,6 @@ export const zhCNShell = {
       permissions: '权限总览',
       permissionsHint: '按权限看应用',
       about: '关于 WasmApp',
-      appSettings: '应用设置',
       runtime: 'WasmApp Mobile {version}',
       devShellHint: '浏览器调试环境 · WASM 后端不在此运行',
       language: '语言',
