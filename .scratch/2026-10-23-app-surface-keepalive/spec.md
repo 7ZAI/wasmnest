@@ -80,6 +80,11 @@
 
 ### 3.2 移动（运行面池 + Teleport）
 
+> **承载更新（2026-10-24）**：本节的「池 + `<Teleport>`」是实现描述，已被
+> `.scratch/2026-10-24-mobile-app-surface-vue-instances/spec.md` 的「每应用一个
+> 独立 Vue 应用 + 容器注册表（`surfaceAppRegistry`）」取代——用户可感知的保活
+> 语义（首次打开创建、切走保留、停用 / 卸载才销毁）不变。本节保留作历史口径。
+
 移动端的应用表面是 Vue 组件（`ui.registerSurface` / 数据源解析），不能用桌面那套「移动容器」：
 
 - 新增 `useAppSurfaces`（模块级单例）：`opened`（打开过的 appId）、`outletEl`（当前运行屏提供的插槽）、`isSurfaceActive`；

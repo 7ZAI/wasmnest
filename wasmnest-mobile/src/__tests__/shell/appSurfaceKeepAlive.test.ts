@@ -1,67 +1,146 @@
-import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-
 /**
- * 运行面保活源码锁（移动端）
+ * 移动端运行面保活：注册表承载（行为锁）
  *
- * 口径来源：`.scratch/2026-10-23-app-surface-keepalive/spec.md` §3.2。
- *   **surface 由壳根常驻的池渲染，用 Teleport 在「运行屏插槽」与「隐藏池」之间移动**——
- *   移动只改 DOM 挂载点，不重建组件实例，切回来界面状态原样。
+ * 口径来源：`.scratch/2026-10-24-mobile-app-surface-vue-instances/spec.md`
+ * （承接 `.scratch/2026-10-23-app-surface-keepalive/spec.md` 的用户可感知语义：
+ * 首次打开创建、切走保留、停用 / 卸载才销毁）。
  *
- * 锁的是三条结构性事实（都不是单个纯函数能覆盖的）：
- *   ① 运行屏不再直接渲染 surface（否则切走即卸载，保活失效）；
- *   ② 池内条目按「打开过 ∩ 运行中」过滤，停用即出池；
- *   ③ 非前台应用走 Teleport disabled（留在隐藏池里，不渲染但实例在）。
+ * 旧版「池 + Teleport」结构锁（app-surface-pool / Teleport / disabled 字符串）
+ * 已随承载方式退役——锁换成行为断言 + 防回接守卫：
+ *   ① 对账派生销毁：应用离开运行态 → 实例 dispose、打开记录清空（停用即销毁）；
+ *   ② 后台应用也建实例（打开过 ∩ 运行中，与是否前台无关）；
+ *   ③ 无运行面零实例（不为无界面服务建空 Vue 应用）；
+ *   ④ 壳接线防回接：ShellHost 不再渲染 Teleport 池，对账与打开登记在场。
+ * （detach 不 unmount / dispose 才 unmount 的注册表级判据由
+ * surfaceAppRegistry.test.ts 的 T5–T9 锁住，此处不重复。）
  */
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { defineComponent, h, onMounted, onUnmounted, ref } from 'vue'
+import type { ShellApp } from '@/shell/types'
+import { getSurfaceAppRegistry, reconcileSurfaceApps } from '@/shell/surfaceRuntime'
+import { dropSurface, isSurfaceOpened, markSurfaceOpened, useAppSurfaces } from '@/shell/composables/useAppSurfaces'
 
 const SHELL_HOST = 'src/shell/components/ShellHost.vue'
 const APP_RUN_SCREEN = 'src/shell/components/screens/ShellAppRunScreen.vue'
-const APP_SURFACE = 'src/shell/components/ShellAppSurface.vue'
 
-describe('移动端运行面保活：池 + Teleport', () => {
-  it('壳根常驻隐藏池，按「打开过 ∩ 运行中」渲染条目', () => {
-    const src = readFileSync(SHELL_HOST, 'utf-8')
+const registry = getSurfaceAppRegistry()
 
-    expect(src).toContain('app-surface-pool')
-    expect(src).toContain('surfaceApps')
-    expect(src, '池内只留打开过且仍在运行的应用').toMatch(
-      /opened\.value\.has\(a\.id\)\s*&&\s*RUNNING_APP_STATES\.has\(a\.state\)/,
-    )
-    // 移动端运行态只有 running（ShellAppState 五档，无 degraded）
-    expect(src).toMatch(/RUNNING_APP_STATES = new Set\(\['running'\]\)/)
-    expect(src, '停用 / 卸载 / 错误终态必须出池').toContain('dropSurface(appId)')
+const counts = { mounted: 0, unmounted: 0 }
+const Probe = defineComponent({
+  name: 'KeepAliveProbe',
+  setup() {
+    onMounted(() => { counts.mounted += 1 })
+    onUnmounted(() => { counts.unmounted += 1 })
+    return () => h('div', { class: 'keepalive-probe' })
+  },
+})
+
+const apps = ref<ShellApp[]>([])
+
+function runningApp(id: string, state: ShellApp['state'] = 'running'): ShellApp {
+  return { id, name: id, version: '1.0.0', state, permissions: [], contributions: {} }
+}
+
+/** 打开记录真源（useAppSurfaces 模块级单例的 opened 集合） */
+const { opened } = useAppSurfaces()
+
+/** 测试用对账输入：清单 ref + 真实打开记录 + 按运行态给出探针组件的解析器 */
+function reconcile() {
+  return reconcileSurfaceApps({
+    apps: apps.value,
+    opened: opened.value,
+    resolveSurface: (appId) => (apps.value.some((a) => a.id === appId && a.state === 'running') ? Probe : undefined),
+  })
+}
+
+// 共享运行时（i18n / router）在适配器测试面用轻桩：真实共享行为由 #33 的契约锁负责
+vi.mock('@/locales', () => ({ default: { install: () => {} } }))
+vi.mock('@/router', () => ({ default: { install: () => {} } }))
+
+beforeEach(async () => {
+  apps.value = []
+  for (const id of registry.list()) await registry.dispose(id)
+  for (const id of ['a', 'b']) dropSurface(id)
+  // 计数器清零必须放在 dispose 之后：上一测试的实例卸载也会推动计数
+  counts.mounted = 0
+  counts.unmounted = 0
+})
+
+describe('对账（派生销毁兜底；用户动作路径的显式销毁见 useShellApps 接线）', () => {
+  it('打开过 ∩ 运行中 ∩ 有运行面 → ensure 出实例（后台应用也建，保持 detached）', async () => {
+    apps.value = [runningApp('a'), runningApp('b')]
+    markSurfaceOpened('a')
+    markSurfaceOpened('b')
+
+    await reconcile()
+
+    expect(registry.list().sort()).toEqual(['a', 'b'])
+    for (const id of ['a', 'b']) {
+      const record = registry.get(id)!
+      expect(record.container.parentElement, '对账只建不 attach（attach 由运行屏适配器决定）').toBeNull()
+    }
+    expect(counts.mounted).toBe(2)
   })
 
-  it('非前台应用禁用 Teleport：内容留在隐藏池（实例不重建）', () => {
-    const src = readFileSync(SHELL_HOST, 'utf-8')
+  it('应用离开运行态 → 实例 dispose、打开记录清空（停用即销毁，下次全新）', async () => {
+    apps.value = [runningApp('a')]
+    markSurfaceOpened('a')
+    await reconcile()
+    expect(registry.has('a')).toBe(true)
 
-    expect(src).toContain('<Teleport')
-    expect(src, '目标 = 运行屏插槽；无插槽时退回池').toContain("outletEl ?? 'body'")
-    expect(src, '前台判据必须进 disabled（否则所有应用同时抢插槽）').toContain(
-      ':disabled="!outletEl || !isSurfaceActive(app.id)"',
-    )
-    expect(src, '前后台信号写入口').toContain('setActiveSurface(')
+    apps.value = [runningApp('a', 'stopped')]
+    await reconcile()
+
+    expect(registry.has('a'), '停用 → 实例销毁').toBe(false)
+    expect(counts.unmounted, '组件真正 unmount').toBe(1)
+    expect(isSurfaceOpened('a'), '打开记录同步清空（下次打开全新实例）').toBe(false)
   })
 
-  it('运行屏只提供插槽并登记，不直接渲染 surface', () => {
+  it('从未打开过的运行中应用不建实例（无界面可保，零 UI 成本）', async () => {
+    apps.value = [runningApp('a')]
+    // 不 markSurfaceOpened
+    await reconcile()
+
+    expect(registry.list()).toEqual([])
+    expect(counts.mounted).toBe(0)
+  })
+
+  it('无运行面（如无界面服务）→ 零实例', async () => {
+    apps.value = [runningApp('a')]
+    markSurfaceOpened('a')
+
+    // 运行中且打开过，但从未注册过运行面（解析恒为 undefined）
+    await reconcileSurfaceApps({ apps: apps.value, opened: opened.value, resolveSurface: () => undefined })
+
+    expect(registry.list(), '不为无运行面应用建空 Vue 应用').toEqual([])
+    expect(counts.mounted).toBe(0)
+  })
+
+  it('对账幂等：同组件身份重复 ensure 不重建', async () => {
+    apps.value = [runningApp('a')]
+    markSurfaceOpened('a')
+    await reconcile()
+    await reconcile()
+
+    expect(counts.mounted).toBe(1)
+  })
+})
+
+describe('壳接线防回接（承载已切注册表，禁止回退 Teleport 池）', () => {
+  it('ShellHost 不再渲染保活池 / Teleport，对账在场', () => {
+    const src = readFileSync(SHELL_HOST, 'utf-8')
+
+    expect(src, '池容器不得回接').not.toContain('app-surface-pool')
+    expect(src, 'Teleport 承载不得回接').not.toContain('<Teleport')
+    expect(src, '对账接线必须在场').toContain('reconcileSurfaceApps')
+    expect(src, '壳卸载只 detach 不 dispose').toContain('surfaceRegistry.detach')
+  })
+
+  it('运行屏保留打开登记，不直接渲染 surface', () => {
     const src = readFileSync(APP_RUN_SCREEN, 'utf-8')
 
-    expect(src).toContain('data-testid="app-surface-outlet"')
-    expect(src).toContain('markSurfaceOpened(')
-    expect(src).toContain('setSurfaceOutlet(')
-    expect(src, '离开运行屏必须注销自己登记的插槽').toContain(
-      'releaseSurfaceOutlet(outletEl.value)',
-    )
-    // 回退征兆：运行屏自己 import 并渲染 surface（切走即销毁）
-    expect(src, '运行屏不得直接 import ShellAppSurface').not.toMatch(
-      /import\s+ShellAppSurface\s+from/,
-    )
-  })
-
-  it('surface 容器提供可选前后台信号（应用可据此暂停轮询）', () => {
-    const src = readFileSync(APP_SURFACE, 'utf-8')
-
-    expect(src).toContain('provide(SURFACE_ACTIVE_KEY')
-    expect(src).toContain('activeSignal(props.appId)')
+    expect(src, '打开登记（保活判据）').toContain('markSurfaceOpened(')
+    expect(src, '运行屏不得自己解析 / 直接渲染运行面组件').not.toContain('resolveSurface')
   })
 })

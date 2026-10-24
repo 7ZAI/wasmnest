@@ -82,7 +82,7 @@ describe('运行屏插槽（outlet）', () => {
     expect(api.outletEl.value).toBe(el)
 
     releaseSurfaceOutlet(el)
-    expect(api.outletEl.value, '离开运行屏必须注销，否则池会往已卸载的 DOM 里 Teleport').toBeNull()
+    expect(api.outletEl.value, '离开运行屏必须注销，否则插槽指向已卸载的 DOM').toBeNull()
   })
 
   it('注销只清自己的插槽：过渡期新旧运行屏共存不得互相抹掉', () => {

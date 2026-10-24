@@ -1,18 +1,21 @@
 /**
- * 应用运行面保活池（移动端表面保活，2026-10-23 用户裁决）
+ * 应用运行面保活记账（移动端表面保活，2026-10-23 用户裁决）
  *
  * 语义与桌面同一口径：**首次打开创建、切走保留、停用/卸载才销毁**。
- * - `opened`：打开过运行面的应用（只有它们需要保活——运行中但从没打开过的应用没有
- *   界面可保）；
- * - `outletEl`：当前应用运行屏提供的插槽 DOM（由 `ShellAppRunScreen` 登记）；
- * - 池由 `ShellHost` 渲染：每个「打开过且运行中」的应用一个 `ShellAppSurface`，
- *   用 `<Teleport>` 在「运行屏插槽」与「隐藏池」之间移动——移动不重建组件实例；
- * - 应用停用 / 卸载 → 从运行中集合消失 → 池内条目卸载（真销毁），并清掉 `opened`，
- *   下次启动是全新实例；
- * - `activeSurfaceId` 供应用 surface 经 `SURFACE_ACTIVE_KEY` 注入判断前后台
- *   （可选：注入后可在后台暂停轮询/动画；不注入不影响保活）。
+ * 本模块只做三件记账（spec `.scratch/2026-10-24-mobile-app-surface-vue-instances`
+ * §4.2：职责收窄）：
+ * - `opened`：打开过运行面的应用（只有它们需要保活——运行中但从没打开过的应用
+ *   没有界面可保）；
+ * - `outletEl`：当前应用运行屏的插槽 DOM（由运行面适配器 `ShellAppSurface` 登记，
+ *   注销只认自己登记的那一个）；
+ * - `activeSurfaceId`：当前前台应用（壳在路由变化时写入）。
  *
- * 后台**不渲染**：池容器 `display:none`，DOM 与组件状态保留、JS 定时器继续。
+ * 实例承载与生命周期在 `surfaceRuntime` / `surfaceAppRegistry`（每应用一个独立
+ * Vue 应用；前后台信号 = 注册表按 attach/detach 推动的该应用 active ref，应用侧
+ * 经 `SURFACE_ACTIVE_KEY` 注入消费）。应用停用 / 卸载 = 显式 dispose + `dropSurface`
+ * 清 `opened`（下次启动全新实例）。
+ *
+ * 后台**不渲染**：容器脱离文档，DOM 与组件状态保留、JS 定时器继续。
  */
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 

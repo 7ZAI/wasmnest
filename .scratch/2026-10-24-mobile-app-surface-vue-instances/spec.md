@@ -1,6 +1,7 @@
 # 移动端应用运行面：每应用一个 Vue 实例（Level 1）— 实施规格
 
-> 状态：**草案（2026-10-24，待实施）**。
+> 状态：**已审核（2026-10-24，结论：值得开发；前置 = 先收口 2026-10-23 保活规格遗留的 Android 手工验收，见 §7.3 步骤 0）**。
+> 审核核实记录（2026-10-24）：现状描述、桌面先例（`appSurfaceRegistry`）、`__WASMNEST_SHARED__` 单一 Vue 运行时、Teleport 结构锁位置、ADR 0058 均与代码对上；`app-run-scope` 显式传 pinia 的契约支撑独立 Vue 应用内的 `useStore()`。
 > 关系：承接 `.scratch/2026-10-23-app-surface-keepalive/spec.md` 的表面保活口径（首次打开创建、切走保留、停用 / 卸载才销毁），把「移动端运行面应该有几个 Vue 应用实例」这件事固化成可实施、可验收的规格。
 > 安全边界引用 ADR 0058：**前端同 webview / 同 JS 信任域；Vue 多实例不是安全隔离。**
 >
@@ -132,7 +133,7 @@ Level 1 的共享面保持不变：**Vue 运行时、Pinia 运行期作用域、
 - **`ShellAppSurface`（改造为宿主侧运行面适配器）**：负责解析当前应用的运行面组件、收集宿主环境注入、向注册表 ensure / attach，并渲染加载、空态、挂载失败等宿主状态；**不再**在壳组件树里直接渲染应用运行面组件。它只服务当前运行屏，**不得成为后台应用实例的唯一创建路径**。
 - **`ShellHost`（保留生命周期对账）**：负责保证所有「打开过 ∩ 运行中 ∩ 有运行面」的应用都有实例（后台应用也要有），在壳挂载、应用状态变化、运行面注册变化时对账；壳卸载时只 detach，不 dispose。`ensure` 必须幂等，`ShellHost` 与当前运行屏适配器可以都调用它，但同一次打开只能产生一个实例。**销毁对账不能依赖 `ShellHost` 是否挂载**：停用 / 卸载走显式 dispose，错误终态 / 外部停用由模块级应用状态对账或 loader 回调兜底，壳重挂时的对账只是最后一道。
 - **`ShellAppRunScreen`（保留插槽与打开登记）**：继续登记 `opened` 和运行屏插槽；不直接拥有应用 Vue 实例。
-- **`useShellApps.stop` / `removeApp`（补显式销毁）**：停用 / 卸载时先 dispose 运行面 Vue 实例，再走插件 loader 的 deactivate / uninstall；如果依赖运行态 watcher，仍保留 watcher 作为外部状态变化的兜底。
+- **`useShellApps.stop` / `removeApp`（补显式销毁）**：停用 / 卸载时先 dispose 运行面 Vue 实例，再走插件 loader 的 deactivate / uninstall；如果依赖运行态 watcher，仍保留 watcher 作为外部状态变化的兜底。**最易错点（审核标注 2026-10-24）**：现状「停用 → 池内组件卸载」完全由 `ShellHost` 的运行态 watcher 派生（池条目 = opened ∩ running），用户动作路径的销毁必须从「watcher 派生」解耦为显式 dispose——T21 / T24 是这条的护栏，实施与评审优先盯它。
 - **`plugin/context.ts` 的 `registerSurface`（原则上不改）**：继续把应用组件包成带 `pluginContext` 的宿主包装组件；独立 Vue 应用可以把这个包装组件作为根，从而保持现有注入路径。
 - **`app-run-scope`（Level 1 不改）**：继续负责每个应用运行期的 Pinia store 作用域与停用作废；Level 1 不改成「每个运行面 Vue 应用独立安装 Pinia / SDK getter 返回当前应用实例」。
 
@@ -445,6 +446,7 @@ pnpm run build
 
 ### 7.3 实施顺序建议
 
+0. **前置收口**：先完成 2026-10-23 表面保活规格（`.scratch/2026-10-23-app-surface-keepalive/`）遗留的 Android 手工验收。本规格 §5.6 与其验收项高度重叠：Teleport 池底座未验收就开始换承载方式，验收期出现的 bug 无法归因（底座还是新注册表）。
 1. 先落运行面实例注册表（创建 / attach / detach / dispose / 并发 / 错误处理），用真实 Vue 的单测把 T1–T13 跑绿。
 2. 再把 `ShellAppSurface` 改成宿主适配器，接上注入与状态面；跑 `shellAppSurface` 测试。
 3. 再改 `ShellHost` / `ShellAppRunScreen` 的接线，跑壳测试；删除 Teleport 结构锁，补行为锁。

@@ -92,6 +92,8 @@ export default {
       menu: '应用菜单',
       recents: '切换应用',
       home: '回主屏',
+      mountFailed: '「{name}」界面启动失败，可重试',
+      retry: '重试',
       noSurface: '应用暂无可用界面',
       noSurfaceHint: '该应用尚未提供运行界面',
       notFound: '应用不存在或已卸载',

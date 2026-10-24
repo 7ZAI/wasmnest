@@ -35,7 +35,7 @@
 
 ## 1. 仓速览（完整代码导航 → `docs/codemap.md`）
 
-平台仓 = 双端宿主 + 端内 SDK + 根工具；Rust **无根 workspace**。能力仓 `../wasmnest-lib` 是全部内部依赖 crate 的真源，平台经 Cargo path（`../../../wasmnest-lib/<crate>`）直接消费，版本由 `release-manifest.json` 的 `repos.lib.tag` 钉住；平台仓不复制、不镜像能力仓源码。应用源码住应用仓、产物落本仓 `resources/plugins/**`（不入库）。**双端一句话**：桌面 = 同窗口全屏挂载独立构建的应用包（机制 B）；移动 = 宿主壳运行面（`registerSurface` 等运行时注册），共享模块外置宿主全局与桌面不同。
+平台仓 = 双端宿主 + 端内 SDK + 根工具；Rust **无根 workspace**。能力仓 `../wasmnest-lib` 是全部内部依赖 crate 的真源，平台经 Cargo path（`../../../wasmnest-lib/<crate>`）直接消费，版本由 `release-manifest.json` 的 `repos.lib.tag` 钉住；平台仓不复制、不镜像能力仓源码。应用源码住应用仓、产物落本仓 `resources/plugins/**`（不入库）。**双端一句话**：桌面 = 同窗口全屏挂载独立构建的应用包（机制 B）；移动 = 宿主壳运行面（`registerSurface` 等运行时注册），每个运行面由宿主建成**独立 Vue 应用**（`surfaceAppRegistry` 容器注册表承载，2026-10-24），共享模块外置宿主全局与桌面不同。
 
 **应用清单**（真源 = 各端构建注册表 + `release-manifest.json`）：`agent-hub`（desktop）、`ai-chatbox`（双端）、`bedcode`（显示名 BedCode，双端）、`file-transfer`（双端单产物，移动经 `desktop-compat` 桩）、`monitor`（双端，只读运行指标）。
 
@@ -56,7 +56,7 @@
 
 **提交前自检**（改动落在宿主侧时逐条回答）：① 在宿主有第二个消费者吗？② 删掉它，第三方插件能用同一形状的既有原语自建吗？③ 是否新增了对产品事件的解释或回调（= B6）？答不出就停下问用户。
 
-**表面生命周期（双端同一口径，2026-10-23）**：应用没被停用就继续运行——切走只是藏起来（DOM / 组件实例保留、脱文档或 `display:none` 不渲染），停用 / 卸载才是唯一销毁点；后台渲染 / 动画不做。桌面 `detach` / 移动 Teleport 均不得退化成卸载。
+**表面生命周期（双端同一口径，2026-10-23；移动承载 2026-10-24）**：应用没被停用就继续运行——切走只是藏起来（DOM / 组件实例保留、容器脱文档不渲染），停用 / 卸载才是唯一销毁点；后台渲染 / 动画不做。双端同为 `detach` 不得退化成卸载；移动停用路径显式「先 dispose UI 再拆插件上下文」。
 
 **服务型应用不进多任务（双端同一口径，2026-10-23）**：装配角色为 `basic-service` / `internal-business`（`isServiceKind`）的应用不产多任务卡——桌面 `openApp` / `syncFromRoute` 走服务面（进全屏但不入 `cards`）、右键菜单隐藏「停用」；移动多任务两个来源（运行中 / 最近使用）都过滤。关闭唯一入口 = 应用管理页（桌面）/ 应用详情页（移动）的「停用」。
 

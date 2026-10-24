@@ -51,6 +51,7 @@ import { syncLinkCryptoContextToNative, initLinkCryptoPinSync } from '@/composab
 import { useFontSize } from '@/composables/useFontSize'
 import { useSettingsStore } from '@/stores/settings'
 import { completeStartupTask, startupReady } from '@/composables/useAppStartup'
+import { registerHostSurfaceEnv } from '@/shell/hostSurfaceEnv'
 // mDNS 广播暂时禁用：移动端目前不需要被发现，避免扫描到自身
 // import { useMdnsAdvertiser } from '@/composables/useMdnsAdvertiser'
 
@@ -151,6 +152,16 @@ onUnmounted(async () => {
 })
 
 // Provide to child components
+// 运行面独立 Vue 应用的环境注入面：壳根收集一次，surfaceRuntime 创建实例时
+// 逐应用透传（注入清单是契约，见 shell/hostSurfaceEnv.ts 头注）
+registerHostSurfaceEnv({
+  platformInfo,
+  isLandscape,
+  orientation,
+  safeArea,
+  keyboardInfo,
+  safeAreaReady: isReady,
+})
 provide('platformInfo', platformInfo)
 provide('isLandscape', isLandscape)
 provide('orientation', orientation)

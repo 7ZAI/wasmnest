@@ -93,6 +93,8 @@ export default {
       menu: 'App menu',
       recents: 'Switch apps',
       home: 'Back home',
+      mountFailed: 'Failed to start the surface of "{name}", you can retry',
+      retry: 'Retry',
       noSurface: 'No interface available',
       noSurfaceHint: 'This app does not provide a run surface yet',
       notFound: 'App not found or uninstalled',

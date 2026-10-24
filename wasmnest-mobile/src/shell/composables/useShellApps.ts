@@ -18,6 +18,8 @@ import { logger } from '@/utils/frontendLogger'
 import { getShellRegistry } from '../registry'
 import type { ShellApp, ShellAppSource } from '../types'
 import { pushRecent } from './useShellRecent'
+import { disposeSurfaceApp, reconcileSurfaceApps } from '../surfaceRuntime'
+import { useAppSurfaces } from './useAppSurfaces'
 import { useShellNavigation } from './useShellNavigation'
 import { useShellNotifications } from './useShellNotifications'
 
@@ -82,6 +84,8 @@ const lastError: Ref<string | null> = ref(null)
 
 /** 应用清单（保持注册/写入顺序） */
 const apps: ComputedRef<ShellApp[]> = computed(() => registry.appsRef.value)
+/** 打开记录（useAppSurfaces 模块单例）：销毁对账的判据之一 */
+const { opened } = useAppSurfaces()
 
 /** 展示排序：运行中优先，其次按名称（中文用 localeCompare，避免拼音序错乱） */
 const sortedApps: ComputedRef<ShellApp[]> = computed(() =>
@@ -141,6 +145,10 @@ async function refresh(): Promise<void> {
     // 无论成功失败都算「已尝试过」：否则拉取持续失败时运行屏会永远停在加载态
     listReady.value = true
   }
+  // 模块级兜底对账（工单 #32：销毁不依赖 ShellHost 是否挂载）：清单刷新后，
+  // 「打开过 ∩ 运行中 ∩ 有运行面」之外的应用实例就地销毁并清打开记录。
+  // 与 ShellHost 的 watcher 幂等共存（ensure 对同组件身份直接复用）
+  void reconcileSurfaceApps({ apps: apps.value, opened: opened.value, resolveSurface })
 }
 
 /** 启动应用（幂等：已运行只记一次最近使用） */
@@ -186,6 +194,9 @@ async function stop(appId: string): Promise<boolean> {
   }
 
   registry.patchApp(appId, { state: 'stopped', error: undefined })
+  // 先 dispose UI 再拆插件上下文（工单 #32 顺序契约）：组件要在 pluginContext
+  // 仍有效时完成 onUnmounted 清理；dispose 幂等，重复停用不重复 unmount
+  await disposeSurfaceApp(appId)
   try {
     await source.stop(appId)
     lastError.value = null
@@ -389,6 +400,8 @@ async function removeApp(appId: string): Promise<boolean> {
     logger.warn(`[Shell] remove unsupported: appId=${appId}`)
     return false
   }
+  // 同停用的顺序契约：先 dispose UI（含清打开记录），再走插件卸载
+  await disposeSurfaceApp(appId)
   try {
     const ok = await source.remove(appId)
     if (ok) {

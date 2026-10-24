@@ -52,6 +52,7 @@ vi.mock('@/shell/components/ShellHost.vue', () => ({
 import ShellView from '@/shell/views/ShellView.vue'
 import ShellAppSurface from '@/shell/components/ShellAppSurface.vue'
 import { getShellRegistry } from '@/shell/registry'
+import { getSurfaceAppRegistry } from '@/shell/surfaceRuntime'
 import { useShellApps } from '@/shell/composables/useShellApps'
 
 const FakeSurface = defineComponent({
@@ -79,8 +80,10 @@ async function enterShellWithApp() {
   return shell
 }
 
-afterEach(() => {
+afterEach(async () => {
   getShellRegistry().clearApp(APP_ID)
+  // 新承载：卸掉本文件挂出的运行面实例（注册表是模块级单例，防跨用例污染）
+  for (const id of getSurfaceAppRegistry().list()) await getSurfaceAppRegistry().dispose(id)
 })
 
 describe('C-V1 卸载保留清单记录', () => {
@@ -106,8 +109,13 @@ describe('C-V2 重挂窗口直接渲染运行面', () => {
     const surface = mount(ShellAppSurface, { props: { appId: APP_ID } })
     await flushPromises()
 
-    expect(surface.findComponent(FakeSurface).exists(), '重挂窗口运行面应立即可解析').toBe(true)
+    // 注册表承载：运行面不在壳组件树里（findComponent 找不到是预期），
+    // 断言其外部可观察行为——实例建出、容器进插槽、应用 DOM 在场
+    expect(getSurfaceAppRegistry().has(APP_ID), '重挂窗口运行面应立即可建').toBe(true)
+    expect(surface.element.querySelector('.surface-instance-host'), '容器挂进插槽').not.toBeNull()
+    expect(surface.element.textContent, '应用 DOM 在场（file-transfer-main）').toContain('file-transfer-main')
     expect(surface.text()).not.toContain('shell.run.notFound')
+    surface.unmount()
     remounted.unmount()
   })
 })

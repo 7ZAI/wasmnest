@@ -29,20 +29,6 @@
     <ShellCapsuleMenu />
     <ShellPermissionPrompt />
     <ShellNotificationShade />
-
-    <!-- 应用运行面保活池（2026-10-23）：打开过且仍在运行的应用，surface 组件常驻于此
-         （display:none，不渲染但状态保留）；当前应用经 Teleport 移到运行屏插槽。
-         移动 DOM 不重建组件实例——切回来是同一份界面状态。 -->
-    <div class="app-surface-pool hidden" aria-hidden="true">
-      <Teleport
-        v-for="app in surfaceApps"
-        :key="app.id"
-        :to="outletEl ?? 'body'"
-        :disabled="!outletEl || !isSurfaceActive(app.id)"
-      >
-        <ShellAppSurface :app-id="app.id" />
-      </Teleport>
-    </div>
   </div>
 </template>
 
@@ -50,7 +36,8 @@
 /**
  * 宿主壳根组件
  * -----------------------------------------------------------------------------
- * 职责：宿主壁纸 + 状态条 + 屏幕栈 + 平台级覆盖层 + 宿主事件桥 + 系统返回键平台兜底。就这些。
+ * 职责：宿主壁纸 + 状态条 + 屏幕栈 + 平台级覆盖层 + 运行面对账 + 宿主事件桥 +
+ * 系统返回键平台兜底。就这些。
  * 壁纸挂在壳根：主屏 / 应用管理 / 权限 / 设置共用同一背景（与桌面壳同口径）。
  * 应用运行面例外：它是应用自己的窗口，壳根另铺一层默认底色（含状态栏带），
  * 平台顶栏与应用界面同底色，不把宿主壁纸透成平台控件的背景。
@@ -61,8 +48,15 @@
  * 会永久占掉一截应用可视高度，且与 Android 系统手势条重复；导航入口改为
  * ① 各非根屏页头自持返回键 ② 应用运行页胶囊里的多任务 / 回主屏。
  *
+ * 运行面承载（Level 1，2026-10-24）：每应用一个**独立 Vue 应用**，由注册表
+ * （surfaceRuntime → surfaceAppRegistry，模块级单例）记账。本组件不再渲染
+ * Teleport 保活池，改为**对账**：所有「打开过 ∩ 运行中 ∩ 有运行面」的应用都
+ * ensure 出实例（后台应用也建，保持 detached）；当前应用的 attach 由运行屏
+ * 适配器（ShellAppSurface）负责。壳卸载只 detach 全部容器、不 dispose——
+ * 注册表与实例都随模块存活，壳重挂后对账重新补建 attach 面。
+ *
  * 不含的东西（都是刻意的）：
- *   · 不含任何应用业务——应用界面由其 surface 组件自持（见 ShellAppSurface）
+ *   · 不含任何应用业务——应用界面由其独立运行面自持（见 ShellAppSurface）
  *   · 不含应用清单的获取逻辑——由 ShellView 注册数据源后 refresh
  *   · 不含主题配置——沿用既有 --mobile-* token 与设置页
  *
@@ -78,7 +72,7 @@ import { useAppSurfaces } from '../composables/useAppSurfaces'
 import { useShellNavigation, type ShellScreenId } from '../composables/useShellNavigation'
 import { useShellSystemBack } from '../composables/useShellSystemBack'
 import { startShellHostEvents } from '../composables/useShellHostEvents'
-import ShellAppSurface from './ShellAppSurface.vue'
+import { getSurfaceAppRegistry, reconcileSurfaceApps } from '../surfaceRuntime'
 import ShellCapsuleMenu from './ShellCapsuleMenu.vue'
 import ShellNotificationShade from './ShellNotificationShade.vue'
 import ShellPermissionPrompt from './ShellPermissionPrompt.vue'
@@ -106,31 +100,27 @@ const nav = useShellNavigation()
 const { transitionName } = nav
 const { wallpaper, wallpaperImage, wallDim } = useShellPreferences()
 
-// ==================== 应用运行面保活池 ====================
+// ==================== 运行面对账（注册表承载） ====================
 
-const { apps } = useShellApps()
-const { opened, outletEl, dropSurface, setActiveSurface, isSurfaceActive } = useAppSurfaces()
+const { apps, resolveSurface } = useShellApps()
+const { opened, setActiveSurface } = useAppSurfaces()
+const surfaceRegistry = getSurfaceAppRegistry()
 
-/** 实例活着且打开过，才需要保活（从没打开过的运行中应用没有界面可保）。 */
-const RUNNING_APP_STATES = new Set(['running'])
-const surfaceApps = computed(() =>
-  apps.value.filter((a) => opened.value.has(a.id) && RUNNING_APP_STATES.has(a.state)),
-)
-
-/** 应用离开运行态（停用 / 卸载 / 错误终态）→ 移出保活池（组件卸载、下次全新） */
+/**
+ * 对账触发面：应用清单 / 运行态 / 打开记录变化，或运行面注册变化
+ * （resolveSurface 的响应式依赖——注册、晚到、身份替换都会推动重算）。
+ * reconcileSurfaceApps 幂等（ensure 对同组件身份直接返回既有实例），重复触发无代价。
+ */
 watch(
-  () => apps.value.map((a) => `${a.id}:${a.state}`).join('|'),
-  () => {
-    const running = new Set(
-      apps.value.filter((a) => RUNNING_APP_STATES.has(a.state)).map((a) => a.id),
-    )
-    for (const appId of [...opened.value]) {
-      if (!running.has(appId)) dropSurface(appId)
-    }
-  },
+  () => [
+    apps.value.map((a) => `${a.id}:${a.state}:${opened.value.has(a.id) ? 1 : 0}`).join('|'),
+    apps.value.map((a) => resolveSurface(a.id)),
+  ],
+  () => void reconcileSurfaceApps({ apps: apps.value, opened: opened.value, resolveSurface }),
+  { immediate: true },
 )
 
-/** 当前前台应用（surface 可通过 SURFACE_ACTIVE_KEY 注入判断；不在应用面 = 空串） */
+/** 当前前台应用（沿用池时代记账；运行面前后台信号由注册表按 attach/detach 推动） */
 watch(
   () => [nav.current.value.id, nav.params.value.appId] as const,
   ([screenId, appId]) => setActiveSurface(screenId === 'app-run' ? (appId ?? '') : ''),
@@ -176,8 +166,11 @@ onMounted(async () => {
 onUnmounted(() => {
   stopHostEvents?.()
   stopHostEvents = null
-  // 壳卸载（如进入插件整页路由）时摘掉返回兜底：此时壳没有任何可退的屏，
-  // 系统返回应交回默认行为 / 由当前整页路由自己的历史承担
+  // 壳卸载（如进入插件整页路由）只 detach 运行面容器、**不 dispose**：
+  // 注册表与实例随模块存活，壳重挂后对账重建 attach 面，后台状态原样保留
+  for (const appId of surfaceRegistry.list()) surfaceRegistry.detach(appId)
+  // 摘掉返回兜底：此时壳没有任何可退的屏，系统返回应交回默认行为 /
+  // 由当前整页路由自己的历史承担
   systemBack.dispose()
 })
 </script>

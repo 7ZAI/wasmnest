@@ -22,10 +22,13 @@
  * | C-O2 | openShellApp 正路 | 可启动应用 | launch + 进运行面 |
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { defineComponent, h, onUnmounted, type Component } from 'vue'
 import { getShellRegistry } from '@/shell/registry'
 import { resetShellNotifications, useShellNotifications } from '@/shell/composables/useShellNotifications'
 import { useShellApps } from '@/shell/composables/useShellApps'
 import { openShellApp, resetShellNavigation, useShellNavigation } from '@/shell/index'
+import { getSurfaceAppRegistry, reconcileSurfaceApps } from '@/shell/surfaceRuntime'
+import { markSurfaceOpened, useAppSurfaces } from '@/shell/composables/useAppSurfaces'
 import type { ShellApp, ShellAppSource } from '@/shell/types'
 
 const SOURCE_ID = 'app-actions-source'
@@ -94,8 +97,12 @@ beforeEach(() => {
   source.remove.mockImplementation(async () => true)
 })
 
-afterEach(() => {
+const surfaceRegistry = getSurfaceAppRegistry()
+const { opened } = useAppSurfaces()
+
+afterEach(async () => {
   shell.clearSource(SOURCE_ID)
+  for (const id of surfaceRegistry.list()) await surfaceRegistry.dispose(id)
 })
 
 describe('C-A1..C-A3 审批动作', () => {
@@ -321,5 +328,96 @@ describe('C-O1/C-O2 打开应用路由', () => {
 
     expect(ok).toBe(false)
     expect(nav.current.value.id, '启动失败不进运行面（错误留在列表上可见）').toBe('home')
+  })
+})
+
+describe('C-A13/C-A14 停用与卸载的显式销毁顺序（工单 #32：先 dispose UI 再拆插件上下文）', () => {
+  /** 顺序证据：surface 组件 unmounted 与 source 动作的相对先后 */
+  const order: string[] = []
+  const counts = { unmounted: 0 }
+  const OrderSurface = defineComponent({
+    name: 'OrderSurfaceProbe',
+    setup() {
+      onUnmounted(() => {
+        counts.unmounted += 1
+        order.push('surface-unmounted')
+      })
+      return () => h('div', { class: 'order-surface' })
+    },
+  })
+
+  const resolveFromRegistry = (id: string): Component | undefined =>
+    shell.getApp(id)?.contributions?.surface?.component as Component | undefined
+
+  /** 造一个「打开过 ∩ 运行中 ∩ 有运行面」的应用并建出真实例 */
+  async function seedRunningSurface(id: string): Promise<void> {
+    shell.upsertApps(SOURCE_ID, [app(id, 'running', 'OrderApp')])
+    shell.registerSurface(id, { component: OrderSurface })
+    markSurfaceOpened(id)
+    await reconcileSurfaceApps({ apps: shell.appsRef.value, opened: opened.value, resolveSurface: resolveFromRegistry })
+  }
+
+  beforeEach(() => {
+    order.length = 0
+    counts.unmounted = 0
+  })
+
+  it('should_disposeSurfaceBeforeSourceStop_when_stopping', async () => {
+    await seedRunningSurface('com.test.o')
+    expect(surfaceRegistry.has('com.test.o'), '前置：实例已建').toBe(true)
+    source.stop.mockImplementationOnce(async () => {
+      order.push('source-stop')
+    })
+
+    const ok = await useShellApps().stop('com.test.o')
+
+    expect(ok).toBe(true)
+    expect(order, '组件清理必须发生在插件上下文拆除之前').toEqual(['surface-unmounted', 'source-stop'])
+    expect(surfaceRegistry.has('com.test.o'), '实例已销毁').toBe(false)
+    expect(opened.value.has('com.test.o'), '打开记录同步清空').toBe(false)
+  })
+
+  it('should_disposeSurfaceBeforeSourceRemove_when_uninstalling', async () => {
+    await seedRunningSurface('com.test.o')
+    source.remove.mockImplementationOnce(async () => {
+      order.push('source-remove')
+      return true
+    })
+
+    const ok = await useShellApps().removeApp('com.test.o')
+
+    expect(ok).toBe(true)
+    expect(order, '卸载同样先 dispose UI 再拆插件上下文').toEqual(['surface-unmounted', 'source-remove'])
+    expect(surfaceRegistry.has('com.test.o')).toBe(false)
+  })
+
+  it('should_notDisposeTwice_when_stopFailsThenRetried', async () => {
+    await seedRunningSurface('com.test.o')
+    source.stop.mockRejectedValueOnce(new Error('backend down'))
+
+    const first = await useShellApps().stop('com.test.o')
+    expect(first, '后端失败返回 false').toBe(false)
+    expect(counts.unmounted, '失败路径 UI 已销毁一次').toBe(1)
+    expect(surfaceRegistry.has('com.test.o')).toBe(false)
+
+    // 用户重试停用：实例已无，不得重复 unmount
+    const second = await useShellApps().stop('com.test.o')
+    expect(second).toBe(true)
+    expect(counts.unmounted, 'dispose 幂等：不重复 unmount').toBe(1)
+  })
+
+  it('should_disposeViaRefreshReconcile_when_appLeavesRunningStateWithoutShell', async () => {
+    await seedRunningSurface('com.test.o')
+    expect(surfaceRegistry.has('com.test.o')).toBe(true)
+
+    // 外部状态变化（如错误终态 / 远端停用）：无壳挂载，仅靠 refresh 对账兜底。
+    // refresh 有意不等对账（void：不拖 UI），断言前冲刷对账的微任务链
+    shell.upsertApps(SOURCE_ID, [app('com.test.o', 'error', 'OrderApp')])
+    await useShellApps().refresh()
+    for (let i = 0; i < 6; i++) await Promise.resolve()
+
+    expect(surfaceRegistry.has('com.test.o'), '离开运行态 → 实例销毁').toBe(false)
+    expect(counts.unmounted).toBe(1)
+    expect(opened.value.has('com.test.o')).toBe(false)
   })
 })

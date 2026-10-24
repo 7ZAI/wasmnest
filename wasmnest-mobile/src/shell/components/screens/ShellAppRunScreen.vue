@@ -76,9 +76,10 @@
     </header>
 
     <!-- ==================== 应用运行面 ====================
-         应用 surface 由壳的运行面保活池 Teleport 到这里：切走只移回池（不销毁），
-         本屏只提供插槽与登记/注销。 -->
-    <div ref="outletEl" class="flex flex-col flex-1 min-h-0" data-testid="app-surface-outlet" />
+         承载在运行面适配器（ShellAppSurface）：它向注册表 ensure 该应用的独立
+         Vue 应用并把容器 attach 到自己的插槽。本屏只保留「打开登记」——
+         打开过的应用才进保活（切走只 detach，停用 / 卸载才 dispose）。 -->
+    <ShellAppSurface :app-id="appId" />
   </div>
 </template>
 
@@ -87,8 +88,8 @@
  * 应用运行屏
  *
  * 平台只叠加两样东西：顶部一行应用身份，与右侧胶囊（菜单 / 多任务 / 回主屏）。
- * 应用内部界面由应用自持（ShellAppSurface），平台不画应用内页头，也不给应用
- * 加返回键——返回不是这一层的语义，退出走「回主屏」。
+ * 应用内部界面由应用自持（经 ShellAppSurface 适配器装载），平台不画应用内页头，
+ * 也不给应用加返回键——返回不是这一层的语义，退出走「回主屏」。
  *
  * 平台顶栏与应用同一布局域：本屏根节点铺默认页面底色，壳根另有 app-run 底色层
  * 盖住顶部安全区（见 ShellHost），因此顶栏 / 状态栏带 / 应用界面共用一层底色。
@@ -99,17 +100,14 @@
  * 标题取名时要看 listReady：壳先渲染、清单后到，这段窗口内 apps 为空，
  * 直接显示「应用不存在」是假空态。
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
 import { useShellOverlays } from '../../composables/useShellOverlays'
-import {
-  markSurfaceOpened,
-  releaseSurfaceOutlet,
-  setSurfaceOutlet,
-} from '../../composables/useAppSurfaces'
+import { markSurfaceOpened } from '../../composables/useAppSurfaces'
 import ShellAppIcon from '../ShellAppIcon.vue'
+import ShellAppSurface from '../ShellAppSurface.vue'
 
 const { t } = useI18n()
 const nav = useShellNavigation()
@@ -119,17 +117,8 @@ const { getApp, listReady } = useShellApps()
 const appId = computed(() => nav.params.value.appId ?? '')
 const app = computed(() => getApp(appId.value))
 
-/** 运行面插槽：壳的保活池把当前应用的 surface Teleport 到这里 */
-const outletEl = ref<HTMLElement | null>(null)
-
 onMounted(() => {
+  // 打开登记（保活判据之一）：运行屏挂载即认为用户打开过该应用
   if (appId.value) markSurfaceOpened(appId.value)
-  setSurfaceOutlet(outletEl.value)
-})
-
-onBeforeUnmount(() => {
-  // 只注销自己登记的插槽：过渡期新旧运行屏共存，新屏可能已经登记了它的插槽。
-  // 无条件清空会让当前应用退回隐藏池（运行面空白）。
-  releaseSurfaceOutlet(outletEl.value)
 })
 </script>
