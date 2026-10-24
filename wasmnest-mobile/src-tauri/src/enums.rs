@@ -10,12 +10,10 @@
 pub mod auth;
 pub mod control;
 pub mod plugin;
-pub mod session;
 pub mod sumary;
 
 // Re-export all public types
 pub use auth::{AuthPayload, AuthStage};
 pub use control::{SessionControlAction, SessionControlPayload};
 pub use plugin::{PluginQuestion, PluginQuestionOption};
-pub use session::{SessionStatus, TaskStatus};
 pub use sumary::{SessionConfigSummary, SessionSummary};

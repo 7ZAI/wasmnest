@@ -4,36 +4,14 @@ import { pluginLoader } from '@/plugin/loader'
 const router = createRouter({
   history: createWebHistory(),
   // 阶段 B（票 2026-10-09）：旧宿主四页容器与其页面已退役删除，
-  // 唯一入口 = 宿主壳 /mobile/shell；设置子页与文件浏览器沿用（壳/插件尚未承接的过渡面）。
-  // 退役面不得回接 —— 见 src/__tests__/views/retiredMobileHostUiFace.test.ts
+  // 唯一入口 = 宿主壳 /mobile/shell；设置子页沿用（壳/插件尚未承接的过渡面）。
+  // 退役面不得回接 —— 见 src/__tests__/shell/retiredHostUIRetirementLocks.test.ts
+  // （#24 批次：文件浏览器全屏页与 connection/authentication/egress 业务设置子页
+  // 已随死路由删除——零导航源，业务真源已按票 2026-10-10 C4 下沉 bedcode 应用。）
   routes: [
     {
       path: '/',
       redirect: '/mobile/shell',
-    },
-    {
-      path: '/mobile/files/:id',
-      name: 'mobile-files',
-      component: () => import('@/views/CodeExplorerView.vue'),
-      meta: { standAlone: true },
-    },
-    {
-      path: '/mobile/settings/connection',
-      name: 'mobile-settings-connection',
-      component: () => import('@/views/settings/ConnectionSettingsView.vue'),
-      meta: { standAlone: true },
-    },
-    {
-      path: '/mobile/settings/authentication',
-      name: 'mobile-settings-authentication',
-      component: () => import('@/views/settings/AuthenticationSettingsView.vue'),
-      meta: { standAlone: true },
-    },
-    {
-      path: '/mobile/settings/egress',
-      name: 'mobile-settings-egress',
-      component: () => import('@/views/settings/EgressSettingsView.vue'),
-      meta: { standAlone: true },
     },
     {
       path: '/mobile/settings/appearance',

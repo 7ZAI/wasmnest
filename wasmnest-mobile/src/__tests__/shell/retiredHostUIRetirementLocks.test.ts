@@ -14,7 +14,7 @@
  *   R2 退役视图 / 组件符号（MobileSwipeContainer / MobileNav / MobileLayout / MobileStatusBar /
  *      DevicesView / SessionsView / ToolboxView / PluginView / SettingsView / PresetTasksView /
  *      TerminalView / registerSettingsSection）不得以词边界符号出现。
- *      —— 词边界保证不误伤仍在服役的合法面：`PluginViewHost` / `EgressSettingsView` /
+ *      —— 词边界保证不误伤仍在服役的合法面：`PluginViewHost` /
  *      `registerTerminalView` / `TerminalViewContribution` 等均不含词边界匹配。
  *   R3 壳等价物正面在场（ShellView / ShellHost / ShellNotificationShade /
  *      ShellSettingsScreen + 路由 mobile-shell）——防「把新面也删掉」绕过退役锁（删空则 R1/R2 恒真）。
@@ -28,6 +28,11 @@
  *      `mobile-settings-notifications` 路由不得回接；运行面解析不得再有回退链。
  *      —— 锁的是**调用面**而非单个文件：只要 src/ 里再出现任一退役符号即红。
  *   R5 票 2026-10-10 批次 D1 删除的孤儿组件 / composable 不得被重新接回宿主。
+ *   R6 #24 死码批次（2026-10-24）删除的死路由视图 / 路由名 / 孤儿组件不得回接：
+ *      文件浏览器全屏页（CodeExplorerView，路由 mobile-files）与三张业务设置子页
+ *      （connection / authentication / egress——零导航源，业务真源已按票 2026-10-10 C4
+ *      下沉 bedcode 应用）+ 五个零消费者孤儿 UI 组件 + components/index.ts 桶导出
+ *      （零 import，且引用三个早已不存在的 Terminal 组件）。
  *
  * 扫描一律跳过注释行：注释里出现退役字面量（如「旧宿主 MobileLayout 退役后……」）不应
  * 判违规——否则说明文字自身会触发红，还会诱导删注释。
@@ -147,6 +152,51 @@ const RETIRED_ORPHANS = [
   'useRunTime',
 ]
 
+/** #24 死码批次（2026-10-24）退役的路由名（带引号锁定，口径同 R1） */
+const RETIRED_24_ROUTE_NAMES = [
+  'mobile-files',
+  'mobile-settings-connection',
+  'mobile-settings-authentication',
+  'mobile-settings-egress',
+]
+
+/** #24 死码批次退役的视图符号（词边界锁定，口径同 R2） */
+const RETIRED_24_VIEW_SYMBOLS = [
+  'CodeExplorerView',
+  'ConnectionSettingsView',
+  'AuthenticationSettingsView',
+  'EgressSettingsView',
+]
+
+/**
+ * #24 死码批次从磁盘删除的文件（路径级不在场钉死，口径同 R5 的 should_notExistOnDisk）。
+ *
+ * 五个孤儿组件只做路径级断言、不做符号扫描：壳 UI 库（`src/shell/components/ui/`）
+ * 存在**同名活组件**（CollapseSection / LetterAvatar / LoadingDialog / QuickActionButton
+ * 均由壳自持实现），裸符号词边界扫描会误伤在役面——这正是「宁窄勿宽」的取舍，
+ * 防回接由路径断言承担。`components/index.ts` 同批删除（零 import 的死桶导出）。
+ */
+const RETIRED_24_FILES = [
+  'src/views/CodeExplorerView.vue',
+  'src/views/settings/ConnectionSettingsView.vue',
+  'src/views/settings/AuthenticationSettingsView.vue',
+  'src/views/settings/EgressSettingsView.vue',
+  'src/components/BottomSheet.vue',
+  'src/components/CollapseSection.vue',
+  'src/components/LetterAvatar.vue',
+  'src/components/LoadingDialog.vue',
+  'src/components/QuickActionButton.vue',
+  'src/components/index.ts',
+]
+
+/**
+ * R6 符号扫描的显性豁免（逐条登记，不做通配，口径同 R4_ALLOWED_FILES）：
+ * - `src/__tests__/composables/useLinkEncryption.test.ts`：票 06 结构锁以路径字符串
+ *   断言 ConnectionSettingsView 不在场（R6 批次把「页内不渲染」升级为「文件已删」），
+ *   路径里含退役符号属记账而非回接。
+ */
+const R6_ALLOWED_FILES = ['src/__tests__/composables/useLinkEncryption.test.ts']
+
 /** 壳等价物：退役面的正面替代——缺件即红，防「删新面绕过退役锁」 */
 const REQUIRED_SHELL_FILES = [
   'src/shell/views/ShellView.vue',
@@ -213,6 +263,26 @@ describe('R5 已删除的宿主孤儿组件不得回接（票 2026-10-10 D1）',
       'src/composables/useRunTime.ts',
     ]) {
       expect(existsSync(join(process.cwd(), file)), `${file} 应已删除`).toBe(false)
+    }
+  })
+})
+
+describe('R6 #24 死码批次：死路由视图 / 路由名 / 孤儿组件不回接', () => {
+  it('should_notContainRetired24RouteNames_when_srcScanned', () => {
+    const pattern = new RegExp(`['"](${RETIRED_24_ROUTE_NAMES.join('|')})['"]`)
+    const hits = scan(pattern, SRC_CODE_FILES)
+    expect(hits).toEqual([])
+  })
+
+  it('should_notContainRetired24ViewSymbols_when_srcScanned', () => {
+    const files = SRC_CODE_FILES.filter((f) => !R6_ALLOWED_FILES.includes(f))
+    const hits = scan(new RegExp(`\\b(${RETIRED_24_VIEW_SYMBOLS.join('|')})\\b`), files)
+    expect(hits).toEqual([])
+  })
+
+  it('should_notExistOnDisk_when_retired24FilesDeleted', () => {
+    for (const file of RETIRED_24_FILES) {
+      expect(existsSync(join(process.cwd(), file)), `${file} 应已删除（#24 死码批次）`).toBe(false)
     }
   })
 })

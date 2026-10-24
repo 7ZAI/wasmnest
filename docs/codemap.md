@@ -213,7 +213,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `appBundlePathLock.test.ts` · `appChromeLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 挂载包路径单一来源（`resources/plugins/desktop` 层级）；壳标题栏常驻、应用不得自绘标题栏/窗口控制/拖拽区 |
 | `appSurfaceKeepAlive.test.ts` · `useAppMountKeepAlive.test.ts` | `wasmnest-desktop/src/__tests__/shell/mount/` | **表面保活**：挂载槽常驻（`v-show`，不得回 `v-if` 分支）、销毁点唯一在 `ShellHost` 运行态 disposer、挂载槽切走只 `detach`、界面租约跟实例生命周期（首次创建 acquire / dispose release）、`setActive?` 是可选契约；装载层行为（复用不重建、detach 不销毁、并发首次 mount 合并为一次） |
 | `shellExtensions.test.ts` · `shellStatusBar.test.ts` · `shellExtensionWiring.test.ts` · `settings/settingsOrderLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 壳扩展点注册语义（排序 / 覆盖 / Disposable / 皮肤 token 校验）、状态栏分区与动作失败隔离、ShellHost 装配接线、设置页顺序（**关于固定最后**） |
-| `pluginWatchCopy.test.ts` · `pluginPrecheck.test.ts` | `wasmnest-desktop/src/__tests__/scripts/` | 插件 watch 复制闭环；**dev 预检四步行为锁**（`scripts/plugin-precheck.mjs` 陈旧判定 / `--out` 直写 resources / `--rust-only` 快路径 / fail-fast / WASM→前端→清单→退役清理四步顺序，可注入依赖不触发真实构建）+ 接线锁只盯 `dev-run.js` 的 `runPluginPrecheck()` 先于宿主启动点（issue #12 / spec §4.1，内部函数名不再逐个点名） |
+| `pluginWatchCopy.test.ts` · `pluginPrecheck.test.ts` | `wasmnest-desktop/src/__tests__/scripts/` | 插件 watch 复制闭环（`copyIfChanged` / `copyManifestIfChanged` / `copyWatchArtifacts` 三组临时目录行为锁，#23 将复制链提为可注入依赖的导出）；**dev 预检四步行为锁**（`scripts/plugin-precheck.mjs` 陈旧判定 / `--out` 直写 resources / `--rust-only` 快路径 / fail-fast / WASM→前端→清单→退役清理四步顺序，可注入依赖不触发真实构建）+ 接线锁 2 条轻量：`startPluginWatch` 调用共享复制链、`dev-run.js` 的 `runPluginPrecheck()` 先于宿主启动点（issue #12 / #23，内部函数名不再逐个点名）；bedcode `--frontend-only` 由沙箱 fixture 驱动真实 build.js |
 | 移动壳系列锁：`shellConstraintLocks`（含 **L7 壳内自足**）、`retiredHostUIRetirementLocks`、`shellRegistry` / `shellPermissions` / `shellMechanisms` / `shellHostEvents` / `shellAppSurface` / `shellAppRunScreen` / `appSurfaceKeepAlive` / `useAppSurfaces` / `shellHomeScreen` 等 20+ | `wasmnest-mobile/src/__tests__/shell/` | 壳内自足（不依赖旧界面目录）、退役路由 / 符号不回接、壳迁移面不得缩水、注册表 / 权限 / 机制行为；**运行面保活**（运行屏只提供插槽、池按「打开过 ∩ 运行中」过滤、停用即出池、Teleport 前后台切换不重建） |
 | `crate-structure-lock.test.mjs` | 根 `scripts/`（`pnpm run test:run`） | 契约 crate 常量保持 node 正则可解析的字面量形状；能力仓（`../wasmnest-lib`）无逃出 crate 目录的 `include!` / `include_str!` / `bindgen!` 路径；双端 `compose.json` 声明的 WIT 路径存在 |
 | `check-markdown-links.mjs` | 根 `scripts/`（`pnpm run check:links`；husky pre-commit 暂存含 .md 时自动跑，issue #14） | 仓内跟踪 markdown 的**相对链接**（含图片）目标必须存在；外链 URL 与纯锚点不探测（跳过即明说，不做假绿）。挪动 / 改名 .md 或其链接目标时同一提交内过此锁 |
@@ -239,25 +239,26 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `shell/mount/appSurfaceKeepAlive.test.ts`（桌面） | 销毁点唯一、挂载槽常驻 `v-show`、租约跟实例生命周期 | 源码文本（结构事实） | 保留（头注释已述理由） | 覆盖停用 / 全部关闭 / 卸载 / 错误终态全路径的组件测试不现实；结构性事实是跨组件装配不变量 |
 | `shell/shellExtensionWiring.test.ts`（桌面） | ShellHost 真的挂状态栏 / 皮肤 token 接壳根 | 接线锁 | 保留单条轻量 | 组件测试全绿而装配缺失的场景无运行时覆盖；接线点唯一 |
 | `shell/shellStyleWiring.test.ts`（桌面） | 入口接线 shell.css（含顺序）+ 被消费共享类仍在 | 接线锁 | 保留单条轻量 | 零引用死样式静默失效教训：类名照写而 CSS 没进构建，组件测试测不出 |
-| `shell/recentsWiring.test.ts`（桌面） | 多任务四处装配点（主屏无运行区 / 工具栏入口 / 全屏层 / Host 挂载） | 源码文本（逐调用点） | **待改造（Phase 2 首批）** | 无——81 处 `toContain` 逐调用点，#12 样板反例；收敛为状态收敛 + ≤2 条接线 |
+| `shell/recentsWiring.test.ts`（桌面） | 多任务四处装配点（主屏无运行区 / 工具栏入口 / 全屏层 / Host 挂载） | 挂载行为 + 接线锁 | 已改造（#23，2026-10-24） | 原 81 处 `toContain` 逐调用点按 #12 样板收敛为挂载行为（主屏无运行区 / 导航顺序 / 开关状态收敛=工具栏↔全屏层联合挂载共享 useShellState 同一 ref / 动作转发 / 卡片装配 DOM / 图标接线）；接线剩 1 条（ShellHost 模板挂 `<ShellTaskSwitcher />`）+ 退役面存在性扫描（ShellRecentsPanel / ShellCommandPalette）；几何纯函数面归 recentsLayout.test.ts |
 | `shell/recentsLayout.test.ts`（桌面） | 卡片尺寸方向 / 几何（纯函数行为测试在场）+ 组件接线 3 条 | 接线锁（混合） | 收敛：接线 3 条 → 1 条 | 方向 / 几何已行为化；接线断言只证 `ShellTaskSwitcher` 真的用了 `recentsLayout` |
-| `shell/settings/settingsOrderLock.test.ts`（桌面） | 设置分组顺序（关于固定最后） | 源码文本（裁决） | **待改造（Phase 2 首批）**：mount 断言分组 DOM 顺序 | 无——顺序在渲染结果里可断言，源码顺序正则是绕路 |
+| `shell/settings/settingsOrderLock.test.ts`（桌面） | 设置分组顺序（关于固定最后） | 挂载行为（DOM 顺序） | 已改造（#23，2026-10-24） | 已按预告改法落地：挂载 SysSettingsView 断言分组标题的 DOM 顺序（分组组件以桩替身渲染），关于固定最后；源码顺序正则已删 |
 | `shell/selectionStyle.test.ts`（桌面） | 选中态两套语言（勾章 / 黑底白字） | 源码文本（样式裁决） | 保留 | happy-dom 不计算 scoped CSS，选中填充色是样式表事实 |
 | `shell/surfaceLadder.test.ts`（桌面） | 透明度三档阶梯（92% / 96%+blur / 实心） | 源码文本（样式裁决） | 保留 | 同上：透明度 / blur 是 CSS 事实，DOM 断言不可达 |
 | `shell/wallpaperScope.test.ts`（桌面） | 壁纸挂壳根、宿主页面不得自铺底色 | 源码文本（裁决） | 保留 | 挂载层级与背景归属是渲染结构事实；「不得存在」的禁令只能扫描 |
 | `shell/appChromeLock.test.ts`（桌面） | 壳标题栏常驻、应用不得自绘标题栏 / 窗口控制 / 拖拽区 | 源码文本（裁决 + 禁字面量） | 保留（改 bedcode 时同批维护） | 「不得出现标题栏 / 100vh」是宿主与 app 双侧禁令，禁字面量形态只能文本断言 |
 | `shell/sysPermsChrome.test.ts`（桌面） | 系统页 chrome 常驻、权限页去「页中页」、SVG 图标重画 | 源码文本（裁决） | 保留（图标在场可随 Phase 2 顺带行为化） | 分层越界（fixed 悬浮胶囊压图标）是布局事实；SVG path 是品牌几何延续 |
-| `shell/toolbarThemeToggle.test.ts`（桌面） | 主题切换按钮图标画当前态、文案说目标态 | 源码文本 | **待改造（Phase 2 首批）**：mount + 切主题断言图标与 aria-label | 无——组件挂载即可断言渲染结果 |
+| `shell/toolbarThemeToggle.test.ts`（桌面） | 主题切换按钮图标画当前态、文案说目标态 | 挂载行为 | 已改造（#23，2026-10-24） | 已按预告改法落地：mount ShellToolbar + 切主题断言图标（DOM path）/ aria-label / 尺寸；sun 光线内缩几何以 ShellIcon 渲染 DOM 断言（渲染资产），双语动作文案以消息对象断言（跨两套消息集契约）保留 |
 | `shell/customWallpaper.test.ts`（桌面） | 偏好只存文件名 / URL 防穿越（行为测试在场）+ 命令调用落点 3 处 | 接线锁（混合） | 收敛：调用点 3 条 → 单条 | 行为部分已行为化；调用落点只证接线唯一性 |
 | `brandMark.test.ts`（桌面） | 品牌位全仓 2 处、笔画与 icon.svg 逐字同源、旧笔画零残留 | 源码文本（品牌几何） | 保留 | SVG 描边曲线与图标的逐字同源是渲染资产事实，DOM 比对不了 path 数据 |
-| `components/SplashLoading.test.ts`（桌面） | 绘画动画行为 + 尺寸 clamp 与 rAF 内联样式字符串 2 条 | 源码文本（混合） | **待改造（Phase 2 首批）**：rAF 字符串断言提纯函数或收敛 | 无——`strokeDashoffset` 赋值字符串是实现细节，格式化 / 重命名即红 |
+| `components/SplashLoading.test.ts`（桌面） | 绘画动画行为 + 品牌位尺寸与描边偏移公式（纯函数真源）+ CSS 动画回退退役扫描 | 挂载行为 + 纯函数 + 退役面 1 条 | 已改造（#23，2026-10-24） | clamp 档位与 offset 公式提纯到 splashTiming.ts（`SPLASH_LOGO_SIZE` / `splashStrokeOffset`，组件内联绑定消费，happy-dom CSSOM 丢 clamp 值 → 组件面以哨兵值注入证明绑定）；rAF 内联样式字符串断言已删（行为由逐帧驱动用例承载）；CSS animation 回退退役禁令 1 条保留（WebKitGTK 退化静态事故，行为测不出「曾经会动」） |
 | `components/SplashLoadingTheme.test.ts`（桌面） | 开屏双主题四条不变量（SFC + 静态首屏 css + index.html 接线） | 源码文本（样式裁决） | 保留 | happy-dom 不解析 scoped CSS 变量；静态首屏在 JS 挂载前，只有文本可断言 |
-| `scripts/pluginWatchCopy.test.ts`（桌面） | copyIfChanged / copyManifestIfChanged 行为（已行为化）+ 接线组：watch 2 条、dev-run 1 条、bedcode build.js 1 条 | 接线锁（混合） | **收敛（Phase 2 首批）**：watch 2 条与 build.js 正则按 #12 样板收敛；dev-run 单条保留 | dev-run 单条理由成立（预检先于宿主启动点）；watch 两条断言 `copyStep('复制 index.js'` 等调用点字面量，无豁免理由 |
+| `scripts/pluginWatchCopy.test.ts`（桌面） | copyIfChanged / copyManifestIfChanged / copyWatchArtifacts 行为（临时目录 fixture）+ 接线组：watch 1 条、dev-run 1 条、bedcode build.js（fixture 驱动真实脚本） | 行为测试 + 接线锁 | 已改造（#23，2026-10-24） | watch 复制链提为可注入依赖的导出 `copyWatchArtifacts`（plugin-watch.js 最小 diff，命令形态不变）并临时目录行为锁定（幂等 / 摘要感知 / fail-visible 记账）；接线剩 2 条轻量（startPluginWatch 调用共享复制链、dev-run 的 `runPluginPrecheck()` 先于宿主启动点——后者理由成立保留）；bedcode `--frontend-only` 由源码正则改为沙箱 fixture 驱动真实 build.js（假 vite / cargo 记账，不触发真实构建） |
 | `scripts/runtimeCrateGate.test.ts`（桌面） | runtime crate 打包门禁纯函数行为 + Cargo.toml crate 身份（包名 / 二进制名 / git tag 依赖） | 边界契约（发布面） | 保留（tag 升级同批更新） | crate 身份就是 Cargo.toml 文本事实，`cargo package` / install 契约无行为替身 |
 | `package-contents.test.ts`（桌面 SDK） | SDK 发布内容自足（files / exports / bin / 工具落点） | 边界契约（发布面） | 保留 | 「npm 包里必须有什么」本身就是包清单文本契约 |
 | `composables/useLinkEncryption.test.ts`（移动） | 配置持久化 / 子开关行为 + WS 加密退役零残留扫描 | 边界契约（退役面） | 保留退役面 | 退役面 fail-visible：残留以任何形式回接即违规，只能扫描源码面 |
 | `shell/appSurfaceKeepAlive.test.ts`（移动） | 池常驻渲染 + Teleport 移动不重建 +「打开过 ∩ 运行中」过滤 | 源码文本（结构事实） | 保留（头注释已述理由） | 同桌面保活锁：Teleport 前后台全路径组件测试不现实 |
-| `shell/retiredHostUIRetirementLocks.test.ts`（移动） | 旧宿主 UI 退役路由 / 符号零回接 + 正面钉（mobile-shell 默认路由在位） | 边界契约（退役面） | 保留 | 退役面防回接 = 禁字面量扫描；测试期门禁与 ESLint 分工（防 ignores 改窄） |
+| `shell/retiredHostUIRetirementLocks.test.ts`（移动） | 旧宿主 UI 退役路由 / 符号零回接 + 正面钉（mobile-shell 默认路由在位）；R6 = #24 死码批次（死路由视图 / 路由名 / 孤儿组件零回接 + 路径级不在场钉） | 边界契约（退役面） | 保留 | 退役面防回接 = 禁字面量扫描；测试期门禁与 ESLint 分工（防 ignores 改窄） |
+| `host_product_vocabulary_lock.rs`（移动 `src-tauri/tests/`，issue #24） | 移动宿主 Rust 源码 B1–B6 产品词汇零未登记（17 针 + 机制复合词 carve-out；白名单逐文件×逐词登记，来源 `docs/host-exceptions.md` §3/§4，#25 直连栈收敛后对应行随之删） | 边界契约（薄壳红线） | 保留（Seam 3 已跑红一次：`struct TestSessionStatus;` ⇒ 红点名文件与词） | B1–B6 命中是词汇存在性事实，产品语义没有行为替身；命中处置 = 例外登记或迁移票 |
 | `shell/shellConstraintLocks.test.ts`（移动） | L1–L7 壳层约束（零资源访问 / 裸 invoke / 授权弹窗单挂载 / 无静默 catch / i18n / token-bound / 壳内自足） | 边界契约（安全红线） | 保留 | 安全三层封锁与壳内自足是禁区扫描不是行为；与 ESLint 分工为测试期门禁 |
 | `with-global-tauri-lock.test.mjs`（根 scripts） | 双端 `tauri.conf.json` 的 `app.withGlobalTauri === false`（issue #22 / #16 / ADR 0058，2026-10-24） | 边界契约（暴露面收缩 + 跨构建单元） | 保留（Seam 3 已跑红一次） | 纯配置项无行为面：其全部效果恰是「`window.__TAURI__` 全局永不注入」这个否定事实，行为测试只能断言在场行为、断言不了缺席；conf 是 Rust 侧构建输入，改它不经任何编译检查。owner=binblink（平台仓）。已知例外：wdio 手动 harness（`@wdio/tauri-plugin` 1.4.0 webview execute 硬依赖该全局）属仓外测试基础设施、不进 CI 门禁，不构成回开理由 |
 | `shell/shellHomeScreen.test.ts`（移动） | 主屏行为契约 + 跨端系统图标 path 与桌面 ShellIcon 逐字一致 | 边界契约（跨端，行为面不动） | 保留跨端契约 | 移动 / 桌面两套独立构建的图标资产无共享真源，一致性只有文本可比对 |
@@ -270,13 +271,13 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `visualParity.test.ts`（移动 dev-shell） | dev-shell ↔ 宿主视觉真源（token / Tailwind 主题）同源 | 边界契约（同构漂移） | 保留 | 同上；视觉漂移事故（墨纸体系）实证 |
 | `crate-structure-lock.test.mjs`（根） | 契约 crate 字面量形状 / 无 `include!` 逃逸 / compose.json WIT 路径存在 | 边界契约（结构） | 保留（已在上表登记） | 字面量形状是给 node 正则消费的构建契约，非运行时行为 |
 
-**Phase 2 首批改造建议（误红风险最高，均桌面端，均未动手——改造随 #12 样板推广执行）**：
+**Phase 2 首批改造建议（误红风险最高，均桌面端——已随 issue #23 于 2026-10-24 全部落地，#12 样板推广执行）**：
 
-1. `shell/recentsWiring.test.ts`：81 处逐调用点断言，是全仓最重的旧写法；合法重排装配顺序 / 重命名局部变量即红。
-2. `scripts/pluginWatchCopy.test.ts` watch 组 2 条 + bedcode `build.js` 1 条：断言 `copyStep('复制 index.js'` 等调用点字面量，改步骤文案即红；`copyIfChanged` 纯函数行为测试已在其位，接线可收敛。
-3. `shell/settings/settingsOrderLock.test.ts`：源码顺序正则锁可由 mount 断言分组 DOM 顺序替代（行为可表达）。
-4. `shell/toolbarThemeToggle.test.ts`：纯源码断言可由 mount + 切主题断言图标 / aria-label 替代。
-5. `components/SplashLoading.test.ts` rAF / clamp 2 条：断言内联样式精确字符串，格式化即红；时序计算已有导出常量可提纯函数。
+1. `shell/recentsWiring.test.ts`（已改造）：81 处逐调用点断言收敛为挂载行为 + ShellHost 接线 1 条 + 退役面扫描；mutate 证明：删 ShellHost 挂载 / 主屏回铺运行带 / 工具栏脱离共享开关各红一次。
+2. `scripts/pluginWatchCopy.test.ts` watch 组 2 条 + bedcode `build.js` 1 条（已改造）：复制链提纯为 `copyWatchArtifacts` 行为锁，bedcode 改沙箱 fixture 驱动真实 build.js；mutate 证明：复制链退回无条件 cpSync / `--frontend-only` 漏调 buildFrontend 各红一次。
+3. `shell/settings/settingsOrderLock.test.ts`（已改造）：mount 断言分组 DOM 顺序；mutate 证明：关于挪到复位之前红两次。
+4. `shell/toolbarThemeToggle.test.ts`（已改造）：mount + 切主题断言图标 / aria-label；mutate 证明：图标写死月亮红两条。
+5. `components/SplashLoading.test.ts` rAF / clamp 2 条（已改造）：clamp 档位与 offset 公式提纯 `splashTiming.ts` + 挂载断言；mutate 证明：档位回退 96px / 组件解绑尺寸常量各红一次。
 
 ## 9. 文档索引
 

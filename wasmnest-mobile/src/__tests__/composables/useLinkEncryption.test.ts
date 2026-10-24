@@ -8,6 +8,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { appPath } from '../support/appPaths'
 import {
   isChannelEncryptionActive,
@@ -156,10 +157,9 @@ describe('pin 落地（ws_link_crypto_pin 事件驱动 applyPin；HTTP 通道 pi
 })
 
 describe('结构锁：WS 帧级加密与 waiting_input 漂移零残留（票 06）', () => {
-  it('上层生产面不再有 WS 加密开关字段/通道名/设置页行/i18n key（linkCrypto 库自身除外）', async () => {
-    const [enc, view, zh, en] = await Promise.all([
+  it('上层生产面不再有 WS 加密开关字段/通道名/i18n key（linkCrypto 库自身除外）', async () => {
+    const [enc, zh, en] = await Promise.all([
       readFile('src/composables/useLinkEncryption.ts', 'utf-8'),
-      readFile('src/views/settings/ConnectionSettingsView.vue', 'utf-8'),
       readFile('src/locales/zh-CN/settings.ts', 'utf-8'),
       readFile('src/locales/en/settings.ts', 'utf-8'),
     ])
@@ -170,11 +170,9 @@ describe('结构锁：WS 帧级加密与 waiting_input 漂移零残留（票 06�
     expect(enc).not.toContain("'ws-terminal'")
     expect(enc).not.toContain("'ws-event'")
     expect(enc).not.toMatch(/LinkCryptoChannel = '[^']*\|/)
-    // 设置页：不再渲染 WS 子开关行 / 引用退役 i18n key
-    expect(view).not.toContain('ws-terminal')
-    expect(view).not.toContain('ws-event')
-    expect(view).not.toContain('linkEncryptWsTerminal')
-    expect(view).not.toContain('linkEncryptWsEvent')
+    // WS 设置页（ConnectionSettingsView）已随 #24 死路由批次整页删除，断言升级为
+    // 文件不在场（比「页内不渲染」更强）；防回接由 retiredHostUIRetirementLocks 钉死
+    expect(existsSync('src/views/settings/ConnectionSettingsView.vue')).toBe(false)
     // i18n 双文件：退役 key 同步删除
     for (const locales of [zh, en]) {
       expect(locales).not.toContain('linkEncryptWsTerminal')

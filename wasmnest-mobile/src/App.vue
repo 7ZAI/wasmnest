@@ -141,7 +141,8 @@ provide('safeAreaReady', isReady)
 // `hostComponents.FileSidebar` / `hostComponents.FileExplorer` 两个挂载位，此前因为
 // 无人 provide 一直是死代码（v-if 恒假）。这里补上 provide，两件事同时成立：
 // ① 文件浏览器从宿主可达（它随应用运行面一起进入宿主组件树，inject 沿树可见）；
-// ② 全屏路由 `/mobile/files/:id` 之外多了一条不需要占宿主路由的入口。
+// ② 全屏路由 `/mobile/files/:id` 已随 #24 死路由批次删除（零导航源），应用内挂载
+//    是文件浏览器唯一入口，且不需要占宿主路由。
 //
 // 为什么在 App.vue 而不是壳里：插件组件可能被非壳路径渲染（如 dev 调试入口），
 // 挂到应用根才能保证凡在宿主组件树内都取得到；这层是**通用注册**不是业务编排，

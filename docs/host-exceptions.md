@@ -31,7 +31,7 @@
 | `src-tauri/src/file_service/saf_tree.rs` | 516 | **平台缝**：Android SAF 目录树遍历，唯一消费者 = `peer/seam.rs` 的 android SAF 桥 | 保留（目录名有误导，见 §6） |
 | `src-tauri/src/plugin/android_plugins/*`（12 文件） | 1,334 | **平台缝**：Kotlin 桥 Tauri 插件（SAF / 生物认证 / 设备信息 / 通知 / 多播锁 / 状态栏 / 下载目录 / 前台服务等），`lib.rs` 统一注册 | 保留 |
 | `src-tauri/src/mdns/*` + `commands/mdns.rs` | 298 | **宿主适配**：`wasmnest-discovery-engine` + ADR 0054 类型中枢的订阅消费面 | 保留 |
-| `src-tauri/src/enums/session.rs` | 83 | B1 产品类型，**死码**（`SessionStatus` / `TaskStatus` 仅被 `enums.rs` 再导出，零真实消费者） | 删 |
+| `src-tauri/src/enums/session.rs` | 83 | B1 产品类型，**死码**（`SessionStatus` / `TaskStatus` 仅被 `enums.rs` 再导出，零真实消费者） | 已删（issue #24；本票提交号后补） |
 | 前端旧五目录（components 5,750 · views 1,459 · composables 5,806 · stores 239 · services 262） | 13,516 | 四类混杂，见 §4 逐项拆解：死码 339 + 死路由视图 ≈609 + 随直连栈退役的连接面 ≈2,145 + 宿主提供组件（跨应用契约）≈3,281 + 活过渡面（外观/关于设置页）+ 全局基础设施（主题 / 平台 / i18n / 链路加密 / 安全闸门对话框） | 逐项处置（§4） |
 
 > 其余移动 Rust（`plugin/*` 其余 ≈8,632、`egress.rs` 1,515、`system/*` 1,820、`commands/*` 其余等）为机制面（插件运行时 / egress 安全闸门 / 系统装配），不在本表展开；`egress.rs` / `plugin/manager.rs` 的拆分是健壮性议题（spec §8.2），不是归属议题。
@@ -61,19 +61,19 @@
 | `connection/*`（17 文件，含 `ws_client/tests` 351 行） | 4,422 | B2（自述「业务层连接管理」：设备级 status 状态机 / 重试封顶 / 重连策略）+ 机制重复 | **非死码，三重活消费**：① `plugin/host_ports.rs` 把 `ConnectionManager` / `ReconnectManager` 投影为 wasm-core `ConnectionEnginePort` / `WsReconnectPolicyPort`（插件机制面的「主连接事实」）；② 前端事件面 `plugin/host-events.ts → useMobileConnection.ts`（1,268 行）经 `commands/connection.rs` 调用；③ `auth/*` 依赖其 `ConnectionManager` | 用能力仓 `wasmnest-ws-client-engine` 替换收敛：宿主设备直连改走引擎，`host_ports.rs` 投影改指引擎适配器；**这是新收敛动作，不是对齐桌面**（桌面是服务端、不依赖该引擎；移动目前只在 `plugin/host_domains/ws.rs` 插件能力面链接了它） | Phase 2 拆票（#19） | 发布 tag 前或 2026-12-19 取早 |
 | `auth/*`（`manager.rs` 691 · `http.rs` 391） | 1,082 | B2/B3（配对 / QR / reauth / 生物挑战编排 + 设备身份文件真源） | 活消费：`plugin/host_ports.rs` 的 `AuthEnginePort` 投影（C4 凭据零过境）+ `plugin/auth.rs` 适配 + `commands/auth.rs` | 能力仓引擎收敛（配对 / 认证是跨端协议机制，承接形态——引擎扩展 or host-kit 新增认证能力 crate——拆票时定；跨端协议改动必须双端同步，`docs/architecture.md` §6） | Phase 2 拆票（#19） | 同上 |
 | 同闭包邻接：`handler/*` 670 · `router/*` 1,013 · `model/message.rs` 1,060 · `enums/auth.rs` 100 · `enums/control.rs` 37 · `enums/sumary.rs` 38 · `enums/plugin.rs` 32 · `commands/{connection,auth}.rs` 310 · `state.rs` 连接/认证片段 | ≈3,260 | 随栈定性（`model/message.rs` 自述信封协议已退役、只剩测试与协议级收尾；`MobileEvent` 前向事件面随 `useMobileConnection` 迁移后退役） | 消费闭环全部落在直连栈内部（`connection/manager.rs` ← `handler::PluginEventRouter` / `router::MessageRouter`；前端侧仅 `host-events.ts` 链） | 随直连栈替换一并退役（engine 事件 → 宿主事件桥按新形状重建） | Phase 2 拆票（#19） | 同上 |
-| `enums/session.rs` | 83 | B1 + 死码 | `SessionStatus` / `TaskStatus` 全仓零消费者（仅 `enums.rs:20` 再导出悬空；`router/event.rs` 的 `SyncSessionStatusChanged` 是自有枚举，与它无关） | 删（连同 `enums.rs` 再导出行与文件内自测） | Phase 2 拆票（#19） | 同上 |
+| `enums/session.rs` | 83 | B1 + 死码 | `SessionStatus` / `TaskStatus` 全仓零消费者（仅 `enums.rs:20` 再导出悬空；`router/event.rs` 的 `SyncSessionStatusChanged` 是自有枚举，与它无关） | **已删（issue #24；本票提交号后补）**——连同 `enums.rs` 再导出行与文件内自测；词汇锁 `host_product_vocabulary_lock.rs` 对 `SessionStatus` / `TaskStatus` 零容忍（白名单无行） | Phase 2 拆票（#19） | 同上 |
 
 ### 4.2 前端旧五目录（13,516 行）
 
 | 项 | 实测行数 | 判据 | 消费者核对结论 | 处置方向 | 迁移票号 | 截止条件 |
 | --- | --- | --- | --- | --- | --- | --- |
 | `components/FileExplorer.vue` 793 · `FileSidebar.vue` 1,195 · `FileViewerModal.vue` 711 · `CodeViewerSettingsModal.vue` 582 · `stores/codeViewer.ts` 107 | 3,388 | B1/B4（文件浏览器 / 代码查看器是业务视图） | **跨应用活契约**：`App.vue:149` `provide('wasmnestHostComponents', { FileExplorer, FileSidebar })`，应用仓 bedcode 移动面三处 `inject`（`TerminalView.vue` / `PresetTasksTab.vue` / `TaskEditDialog.vue`）——不是死码 | 迁应用仓（随宿主提供组件契约迁移：组件随 bedcode 走或沉 SDK 共享包，挂载契约形状不变） | Phase 2 拆票（#19） | 同上 |
-| `views/CodeExplorerView.vue` | 137 | B4 | 死路由：`/mobile/files/:id` 无任何导航源（全仓零 `router.push`，壳不识别该路径） | 删（路由 + 视图） | Phase 2 拆票（#19） | 同上 |
-| `views/settings/AuthenticationSettingsView.vue` 190 · `EgressSettingsView.vue` 293 | 483 | B1（连接与认证业务设置） | 死路由：两个 route name 全仓零导航源（壳设置屏只推 appearance / about；业务设置真源已按票 2026-10-10 C4 下沉 bedcode 应用） | 删（路由 + 视图） | Phase 2 拆票（#19） | 同上 |
-| `views/settings/ConnectionSettingsView.vue` | 126 | B1 | 传递性死路由：唯一跳转源是死路由 `CodeExplorerView.vue:81` | 删（随 CodeExplorerView 一并） | Phase 2 拆票（#19） | 同上 |
+| `views/CodeExplorerView.vue` | 137 | B4 | 死路由：`/mobile/files/:id` 无任何导航源（全仓零 `router.push`，壳不识别该路径） | **已删（issue #24；本票提交号后补）**（路由 + 视图） | Phase 2 拆票（#19） | 同上 |
+| `views/settings/AuthenticationSettingsView.vue` 190 · `EgressSettingsView.vue` 293 | 483 | B1（连接与认证业务设置） | 死路由：两个 route name 全仓零导航源（壳设置屏只推 appearance / about；业务设置真源已按票 2026-10-10 C4 下沉 bedcode 应用） | **已删（issue #24；本票提交号后补）**（路由 + 视图） | Phase 2 拆票（#19） | 同上 |
+| `views/settings/ConnectionSettingsView.vue` | 126 | B1 | 传递性死路由：唯一跳转源是死路由 `CodeExplorerView.vue:81` | **已删（issue #24；本票提交号后补）**（随 CodeExplorerView 一并） | Phase 2 拆票（#19） | 同上 |
 | 直连栈前端面：`composables/useMobileConnection.ts` 1,268 · `useMobileCommands.ts` 518 · `usePresetTasks.ts` 227 · `useMdnsDiscovery.ts` 135 | 2,148 | B2/B4（连接状态编排 / 事件投影） | 活消费但属替换桶：`plugin/host-events.ts` / `plugin/index.ts`（插件系统初始化于 `main.ts:10`）消费——插件运行面的事件与命令桥 | 随 Rust 直连栈替换退役，插件面事件桥按引擎事件形状重建 | Phase 2 拆票（#19） | 同上 |
 | 活过渡面：`views/settings/AppearanceSettingsView.vue` 451 · `AboutSettingsView.vue` 262（含 `useUpdateChecker` / `useClearAllData` / `useForegroundService` / `useNotification` 依赖链） | ≈713+ | 无（外观 / 版本 / 清数据是平台机制设置） | 活：壳设置屏 `ShellSettingsScreen.vue:155/:169` 直接 `router.push` | **保留**至壳承接（router 注释自述「设置子页与文件浏览器沿用——壳/插件尚未承接的过渡面」）；承接后迁 `src/shell/` 并退役旧路由 | Phase 2 拆票（#19，壳承接子项） | 同上 |
-| 死码组件：`components/{BottomSheet,CollapseSection,LetterAvatar,LoadingDialog,QuickActionButton}.vue` + `components/index.ts` | 339 | B1（无消费者即无存在理由） | import 可达闭包零命中（含相对导入核对） | 删 | Phase 2 拆票（#19） | 同上 |
+| 死码组件：`components/{BottomSheet,CollapseSection,LetterAvatar,LoadingDialog,QuickActionButton}.vue` + `components/index.ts` | 339 | B1（无消费者即无存在理由） | import 可达闭包零命中（含相对导入核对；`index.ts` 自身零 import，且引用三个早已不存在的 Terminal 组件） | **已删（issue #24；本票提交号后补）**；防回接钉在 `retiredHostUIRetirementLocks.test.ts` R6（孤儿组件为壳同名活组件计，只做路径级不在场断言，不做符号扫描） | Phase 2 拆票（#19） | 同上 |
 | `components/{SettingsSubPage,Toggle,ConfirmDialog}.vue` 等过渡面支撑组件 | ≈1,000 | 无（通用 UI 原语） | 活：设置过渡面 + `plugin/components/PluginRouteView.vue` 消费 | 随过渡面承接一并迁壳 / 退役 | Phase 2 拆票（#19，壳承接子项） | 同上 |
 
 > 五目录实测 13,516 行的构成核对（2026-10-24）：活过渡面 + 全局基础设施 + 宿主提供组件 + 直连栈前端面 + 死码 ≈ 全量；「≈13,500 全是待删业务」的旧印象不成立——**大头是活的基础设施与跨应用契约**，逐项处置见上表。
@@ -93,12 +93,12 @@
 1. **`connection/*` 不是可整删的死码**：它同时是 (a) 插件机制面的引擎实现（`plugin/host_ports.rs` 端口投影）与 (b) 插件前端事件桥的数据源（`plugin/host-events.ts → useMobileConnection`）。替换必须先接后断，`host_ports.rs` 投影改指引擎适配器是关键中间态。
 2. **FileExplorer / FileSidebar 是跨应用活契约**：spec 旧印象按「产品语义、优先删」处理，实测是 bedcode 移动面经 `wasmnestHostComponents` 注入消费的宿主提供组件——只能迁、不能删。
 3. **疑似业务实为机制**：`model/data.rs` 的 `Setting`（通用 KV 形状）、`FsAuthDialog` / `EgressConsentDialog`（安全闸门确认面）、`mdns/*`（discovery-engine 订阅面）初看命中 B1/B3/B4，核对后均不携带产品语义。
-4. **死码比预期少但更准**：Rust 侧仅 `enums/session.rs`（83 行）整文件死码；前端死码 = 6 个孤儿组件（339 行）+ 3 条死路由视图（CodeExplorerView / Authentication / Egress / Connection 设置页 ≈736 行，其中 connection 页是传递性死路由）。`enums/sumary.rs` 看似死码，实为 `handler/plugin_event.rs` 消费的旧同步事件闭包（随栈退役，不单独删）。
+4. **死码比预期少但更准**：Rust 侧仅 `enums/session.rs`（83 行）整文件死码；前端死码 = 6 个孤儿组件（339 行）+ 3 条死路由视图（CodeExplorerView / Authentication / Egress / Connection 设置页 ≈736 行，其中 connection 页是传递性死路由）。`enums/sumary.rs` 看似死码，实为 `handler/plugin_event.rs` 消费的旧同步事件闭包（随栈退役，不单独删）。**以上死码已全部随 issue #24 删除（2026-10-24，提交号见 §4 标记），防回接分别钉在词汇锁 `host_product_vocabulary_lock.rs` 与 `retiredHostUIRetirementLocks.test.ts` R6。**
 5. **`file_service/` 目录名有误导**：整目录只有 `saf_tree.rs` 一个文件、唯一消费者是 `peer/seam.rs`——它实际是 peer 平台缝的组成件，不是独立「文件服务」。
 6. **`src/shell/` 与旧目录存在 composables 同名重复**（`usePlatform` / `useOrientation` / `useSwipeTabs` / `useToast`）：壳 L7 锁已禁止壳内 import 旧目录，合并方向 = 壳承接过渡面时统一到 `src/shell/`（§4.2 保留行）。
 
 ## 7. 维护口径
 
-- 本表是移动侧 B1–B6 host 锁的**白名单输入**（spec §7.2）：锁命中须先查本表——已登记例外放行，未登记命中走例外登记或迁移票，禁止扩大排除面。
+- 本表是移动侧 B1–B6 host 锁的**白名单输入**（spec §7.2）：锁命中须先查本表——已登记例外放行，未登记命中走例外登记或迁移票，禁止扩大排除面。锁落点 = `wasmnest-mobile/src-tauri/tests/host_product_vocabulary_lock.rs`（issue #24，逐文件×逐词白名单，标注来源 §3/§4；#25 直连栈收敛后 §4.1 白名单行随之删除，锁红即催办）。
 - 新增任何宿主侧「疑似业务」代码：先过三问；确属机制的，在本表 §3 补行并给出正面论证；属业务的，直接进应用仓或开迁移票。
 - 处置项完成后在 §4 表格标记完成与提交号；全部清零后本文件收缩为纯例外表（§3），处置清单归档。
