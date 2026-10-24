@@ -15,7 +15,11 @@
              顺序逐笔描出，全部画完 = 加载完成（宿主随后收起）。视觉上零文字、零进度条。 -->
         <div ref="logoWrap" class="splash-content relative z-[1]">
           <slot name="logo">
-            <div class="splash-logo flex items-center justify-center">
+            <!-- 品牌位尺寸档位单一真源：SPLASH_LOGO_SIZE（splashTiming.ts，内联绑定） -->
+            <div
+              class="splash-logo flex items-center justify-center"
+              :style="{ width: SPLASH_LOGO_SIZE, height: SPLASH_LOGO_SIZE }"
+            >
               <svg class="h-full w-full" viewBox="0 0 100 100" aria-hidden="true">
                 <defs>
                   <linearGradient id="splash-logo-bg" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -200,7 +204,7 @@
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { SPLASH_DRAW_TOTAL_MS, splashDrawingPlan } from './splashTiming'
+import { SPLASH_DRAW_TOTAL_MS, SPLASH_LOGO_SIZE, splashDrawingPlan, splashStrokeOffset } from './splashTiming'
 
 interface Props {
   visible: boolean
@@ -278,7 +282,8 @@ onMounted(() => {
   const drawing = plan.map((timing) => {
     const { el, length } = geometry[timing.index]
     el.style.strokeDasharray = `${length}px`
-    el.style.strokeDashoffset = `${timing.direction * length}px`
+    // 初始 = progress 0：offset = ±周长（整段隐藏）；与逐帧推进共用同一公式
+    el.style.strokeDashoffset = `${splashStrokeOffset(timing.direction, length, 0)}px`
     el.style.opacity = '0'
     return {
       el,
@@ -319,7 +324,7 @@ onMounted(() => {
         line.done = true
       } else {
         // 0 → 1 的进度对应 offset 从 ±周长回到 0：符号决定从首点还是末点描出
-        line.el.style.strokeDashoffset = `${line.direction * line.length * (1 - progress)}px`
+        line.el.style.strokeDashoffset = `${splashStrokeOffset(line.direction, line.length, progress)}px`
         line.el.style.opacity = '1'
         pending = true
       }
@@ -398,13 +403,13 @@ html.dark .splash-root {
   50%      { opacity: 0.55; transform: translate(-50%, -50%) scale(1.03); }
 }
 
-/* Logo 由内联 SVG 自绘（底板渐变 + 真源线框），这里只保留尺寸与氛围层。
-   开屏品牌位跟随窗口短边缩放：最小窗口 800×600 下 144px 仍留边，常见 1300×900
-   下约 192px——比壳内小尺寸位（工具栏实心态降级档）明显更大。 */
+/* Logo 由内联 SVG 自绘（底板渐变 + 真源线框），这里只保留氛围层。
+   开屏品牌位尺寸（width/height）走 :style 内联绑定，档位单一真源 =
+   splashTiming.ts 的 SPLASH_LOGO_SIZE（clamp(144px, 24vmin, 200px)：最小窗口
+   800×600 下 144px 仍留边，常见 1300×900 下约 192px——比壳内小尺寸位（工具栏
+   实心态降级档）明显更大）。 */
 .splash-logo {
   position: relative;
-  width: clamp(144px, 24vmin, 200px);
-  height: clamp(144px, 24vmin, 200px);
 }
 
 /* Logo 外围氛围层：深色读作外发光，浅色下 ambient 为墨色 → 柔影 */

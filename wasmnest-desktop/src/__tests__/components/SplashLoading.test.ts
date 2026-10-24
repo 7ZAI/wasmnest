@@ -7,7 +7,16 @@ import {
   SPLASH_BASE_FADE_MS,
   SPLASH_DRAW_TOTAL_MS,
   splashDrawingPlan,
+  splashStrokeOffset,
 } from '@/components/splashTiming'
+
+// 品牌位尺寸换成可被 happy-dom CSSOM 解析的哨兵值：证明组件内联绑定真的消费
+// 共享常量（happy-dom 会整段丢弃 clamp() 这类解析不了的样式值，直接断言渲染
+// 样式读不回 clamp 字面量）。其余导出保持真源；档位本身的断言用 importActual。
+vi.mock('@/components/splashTiming', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/splashTiming')>()
+  return { ...actual, SPLASH_LOGO_SIZE: '77px' }
+})
 
 /**
  * SplashLoading（真源镂空线框 · 从左到右绘画动画）测试
@@ -21,6 +30,9 @@ import {
  *   （左柱上→下、左中下→上、右中上→下、右柱下→上；组间左→右，末笔 = 总时长）；
  *   SVG 不可测量（happy-dom 默认）→ .complete
  * - reduced-motion → .complete
+ * - 品牌位尺寸与描边偏移公式为纯函数真源（splashTiming.ts）：断言常量档位 +
+ *   挂载后的内联样式 + 公式期望值（issue #23 源码锁改造：原内联样式字符串
+ *   断言对格式化 / 重命名误红，改走纯函数与 DOM 面）
  * - 主题锁（浅/深色板对称）由 SplashLoadingTheme.test.ts 单独钉住
  */
 
@@ -283,28 +295,45 @@ describe('SplashLoading Component', () => {
     wrapper.unmount()
   })
 
-  it('should keep the splash logo at the enlarged brand size', () => {
-    const source = readFileSync('src/components/SplashLoading.vue', 'utf-8')
-    // 开屏品牌位随窗口短边缩放（最小窗口 144px，常见窗口约 192px）
-    expect(source).toContain('width: clamp(144px, 24vmin, 200px)')
-    expect(source).toContain('height: clamp(144px, 24vmin, 200px)')
-    // 旧的小尺寸位不得回接
-    expect(source).not.toContain('h-[96px] w-[96px]')
+  it('should bind the splash logo size from the shared brand-size constant', async () => {
+    // 纯函数面：档位是产品裁决（单一真源 = splashTiming.ts）：144px 下限 /
+    // 24vmin 偏好 / 200px 上限，旧的 96px 小尺寸位已退役——常量值回归即红
+    const timing = await vi.importActual<typeof import('@/components/splashTiming')>(
+      '@/components/splashTiming',
+    )
+    expect(timing.SPLASH_LOGO_SIZE).toBe('clamp(144px, 24vmin, 200px)')
+    expect(timing.SPLASH_LOGO_MIN_PX).toBeLessThan(timing.SPLASH_LOGO_MAX_PX)
+
+    // 行为面：挂载后品牌位 width / height 真的来自共享常量（哨兵值经内联
+    // 样式出现在 DOM，见文件头的 mock 说明）
+    const wrapper = mountSplash({ visible: true })
+    const logo = document.querySelector<HTMLElement>('.splash-logo')!
+    expect(logo, '品牌位必须在场').toBeTruthy()
+    expect(logo.style.width).toBe('77px')
+    expect(logo.style.height).toBe('77px')
+    wrapper.unmount()
   })
 
-  it('should start from a blank W and advance the drawing with requestAnimationFrame', () => {
+  it('should compute stroke offset with the shared pure formula', () => {
+    // 偏移公式单一真源：progress 0 = ±周长（整段隐藏，符号 = 描出端），1 = 收笔归 0
+    expect(splashStrokeOffset(1, 100, 0)).toBe(100)
+    expect(splashStrokeOffset(-1, 100, 0)).toBe(-100)
+    expect(splashStrokeOffset(1, 100, 0.5)).toBeCloseTo(50, 10)
+    expect(splashStrokeOffset(-1, 100, 0.5)).toBeCloseTo(-50, 10)
+    expect(splashStrokeOffset(1, 100, 1)).toBeCloseTo(0, 10)
+    expect(splashStrokeOffset(-1, 100, 1)).toBeCloseTo(0, 10)
+    // 进度越大越接近收笔（单调不回退）：组件 rAF 逐帧推进用的就是它
+    const run = (progress: number) => Math.abs(splashStrokeOffset(1, 100, progress))
+    expect(run(0.25)).toBeGreaterThan(run(0.75))
+    // 初始隐藏 = progress 0 这条路组件真的在走（行为断言见「逐笔描边」用例：
+    // 初始态 dashoffset ±周长、rAF 中段 ±(0,周长)、末帧 0px）
+  })
+
+  it('should keep the rAF-driven drawing and never fall back to CSS animation', () => {
+    // 退役面扫描（保留的文本锁）：描边曾因 WebKitGTK 对 var() 参与动画属性解析
+    // 不稳定而退化成静态图（组件头注）——回退到 CSS animation / keyframes /
+    // transition 即回归，行为测试测不出「曾经会动」，只能禁字面量。
     const source = readFileSync('src/components/SplashLoading.vue', 'utf-8')
-    // 初始内联态：offset = ±周长、opacity 0（整段隐藏，零长度点也不提前露出）
-    expect(source).toContain('el.style.strokeDashoffset = `${timing.direction * length}px`')
-    expect(source).toContain("el.style.opacity = '0'")
-    // 由 rAF 逐帧推进：进度 0→1 时 offset 从 ±周长回到 0
-    expect(source).toContain('requestAnimationFrame(frame)')
-    expect(source).toContain('const progress = line.duration > 0')
-    expect(source).toContain(
-      'line.el.style.strokeDashoffset = `${line.direction * line.length * (1 - progress)}px`',
-    )
-    expect(source).toContain("line.el.style.strokeDashoffset = '0px'")
-    // 回退锁：不得回退到 CSS animation / keyframes / transition（WebKitGTK 下会退化为静态）
     expect(source).not.toContain('@keyframes logo-line-draw')
     expect(source).not.toContain('animation-name: logo-line-draw')
     expect(source).not.toContain('transitionProperty')

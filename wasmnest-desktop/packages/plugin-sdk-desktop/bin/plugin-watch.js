@@ -144,6 +144,81 @@ export function copyManifestIfChanged(sourcePath, artifactDir) {
 }
 
 /**
+ * 执行一次 watch 复制链（内容感知 + 按步记账）。
+ *
+ * 从 `startPluginWatch` 的 `copy()` 闭包提为可注入依赖的导出（issue #23，#12
+ * 样板）：复制链语义（内容不变绝不写 / 清单摘要感知 / extraFiles 压平复制 /
+ * 摘要兜底注入 / 失败点名步骤与已落地前半）由
+ * `src/__tests__/scripts/pluginWatchCopy.test.ts` 在真实临时目录上行为锁定，
+ * 不再靠读本文件源码找调用点字面量。不注入 = 生产默认（logger 即 console）。
+ *
+ * @param {object} opts
+ * @param {string} opts.root 插件工程根目录（含 dist/index.js / plugin.json / extraFiles）
+ * @param {string} opts.resourcesDir 宿主资源目标目录（如 src-tauri/resources/plugins/desktop/<id>）
+ * @param {string[]} [opts.extraFiles] 随前端一并复制的附加产物（相对 root，压平落资源目录根）
+ * @param {Pick<Console, 'log' | 'error'>} [opts.logger] 日志出口（测试注入静音）
+ * @returns {{ changed: number, hashChanged: boolean, failed?: boolean }}
+ *   changed = 真实落盘的复制步数（mtime 变了，宿主会重启）；hashChanged = 摘要
+ *   兜底注入是否落盘；failed = 复制链中途抛错（半份产物，错误已按步点名）。
+ */
+export function copyWatchArtifacts({ root, resourcesDir, extraFiles = [], logger = console }) {
+  const distMain = resolve(root, 'dist', 'index.js')
+  const done = []
+  let current = null
+  const step = (name, fn) => {
+    current = name
+    fn()
+    done.push(name)
+    current = null
+  }
+
+  try {
+    if (!existsSync(distMain)) return { changed: 0, hashChanged: false }
+    let changed = 0
+    /** 记账版 copyIfChanged：返回 1 = 真的落盘（mtime 变了，宿主会重启） */
+    const copyStep = (label, src, dest) => {
+      let written = false
+      step(label, () => {
+        written = copyIfChanged(src, dest)
+      })
+      return written ? 1 : 0
+    }
+    step('创建产物目录', () => mkdirSync(resourcesDir, { recursive: true }))
+    changed += copyStep('复制 index.js', distMain, resolve(resourcesDir, 'index.js'))
+    // plugin.json 的预期内容 = 源清单 + 产物 wasm 摘要（源清单不带 wasmHash），
+    // 不能按源字节比较——否则每次冷启动都会重写，触发 tauri dev 重启（窗口闪两次）。
+    step('复制 plugin.json', () => {
+      if (copyManifestIfChanged(resolve(root, 'plugin.json'), resourcesDir)) changed += 1
+    })
+    for (const f of extraFiles) {
+      const src = resolve(root, f)
+      if (existsSync(src)) changed += copyStep(`复制 ${f}`, src, resolve(resourcesDir, basename(f)))
+    }
+    // 源清单被覆盖后重算摘要（票 14：wasmHash 只存在于产物，dev 刷新不能把它抹掉）。
+    // injectWasmHash 自己就是内容感知的（hash 未变不写文件），故它不会白刷 mtime。
+    let hashChanged = false
+    step('注入 wasmHash', () => {
+      hashChanged = injectWasmHash(resourcesDir, { log: () => {} }).reason === 'written'
+    })
+    const stamp = new Date().toLocaleTimeString()
+    if (changed > 0 || hashChanged) {
+      logger.log(`[watch] ${stamp} 产物已更新 → ${resourcesDir}`)
+    } else {
+      logger.log(`[watch] ${stamp} 产物无变化（跳过写入，不触发宿主重启）`)
+    }
+    return { changed, hashChanged }
+  } catch (e) {
+    logger.error(`[watch] 复制失败：${current ? `步骤「${current}」` : '未知步骤'} —— ${e.message}`)
+    logger.error(
+      done.length
+        ? `[watch]   已完成步骤：${done.join(' → ')}（产物目录已是**半份**状态，不要按「没复制过」处理）`
+        : '[watch]   尚无步骤落地（产物目录未被本次复制触碰）',
+    )
+    return { changed: 0, hashChanged: false, failed: true }
+  }
+}
+
+/**
  * 启动前端 watch 构建并自动复制产物
  *
  * @param {object} opts
@@ -158,7 +233,6 @@ export function copyManifestIfChanged(sourcePath, artifactDir) {
 export function startPluginWatch({ root, resourcesDir, extraFiles = [], wasmFile }) {
   const distDir = resolve(root, 'dist')
   const viteBin = findViteBin(root)
-  const distMain = resolve(distDir, 'index.js')
 
   if (!viteBin) {
     console.error(
@@ -238,70 +312,10 @@ export function startPluginWatch({ root, resourcesDir, extraFiles = [], wasmFile
   // 兜底：非信号路径退出（进程崩溃等）时已无法等待孙进程，直接 SIGKILL
   process.on('exit', () => killVite('SIGKILL'))
 
-  // 复制产物到宿主资源目录（覆盖式，不删目录：宿主运行时可能正持有文件句柄）
-  const copy = () => {
-    // 内容没变的文件**不写**：`cpSync` 会刷新 mtime，而产物目录在 `src-tauri/` 下
-    // ——`tauri dev` 的 file watch 一见变化就「Rebuilding application...」重启整个
-    // app。watch 启动时 vite 必然先完整构建一次（产物字节与上次相同），旧实现无条件
-    // 覆盖 → 每次 `pnpm run tauri:dev` 都会多出一次重启 = 前端**加载两次**。
-    // 内容比较后跳过写入，冷启动稳定为一次加载；真改了源码才落盘触发重启（这是
-    // dev 期热更新的既有形态，不变）。
-    // 票 16：复制链是**多步有副作用**的序列——前几步落地后仍可能在最后一步失败。
-    // 原来只打一句「复制失败」，会让人误以为什么都没复制，实际留下的是**半份产物**
-    // （index.js / plugin.json 已覆盖、摘要未重算）。按步记账，失败时点名哪一步 +
-    // 前半是否已落地（§8 fail-visible 口径）。
-    const done = []
-    let current = null
-    const step = (name, fn) => {
-      current = name
-      fn()
-      done.push(name)
-      current = null
-    }
-
-    try {
-      if (!existsSync(distMain)) return
-      let changed = 0
-      /** 记账版 copyIfChanged：返回 1 = 真的落盘（mtime 变了，宿主会重启） */
-      const copyStep = (label, src, dest) => {
-        let written = false
-        step(label, () => {
-          written = copyIfChanged(src, dest)
-        })
-        return written ? 1 : 0
-      }
-      step('创建产物目录', () => mkdirSync(resourcesDir, { recursive: true }))
-      changed += copyStep('复制 index.js', distMain, resolve(resourcesDir, 'index.js'))
-      // plugin.json 的预期内容 = 源清单 + 产物 wasm 摘要（源清单不带 wasmHash），
-      // 不能按源字节比较——否则每次冷启动都会重写，触发 tauri dev 重启（窗口闪两次）。
-      step('复制 plugin.json', () => {
-        if (copyManifestIfChanged(resolve(root, 'plugin.json'), resourcesDir)) changed += 1
-      })
-      for (const f of extraFiles) {
-        const src = resolve(root, f)
-        if (existsSync(src)) changed += copyStep(`复制 ${f}`, src, resolve(resourcesDir, basename(f)))
-      }
-      // 源清单被覆盖后重算摘要（票 14：wasmHash 只存在于产物，dev 刷新不能把它抹掉）。
-      // injectWasmHash 自己就是内容感知的（hash 未变不写文件），故它不会白刷 mtime。
-      let hashChanged = false
-      step('注入 wasmHash', () => {
-        hashChanged = injectWasmHash(resourcesDir, { log: () => {} }).reason === 'written'
-      })
-      const stamp = new Date().toLocaleTimeString()
-      if (changed > 0 || hashChanged) {
-        console.log(`[watch] ${stamp} 产物已更新 → ${resourcesDir}`)
-      } else {
-        console.log(`[watch] ${stamp} 产物无变化（跳过写入，不触发宿主重启）`)
-      }
-    } catch (e) {
-      console.error(`[watch] 复制失败：${current ? `步骤「${current}」` : '未知步骤'} —— ${e.message}`)
-      console.error(
-        done.length
-          ? `[watch]   已完成步骤：${done.join(' → ')}（产物目录已是**半份**状态，不要按「没复制过」处理）`
-          : '[watch]   尚无步骤落地（产物目录未被本次复制触碰）',
-      )
-    }
-  }
+  // 复制产物到宿主资源目录（覆盖式，不删目录：宿主运行时可能正持有文件句柄）。
+  // 复制链本体已提为可注入依赖的导出 copyWatchArtifacts（issue #23，#12 样板）：
+  // 语义由行为测试在临时目录上锁定，这里只保留「dist 事件 → 复制链」的接线。
+  const copy = () => copyWatchArtifacts({ root, resourcesDir, extraFiles, logger: console })
 
   // dist 任意文件事件都防抖复制（Windows 上 fs.watch 的 filename 常为 null，
   // 且 vite 写入伴随临时文件/rename 多次事件，按时间聚合最稳）

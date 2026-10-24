@@ -1,10 +1,14 @@
 /**
- * 开屏绘画动画时序（SplashLoading 与 ShellHost 共用的单一真源）
+ * 开屏纯计算真源（SplashLoading 与 ShellHost 共用）
  *
  * 为什么单独成文件：动画总时长决定「最后一笔画完」的时刻，而宿主以同一时刻作为
  * 启动面最低展示时长（画完即加载完成，随即收起开屏）。两处各写一份常量时，
  * 调动画节奏必然漂移——展示短于动画 → 线框画到一半被切掉；展示长于动画 →
  * 画完干等。改节奏只动本文件，两端自动对齐。
+ *
+ * 品牌位尺寸常量也收在这里（issue #23 源码锁改造）：clamp 档位是产品裁决
+ * （最小窗口 144px 仍留边、常见窗口约 192px、上限 200px；旧的 96px 小尺寸位
+ * 已退役），组件以 :style 内联绑定消费、测试断言常量与渲染结果。
  *
  * 总时长 = 底板淡入 180ms + 124 条线框连续收笔（约 1.1s 绘画窗口），
  * 收起条件即「画完」；两个调用方都无需再动。
@@ -25,6 +29,29 @@ export const SPLASH_DRAWING_SPAN_MS = SPLASH_DRAW_TOTAL_MS - SPLASH_BASE_FADE_MS
  * 被淡出盖掉；视觉上仍是「1.26s 画完」。
  */
 export const SPLASH_HOLD_AFTER_DRAW_MS = 80
+
+// ==================== 品牌位尺寸（clamp 档位单一真源） ====================
+
+/** 最小窗口（800×600）下仍留边的下限 */
+export const SPLASH_LOGO_MIN_PX = 144
+/** 常见窗口（约 1300×900）短边 24% ≈ 192px 的偏好档 */
+export const SPLASH_LOGO_PREFERRED_VMIN = 24
+/** 超大窗口的上限 */
+export const SPLASH_LOGO_MAX_PX = 200
+
+/** 开屏品牌位尺寸：组件 .splash-logo 以 :style 内联绑定消费（width / height 同值） */
+export const SPLASH_LOGO_SIZE = `clamp(${SPLASH_LOGO_MIN_PX}px, ${SPLASH_LOGO_PREFERRED_VMIN}vmin, ${SPLASH_LOGO_MAX_PX}px)`
+
+/**
+ * 单条线框某一帧的 stroke-dashoffset 数值。
+ *
+ * 0 → 1 的进度对应 offset 从 ±周长回到 0：符号（direction）决定从首点还是末点
+ * 描出。初始隐藏态 = progress 0（整段隐藏），收笔 = progress 1（offset 归 0）；
+ * 组件的 rAF 逐帧回调与初始写入都用这一个公式，不另写算术。
+ */
+export function splashStrokeOffset(direction: 1 | -1, length: number, progress: number): number {
+  return direction * length * (1 - progress)
+}
 
 export interface SplashLineTiming {
   /** 相对组件挂载的起笔延迟（ms） */
