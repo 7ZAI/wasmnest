@@ -630,7 +630,9 @@
   aspect-ratio: 3 / 4;
   min-width: 0;
   border-radius: var(--shell-radius-lg);
-  border: 1px solid var(--mobile-border);
+  /* 边框线不再显示（2026-10-25 用户裁决，对齐桌面 .ts-card 的强调口径）：
+     保留 1px 宽度防内容抖动，颜色透明——卡片边界交给底色差与投影。 */
+  border: 1px solid transparent;
   background: var(--mobile-bg-card);
   box-shadow: var(--mobile-card-shadow);
   overflow: hidden;
@@ -638,10 +640,11 @@
   animation-delay: calc(var(--i, 0) * 45ms);
   transition:
     transform var(--shell-dur-base) var(--shell-ease-standard),
-    border-color var(--shell-dur-base) var(--shell-ease-standard);
+    box-shadow var(--shell-dur-base) var(--shell-ease-standard);
 }
 .shell-recents-card.active {
-  border-color: var(--mobile-border-active);
+  /* 桌面同款：active 只抬阴影，不改描边（边框已透明化，见 .shell-recents-card） */
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--mobile-text-primary) 16%, transparent);
 }
 /* 拖拽期间关掉过渡与入场动画并开启 will-change：抬手后交回 CSS 过渡，
    否则手指与卡片之间会慢半拍，入场动画也会盖掉跟手位移。 */
@@ -667,6 +670,8 @@
 }
 .shell-recents-card.active .shell-recents-meta {
   background: var(--mobile-accent-muted);
+  /* 透明下边框让主色底铺到边，不再围出一圈描边（桌面 .ts-card.active .ts-meta 同款） */
+  border-bottom-color: transparent;
 }
 .shell-recents-name {
   display: block;

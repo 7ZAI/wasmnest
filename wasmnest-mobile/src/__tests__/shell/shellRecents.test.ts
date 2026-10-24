@@ -710,6 +710,22 @@ describe('C-S8 卡片布局（与桌面同形）', () => {
     expect(css, '旧卡片轨道已退役').not.toContain('.shell-deck')
   })
 
+  it('should_notDrawBorderLine_when_cardsRendered', () => {
+    // 2026-10-25 用户裁决：卡片边框线不再显示——对齐桌面 .ts-card 的强调口径
+    // （active 只抬阴影不改描边；主色信息条下边框透明，防围出一圈描边）
+    const css = readFileSync(join(process.cwd(), 'src/shell/styles/shell.css'), 'utf8')
+    const card = cssBlock(css, '.shell-recents-card')
+    expect(card, '常态边框透明（保留 1px 宽度防布局抖动）').toContain(
+      'border: 1px solid transparent',
+    )
+    expect(card, '强调态过渡走阴影').toContain('box-shadow var(--shell-dur-base)')
+    const active = cssBlock(css, '.shell-recents-card.active')
+    expect(active, 'active 不再改描边色').not.toContain('border-color')
+    expect(active, 'active 阴影抬升与桌面同款').toContain('14px 36px')
+    const activeMeta = cssBlock(css, '.shell-recents-card.active .shell-recents-meta')
+    expect(activeMeta, '主色信息条下边框透明').toContain('border-bottom-color: transparent')
+  })
+
   it('should_followFingerWithWholeGrid_when_swipedHorizontally', async () => {
     const wrapper = twoCards()
 
