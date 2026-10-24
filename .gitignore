@@ -182,3 +182,6 @@ docs/diagrams/*.browser-check.json
 
 # ZCode 会话目录（不入库）
 .zcode/
+
+# 会话临时 scratch（不入库）
+.scratch/
