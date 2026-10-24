@@ -103,7 +103,7 @@ const { wallpaper, wallpaperImage, wallDim } = useShellPreferences()
 // ==================== 运行面对账（注册表承载） ====================
 
 const { apps, resolveSurface } = useShellApps()
-const { opened, setActiveSurface } = useAppSurfaces()
+const { opened } = useAppSurfaces()
 const surfaceRegistry = getSurfaceAppRegistry()
 
 /**
@@ -117,13 +117,6 @@ watch(
     apps.value.map((a) => resolveSurface(a.id)),
   ],
   () => void reconcileSurfaceApps({ apps: apps.value, opened: opened.value, resolveSurface }),
-  { immediate: true },
-)
-
-/** 当前前台应用（沿用池时代记账；运行面前后台信号由注册表按 attach/detach 推动） */
-watch(
-  () => [nav.current.value.id, nav.params.value.appId] as const,
-  ([screenId, appId]) => setActiveSurface(screenId === 'app-run' ? (appId ?? '') : ''),
   { immediate: true },
 )
 

@@ -11,12 +11,12 @@
  *    （hostSurfaceEnv 收集的平台信息等 + 该应用自己的前后台信号）。
  * 3. **壳对账**（reconcileSurfaceApps）：「打开过 ∩ 运行中 ∩ 有运行面」的
  *    应用 ensure 出实例（后台应用也建，不 attach）；条件不再满足的 dispose
- *    并清打开记录。壳（ShellHost）在清单 / 状态 / 注册变化时调用；本函数
- *    是纯输入输出（不读组件树），模块级兜底对账复用同一实现。
+ *    并清打开记录。壳（ShellHost）在清单 / 状态 / 注册变化时调用；输入是纯
+ *    数据 + 解析函数（不读组件树），模块级兜底对账复用同一实现。
  *
  * 派生销毁说明：本层的 dispose 是「外部状态变化」的对账兜底（应用离开运行态）。
  * 用户动作路径（详情页停用 / 卸载）的**显式**「先 dispose UI 再拆插件上下文」
- * 接线由 useShellApps.stop / removeApp 负责（工单 #32），与本层互为补充。
+ * 接线由 useShellApps.stop / removeApp 负责，与本层互为补充。
  */
 import type { Component } from 'vue'
 import i18n from '@/locales'
@@ -56,15 +56,22 @@ export function getSurfaceAppRegistry(): SurfaceAppRegistry {
 }
 
 /**
- * 显式销毁单个应用的运行面实例（停用 / 卸载的用户动作路径，工单 #32）：
- * dispose（唯一 unmount 路径，幂等、能处理创建在途）+ 同步清打开记录（下次
- * 打开是全新实例）。**调用方必须先于插件 loader 的 deactivate / uninstall
- * 调用**——组件要在 pluginContext 仍有效时完成 onUnmounted 清理，顺序反了
- * 会让清理期的 inject 拿到已拆的 context。
+ * 显式销毁单个应用的运行面实例（停用 / 卸载的用户动作路径）：dispose（幂等、
+ * 能处理创建在途）+ 同步清打开记录（下次打开是全新实例）。**调用方必须先于
+ * 插件 loader 的 deactivate / uninstall 调用**——组件要在 pluginContext 仍
+ * 有效时完成 onUnmounted 清理。
+ *
+ * 不向外抛：unmount 抛错时注册表已摘记账并移除容器，这里只落日志——抛出去会
+ * 打断停用 / 卸载主流程（source.stop / source.remove 与打开记录清理）。
  */
 export async function disposeSurfaceApp(appId: string): Promise<void> {
-  await registry.dispose(appId)
-  dropSurface(appId)
+  try {
+    await registry.dispose(appId)
+  } catch (e) {
+    logger.error(`[surfaceRuntime] 运行面销毁失败 appId=${appId}`, e)
+  } finally {
+    dropSurface(appId)
+  }
 }
 
 /**
@@ -120,7 +127,6 @@ export async function reconcileSurfaceApps(input: SurfaceReconcileInput): Promis
   }
   for (const appId of registry.list()) {
     if (desired.has(appId)) continue
-    await registry.dispose(appId)
-    dropSurface(appId)
+    await disposeSurfaceApp(appId)
   }
 }

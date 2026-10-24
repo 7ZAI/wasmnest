@@ -331,7 +331,7 @@ describe('C-O1/C-O2 打开应用路由', () => {
   })
 })
 
-describe('C-A13/C-A14 停用与卸载的显式销毁顺序（工单 #32：先 dispose UI 再拆插件上下文）', () => {
+describe('C-A13/C-A14 停用与卸载的显式销毁顺序（先 dispose UI 再拆插件上下文）', () => {
   /** 顺序证据：surface 组件 unmounted 与 source 动作的相对先后 */
   const order: string[] = []
   const counts = { unmounted: 0 }
@@ -419,5 +419,22 @@ describe('C-A13/C-A14 停用与卸载的显式销毁顺序（工单 #32：先 di
     expect(surfaceRegistry.has('com.test.o'), '离开运行态 → 实例销毁').toBe(false)
     expect(counts.unmounted).toBe(1)
     expect(opened.value.has('com.test.o')).toBe(false)
+  })
+
+  it('should_continueStop_when_disposeThrows', async () => {
+    await seedRunningSurface('com.test.x')
+    const record = surfaceRegistry.get('com.test.x')!
+    // 销毁期异常（unmount 自身抛错，不经 Vue errorHandler）：不得打断 source.stop
+    const boom = vi.spyOn(record.app, 'unmount').mockImplementation(() => {
+      throw new Error('unmount-boom')
+    })
+
+    const ok = await useShellApps().stop('com.test.x')
+
+    expect(ok, '停用主流程照常完成').toBe(true)
+    expect(source.stop).toHaveBeenCalledWith('com.test.x')
+    expect(surfaceRegistry.has('com.test.x'), '销毁失败也已完成记账摘除').toBe(false)
+    expect(opened.value.has('com.test.x'), '打开记录仍被清空').toBe(false)
+    boom.mockRestore()
   })
 })

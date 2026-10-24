@@ -151,23 +151,20 @@ onUnmounted(async () => {
   // await stopAdvertise()
 })
 
-// Provide to child components
-// 运行面独立 Vue 应用的环境注入面：壳根收集一次，surfaceRuntime 创建实例时
-// 逐应用透传（注入清单是契约，见 shell/hostSurfaceEnv.ts 头注）
-registerHostSurfaceEnv({
+// 宿主环境注入面（单一清单）：壳内子组件走 provide，独立运行面 Vue 应用由
+// surfaceRuntime 创建实例时逐应用透传（见 shell/hostSurfaceEnv.ts 头注）
+const hostSurfaceEnv = {
   platformInfo,
   isLandscape,
   orientation,
   safeArea,
   keyboardInfo,
   safeAreaReady: isReady,
-})
-provide('platformInfo', platformInfo)
-provide('isLandscape', isLandscape)
-provide('orientation', orientation)
-provide('safeArea', safeArea)
-provide('keyboardInfo', keyboardInfo)
-provide('safeAreaReady', isReady)
+}
+registerHostSurfaceEnv(hostSurfaceEnv)
+for (const key of Object.keys(hostSurfaceEnv)) {
+  provide(key, hostSurfaceEnv[key as keyof typeof hostSurfaceEnv])
+}
 
 // 宿主提供组件面（wasmnestHostComponents）已整面退役（issue #24）：FileExplorer /
 // FileSidebar 五件套随唯一消费者 bedcode 迁入应用仓 fileExplorer 域，应用侧直接

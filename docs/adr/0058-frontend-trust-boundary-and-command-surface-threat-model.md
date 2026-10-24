@@ -23,7 +23,7 @@ Component 实例，能力即权限（`plugin.json` 声明 ∩ 用户批准，无
 - **同 webview**：桌面机制 B 把独立构建的应用包动态 import 进宿主壳的同一个
   webview（`wasmnest-desktop/src/shell/mount/useAppMount.ts` 头注释；「桌面所有
   应用共享一个 webview」——`docs/architecture.md` §2 表面保活条）；移动运行面同样
-  跑在宿主壳 webview 内（Teleport 池，`docs/frontend.md` §2）。
+  跑在宿主壳 webview 内（移动：每应用独立 Vue 应用 + 容器注册表；`docs/frontend.md` §2）。
 - **`__TAURI__` 全局暴露**：双端 `tauri.conf.json` L12 `withGlobalTauri: true`
   （`wasmnest-desktop/src-tauri/tauri.conf.json`、`wasmnest-mobile/src-tauri/tauri.conf.json`）
   ——webview 内任意 JS（含任一插件前端）可经 `window.__TAURI__.core.invoke` 直调

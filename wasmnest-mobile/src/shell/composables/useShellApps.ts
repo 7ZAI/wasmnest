@@ -145,7 +145,7 @@ async function refresh(): Promise<void> {
     // 无论成功失败都算「已尝试过」：否则拉取持续失败时运行屏会永远停在加载态
     listReady.value = true
   }
-  // 模块级兜底对账（工单 #32：销毁不依赖 ShellHost 是否挂载）：清单刷新后，
+  // 模块级兜底对账（销毁不依赖 ShellHost 是否挂载）：清单刷新后，
   // 「打开过 ∩ 运行中 ∩ 有运行面」之外的应用实例就地销毁并清打开记录。
   // 与 ShellHost 的 watcher 幂等共存（ensure 对同组件身份直接复用）
   void reconcileSurfaceApps({ apps: apps.value, opened: opened.value, resolveSurface })
@@ -194,7 +194,7 @@ async function stop(appId: string): Promise<boolean> {
   }
 
   registry.patchApp(appId, { state: 'stopped', error: undefined })
-  // 先 dispose UI 再拆插件上下文（工单 #32 顺序契约）：组件要在 pluginContext
+  // 先 dispose UI 再拆插件上下文：组件要在 pluginContext
   // 仍有效时完成 onUnmounted 清理；dispose 幂等，重复停用不重复 unmount
   await disposeSurfaceApp(appId)
   try {

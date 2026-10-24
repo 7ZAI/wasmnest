@@ -5,24 +5,19 @@
  * （承接 `.scratch/2026-10-23-app-surface-keepalive/spec.md` 的用户可感知语义：
  * 首次打开创建、切走保留、停用 / 卸载才销毁）。
  *
- * 旧版「池 + Teleport」结构锁（app-surface-pool / Teleport / disabled 字符串）
- * 已随承载方式退役——锁换成行为断言 + 防回接守卫：
+ * 锁全部是行为断言（不锁模板写法 / 源码字符串）：
  *   ① 对账派生销毁：应用离开运行态 → 实例 dispose、打开记录清空（停用即销毁）；
  *   ② 后台应用也建实例（打开过 ∩ 运行中，与是否前台无关）；
  *   ③ 无运行面零实例（不为无界面服务建空 Vue 应用）；
- *   ④ 壳接线防回接：ShellHost 不再渲染 Teleport 池，对账与打开登记在场。
+ *   ④ 服务型应用有运行面且打开 → 同样只建一个实例（不进多任务是另一条既有锁）。
  * （detach 不 unmount / dispose 才 unmount 的注册表级判据由
  * surfaceAppRegistry.test.ts 的 T5–T9 锁住，此处不重复。）
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { readFileSync } from 'node:fs'
 import { defineComponent, h, onMounted, onUnmounted, ref } from 'vue'
 import type { ShellApp } from '@/shell/types'
 import { getSurfaceAppRegistry, reconcileSurfaceApps } from '@/shell/surfaceRuntime'
 import { dropSurface, isSurfaceOpened, markSurfaceOpened, useAppSurfaces } from '@/shell/composables/useAppSurfaces'
-
-const SHELL_HOST = 'src/shell/components/ShellHost.vue'
-const APP_RUN_SCREEN = 'src/shell/components/screens/ShellAppRunScreen.vue'
 
 const registry = getSurfaceAppRegistry()
 
@@ -127,20 +122,35 @@ describe('对账（派生销毁兜底；用户动作路径的显式销毁见 use
   })
 })
 
-describe('壳接线防回接（承载已切注册表，禁止回退 Teleport 池）', () => {
-  it('ShellHost 不再渲染保活池 / Teleport，对账在场', () => {
-    const src = readFileSync(SHELL_HOST, 'utf-8')
+describe('服务型应用与快速切换（行为）', () => {
+  it('T15 服务型应用有运行面且打开 → 只建一个实例', async () => {
+    apps.value = [runningApp('svc')]
+    apps.value[0].kind = 'basic-service'
+    markSurfaceOpened('svc')
 
-    expect(src, '池容器不得回接').not.toContain('app-surface-pool')
-    expect(src, 'Teleport 承载不得回接').not.toContain('<Teleport')
-    expect(src, '对账接线必须在场').toContain('reconcileSurfaceApps')
-    expect(src, '壳卸载只 detach 不 dispose').toContain('surfaceRegistry.detach')
+    await reconcile()
+
+    expect(registry.list()).toEqual(['svc'])
+    expect(counts.mounted).toBe(1)
   })
 
-  it('运行屏保留打开登记，不直接渲染 surface', () => {
-    const src = readFileSync(APP_RUN_SCREEN, 'utf-8')
+  it('T23 快速切换 A→B→A：每应用至多一个实例、无重复容器', async () => {
+    apps.value = [runningApp('a'), runningApp('b')]
+    markSurfaceOpened('a')
+    markSurfaceOpened('b')
+    await reconcile()
 
-    expect(src, '打开登记（保活判据）').toContain('markSurfaceOpened(')
-    expect(src, '运行屏不得自己解析 / 直接渲染运行面组件').not.toContain('resolveSurface')
+    const outletA = document.createElement('div')
+    const outletB = document.createElement('div')
+    const firstA = registry.get('a')!
+
+    registry.attach('a', outletA)
+    registry.attach('b', outletB)
+    registry.attach('a', outletA)
+
+    expect(registry.list().sort()).toEqual(['a', 'b'])
+    expect(registry.get('a'), '复用同一实例').toBe(firstA)
+    expect(outletA.querySelectorAll('.surface-instance-host').length, '不产生重复容器').toBe(1)
+    expect(counts.mounted, '每应用只 mount 一次').toBe(2)
   })
 })

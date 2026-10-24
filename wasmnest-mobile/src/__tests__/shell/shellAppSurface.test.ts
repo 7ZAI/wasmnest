@@ -21,7 +21,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, inject, onMounted, onUnmounted, ref, nextTick } from 'vue'
 import type { ShellApp } from '@/shell/types'
-import { SURFACE_ACTIVE_KEY, setSurfaceOutlet } from '@/shell/composables/useAppSurfaces'
+import { SURFACE_ACTIVE_KEY } from '@/shell/composables/useAppSurfaces'
 import { getSurfaceAppRegistry } from '@/shell/surfaceRuntime'
 import { clearHostSurfaceEnv, registerHostSurfaceEnv } from '@/shell/hostSurfaceEnv'
 
@@ -101,7 +101,6 @@ beforeEach(async () => {
   listReady.value = true
   surfaceComponent.value = undefined
   clearHostSurfaceEnv()
-  setSurfaceOutlet(null)
   for (const id of registry.list()) await registry.dispose(id)
   // 计数清零必须放在 dispose 之后：上一测试遗留实例的卸载也会推动计数
   counts.mounted = 0
@@ -192,6 +191,21 @@ describe('C-S5 保活（适配器卸载只 detach）', () => {
     second.unmount()
   })
 
+  it('should_notAttach_when_adapterUnmountedWhileCreating', async () => {
+    // 独立 appId：避免前序用例遗留的异步续跑污染这一条（同一 appId 会共享实例）
+    apps.value = [app('a'), app('race')]
+    surfaceComponent.value = probe
+    const wrapper = mount(ShellAppSurface, { props: { appId: 'race' } })
+    // 不等 ensure 的微任务链：创建还在途就切走
+    wrapper.unmount()
+    await settle()
+
+    expect(registry.has('race'), '实例照常建出（后台保活）').toBe(true)
+    const record = registry.get('race')!
+    expect(record.container.parentElement, '不得 attach 到已卸载的插槽').toBeNull()
+    expect(record.active.value, '前台信号不得被错误推成 true').toBe(false)
+  })
+
   it('should_disposeAndRecreate_when_registryDisposed', async () => {
     surfaceComponent.value = probe
     const wrapper = mount(ShellAppSurface, { props: { appId: 'a' } })
@@ -225,7 +239,7 @@ describe('C-S6 失败态 fail-visible', () => {
     await until(() => wrapper.text().includes('shell.run.mountFailed'))
 
     expect(registry.list(), '半挂载实例不留').toEqual([])
-    expect(wrapper.find('button[aria-label="shell.run.retry"]').exists(), '失败态提供重试入口').toBe(true)
+    expect(wrapper.find('button[aria-label="shell.common.retry"]').exists(), '失败态提供重试入口').toBe(true)
 
     // 组件修复后重建（spec §4.8「下次打开 / 重试可以重新创建」——用「下次打开」
     // 路径断言：与 C-S1 同构的 onMounted 管线；重试按钮走同一条 ensure 管线）

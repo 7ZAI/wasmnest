@@ -217,7 +217,7 @@ describe('运行面实例注册表：attach / detach（保活语义）', () => {
 
   beforeEach(() => {
     document.body.innerHTML = ''
-    registry = createSurfaceAppRegistry()
+    registry = createSurfaceAppRegistry({ logger: makeLogCollector().logger })
   })
 
   it('T5 attach：容器进入插槽、DOM 节点引用不变、前台信号变 true、重复 attach 幂等', async () => {

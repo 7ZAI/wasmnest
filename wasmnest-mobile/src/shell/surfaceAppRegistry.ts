@@ -46,8 +46,8 @@ export interface SurfaceRegistryLogEvent {
 }
 
 /**
- * 日志出口由调用方注入（壳接线时传 frontendLogger 的分级方法；本模块不
- * import Tauri 侧设施）。对象形态对齐前端 logger 的 info / warn / error。
+ * 日志出口（必填）：由壳接线时传 frontendLogger 的分级方法，本模块不 import
+ * Tauri 侧设施。对象形态对齐前端 logger 的 info / warn / error。
  */
 export interface SurfaceRegistryLogger {
   info(event: SurfaceRegistryLogEvent): void
@@ -72,8 +72,8 @@ export interface SurfaceAppRecord {
 export interface SurfaceAppEnsureInput {
   /** 运行面根组件（应用注册、宿主包装后的组件） */
   component: Component
-  /** 共享运行时安装（i18n / pinia / router 等宿主同一份实例，按序 `app.use`） */
-  plugins?: unknown[]
+  /** 共享运行时安装（i18n / router 等宿主同一份实例，按序 `app.use`） */
+  plugins?: Plugin[]
   /**
    * 宿主环境注入工厂：独立 Vue 应用不能靠组件树继承宿主 provide，由壳统一
    * 收集一次注入清单，创建时按应用生成注入表（含该应用的前台信号）。键可为
@@ -115,28 +115,10 @@ interface InflightCreate {
   disposed: boolean
 }
 
-export function createSurfaceAppRegistry(
-  options: { logger?: SurfaceRegistryLogger } = {},
-): SurfaceAppRegistry {
-  const logger: SurfaceRegistryLogger =
-    options.logger ??
-    {
-      info(event) {
-        console.info(renderEvent(event))
-      },
-      warn(event) {
-        console.warn(renderEvent(event))
-      },
-      error(event) {
-        console.error(renderEvent(event))
-      },
-    }
-
-  function renderEvent(event: SurfaceRegistryLogEvent): string {
-    const phase = event.phase ? ` phase=${event.phase}` : ''
-    const detail = event.detail ? ` ${event.detail}` : ''
-    return `[surfaceAppRegistry] ${event.action} appId=${event.appId}${phase} instances=${event.instanceCount}${detail}`
-  }
+export function createSurfaceAppRegistry(options: {
+  logger: SurfaceRegistryLogger
+}): SurfaceAppRegistry {
+  const { logger } = options
 
   const records = new Map<string, SurfaceAppRecord>()
   const inflight = new Map<string, InflightCreate>()
@@ -202,7 +184,7 @@ export function createSurfaceAppRegistry(
           makeEvent(appId, 'error', { phase: classifyRuntimePhase(info), detail: errorText(err) }),
         )
       }
-      for (const plugin of input.plugins ?? []) app.use(plugin as Plugin)
+      for (const plugin of input.plugins ?? []) app.use(plugin)
       if (input.provides) {
         const entries = input.provides(active)
         for (const key of Reflect.ownKeys(entries)) {

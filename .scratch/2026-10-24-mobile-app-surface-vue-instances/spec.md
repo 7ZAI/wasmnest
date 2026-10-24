@@ -6,6 +6,8 @@
 > 安全边界引用 ADR 0058：**前端同 webview / 同 JS 信任域；Vue 多实例不是安全隔离。**
 >
 > 一句话：**壳仍是 1 个 Vue 应用；每个「已打开且有运行面」的应用各建 1 个独立 Vue 应用；每个应用 / 服务仍只有 1 个 WASM 运行期；无界面服务 0 个 Vue 应用。**
+>
+> **实施注记（2026-10-24 code-review 收口）**：`useAppSurfaces` 实际收窄为只记 `opened`——§4.2 的「当前运行屏插槽」「当前前台应用」随注册表承载退出（容器位置由 `ShellAppSurface` 直接交给 `registry.attach`，前后台信号由注册表按 attach / detach 推动该应用的 `active` ref，见 §4.4）；§4.5 注入清单里的 `wasmnestHostComponents` 已按 issue #24 整面退役，不再注入，其余宿主环境键不变。新增行为锁：创建在途切走不得 attach（C-S8）、销毁抛错不打断停用（C-A15）、T15 / T23。
 
 ## 1. Problem Statement
 
