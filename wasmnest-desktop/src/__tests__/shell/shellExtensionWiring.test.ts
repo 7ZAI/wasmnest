@@ -17,8 +17,8 @@ describe('壳扩展点接线锁', () => {
     expect(HOST).toContain(':style="[wallStyle, skinStyle]"')
   })
 
-  it('状态栏在路由内容之后、全局覆层之前挂载，独立窗口不渲染', () => {
-    expect(HOST).toContain('<ShellStatusBar v-if="!isBareWindow" />')
+  it('状态栏在路由内容之后、全局覆层之前挂载；独立窗口与应用态不渲染', () => {
+    expect(HOST).toContain('<ShellStatusBar v-if="!isBareWindow && !isAppRoute" />')
 
     const statusAt = HOST.indexOf('<ShellStatusBar')
     expect(statusAt).toBeGreaterThan(HOST.indexOf('<AppMountSlot'))

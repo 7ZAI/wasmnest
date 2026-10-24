@@ -34,9 +34,10 @@
          不再随路由分支销毁；停用 / 卸载由下方运行态 disposer 调 disposeAppBundle。 -->
     <AppMountSlot v-show="isAppRoute" :app-id="currentAppId" :route="route.fullPath" />
 
-    <!-- ============ 平台状态栏（壳常驻 chrome；独立窗口除外） ============
-         只承载宿主机制事实与扩展注册项，位于路由内容之后、覆层之下。 -->
-    <ShellStatusBar v-if="!isBareWindow" />
+    <!-- ============ 平台状态栏（壳 chrome：主屏 / 系统页显示；应用态与独立窗口除外） ============
+         只承载宿主机制事实与扩展注册项，位于路由内容之后、覆层之下。
+         应用态隐藏（2026-10-25 用户裁决）：应用面整高让位给应用界面，回壳态恢复。 -->
+    <ShellStatusBar v-if="!isBareWindow && !isAppRoute" />
 
     <!-- ============ 全局覆层（任何面可用；Esc 逐层收） ============ -->
     <ShellTaskSwitcher />
