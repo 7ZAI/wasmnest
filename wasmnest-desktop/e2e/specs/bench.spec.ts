@@ -60,6 +60,18 @@ function webviewScript(body: string) {
   return new Function(`return async function (api) { ${body} }`)() as (api: unknown) => Promise<unknown>
 }
 
+/**
+ * webview 侧取宿主面凭证（ADR 0058 方案 A：管理类命令的 loader 会话门）。
+ *
+ * loader 会话「域内首个调用者生效」且每次页面加载只签发一次——同一页面内的多次
+ * `execute` 必须复用同一份凭证（挂在 `window` 上），否则第二次 `invoke` 会被宿主
+ * 以「already issued」显性拒绝。本套件独占实例、不经过宿主 UI 打开应用，宿主前端
+ * 尚未取用该会话，故 e2e 可以自取。
+ */
+const BENCH_HOST_CREDENTIAL =
+  'const credential = window.__benchHostCredential || ' +
+  "(window.__benchHostCredential = await api.core.invoke('plugin_frontend_loader_session'))"
+
 /** 毫秒格式化（读数用） */
 function ms(value: number): string {
   return `${value.toFixed(3)} ms`
@@ -132,18 +144,19 @@ describe('桥接基准 · webview 层（wasm → 宿主 → 前端）', () => {
     // 先停用 + 卸载，再走生产安装路径（zip 安装器校验 wasm 摘要 / 路径穿越 / 体积上限）
     const pluginId = await browser.tauri.execute(
       webviewScript(`
+        ${BENCH_HOST_CREDENTIAL}
         const list = await api.core.invoke('plugin_list_loaded')
         const exists = (list || []).some((p) => p.id === ${JSON.stringify(PLUGIN_ID)})
         if (exists) {
-          await api.core.invoke('plugin_deactivate', { pluginId: ${JSON.stringify(PLUGIN_ID)} }).catch(() => {})
-          await api.core.invoke('plugin_uninstall', { pluginId: ${JSON.stringify(PLUGIN_ID)} })
+          await api.core.invoke('plugin_deactivate', { pluginId: ${JSON.stringify(PLUGIN_ID)}, credential }).catch(() => {})
+          await api.core.invoke('plugin_uninstall', { pluginId: ${JSON.stringify(PLUGIN_ID)}, credential })
         }
-        return api.core.invoke('plugin_install_from_file', { path: ${JSON.stringify(ZIP_PATH)} })
+        return api.core.invoke('plugin_install_from_file', { path: ${JSON.stringify(ZIP_PATH)}, credential })
       `),
     )
     expect(pluginId).toBe(PLUGIN_ID)
-    await browser.tauri.execute(webviewScript(`return api.core.invoke('plugin_approve', { pluginId: ${JSON.stringify(PLUGIN_ID)} })`))
-    await browser.tauri.execute(webviewScript(`return api.core.invoke('plugin_activate', { pluginId: ${JSON.stringify(PLUGIN_ID)} })`))
+    await browser.tauri.execute(webviewScript(`return api.core.invoke('plugin_approve', { pluginId: ${JSON.stringify(PLUGIN_ID)}, credential: window.__benchHostCredential })`))
+    await browser.tauri.execute(webviewScript(`return api.core.invoke('plugin_activate', { pluginId: ${JSON.stringify(PLUGIN_ID)}, credential: window.__benchHostCredential })`))
     installed = true
   })
 
@@ -153,8 +166,9 @@ describe('桥接基准 · webview 层（wasm → 宿主 → 前端）', () => {
       // 卸载前必须先停用（宿主拒绝卸载运行中的插件：Plugin is running）
       await browser.tauri.execute(
         webviewScript(`
-          await api.core.invoke('plugin_deactivate', { pluginId: ${JSON.stringify(PLUGIN_ID)} }).catch(() => {})
-          return api.core.invoke('plugin_uninstall', { pluginId: ${JSON.stringify(PLUGIN_ID)} })
+          const credential = window.__benchHostCredential
+          await api.core.invoke('plugin_deactivate', { pluginId: ${JSON.stringify(PLUGIN_ID)}, credential }).catch(() => {})
+          return api.core.invoke('plugin_uninstall', { pluginId: ${JSON.stringify(PLUGIN_ID)}, credential })
         `),
       )
     } catch (error) {
@@ -173,7 +187,7 @@ describe('桥接基准 · webview 层（wasm → 宿主 → 前端）', () => {
         // 也不适用于它。故改经 webview 注入的 api 直连宿主命令面（plugin_frontend_loader_session
         // + plugin_invoke），测点语义 = IPC 往返 + 凭证校验 + JSON 序列化（与 downsink 前
         // 封装层的内容一致，仅少了 TS 函数调用那几微秒）。
-        const credential = await api.core.invoke('plugin_frontend_loader_session')
+        ${BENCH_HOST_CREDENTIAL}
         const call = (command, args) =>
           api.core.invoke('plugin_invoke', { pluginId: 'com.wasmnest.bench', command, args: args ?? null, credential })
 
@@ -221,7 +235,7 @@ describe('桥接基准 · webview 层（wasm → 宿主 → 前端）', () => {
         // import 的 TS 封装。命令面改经 api 直连宿主（凭证 + plugin_invoke），事件面经
         // Tauri listen（旧 events.on 内部本就是 listen(event) 原样事件名），测点语义 =
         // 「wasm emit → 宿主 app_handle.emit → IPC → webview listen」到达段不变。
-        const credential = await api.core.invoke('plugin_frontend_loader_session')
+        ${BENCH_HOST_CREDENTIAL}
         const call = (command, args) =>
           api.core.invoke('plugin_invoke', { pluginId: 'com.wasmnest.bench', command, args: args ?? null, credential })
 

@@ -209,7 +209,13 @@ interface AppBundleModule {
  */
 const loadedModules = new Map<string, Promise<AppBundleModule>>()
 
-/** 装载 app 前端模块（bundle URL + import 超时的唯一入口） */
+/** 装载 app 前端模块（bundle URL + import 超时的唯一入口）
+ *
+ * 顺序不变量（ADR 0058 方案 A）：所有装载路径（挂载槽 / 多任务预览 / 监控面板）
+ * 都以「应用已激活」为前提，而激活经 `useShellApps` 先取宿主面凭证（loader 会话，
+ * 域内首个调用者生效）。**不得新增不经过 activate 就 import app 模块的路径**——
+ * 那会让插件前端有机会抢在宿主前自取宿主面凭证。
+ */
 export async function loadAppModule(appId: string): Promise<AppBundleModule> {
   const cached = loadedModules.get(appId)
   if (cached) return cached

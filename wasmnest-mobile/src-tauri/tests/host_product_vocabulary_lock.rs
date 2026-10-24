@@ -19,8 +19,10 @@
 //!
 //! ## 扫描面与注释豁免
 //!
-//! 扫 `src-tauri/src` 全部 `.rs` 的**非注释行**（注释里出现产品词是「为什么删 /
+//! 扫 `src-tauri/src` 全部 `.rs` 的**非注释代码段**（注释里出现产品词是「为什么删 /
 //! 怎么退役」的记账，桌面同款锁同口径）；`tests/` 与构建产物不进扫描面。
+//! 注释剥离覆盖整行注释、**行尾 `//` 注释**与**跨行块注释正文**（字符串字面量里的
+//! `//` / `/*` 不误切，如 URL）——只按行首判会把行尾注释与块注释正文当代码扫（误红）。
 //!
 //! ## 白名单与 host-exceptions.md 的映射
 //!
@@ -193,10 +195,80 @@ struct Violation {
     text: String,
 }
 
-/// 行是否注释行（桌面 retired_session_command_lock 同口径：注释出现产品词是记账）
-fn is_comment_line(raw: &str) -> bool {
-    let t = raw.trim_start();
-    t.starts_with("//") || t.starts_with("/*") || t.starts_with('*')
+/// 行注释 / 块注释剥离：逐行喂入，跨行块注释状态由过滤器持有。
+///
+/// 只判「行首是 `//` / `*`」不够——行尾注释与块注释正文同样只是记账，按行首判会
+/// 把它们当代码扫（误红）。字符串字面量内的 `//` / `/*` 不切（URL 等）。
+struct CommentFilter {
+    in_block: bool,
+}
+
+impl CommentFilter {
+    fn new() -> Self {
+        Self { in_block: false }
+    }
+
+    /// 返回该行的代码段（注释已剥离；整行都是注释时返回空串）
+    fn code(&mut self, raw: &str) -> String {
+        let bytes = raw.as_bytes();
+        let mut code = String::with_capacity(raw.len());
+        // 当前代码段起点（ASCII 边界：只按 ASCII 的分隔符切，UTF-8 不会断）
+        let mut seg = 0usize;
+        let mut i = 0usize;
+        let mut in_str = false;
+        while i < bytes.len() {
+            if self.in_block {
+                if bytes[i] == b'*' && bytes.get(i + 1) == Some(&b'/') {
+                    self.in_block = false;
+                    i += 2;
+                    seg = i;
+                } else {
+                    i += 1;
+                }
+                continue;
+            }
+            match bytes[i] {
+                b'"' => {
+                    in_str = !in_str;
+                    i += 1;
+                }
+                b'\\' if in_str => {
+                    // 跳过被转义字符（按 UTF-8 首字节长度推进，保持字符边界）
+                    i += 1;
+                    if i < bytes.len() {
+                        i += utf8_len(bytes[i]);
+                    }
+                }
+                b'/' if !in_str && bytes.get(i + 1) == Some(&b'/') => {
+                    code.push_str(&raw[seg..i]);
+                    return code;
+                }
+                b'/' if !in_str && bytes.get(i + 1) == Some(&b'*') => {
+                    code.push_str(&raw[seg..i]);
+                    self.in_block = true;
+                    i += 2;
+                    seg = i;
+                }
+                _ => i += 1,
+            }
+        }
+        if !self.in_block {
+            code.push_str(&raw[seg..]);
+        }
+        code
+    }
+}
+
+fn utf8_len(first: u8) -> usize {
+    if first < 0x80 {
+        1
+    } else if first >> 5 == 0b110 {
+        2
+    } else if first >> 4 == 0b1110 {
+        3
+    } else {
+        4
+    }
 }
 
 /// 行内 `needle` 出现点的完整标识符 token（两侧扩展到 `[A-Za-z0-9_]`；中文针天然单 token）
@@ -264,12 +336,14 @@ fn scan() -> (Vec<Violation>, BTreeMap<(String, &'static str), usize>) {
                 .unwrap_or(&path)
                 .to_string_lossy()
                 .replace('\\', "/");
+            let mut filter = CommentFilter::new();
             for (idx, raw_line) in content.lines().enumerate() {
-                if is_comment_line(raw_line) {
+                let code = filter.code(raw_line);
+                if code.trim().is_empty() {
                     continue;
                 }
                 for needle in NEEDLES {
-                    if !line_hits(needle, raw_line) {
+                    if !line_hits(needle, &code) {
                         continue;
                     }
                     let registered = WHITELIST
@@ -359,4 +433,21 @@ fn whitelist_rows_are_load_bearing() {
          若属 #25 直连栈收敛后的正常退役 → 删除对应白名单行；否则核对词表。",
         dead.join("\n")
     );
+}
+
+/// 注释剥离：整行 / 行尾 / 跨行块注释都不算代码，字符串里的 `//` 不误切。
+///
+/// 防的是「行首判注释」的形态缺陷：行尾注释与块注释正文被当代码扫 = 产品词记账误红。
+#[test]
+fn comment_filter_keeps_code_and_strips_comments() {
+    let mut f = CommentFilter::new();
+    assert_eq!(f.code("let a = 1; // SessionStatus 记账").trim(), "let a = 1;");
+    assert_eq!(f.code("/* 说明"), "");
+    assert_eq!(f.code("  * MobileEvent"), "");
+    assert_eq!(f.code(" */ let b = 2;").trim(), "let b = 2;");
+    assert_eq!(
+        f.code("let url = \"http://x/y\"; // 注").trim(),
+        "let url = \"http://x/y\";"
+    );
+    assert_eq!(f.code("let c = 3;").trim(), "let c = 3;");
 }

@@ -155,3 +155,13 @@ Tauri 命令都必须按任意前端 JS 可调用设防」，实施盘点发现�
    （任何前端可驱动任意应用命令）、`plugin_storage_*`（跨应用读写）、偏好命令
    （set_enabled / set_autostart）。收敛需移动全命令面接入通道令牌（SDK 面联动），
    与 #25（connection/auth 引擎收敛）对移动 manager 的拆解有交叠，单独裁决。
+5. **首占顺序（凭证门的实际保证，2026-10-24 复核补记）**：loader 会话「域内首个
+   调用者生效」，两侧赢法不同但结论一致——
+   - **移动**：`loader.ts loadAll()` 首行显式 `ensureHostCredential()`，先于任何
+     插件模块 import；
+   - **桌面**：不另做 bootstrap 预取，靠**装载顺序不变量**——app 前端模块只在
+     `openApp → activate`（已取宿主面凭证）之后被 import；挂载槽 / 多任务预览 /
+     监控面板都以「应用已激活」为前提。该不变量写在 `useAppMount.ts`
+     `loadAppModule` 头注释，新增不经 activate 的 import 路径即破坏本门禁。
+   移动侧无 `AppMountEnv` / `env.invoke` 面，故第 3 条白名单代理只落桌面（移动由
+   命令门禁本体覆盖），不属于「双端漏做」。
