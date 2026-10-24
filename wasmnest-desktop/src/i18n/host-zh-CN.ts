@@ -202,6 +202,11 @@ export default {
         confirm: '确认卸载',
         success: '{name} 已卸载',
       },
+      stopService: {
+        title: '停止服务「{name}」？',
+        body: '服务将停止对外提供能力，可在应用管理中重新启动。',
+        confirm: '停止服务',
+      },
       exit: {
         title: '退出 WasmNest？',
         desc: '以下应用仍在运行：',

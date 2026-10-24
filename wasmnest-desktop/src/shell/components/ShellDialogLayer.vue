@@ -83,6 +83,27 @@
             </div>
           </template>
 
+          <!-- ==================== 服务停止确认（系统服务常驻能力，误停影响面广） ==================== -->
+          <template v-else-if="dialog === 'stop-service'">
+            <div class="dlg-h danger">
+              <span class="dlg-ic"><ShellIcon name="stop" :size="15" /></span>
+              <span class="t">{{ t('shell.dialog.stopService.title', { name: app?.name ?? '' }) }}</span>
+              <button class="dlg-x" :aria-label="t('shell.dialog.close')" @click="close">
+                <ShellIcon name="x" :size="13" />
+              </button>
+            </div>
+            <div class="dlg-b">
+              <p class="note">{{ t('shell.dialog.stopService.body') }}</p>
+              <div class="perm-line mono">{{ app?.pluginId }}</div>
+            </div>
+            <div class="dlg-f">
+              <button class="shell-btn ghost" @click="close">{{ t('shell.dialog.cancel') }}</button>
+              <button class="shell-btn danger-fill" :disabled="busy" @click="confirmStopService">
+                <ShellIcon name="stop" :size="13" /> {{ t('shell.dialog.stopService.confirm') }}
+              </button>
+            </div>
+          </template>
+
           <!-- 策略二次确认（授权策略切换弹窗；预留扩展点） -->
           <template v-else-if="dialog === 'strategy-confirm'">
             <div class="dlg-h">
@@ -108,13 +129,15 @@
 
 <script setup lang="ts">
 /**
- * ShellDialogLayer — 壳内全局弹窗层（退出确认 / 审批 / 卸载 / 策略二次确认）
+ * ShellDialogLayer — 壳内全局弹窗层（退出确认 / 审批 / 卸载 / 服务停止确认 / 策略二次确认）
  *
  * 2026-10-17 lifecycle-sync 改造后：审批与卸载弹窗**复活为真实动作**（D2/D5）——
  * - 审批：应用激活被审批门禁拒（NeedsApproval）时打开，确认 = approveAndStart
  *   （整单批准 + 内容哈希钉扎 → 激活 → 挂载运行面）；
  * - 卸载：应用管理页「卸载」按钮，确认 = uninstallApp（停用 → 丢私有库 → 删目录
- *   → 清存储，不可恢复）。
+ *   → 清存储，不可恢复）；
+ * - 服务停止确认（2026-10-25）：应用管理页系统服务的「停止服务」先经此弹窗确认，
+ *   确认 = stopApp（服务是常驻能力，误停影响面广；业务应用停用保持即时生效）。
  * 窗口关闭按钮与 requestClose 统一走退出确认，避免绕过会话关窗守卫。
  */
 import { computed } from 'vue'
@@ -152,6 +175,8 @@ const dlgTitle = computed(() => {
       return t('shell.dialog.approval.title', { name: app.value?.name ?? '' })
     case 'uninstall':
       return t('shell.dialog.uninstall.title', { name: app.value?.name ?? '' })
+    case 'stop-service':
+      return t('shell.dialog.stopService.title', { name: app.value?.name ?? '' })
     case 'strategy-confirm':
       return t('shell.dialog.strategy.title')
     default:
@@ -182,6 +207,12 @@ function confirmApprove() {
 function confirmUninstall() {
   if (!state.dialogAppId.value) return
   void state.uninstallApp(state.dialogAppId.value)
+}
+
+/** 服务停止确认：确认后停用服务（stopApp 收口真实生命周期） */
+function confirmStopService() {
+  if (!state.dialogAppId.value) return
+  void state.stopApp(state.dialogAppId.value)
 }
 </script>
 

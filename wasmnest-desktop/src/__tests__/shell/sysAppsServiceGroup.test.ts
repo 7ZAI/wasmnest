@@ -15,6 +15,8 @@ import { ref } from 'vue'
 const mocks = vi.hoisted(() => ({
   plugins: null as unknown as Ref<unknown[]>,
   busyId: null as unknown as Ref<string | null>,
+  dialog: null as unknown as Ref<string | null>,
+  dialogAppId: null as unknown as Ref<string | null>,
   setEnabled: vi.fn(),
   setAutostart: vi.fn(),
   openSys: vi.fn(),
@@ -36,8 +38,8 @@ vi.mock('@/shell/composables/useShellApps', () => ({
 
 vi.mock('@/shell/composables/useShellState', () => ({
   useShellState: () => ({
-    dialog: ref(null),
-    dialogAppId: ref(null),
+    dialog: mocks.dialog,
+    dialogAppId: mocks.dialogAppId,
     openSys: mocks.openSys,
     openApp: mocks.openApp,
     stopApp: mocks.stopApp,
@@ -84,6 +86,8 @@ function groupTitles(wrapper: ReturnType<typeof mountView>): string[] {
 beforeEach(() => {
   mocks.plugins = ref([])
   mocks.busyId = ref(null)
+  mocks.dialog = ref(null)
+  mocks.dialogAppId = ref(null)
   vi.clearAllMocks()
 })
 
@@ -209,5 +213,47 @@ describe('系统服务区（manifest kind 分组）', () => {
     expect(
       labels.some((tx) => tx.includes('shell.apps.stop') && !tx.includes('shell.apps.stopService')),
     ).toBe(true)
+  })
+
+  it('服务点「停止服务」→ 打开确认弹窗，不直接停止', async () => {
+    mocks.plugins.value = [
+      entry({
+        id: 'com.wasmnest.monitor',
+        pluginId: 'com.wasmnest.monitor',
+        name: 'Monitor',
+        kind: 'internal-business',
+        state: 'running',
+      }),
+    ]
+
+    const wrapper = mountView()
+    const stopBtn = wrapper.findAll('button').find((b) => b.text().includes('shell.apps.stopService'))
+    expect(stopBtn, '服务卡必须渲染「停止服务」按钮').toBeDefined()
+
+    await stopBtn!.trigger('click')
+    // 服务停止 = 先弹确认（dialog 置 stop-service + 关联应用 id），不直调 stopApp
+    expect(mocks.stopApp).not.toHaveBeenCalled()
+    expect(mocks.dialog!.value).toBe('stop-service')
+    expect(mocks.dialogAppId!.value).toBe('com.wasmnest.monitor')
+  })
+
+  it('业务应用点「停用」→ 直接停止，不弹确认', async () => {
+    mocks.plugins.value = [
+      entry({
+        id: 'com.wasmnest.bedcode',
+        pluginId: 'com.wasmnest.bedcode',
+        name: 'BedCode',
+        state: 'running',
+      }),
+    ]
+
+    const wrapper = mountView()
+    const stopBtn = wrapper.findAll('button').find(
+      (b) => b.text().includes('shell.apps.stop') && !b.text().includes('shell.apps.stopService'),
+    )
+    expect(stopBtn, '业务应用卡必须渲染「停用」按钮').toBeDefined()
+
+    await stopBtn!.trigger('click')
+    expect(mocks.stopApp).toHaveBeenCalledWith('com.wasmnest.bedcode')
   })
 })

@@ -85,6 +85,8 @@ export default {
       disable: '停用应用',
       /** 停止动作按装配角色分词语：服务说「停止服务」（同一裁决） */
       stopService: '停止服务',
+      /** 服务停止二次确认（服务是常驻能力，误停影响面广） */
+      stopServiceConfirm: '确定停止服务「{name}」吗？服务将停止对外提供能力，可在应用管理中重新启动。',
       uninstall: '卸载并删除数据',
       version: 'v{version}',
     },

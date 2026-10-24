@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   setAutostart: vi.fn(async () => true),
   back: vi.fn(),
   openApp: vi.fn(),
+  stopSpy: vi.fn(async () => {}),
 }))
 
 vi.mock('@/shell/composables/useShellApps', () => ({
@@ -36,7 +37,7 @@ vi.mock('@/shell/composables/useShellApps', () => ({
     supportsAutostart: () => mocks.supportsAutostart,
     isAutostart: async () => mocks.autostartValue,
     setAutostart: (...args: unknown[]) => mocks.setAutostart(...args as []),
-    stop: vi.fn(async () => {}),
+    stop: (...args: unknown[]) => mocks.stopSpy(...args as []),
     approveApp: vi.fn(async () => {}),
     launch: vi.fn(async () => {}),
   }),
@@ -92,6 +93,39 @@ async function mountDetail() {
   })
   await flushPromises()
   return wrapper
+}
+
+/** 找「停止」按钮（按 kind 文案定位；业务应用与服务的标签不同） */
+function stopButton(wrapper: Awaited<ReturnType<typeof mountDetail>>) {
+  return wrapper
+    .findAll('button')
+    .find((b) => b.text().includes('shell.detail.stopService') || b.text().includes('shell.detail.disable'))
+}
+
+/**
+ * 挂载一个能记录 confirm 流的替换版 ConfirmDialog 桩：
+ * 服务停止确认弹窗是否被打开（modelValue 变 true），以及确认后 emit confirm。
+ */
+async function mountDetailWithDialogStub() {
+  const confirmModel = { value: false }
+  const wrapper = mount(ShellAppDetailScreen, {
+    global: {
+      stubs: {
+        ShellAppIcon: true,
+        ConfirmDialog: {
+          props: ['modelValue'],
+          emits: ['update:modelValue', 'confirm'],
+          template: `
+            <div v-if="modelValue" class="dialog-stub">
+              <button class="dialog-confirm" @click="$emit('confirm')">confirm</button>
+              <button class="dialog-cancel" @click="$emit('update:modelValue', false)">cancel</button>
+            </div>`,
+        },
+      },
+    },
+  })
+  await flushPromises()
+  return { wrapper, confirmModel }
 }
 
 /** 自启开关（Toggle 渲染为 checkbox；按文案定位所属分组） */
@@ -199,5 +233,55 @@ describe('系统服务详情：不可卸载 + 自启可关', () => {
     const wrapper = await mountDetail()
     expect(wrapper.text()).toContain('shell.detail.disable')
     expect(wrapper.text()).not.toContain('shell.detail.stopService')
+  })
+})
+
+describe('系统服务停止：先弹确认，确认后才停（业务应用直停）', () => {
+  it('服务点「停止服务」→ 弹确认，不直接停止', async () => {
+    const { wrapper } = await mountDetailWithDialogStub()
+    const btn = stopButton(wrapper)
+    expect(btn).toBeDefined()
+    await btn!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.stopSpy).not.toHaveBeenCalled()
+    expect(wrapper.find('.dialog-stub').exists(), '服务停止必须先弹确认弹窗').toBe(true)
+  })
+
+  it('确认 → 才执行 stop(appId)', async () => {
+    const { wrapper } = await mountDetailWithDialogStub()
+    await stopButton(wrapper)!.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.stopSpy).toHaveBeenCalledTimes(1)
+    expect(mocks.stopSpy).toHaveBeenCalledWith('com.wasmnest.monitor')
+  })
+
+  it('取消 → 不执行 stop', async () => {
+    const { wrapper } = await mountDetailWithDialogStub()
+    await stopButton(wrapper)!.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.dialog-cancel').trigger('click')
+    await flushPromises()
+
+    expect(mocks.stopSpy).not.toHaveBeenCalled()
+    expect(wrapper.find('.dialog-stub').exists()).toBe(false)
+  })
+
+  it('业务应用点「停用应用」→ 直接停止，不弹确认', async () => {
+    mocks.params.value = { appId: 'com.wasmnest.file-transfer' }
+    mocks.app = businessApp()
+
+    const { wrapper } = await mountDetailWithDialogStub()
+    await stopButton(wrapper)!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.stopSpy).toHaveBeenCalledTimes(1)
+    expect(mocks.stopSpy).toHaveBeenCalledWith('com.wasmnest.file-transfer')
+    expect(wrapper.find('.dialog-stub').exists()).toBe(false)
   })
 })

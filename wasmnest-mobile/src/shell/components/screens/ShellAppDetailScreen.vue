@@ -202,7 +202,9 @@
           class="w-full rounded-[10px] border border-[var(--mobile-border)] px-4 py-3 shell-type-label text-[var(--mobile-text-primary)] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)] min-h-[var(--mobile-touch-target-min)]"
           @click="handleStop"
         >
-          <!-- 停止动作按装配角色分词语：系统服务说「停止服务」（2026-10-23 用户裁决） -->
+          <!-- 停止动作按装配角色分词语：系统服务说「停止服务」（2026-10-23 用户裁决）。
+               系统服务停止前弹确认（下方 ConfirmDialog）：服务是常驻能力，误停影响面广；
+               业务应用停用保持即时生效。 -->
           {{ isService ? t('shell.detail.stopService') : t('shell.detail.disable') }}
         </button>
         <button
@@ -240,6 +242,17 @@
       :cancel-text="t('shell.common.cancel')"
       @update:model-value="confirmRemove = $event"
       @confirm="handleRemove"
+    />
+    <!-- 系统服务停止确认（服务是常驻能力，误停影响面广；业务应用停用不弹） -->
+    <ConfirmDialog
+      :model-value="confirmStop"
+      variant="warning"
+      :title="t('shell.detail.stopService')"
+      :message="app ? t('shell.detail.stopServiceConfirm', { name: app.name }) : ''"
+      :confirm-text="t('shell.detail.stopService')"
+      :cancel-text="t('shell.common.cancel')"
+      @update:model-value="confirmStop = $event"
+      @confirm="handleStopConfirm"
     />
   </div>
 </template>
@@ -377,6 +390,8 @@ const stateDot = computed(() => {
 const toggleError = ref<string | null>(null)
 /** 卸载二次确认（复用平台 ConfirmDialog，见模板） */
 const confirmRemove = ref(false)
+/** 系统服务停止二次确认（复用平台 ConfirmDialog，见模板） */
+const confirmStop = ref(false)
 // 切换应用时清掉上一条的失败提示，避免张冠李戴；顺带读取自启偏好
 watch(
   appId,
@@ -409,6 +424,18 @@ async function handleToggle(key: string, next: boolean): Promise<void> {
 }
 
 async function handleStop(): Promise<void> {
+  if (!appId.value) return
+  // 系统服务是常驻能力：停止前先弹确认；业务应用停用保持即时生效
+  if (isService.value) {
+    confirmStop.value = true
+    return
+  }
+  await stop(appId.value)
+}
+
+/** 服务停止确认后执行（confirmStop 弹窗的确认动作） */
+async function handleStopConfirm(): Promise<void> {
+  confirmStop.value = false
   if (!appId.value) return
   await stop(appId.value)
 }

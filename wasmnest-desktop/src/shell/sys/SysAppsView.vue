@@ -74,9 +74,11 @@
             v-if="app.state === 'running' || app.state === 'degraded'"
             class="shell-btn ghost"
             :disabled="busy(app.id)"
-            @click="void state.stopApp(app.id)"
+            @click="onStop(app)"
           >
-            <!-- 停止动作按装配角色分词语：系统服务（L1/L2）说「停止服务」（2026-10-23 用户裁决） -->
+            <!-- 停止动作按装配角色分词语：系统服务（L1/L2）说「停止服务」（2026-10-23 用户裁决）。
+                 系统服务停止前弹确认（ShellDialogLayer stop-service 分支）：服务是常驻能力，
+                 误停影响面广；业务应用停用保持即时生效。 -->
             <ShellIcon name="stop" :size="13" />
             {{ isServiceKind(app.kind) ? t('shell.apps.stopService') : t('shell.apps.stop') }}
           </button>
@@ -189,6 +191,18 @@ function onAutostart(app: ShellAppEntry, autostart: boolean) {
 }
 function onApprove(app: ShellAppEntry) {
   void state.approveAndStart(app.id)
+}
+/**
+ * 停止入口分派：系统服务（L1/L2）先弹确认（ShellDialogLayer stop-service 分支，
+ * 服务是常驻能力，误停影响面广）；业务应用停用保持即时生效。
+ */
+function onStop(app: ShellAppEntry) {
+  if (isServiceKind(app.kind)) {
+    state.dialog.value = 'stop-service'
+    state.dialogAppId.value = app.id
+    return
+  }
+  void state.stopApp(app.id)
 }
 function onUninstall(app: ShellAppEntry) {
   state.dialog.value = 'uninstall'

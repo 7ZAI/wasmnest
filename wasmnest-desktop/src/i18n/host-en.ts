@@ -208,6 +208,11 @@ export default {
         confirm: 'Confirm uninstall',
         success: '{name} uninstalled',
       },
+      stopService: {
+        title: 'Stop service "{name}"?',
+        body: 'The service will stop providing its capability; restart it from App management.',
+        confirm: 'Stop service',
+      },
       exit: {
         title: 'Quit WasmNest?',
         desc: 'These apps are still running:',

@@ -86,6 +86,8 @@ export default {
       grantsEmpty: 'No grant records',
       disable: 'Disable app',
       stopService: 'Stop service',
+      /** Stop-service confirmation (services are resident capabilities; a mistaken stop has wide impact) */
+      stopServiceConfirm: 'Stop service "{name}"? It will stop providing its capability; restart it from App manager.',
       uninstall: 'Uninstall and delete data',
       version: 'v{version}',
     },
