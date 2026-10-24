@@ -3,6 +3,10 @@
        旧宿主 MobileLayout 退役时它一度只在壳内（ShellView）挂着，导致旧路由（设置二级页 / 文件浏览器）
        拿不到那套排版——现在回到全局容器上，与旧布局同口径。 -->
   <div :class="['mobile-app mobile-ui', themeClasses.container]">
+    <!-- 启动画面：与桌面端同一个 SplashLoading（真源线框绘画动画）。
+         仅前端展示——Android 原生开屏动画与配置不在此处适配。 -->
+    <SplashLoading :visible="showSplash" />
+
     <!-- 路由出口：旧宿主布局（MobileLayout + MobileNav）随阶段 B 退役，
          壳自行承担布局框与安全区（见 src/shell/views/ShellView.vue） -->
     <router-view />
@@ -26,27 +30,15 @@
 
     <!-- 外网访问授权弹窗（Egress L3，请求时懒触发，全局挂载） -->
     <EgressConsentDialog />
-
-    <!-- 开屏组件已禁用（2026-09-13 排查：启动期存在两层前端开屏——index.html 静态首屏
-         与本处的 Vue 开屏组件，现仅保留静态首屏 + Android 原生纯色开屏底）。
-         恢复方式：取消下方两个组件标签的注释，并同步恢复 script 中的
-         SplashScreen / SplashScreenNative / ACTIVE_SPLASH_CANDIDATE 导入、
-         showSplash / splashIsNative 声明及 vue 导入里的 ref；
-         渲染候选页仍由 config/splash.ts 的 ACTIVE_SPLASH_CANDIDATE 决定。
-    <SplashScreen v-if="!splashIsNative && showSplash" @closed="showSplash = false" />
-    <SplashScreenNative v-else-if="showSplash" @closed="showSplash = false" />
-    -->
   </div>
 </template>
 
 <script setup lang="ts">
-import { provide, computed, onMounted, onUnmounted } from 'vue'
+import { provide, computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { logger } from '@/utils/frontendLogger'
 import { Toaster } from 'vue-sonner'
-// 开屏组件已禁用（恢复说明见模板注释块）
-// import SplashScreen from '@/components/SplashScreen.vue'
-// import SplashScreenNative from '@/components/SplashScreenNative.vue'
-// import { ACTIVE_SPLASH_CANDIDATE } from '@/config/splash'
+import SplashLoading from '@/shell/components/SplashLoading.vue'
+import { SPLASH_DRAW_TOTAL_MS, SPLASH_HOLD_AFTER_DRAW_MS } from '@/shell/components/splashTiming'
 import { usePlatform } from '@/composables/usePlatform'
 import { useOrientation } from '@/composables/useOrientation'
 import { useEdgeToEdge } from '@/composables/useEdgeToEdge'
@@ -58,7 +50,7 @@ import { useTheme } from '@/composables/useTheme'
 import { syncLinkCryptoContextToNative, initLinkCryptoPinSync } from '@/composables/useLinkEncryption'
 import { useFontSize } from '@/composables/useFontSize'
 import { useSettingsStore } from '@/stores/settings'
-import { completeStartupTask } from '@/composables/useAppStartup'
+import { completeStartupTask, startupReady } from '@/composables/useAppStartup'
 // mDNS 广播暂时禁用：移动端目前不需要被发现，避免扫描到自身
 // import { useMdnsAdvertiser } from '@/composables/useMdnsAdvertiser'
 
@@ -74,10 +66,44 @@ const { setupFontSize } = useFontSize()
 const settingsStore = useSettingsStore()
 const toasterTheme = computed(() => settingsStore.settings.ui.theme as 'light' | 'dark' | 'system')
 
-// 开屏动画状态已随组件一并禁用（恢复说明见模板注释块）
-// const showSplash = ref(true)
-// /** 当前候选是否为原生系统开屏样式复刻(候选 2);false 即终端叙事动画(候选 1) */
-// const splashIsNative = ACTIVE_SPLASH_CANDIDATE === 'native'
+// ==================== 启动画面（与桌面端同一 SplashLoading） ====================
+// 只做前端展示：Android 原生开屏动画与配置不在这里适配。收起条件 =
+// 启动任务就绪且绘画动画画完（时序真源见 shell/components/splashTiming.ts）。
+const showSplash = ref(true)
+/** 最低展示时长 = 绘画动画总时长 + 末笔停留（画完即加载完成） */
+const SPLASH_MIN_MS = SPLASH_DRAW_TOTAL_MS + SPLASH_HOLD_AFTER_DRAW_MS
+/** 启动任务挂起保底：必须覆盖完整动画并留出余量，否则开屏会在画完前被切掉 */
+const SPLASH_GUARD_MS = SPLASH_MIN_MS + 1500
+const splashBootAt = Date.now()
+let splashHideTimer: ReturnType<typeof setTimeout> | null = null
+let splashGuardTimer: ReturnType<typeof setTimeout> | null = null
+let stopSplashReadyWatch: (() => void) | null = null
+
+function hideSplash() {
+  showSplash.value = false
+  stopSplashReadyWatch?.()
+  stopSplashReadyWatch = null
+  if (splashHideTimer) {
+    clearTimeout(splashHideTimer)
+    splashHideTimer = null
+  }
+  if (splashGuardTimer) {
+    clearTimeout(splashGuardTimer)
+    splashGuardTimer = null
+  }
+}
+
+stopSplashReadyWatch = watch(startupReady, (ready) => {
+  if (!ready) return
+  stopSplashReadyWatch?.()
+  stopSplashReadyWatch = null
+  const remain = Math.max(0, SPLASH_MIN_MS - (Date.now() - splashBootAt))
+  splashHideTimer = setTimeout(hideSplash, remain)
+})
+// 保底：启动任务（如 connection）挂起时不永久停留在启动面
+splashGuardTimer = setTimeout(hideSplash, SPLASH_GUARD_MS)
+
+// mDNS 广播暂时禁用
 // const { startAdvertise, stopAdvertise } = useMdnsAdvertiser()
 
 onMounted(async () => {
@@ -109,6 +135,10 @@ onMounted(async () => {
 const unlistenQueue: Array<() => void> = []
 
 onUnmounted(async () => {
+  if (splashHideTimer) clearTimeout(splashHideTimer)
+  if (splashGuardTimer) clearTimeout(splashGuardTimer)
+  stopSplashReadyWatch?.()
+  stopSplashReadyWatch = null
   cleanupTheme()
   for (const unlisten of unlistenQueue.splice(0)) {
     try {

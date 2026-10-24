@@ -624,6 +624,7 @@ export default {
       },
     },
     splash: {
+      status: '正在启动…',
       tagline: '局域网远程终端',
       typedCommand: 'wasmnest --boot',
       ready: '就绪 · 可以开工了',

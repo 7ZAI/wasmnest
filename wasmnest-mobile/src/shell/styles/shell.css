@@ -13,7 +13,9 @@
    与桌面 ShellIcon 同源（中性 card 表面 + stroke 线稿），不使用品牌层颜色。
    ============================================================================ */
 
-.shell-ui {
+/* 品牌固定色挂 :root：启动画面 SplashLoading teleport 到 body，脱离 .shell-ui
+   作用域，且展示时刻早于壳路由挂载——必须在壳外也能取到（壳组件按需继承）。 */
+:root {
   /* 品牌 ink 底恒定（斜向渐变亮端 / 暗端）：标志底板不随主题翻转 */
   --shell-brand-ink: #16181c;
   --shell-brand-ink-deep: #08090b;
@@ -22,6 +24,12 @@
      出现一处，与图形同住本 token 块） */
   --shell-brand-glyph: #f5f7f9;
   --shell-brand-stripe: #ff9e2c;
+  /* 启动画面专用：logo 底板渐变（逐字取 icon.svg 真源，组件内联 SVG 消费） */
+  --splash-logo-base-from: #151b23;
+  --splash-logo-base-to: #050608;
+}
+
+.shell-ui {
   /* 壳内结构 token：只定义与平台 token 无关的几何量，避免各处硬编码同一数值 */
   --shell-radius-card: 12px;
   --shell-radius-control: 10px;

@@ -635,6 +635,7 @@ export default {
       },
     },
     splash: {
+      status: 'Starting…',
       tagline: 'LAN Remote Terminal',
       typedCommand: 'wasmnest --boot',
       ready: "Ready · Let's code",
