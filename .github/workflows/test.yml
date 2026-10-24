@@ -311,6 +311,10 @@ jobs:
       - name: 拼装双端 WIT 生成物
         run: node scripts/compose-wit.mjs --all
 
+      - name: cargo fmt --check（块 6 门禁；格式化基线 = 646fe5a，后续格式化改动单独提交）
+        working-directory: wasmnest/wasmnest-${{ matrix.end }}/src-tauri
+        run: cargo fmt -- --check
+
       - name: cargo check
         working-directory: wasmnest/wasmnest-${{ matrix.end }}/src-tauri
         run: cargo check
