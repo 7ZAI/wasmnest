@@ -147,6 +147,9 @@ temp/
 # Git worktrees (isolated development workspaces)
 .worktrees/
 
+# Understand-Anything 分析数据目录（/understand 生成，不入库）
+.ua/
+
 # Playwright MCP temporary files
 .playwright-mcp/
 
@@ -176,3 +179,6 @@ docs/diagrams/*.delivery.json
 docs/diagrams/*.finalize.json
 docs/diagrams/*.finalize-summary.json
 docs/diagrams/*.browser-check.json
+
+# ZCode 会话目录（不入库）
+.zcode/
