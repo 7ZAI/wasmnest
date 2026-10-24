@@ -143,10 +143,7 @@ fn frontend_and_dev_shell_have_no_retired_auto_task_literal() {
     let mut violations: Vec<String> = Vec::new();
     for (root, label) in [
         (repo.join("src"), "宿主前端"),
-        (
-            repo.join("packages/plugin-sdk-mobile/dev-shell/src"),
-            "dev-shell",
-        ),
+        (repo.join("packages/plugin-sdk-mobile/dev-shell/src"), "dev-shell"),
     ] {
         let mut files: Vec<String> = Vec::new();
         collect_ext(&root, &root, &["ts", "vue"], &mut files);
@@ -217,8 +214,7 @@ fn merged_task_domain_and_plugin_retirement_stay() {
         );
     }
 
-    let activate = std::fs::read_to_string(app_root.join("src/task/activate.ts"))
-        .expect("读取任务域 activate.ts 失败");
+    let activate = std::fs::read_to_string(app_root.join("src/task/activate.ts")).expect("读取任务域 activate.ts 失败");
     // 只扫非注释行（本文件头注纪律：模块头「为什么退役」的记账段落不算回接）——
     // C2 的退役说明以「记名某 API 已退役」形式写在注释里，按全文 contains 会把
     // 记账本身判红（锁空转的变体：锁对着免责声明恒红）。
@@ -245,8 +241,7 @@ fn merged_task_domain_and_plugin_retirement_stay() {
         activate_violations.join("\n")
     );
 
-    let api = std::fs::read_to_string(app_root.join("src/task/api.ts"))
-        .expect("读取任务域 api.ts 失败");
+    let api = std::fs::read_to_string(app_root.join("src/task/api.ts")).expect("读取任务域 api.ts 失败");
     assert!(
         api.contains("/api/plugin/com.wasmnest.terminal-session"),
         "任务域 HTTP 基址未切到 com.wasmnest.terminal-session"

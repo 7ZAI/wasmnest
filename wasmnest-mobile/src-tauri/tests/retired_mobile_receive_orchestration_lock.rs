@@ -106,7 +106,12 @@ fn retired_receive_snapshot_event_is_no_longer_bridged_to_plugin_bus() {
     // 且会让插件误以为「无待应答批」（实为事件流断了）。锁的是 topic 字面量与
     // 快照发射调用——`bus_topic_for` 的反向断言只含事件名字面量，不误伤。
     let mut violations: Vec<String> = Vec::new();
-    for rel in ["src/peer/net.rs", "src/peer/ports.rs", "src/peer/seam.rs", "src/peer/receive.rs"] {
+    for rel in [
+        "src/peer/net.rs",
+        "src/peer/ports.rs",
+        "src/peer/seam.rs",
+        "src/peer/receive.rs",
+    ] {
         let path = mobile_src_root().join(rel);
         let content = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 {rel} 失败：{e}"));
         for (idx, raw_line) in content.lines().enumerate() {

@@ -25,10 +25,7 @@ fn src_tauri_root() -> PathBuf {
 }
 
 fn mobile_root() -> PathBuf {
-    src_tauri_root()
-        .parent()
-        .expect("src-tauri 上必有项目根")
-        .to_path_buf()
+    src_tauri_root().parent().expect("src-tauri 上必有项目根").to_path_buf()
 }
 
 /// 退役面扫描范围（Rust 宿主 + 前端 src/；wasm-core 的 `bare/host_impl/mdns.rs`
@@ -68,8 +65,7 @@ const SHARED_DAEMON_ANCHOR: &str = "wasmnest_discovery_engine::engine";
 
 /// 逐行扫描（跳过纯注释行），返回命中记录
 fn scan_source_lines(path: &Path, needles: &[&str]) -> Vec<String> {
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("读取 {} 失败：{e}", path.display()));
+    let content = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("读取 {} 失败：{e}", path.display()));
     let mut hits: Vec<String> = Vec::new();
     for (idx, line) in content.lines().enumerate() {
         let trimmed = line.trim_start();
@@ -115,7 +111,10 @@ fn mobile_mdns_browse_shell_stays_and_daemon_is_shared() {
     let commands = std::fs::read_to_string(root.join("src/commands/mdns.rs"))
         .unwrap_or_else(|e| panic!("读取 commands/mdns.rs 失败：{e}"));
     for needle in KEPT_BROWSE_NEEDLES {
-        let hay = if needle.contains("mdns_start_discovery") || needle.contains("mdns_stop_discovery") || needle.contains("mdns_get_discovered_services") {
+        let hay = if needle.contains("mdns_start_discovery")
+            || needle.contains("mdns_stop_discovery")
+            || needle.contains("mdns_get_discovered_services")
+        {
             &commands
         } else {
             &browse

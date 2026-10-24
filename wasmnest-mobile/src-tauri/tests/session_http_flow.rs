@@ -27,13 +27,11 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
-use wasmnest_server_http::plugin_binding::egress::http_fetch;
-use wasmnest_server_http::plugin_binding::ports::{
-    BoxedBlocked, HttpEventSink, HttpPorts, OutboundAuth,
-};
-use wasmnest_wasm_core::host_api::ports::HostEnginePorts;
-use wasmnest_mobile_lib::state::{clear_global_token, set_global_token};
 use serde_json::{json, Value};
+use wasmnest_mobile_lib::state::{clear_global_token, set_global_token};
+use wasmnest_server_http::plugin_binding::egress::http_fetch;
+use wasmnest_server_http::plugin_binding::ports::{BoxedBlocked, HttpEventSink, HttpPorts, OutboundAuth};
+use wasmnest_wasm_core::host_api::ports::HostEnginePorts;
 
 /// 宿主级端口：能力域要求的三件宿主服务在本套件里都取「放行」形态
 ///
@@ -90,7 +88,6 @@ async fn exec(request: &serde_json::Value) -> Result<Value, String> {
         serde_json::from_str(&raw).map_err(|e| format!("response is not JSON: {e}"))
     })
 }
-
 
 /// 全局串行闸：`set_global_token`（jwtAuth 经宿主代注读取）是进程级共享静态，
 /// 用例并发会互相踩 token——与 http_auth_flow / http_proxy_flow 的 SERIAL 同构
@@ -252,7 +249,8 @@ fn auth_header(req: &HttpRequest) -> Option<String> {
 }
 
 async fn mock_list(data: web::Data<MockData>, req: HttpRequest) -> HttpResponse {
-    data.state.record("/api/sessions", "GET", auth_header(&req).as_deref(), &json!({}));
+    data.state
+        .record("/api/sessions", "GET", auth_header(&req).as_deref(), &json!({}));
     HttpResponse::Ok().json(json!({
         "code": 0, "message": "ok",
         "data": { "sessions": [
@@ -263,31 +261,47 @@ async fn mock_list(data: web::Data<MockData>, req: HttpRequest) -> HttpResponse 
 }
 
 async fn mock_start(data: web::Data<MockData>, req: HttpRequest, body: web::Json<Value>) -> HttpResponse {
-    data.state.record("/api/sessions/start", "POST", auth_header(&req).as_deref(), &body);
+    data.state
+        .record("/api/sessions/start", "POST", auth_header(&req).as_deref(), &body);
     HttpResponse::Ok().json(json!({"code": 0, "message": "ok", "data": {"sessionId": "s-new"}}))
 }
 
 async fn mock_stop(data: web::Data<MockData>, req: HttpRequest, path: web::Path<String>) -> HttpResponse {
     // stop 请求无 body（客户端只发空 POST；Content-Type 亦非 json）——不挂 web::Json
-    data.state
-        .record(&format!("/api/sessions/{path}/stop"), "POST", auth_header(&req).as_deref(), &json!({}));
+    data.state.record(
+        &format!("/api/sessions/{path}/stop"),
+        "POST",
+        auth_header(&req).as_deref(),
+        &json!({}),
+    );
     match MockMode::from_bits(data.state.mode.load(Ordering::SeqCst)) {
-        MockMode::StopRejected => {
-            HttpResponse::Ok().json(json!({"code": 1002, "message": "session not found"}))
-        }
+        MockMode::StopRejected => HttpResponse::Ok().json(json!({"code": 1002, "message": "session not found"})),
         _ => HttpResponse::Ok().json(json!({"code": 0, "message": "ok"})),
     }
 }
 
 async fn mock_remove(data: web::Data<MockData>, req: HttpRequest, path: web::Path<String>) -> HttpResponse {
-    data.state
-        .record(&format!("/api/sessions/{path}/remove"), "DELETE", auth_header(&req).as_deref(), &json!({}));
+    data.state.record(
+        &format!("/api/sessions/{path}/remove"),
+        "DELETE",
+        auth_header(&req).as_deref(),
+        &json!({}),
+    );
     HttpResponse::Ok().json(json!({"code": 0, "message": "ok"}))
 }
 
-async fn mock_input(data: web::Data<MockData>, req: HttpRequest, path: web::Path<String>, body: web::Json<Value>) -> HttpResponse {
-    data.state
-        .record(&format!("/api/sessions/{path}/input"), "POST", auth_header(&req).as_deref(), &body);
+async fn mock_input(
+    data: web::Data<MockData>,
+    req: HttpRequest,
+    path: web::Path<String>,
+    body: web::Json<Value>,
+) -> HttpResponse {
+    data.state.record(
+        &format!("/api/sessions/{path}/input"),
+        "POST",
+        auth_header(&req).as_deref(),
+        &body,
+    );
     match MockMode::from_bits(data.state.mode.load(Ordering::SeqCst)) {
         MockMode::InputHttpError => HttpResponse::InternalServerError().json(json!({"code": 1, "message": "boom"})),
         _ => HttpResponse::Ok().json(json!({"code": 0, "message": "ok"})),
@@ -338,17 +352,16 @@ async fn scenario_start_stop_remove_input_shapes() {
     .expect("start transport must succeed");
     assert_eq!(json_body(&resp)["data"]["sessionId"], "s-new");
     let (_p, _m, _a, body) = mock.state.last_req("/api/sessions/start");
-    assert_eq!(body["configId"], "cfg-1", "启动载荷应带 configId（camelCase，桌面 wire）");
+    assert_eq!(
+        body["configId"], "cfg-1",
+        "启动载荷应带 configId（camelCase，桌面 wire）"
+    );
     assert_eq!(body["cols"], 120);
 
     // stop / remove / input：无 data 的 ok 信封
-    exec(&plugin_request(
-        "POST",
-        format!("{base}/api/sessions/s-new/stop"),
-        None,
-    ))
-    .await
-    .expect("stop transport");
+    exec(&plugin_request("POST", format!("{base}/api/sessions/s-new/stop"), None))
+        .await
+        .expect("stop transport");
     exec(&plugin_request(
         "DELETE",
         format!("{base}/api/sessions/s-new/remove"),

@@ -164,9 +164,7 @@ pub async fn open_download_file_location_by_name(display_name: &str) -> crate::R
     let _response: serde_json::Value = handle
         .run_mobile_plugin_async("openFileLocationByName", payload)
         .await
-        .map_err(|e| {
-            crate::AppError::Plugin(format!("Failed to invoke openFileLocationByName: {}", e))
-        })?;
+        .map_err(|e| crate::AppError::Plugin(format!("Failed to invoke openFileLocationByName: {}", e)))?;
     Ok(())
 }
 

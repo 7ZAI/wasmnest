@@ -30,12 +30,10 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Manager};
 
-use wasmnest_server_peer_net::SharedDirEntry;
 use wasmnest_server_peer_net::engine_ports::PeerEnginePorts;
+use wasmnest_server_peer_net::SharedDirEntry;
 
-use super::ports::{
-    MobileBusPort, MobileEventSink, MobileMdnsPort, MobilePathsPort, MobileSystemInfoPort,
-};
+use super::ports::{MobileBusPort, MobileEventSink, MobileMdnsPort, MobilePathsPort, MobileSystemInfoPort};
 use super::seam::MobilePlatformSeam;
 
 // ==================== 能力域再导出（宿主其余模块只认本模块路径） ====================

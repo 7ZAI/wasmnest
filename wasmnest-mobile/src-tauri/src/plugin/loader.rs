@@ -343,9 +343,6 @@ fn copy_dir_all(src: &Path, dest: &Path) -> crate::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
-    
 
     /// 迁移 ticket 06 验收：生产加载路径（PluginLoader::load_all）直接吃组件产物
     ///

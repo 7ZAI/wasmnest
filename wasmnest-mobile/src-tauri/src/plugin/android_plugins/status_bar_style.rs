@@ -27,8 +27,7 @@ pub fn status_bar_style_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .setup(|_app, api| {
             #[cfg(target_os = "android")]
             {
-                let handle =
-                    api.register_android_plugin("com.wasmnest.mobile", "StatusBarStylePlugin")?;
+                let handle = api.register_android_plugin("com.wasmnest.mobile", "StatusBarStylePlugin")?;
                 let _ = STATUS_BAR_STYLE_HANDLE.set(handle);
             }
             #[cfg(not(target_os = "android"))] // 非 Android 平台消除 unused 警告
@@ -41,18 +40,15 @@ pub fn status_bar_style_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 /// 同步系统栏图标外观（幂等）：dark=true（App 深色）→ 浅色图标
 #[cfg(target_os = "android")]
 pub async fn set_status_bar_style(dark: bool) -> crate::Result<()> {
-    let handle = STATUS_BAR_STYLE_HANDLE.get().ok_or_else(|| {
-        crate::AppError::Plugin("StatusBarStylePlugin not registered".to_string())
-    })?;
+    let handle = STATUS_BAR_STYLE_HANDLE
+        .get()
+        .ok_or_else(|| crate::AppError::Plugin("StatusBarStylePlugin not registered".to_string()))?;
     // T 必须显式指定:该调用是语句(返回值被丢弃),若不写 turbofish,
     // 无约束泛型结果只能靠 never type fallback(→ ())兜底,触发
     // dependency_on_unit_never_type_fallback lint(Android target 编译报错)。
     // Kotlin 端 setStyle 为 void 命令,响应为 null,用 Value 兼容任意响应。
     handle
-        .run_mobile_plugin_async::<serde_json::Value>(
-            "setStyle",
-            serde_json::json!({ "dark": dark }),
-        )
+        .run_mobile_plugin_async::<serde_json::Value>("setStyle", serde_json::json!({ "dark": dark }))
         .await
         .map_err(|e| crate::AppError::Plugin(format!("Failed to sync status bar style: {}", e)))?;
     Ok(())

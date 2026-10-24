@@ -29,6 +29,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use tauri::ipc::{Channel, InvokeResponseBody};
 use wasmnest_mobile_lib as _;
 use wasmnest_mobile_lib::plugin::guest_events::MobileGuestEvents;
 use wasmnest_mobile_lib::plugin::manager::mobile_core_config;
@@ -41,7 +42,6 @@ use wasmnest_wasm_core::test_support::{
     build_host_ctx_with, mock_plugin_ws, runtime_engine, setup_headless_runtime_with_config, MockPorts,
 };
 use wasmnest_wasm_core::wasmtime::component::Component;
-use tauri::ipc::{Channel, InvokeResponseBody};
 
 /// 随包真产物（`pnpm run plugins:build` 落点；相对 crate 根）
 const WASM_REL: &str = "resources/plugins/mobile/com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm";

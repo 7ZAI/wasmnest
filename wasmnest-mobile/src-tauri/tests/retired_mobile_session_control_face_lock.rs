@@ -127,7 +127,10 @@ const RETIRED_WS_CRYPTO: [&str; 8] = [
 /// 针脚取 `.get("jwtAuth")` 而非整行 `request.get("jwtAuth")`：后者在 rustfmt 把链式调用
 /// 折成多行后即失效（假红——语义面仍在，只是行形态变了；本锁判据是「保留面在场」）。
 const KEEP_HOST_FACE: [(&str, &str); 3] = [
-    ("../../../wasmnest-lib/wasmnest-server-http/src/plugin_binding/egress.rs", ".get(\"jwtAuth\")"),
+    (
+        "../../../wasmnest-lib/wasmnest-server-http/src/plugin_binding/egress.rs",
+        ".get(\"jwtAuth\")",
+    ),
     (
         "../../../wasmnest-lib/wasmnest-server-http/src/plugin_binding/ports.rs",
         "fn jwt_auth_token(&self, _plugin_id: &str) -> Result<Option<String>, String>",
@@ -196,10 +199,7 @@ fn retired_session_control_symbols_are_absent() {
     let files = collect_rs_files();
     let checked = files.len();
     let violations = scan_files(&files, &RETIRED_SYMBOLS);
-    assert!(
-        checked > 50,
-        "结构锁扫描范围异常：仅扫到 {checked} 个 .rs 文件"
-    );
+    assert!(checked > 50, "结构锁扫描范围异常：仅扫到 {checked} 个 .rs 文件");
     assert!(
         violations.is_empty(),
         "会话控制面（票 13 退役）出现回接：\n{}",
@@ -270,7 +270,10 @@ fn session_control_new_face_stays() {
     for (rel, needle) in PLUGIN_SESSION_FACE {
         let content = std::fs::read_to_string(app_root.join(rel))
             .unwrap_or_else(|e| panic!("读取 {} 失败：{e}", app_root.join(rel).display()));
-        assert!(content.contains(needle), "插件会话控制域缺失：{rel} 中找不到 `{needle}`");
+        assert!(
+            content.contains(needle),
+            "插件会话控制域缺失：{rel} 中找不到 `{needle}`"
+        );
     }
     for (rel, needle) in FRONTEND_FACE {
         let content = std::fs::read_to_string(root.join(rel)).unwrap_or_else(|e| panic!("读取 {rel} 失败：{e}"));
@@ -286,15 +289,8 @@ fn retired_envelope_command_names_have_no_production_hits() {
     let files = collect_rs_files();
     let checked = files.len();
     let violations = scan_files(&files, &RETIRED_ENVELOPE_COMMAND_NAMES);
-    assert!(
-        checked > 50,
-        "结构锁扫描范围异常：仅扫到 {checked} 个 .rs 文件"
-    );
-    assert!(
-        violations.is_empty(),
-        "旧信封命令名残留：\n{}",
-        violations.join("\n")
-    );
+    assert!(checked > 50, "结构锁扫描范围异常：仅扫到 {checked} 个 .rs 文件");
+    assert!(violations.is_empty(), "旧信封命令名残留：\n{}", violations.join("\n"));
 }
 
 #[test]
@@ -303,10 +299,7 @@ fn ws_link_crypto_has_no_production_residue() {
     let files = collect_rs_files();
     let checked = files.len();
     let violations = scan_files(&files, &RETIRED_WS_CRYPTO);
-    assert!(
-        checked > 50,
-        "结构锁扫描范围异常：仅扫到 {checked} 个 .rs 文件"
-    );
+    assert!(checked > 50, "结构锁扫描范围异常：仅扫到 {checked} 个 .rs 文件");
     assert!(
         violations.is_empty(),
         "WS 帧级加密已退役，出现回接：\n{}",

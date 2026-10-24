@@ -5,9 +5,8 @@
 
 use crate::connection::MessageHandler;
 use crate::connection::{
-    heartbeat::HeartbeatManager, io::IoManager, lifecycle::LifecycleManager,
-    ws_connection::WsConnectionManager, ConnectionStatus, IoEvent, MatchOutcome, RequestResponseManager,
-    WsClientConfig, WsClientEvent,
+    heartbeat::HeartbeatManager, io::IoManager, lifecycle::LifecycleManager, ws_connection::WsConnectionManager,
+    ConnectionStatus, IoEvent, MatchOutcome, RequestResponseManager, WsClientConfig, WsClientEvent,
 };
 use crate::model::message::Message;
 use crate::Result;
@@ -18,8 +17,8 @@ use tokio_tungstenite::tungstenite::protocol::Message as WsMsg;
 use tracing::{debug, error, info, warn};
 
 use crate::system::constants::connection::{
-    BROADCAST_CHANNEL_CAPACITY, DISCONNECT_TASK_TIMEOUT_SECS, EVENT_FORWARDER_POLL_INTERVAL_MS,
-    LOG_PREVIEW_MAX_LEN, PLACEHOLDER_CLIENT_ADDR, RECEIVER_POLL_INTERVAL_MS, SENDER_POLL_INTERVAL_MS,
+    BROADCAST_CHANNEL_CAPACITY, DISCONNECT_TASK_TIMEOUT_SECS, EVENT_FORWARDER_POLL_INTERVAL_MS, LOG_PREVIEW_MAX_LEN,
+    PLACEHOLDER_CLIENT_ADDR, RECEIVER_POLL_INTERVAL_MS, SENDER_POLL_INTERVAL_MS,
 };
 
 /// WebSocket 客户端
@@ -629,8 +628,6 @@ impl WsClient {
             }
         }
     }
-
-
 }
 
 // ==================== Tests ====================

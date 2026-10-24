@@ -28,9 +28,7 @@ use wasmnest_wasm_core::manager::runtime::AbiPolicy;
 use wasmnest_wasm_core::permission::{
     PERMISSION_FS_READ, PERMISSION_FS_WRITE, PERMISSION_NETWORK_HTTP, PERMISSION_STORAGE,
 };
-use wasmnest_wasm_core::test_support::{
-    build_host_ctx_with, runtime_engine, setup_headless_runtime_with_config,
-};
+use wasmnest_wasm_core::test_support::{build_host_ctx_with, runtime_engine, setup_headless_runtime_with_config};
 use wasmtime::component::Component;
 
 /// 真机插件 id（与 manifest 逐字一致）

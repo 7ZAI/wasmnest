@@ -26,11 +26,11 @@
 //! 行为契约（句柄表 / 属主隔离 / purge / topic 形状）由引擎自身单测覆盖
 //! （`wasmnest-discovery-engine` crate 测试），本模块只保薄转发语义断言。
 
-use wasmnest_discovery_engine::ports::{BoxedTask, DiscoveryPorts, DiscoveryTask};
 use std::sync::Arc;
+use wasmnest_discovery_engine::ports::{BoxedTask, DiscoveryPorts, DiscoveryTask};
 
-use wasmnest_host_kit::WasmPluginState;
 use super::host_ctx;
+use wasmnest_host_kit::WasmPluginState;
 use wasmnest_wasm_core::bus::MessageBus;
 use wasmnest_wasm_core::host_api::ports::HostEnginePorts;
 
@@ -57,7 +57,6 @@ impl wasmnest::plugin::host_mdns::Host for WasmPluginState {
         mdns_is_advertising(self, &advertise_id)
     }
 }
-
 
 // ==================== 移动端 DiscoveryPorts 适配器 ====================
 
@@ -166,43 +165,23 @@ impl DiscoveryPorts for StateDiscoveryPorts {
 
     // 能力路由：移动端无 core-plugin-manager → 恒 None（契约保留，语义 =
     // 无提供者走引擎，逐字与桌面「无提供者落引擎」一致）
-    fn forward_mdns_browse(
-        &self,
-        _plugin_id: &str,
-        _service_type: &str,
-    ) -> Option<Result<String, String>> {
+    fn forward_mdns_browse(&self, _plugin_id: &str, _service_type: &str) -> Option<Result<String, String>> {
         None
     }
 
-    fn forward_mdns_stop_browse(
-        &self,
-        _plugin_id: &str,
-        _browser_id: &str,
-    ) -> Option<Result<bool, String>> {
+    fn forward_mdns_stop_browse(&self, _plugin_id: &str, _browser_id: &str) -> Option<Result<bool, String>> {
         None
     }
 
-    fn forward_mdns_advertise(
-        &self,
-        _plugin_id: &str,
-        _config_json: &str,
-    ) -> Option<Result<String, String>> {
+    fn forward_mdns_advertise(&self, _plugin_id: &str, _config_json: &str) -> Option<Result<String, String>> {
         None
     }
 
-    fn forward_mdns_stop_advertise(
-        &self,
-        _plugin_id: &str,
-        _advertise_id: &str,
-    ) -> Option<Result<bool, String>> {
+    fn forward_mdns_stop_advertise(&self, _plugin_id: &str, _advertise_id: &str) -> Option<Result<bool, String>> {
         None
     }
 
-    fn forward_mdns_is_advertising(
-        &self,
-        _plugin_id: &str,
-        _advertise_id: &str,
-    ) -> Option<Result<bool, String>> {
+    fn forward_mdns_is_advertising(&self, _plugin_id: &str, _advertise_id: &str) -> Option<Result<bool, String>> {
         None
     }
 }
@@ -230,19 +209,13 @@ pub(crate) fn mdns_advertise(state: &WasmPluginState, config_json: &str) -> Resu
 }
 
 /// 停止广播并回收句柄：引擎权限门 + 属主校验 → 注销 → 回收续期任务
-pub(crate) fn mdns_stop_advertise(
-    state: &WasmPluginState,
-    advertise_id: &str,
-) -> Result<bool, String> {
+pub(crate) fn mdns_stop_advertise(state: &WasmPluginState, advertise_id: &str) -> Result<bool, String> {
     let ports = StateDiscoveryPorts::from_state(state);
     wasmnest_discovery_engine::engine::stop_advertise(&ports, &state.plugin_id, advertise_id)
 }
 
 /// 查询广播状态（返回是否存在该句柄）：引擎权限门 + 属主校验（跨插件拒绝）
-pub(crate) fn mdns_is_advertising(
-    state: &WasmPluginState,
-    advertise_id: &str,
-) -> Result<bool, String> {
+pub(crate) fn mdns_is_advertising(state: &WasmPluginState, advertise_id: &str) -> Result<bool, String> {
     let ports = StateDiscoveryPorts::from_state(state);
     wasmnest_discovery_engine::engine::is_advertising(&ports, &state.plugin_id, advertise_id)
 }

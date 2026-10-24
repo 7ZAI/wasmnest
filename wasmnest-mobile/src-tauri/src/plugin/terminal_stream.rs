@@ -18,13 +18,13 @@
 //! `host-terminal-stream` 是移动独有 interface：桌面无此域（`events` 客户端化后
 //! 桌面终端输出走 WS 帧下行），故本模块不参与桌面装配。
 
-use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_plugin_api_mobile::permission::PERMISSION_TERMINAL_OUTPUT;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use tauri::ipc::{Channel, InvokeResponseBody};
+use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
+use wasmnest_plugin_api_mobile::permission::PERMISSION_TERMINAL_OUTPUT;
 
-use crate::plugin::bindings::{wasmnest, check_permission, guarded};
+use crate::plugin::bindings::{check_permission, guarded, wasmnest};
 
 // ==================== 能力模块自报 ====================
 

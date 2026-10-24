@@ -605,10 +605,7 @@ impl EgressPolicy {
             None => return,
         };
         let strategies = self.plugin_strategies.read().unwrap().clone();
-        let map: HashMap<String, &str> = strategies
-            .iter()
-            .map(|(k, v)| (k.clone(), v.as_str()))
-            .collect();
+        let map: HashMap<String, &str> = strategies.iter().map(|(k, v)| (k.clone(), v.as_str())).collect();
         let content = match serde_json::to_string_pretty(&map) {
             Ok(c) => c,
             Err(e) => {
@@ -640,8 +637,7 @@ impl EgressPolicy {
                     None => true,
                 }
         };
-        self.persistent_grants.read().unwrap().iter().any(hit)
-            || self.session_grants.read().unwrap().values().any(hit)
+        self.persistent_grants.read().unwrap().iter().any(hit) || self.session_grants.read().unwrap().values().any(hit)
     }
 
     /// 记忆授权（L3 命中后调用）：persist=true 落盘（「不再询问」），否则会话级。
@@ -741,11 +737,7 @@ impl EgressPolicy {
             })
             .collect();
         // 稳定排序：插件 → 时间（设置页展示顺序稳定，不依赖 HashMap 遍历序）
-        records.sort_by(|a, b| {
-            a.plugin_id
-                .cmp(&b.plugin_id)
-                .then(a.created_at.cmp(&b.created_at))
-        });
+        records.sort_by(|a, b| a.plugin_id.cmp(&b.plugin_id).then(a.created_at.cmp(&b.created_at)));
         records
     }
 
@@ -928,10 +920,7 @@ impl EgressPolicy {
         match step.tier() {
             // 始终允许：免询问放行 + 以 `source='always_allow'` 落账（审计是档位义务）
             Tier::AutoAllow => {
-                debug_assert!(
-                    step.must_land_auto_allow(),
-                    "AutoAllow 档位字段丢失审计义务"
-                );
+                debug_assert!(step.must_land_auto_allow(), "AutoAllow 档位字段丢失审计义务");
                 self.record_grant(
                     &parsed.host,
                     None,
@@ -1278,7 +1267,14 @@ mod tests {
             p.decide("https://custom.example.com/api", "host"),
             EgressDecision::NeedConsent(_)
         ));
-        p.record_grant("custom.example.com", None, false, GRANT_PLUGIN_HOST, AUTH_EFFECT_ALLOW, AuthRecordSource::User);
+        p.record_grant(
+            "custom.example.com",
+            None,
+            false,
+            GRANT_PLUGIN_HOST,
+            AUTH_EFFECT_ALLOW,
+            AuthRecordSource::User,
+        );
         assert!(matches!(
             p.decide("https://custom.example.com/api", "host"),
             EgressDecision::Allow(GrantSource::L3Memory)
@@ -1305,24 +1301,15 @@ mod tests {
     /// 档位 → 动作映射单点：AlwaysAsk 不读记录；Default 读记录；AutoAllow 必须落账
     #[test]
     fn strategy_step_single_mapping() {
-        assert_eq!(
-            StrategyStep::of(AuthStrategy::AlwaysAsk),
-            StrategyStep::ask()
-        );
+        assert_eq!(StrategyStep::of(AuthStrategy::AlwaysAsk), StrategyStep::ask());
         assert!(!StrategyStep::of(AuthStrategy::AlwaysAsk).reads_allow_records());
         assert!(!StrategyStep::of(AuthStrategy::AlwaysAsk).must_land_auto_allow());
 
-        assert_eq!(
-            StrategyStep::of(AuthStrategy::Default),
-            StrategyStep::consult_records()
-        );
+        assert_eq!(StrategyStep::of(AuthStrategy::Default), StrategyStep::consult_records());
         assert!(StrategyStep::of(AuthStrategy::Default).reads_allow_records());
         assert!(!StrategyStep::of(AuthStrategy::Default).must_land_auto_allow());
 
-        assert_eq!(
-            StrategyStep::of(AuthStrategy::AlwaysAllow),
-            StrategyStep::auto_allow()
-        );
+        assert_eq!(StrategyStep::of(AuthStrategy::AlwaysAllow), StrategyStep::auto_allow());
         assert!(!StrategyStep::of(AuthStrategy::AlwaysAllow).reads_allow_records());
         assert!(StrategyStep::of(AuthStrategy::AlwaysAllow).must_land_auto_allow());
     }

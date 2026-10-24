@@ -111,10 +111,7 @@ fn surface_commands_acquire_and_release_transport() {
 
     let services = read("src/plugin/services.rs");
     for needle in ["plugin_uses_transport", "TRANSPORT_SERVICE_KEY"] {
-        assert!(
-            services.contains(needle),
-            "services.rs 缺 `{needle}`（租约薄壳漂移）"
-        );
+        assert!(services.contains(needle), "services.rs 缺 `{needle}`（租约薄壳漂移）");
     }
 }
 
@@ -204,12 +201,12 @@ fn background_transport_lease_follows_runtime_not_surface() {
         "wasm-core 启动成功路径必须建运行期传输租约（backgroundTransport 漂移）"
     );
     let activate_at = pos(&activation, "pub async fn activate_plugin(", "activation.rs");
-    let acquire_at = pos(
+    let acquire_at = pos(&activation, "acquire_background_transport(plugin_id)", "activation.rs");
+    let release_at = pos(
         &activation,
-        "acquire_background_transport(plugin_id)",
+        "release_services_for(plugin_id, \"activation failed\")",
         "activation.rs",
     );
-    let release_at = pos(&activation, "release_services_for(plugin_id, \"activation failed\")", "activation.rs");
     assert!(
         activate_at < acquire_at && acquire_at < release_at,
         "acquire 必须在启动成功后（失败分支的 release 补偿之前）——顺序漂移会让失败激活也留租"
@@ -236,9 +233,8 @@ fn background_transport_lease_follows_runtime_not_surface() {
     );
     assert!(
         commands.contains("pub async fn plugin_surface_open(")
-            && commands[pos(&commands, "pub async fn plugin_surface_open(", "commands.rs")..].contains(
-                "declares_background_transport(&app_id)"
-            ),
+            && commands[pos(&commands, "pub async fn plugin_surface_open(", "commands.rs")..]
+                .contains("declares_background_transport(&app_id)"),
         "plugin_surface_open 也必须识别运行期租约应用（不重复记账）"
     );
 

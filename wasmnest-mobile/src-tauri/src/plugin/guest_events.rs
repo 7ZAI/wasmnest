@@ -59,10 +59,7 @@ impl GuestEventDispatcher for MobileGuestEvents {
     ) -> wasmnest_wasm_core::Result<()> {
         // 导出视图打开失败即 fail-visible（不是「拿不到就跳过投递」）
         let exports = bindings::Plugin::new(&mut *store, &instance).map_err(|e| {
-            wasmnest_wasm_core::AppError::Plugin(format!(
-                "WASM component exports access failed: {}",
-                e
-            ))
+            wasmnest_wasm_core::AppError::Plugin(format!("WASM component exports access failed: {}", e))
         })?;
         let events = exports.wasmnest_plugin_events();
         settle(
@@ -94,12 +91,9 @@ impl GuestEventDispatcher for MobileGuestEvents {
         &self,
         store: &mut Store<WasmPluginState>,
         instance: wasmtime::component::Instance,
-        ) -> wasmnest_wasm_core::Result<()> {
+    ) -> wasmnest_wasm_core::Result<()> {
         let exports = bindings::Plugin::new(&mut *store, &instance).map_err(|e| {
-            wasmnest_wasm_core::AppError::Plugin(format!(
-                "WASM component exports access failed: {}",
-                e
-            ))
+            wasmnest_wasm_core::AppError::Plugin(format!("WASM component exports access failed: {}", e))
         })?;
         let events = exports.wasmnest_plugin_events();
         settle(
@@ -115,16 +109,11 @@ impl GuestEventDispatcher for MobileGuestEvents {
         reason: &str,
     ) -> wasmnest_wasm_core::Result<()> {
         let exports = bindings::Plugin::new(&mut *store, &instance).map_err(|e| {
-            wasmnest_wasm_core::AppError::Plugin(format!(
-                "WASM component exports access failed: {}",
-                e
-            ))
+            wasmnest_wasm_core::AppError::Plugin(format!("WASM component exports access failed: {}", e))
         })?;
         let events = exports.wasmnest_plugin_events();
         settle(
-            wasmnest_wasm_core::runtime_util::block_on_async(
-                events.call_on_disconnect(&mut *store, reason),
-            ),
+            wasmnest_wasm_core::runtime_util::block_on_async(events.call_on_disconnect(&mut *store, reason)),
             "events.on-disconnect",
         )
     }
@@ -136,16 +125,11 @@ impl GuestEventDispatcher for MobileGuestEvents {
         session_id: &str,
     ) -> wasmnest_wasm_core::Result<()> {
         let exports = bindings::Plugin::new(&mut *store, &instance).map_err(|e| {
-            wasmnest_wasm_core::AppError::Plugin(format!(
-                "WASM component exports access failed: {}",
-                e
-            ))
+            wasmnest_wasm_core::AppError::Plugin(format!("WASM component exports access failed: {}", e))
         })?;
         let events = exports.wasmnest_plugin_events();
         settle(
-            wasmnest_wasm_core::runtime_util::block_on_async(
-                events.call_on_session_created(&mut *store, session_id),
-            ),
+            wasmnest_wasm_core::runtime_util::block_on_async(events.call_on_session_created(&mut *store, session_id)),
             "events.on-session-created",
         )
     }
@@ -157,16 +141,11 @@ impl GuestEventDispatcher for MobileGuestEvents {
         session_id: &str,
     ) -> wasmnest_wasm_core::Result<()> {
         let exports = bindings::Plugin::new(&mut *store, &instance).map_err(|e| {
-            wasmnest_wasm_core::AppError::Plugin(format!(
-                "WASM component exports access failed: {}",
-                e
-            ))
+            wasmnest_wasm_core::AppError::Plugin(format!("WASM component exports access failed: {}", e))
         })?;
         let events = exports.wasmnest_plugin_events();
         settle(
-            wasmnest_wasm_core::runtime_util::block_on_async(
-                events.call_on_session_stopped(&mut *store, session_id),
-            ),
+            wasmnest_wasm_core::runtime_util::block_on_async(events.call_on_session_stopped(&mut *store, session_id)),
             "events.on-session-stopped",
         )
     }

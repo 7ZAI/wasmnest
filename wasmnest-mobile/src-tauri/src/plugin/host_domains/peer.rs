@@ -70,21 +70,11 @@ impl wasmnest::plugin::host_peer::Host for WasmPluginState {
         peer_list_shared_roots(self, &session)
     }
 
-    fn browse_directory(
-        &mut self,
-        session: String,
-        dir_id: String,
-        rel_path: String,
-    ) -> Result<String, String> {
+    fn browse_directory(&mut self, session: String, dir_id: String, rel_path: String) -> Result<String, String> {
         peer_browse_directory(self, &session, &dir_id, &rel_path)
     }
 
-    fn pull_files(
-        &mut self,
-        session: String,
-        dir_id: String,
-        files_json: String,
-    ) -> Result<u32, String> {
+    fn pull_files(&mut self, session: String, dir_id: String, files_json: String) -> Result<u32, String> {
         peer_pull_files(self, &session, &dir_id, &files_json)
     }
 
@@ -109,7 +99,6 @@ impl wasmnest::plugin::host_peer::Host for WasmPluginState {
     }
 }
 
-
 pub(crate) fn peer_dial(state: &WasmPluginState, endpoint_json: &str) -> Result<String, String> {
     plugin_binding::peer_dial(&ports(), &state.plugin_id, endpoint_json)
 }
@@ -118,11 +107,7 @@ pub(crate) fn peer_close(state: &WasmPluginState, handle: &str) -> Result<bool, 
     plugin_binding::peer_close(&ports(), &state.plugin_id, handle)
 }
 
-pub(crate) fn peer_respond_consent(
-    state: &WasmPluginState,
-    request_id: &str,
-    accepted: bool,
-) -> Result<bool, String> {
+pub(crate) fn peer_respond_consent(state: &WasmPluginState, request_id: &str, accepted: bool) -> Result<bool, String> {
     plugin_binding::peer_respond_consent(&ports(), &state.plugin_id, request_id, accepted)
 }
 
@@ -134,27 +119,15 @@ pub(crate) fn peer_revoke_trusted(state: &WasmPluginState, node_id: &str) -> Res
     plugin_binding::peer_revoke_trusted(&ports(), &state.plugin_id, node_id)
 }
 
-pub(crate) fn peer_send_files(
-    state: &WasmPluginState,
-    session: &str,
-    paths_json: &str,
-) -> Result<String, String> {
+pub(crate) fn peer_send_files(state: &WasmPluginState, session: &str, paths_json: &str) -> Result<String, String> {
     plugin_binding::peer_send_files(&ports(), &state.plugin_id, session, paths_json)
 }
 
-pub(crate) fn peer_respond_transfer(
-    state: &WasmPluginState,
-    batch_id: &str,
-    accept: bool,
-) -> Result<(), String> {
+pub(crate) fn peer_respond_transfer(state: &WasmPluginState, batch_id: &str, accept: bool) -> Result<(), String> {
     plugin_binding::peer_respond_transfer(&ports(), &state.plugin_id, batch_id, accept)
 }
 
-pub(crate) fn peer_set_receive_policy(
-    state: &WasmPluginState,
-    mode: &str,
-    timeout_secs: u64,
-) -> Result<(), String> {
+pub(crate) fn peer_set_receive_policy(state: &WasmPluginState, mode: &str, timeout_secs: u64) -> Result<(), String> {
     plugin_binding::peer_set_receive_policy(&ports(), &state.plugin_id, mode, timeout_secs)
 }
 

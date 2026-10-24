@@ -673,10 +673,7 @@ pub const APP_FRONTEND_INVOKE_WHITELIST: &[&str] = &[
 /// app 前端查询 env.invoke 白名单（前端代理启动时取用；公开只读面）
 #[tauri::command]
 pub fn plugin_frontend_invoke_whitelist() -> Vec<String> {
-    APP_FRONTEND_INVOKE_WHITELIST
-        .iter()
-        .map(|s| s.to_string())
-        .collect()
+    APP_FRONTEND_INVOKE_WHITELIST.iter().map(|s| s.to_string()).collect()
 }
 
 // ==================== Server Control Commands ====================

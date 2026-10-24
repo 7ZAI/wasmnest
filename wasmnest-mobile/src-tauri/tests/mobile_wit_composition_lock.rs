@@ -56,13 +56,14 @@ fn compose_manifest_package_version_matches_wit_sources() {
     let raw = read(&root.join("../wasmnest-lib/wasmnest-contract/src/lib.rs"));
     let const_of = |name: &str| -> String {
         let needle = format!("pub const {name}: &str = \"");
-        let start = raw.find(&needle).unwrap_or_else(|| {
-            panic!("wasmnest-contract/src/lib.rs 缺常量 {name}")
-        }) + needle.len();
+        let start = raw
+            .find(&needle)
+            .unwrap_or_else(|| panic!("wasmnest-contract/src/lib.rs 缺常量 {name}"))
+            + needle.len();
         let rest = &raw[start..];
-        let end = rest.find('"').unwrap_or_else(|| {
-            panic!("wasmnest-contract/src/lib.rs 常量 {name} 未闭合")
-        });
+        let end = rest
+            .find('"')
+            .unwrap_or_else(|| panic!("wasmnest-contract/src/lib.rs 常量 {name} 未闭合"));
         rest[..end].to_string()
     };
     let name = const_of("PACKAGE_NAME");

@@ -34,7 +34,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use wasmnest_wasm_core::manager::runtime::{AbiPolicy, WasmRuntime};
-use wasmnest_wasm_core::test_support::{runtime_engine, build_host_ctx as build_bare_host_ctx};
+use wasmnest_wasm_core::test_support::{build_host_ctx as build_bare_host_ctx, runtime_engine};
 use wasmtime::component::Component;
 
 /// 移动宿主端事实（平台 = `"mobile"`）注入版上下文——与生产
@@ -49,7 +49,6 @@ fn build_host_ctx() -> Arc<wasmnest_wasm_core::host_api::WasmHostContext> {
 }
 
 const PLUGIN_ID: &str = "com.wasmnest.file-transfer";
-
 
 /// 移动端产物文件名（build 脚本产物名，两端同名）
 const ARTIFACT_FILE: &str = "wasmnest_plugin_file_transfer.wasm";
@@ -78,7 +77,6 @@ fn read_artifact(path: &Path) -> Vec<u8> {
     std::fs::read(path).unwrap_or_else(|e| panic!("read artifact {}: {e}", path.display()))
 }
 
-
 /// 授权并取共享宿主上下文（2026-10-14 权限面桌面同构）
 ///
 /// 权限真源 = 内核 `PermissionManager`：逐实例 `granted_permissions` 副本 /
@@ -99,8 +97,7 @@ fn declared_permissions() -> HashSet<String> {
         .join("plugin.json");
     let raw = std::fs::read_to_string(&manifest_path)
         .unwrap_or_else(|e| panic!("read manifest {}: {e}", manifest_path.display()));
-    let manifest: serde_json::Value =
-        serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse manifest: {e}"));
+    let manifest: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse manifest: {e}"));
     manifest["permissions"]
         .as_array()
         .expect("manifest.permissions must be an array")
@@ -129,14 +126,10 @@ fn mobile_runtime(aot_cache_dir: Option<PathBuf>) -> WasmRuntime {
     // spawn 走 tauri async_runtime，bus / app 缺省）——不是自造替身。crate 侧幂等。
     wasmnest_mobile_lib::plugin::host_domains::mdns::register_process_ports();
 
-    let runtime = wasmnest_wasm_core::test_support::setup_headless_runtime_with_abi(
-        aot_cache_dir,
-        AbiPolicy { form: None },
-    )
-    .expect("create wasm runtime");
-    runtime.set_guest_events(Arc::new(
-        wasmnest_mobile_lib::plugin::guest_events::MobileGuestEvents,
-    ));
+    let runtime =
+        wasmnest_wasm_core::test_support::setup_headless_runtime_with_abi(aot_cache_dir, AbiPolicy { form: None })
+            .expect("create wasm runtime");
+    runtime.set_guest_events(Arc::new(wasmnest_mobile_lib::plugin::guest_events::MobileGuestEvents));
     runtime
 }
 
@@ -160,8 +153,8 @@ fn desktop_artifact_instantiates_on_mobile_host_closing_desktop_only_imports() {
     rt.block_on(async move {
         let runtime = mobile_runtime(None);
         // 必须用 runtime 自身 Engine 编译（跨 Engine 实例化被 wasmtime 拒绝）
-        let component = Component::from_binary(runtime_engine(&runtime), &bytes)
-            .expect("compile shared artifact as component");
+        let component =
+            Component::from_binary(runtime_engine(&runtime), &bytes).expect("compile shared artifact as component");
 
         let host_ctx = build_host_ctx();
         let mut plugin = runtime
@@ -182,8 +175,7 @@ fn desktop_artifact_instantiates_on_mobile_host_closing_desktop_only_imports() {
         // （10 源 + 9 生成物）与应用仓 `apps/file-transfer/rust/src/wiring_lock.rs` 断言。
 
         // 产物 id 与宿主加载的 manifest 同源（防张冠李戴加载到别的插件产物）
-        let manifest: serde_json::Value =
-            serde_json::from_str(&plugin.get_manifest().expect("get manifest")).unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(&plugin.get_manifest().expect("get manifest")).unwrap();
         assert_eq!(manifest["id"], PLUGIN_ID);
     });
 }
@@ -202,8 +194,7 @@ fn mobile_vocabulary_event_dispatches_into_desktop_built_artifact() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async move {
         let runtime = mobile_runtime(None);
-        let component = Component::from_binary(runtime_engine(&runtime), &bytes)
-            .expect("compile shared artifact");
+        let component = Component::from_binary(runtime_engine(&runtime), &bytes).expect("compile shared artifact");
         let host_ctx = build_host_ctx();
         let mut plugin = runtime
             .instantiate_component(
@@ -244,8 +235,7 @@ fn desktop_only_command_is_visibly_unsupported_on_mobile_branch() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async move {
         let runtime = mobile_runtime(None);
-        let component = Component::from_binary(runtime_engine(&runtime), &bytes)
-            .expect("compile shared artifact");
+        let component = Component::from_binary(runtime_engine(&runtime), &bytes).expect("compile shared artifact");
         let host_ctx = build_host_ctx();
         let mut plugin = runtime
             .instantiate_component(

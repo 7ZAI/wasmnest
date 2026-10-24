@@ -17,12 +17,12 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
 use actix_web::{web, App, HttpResponse, HttpServer};
+use serde_json::{json, Value};
 use wasmnest_mobile_lib::auth::http::{resolve_base_url, AuthHttpClient, DeviceAuthContext};
 use wasmnest_mobile_lib::auth::{AuthManager, AuthStatus};
 use wasmnest_mobile_lib::connection::manager::ConnectionManager;
 use wasmnest_mobile_lib::state::{clear_global_token, get_global_token};
 use wasmnest_mobile_lib::AppError;
-use serde_json::{json, Value};
 
 // 复用 WS 协议 mock（resolve_base_url happy path 需真实建连保存 target）
 mod common;

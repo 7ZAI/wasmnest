@@ -50,12 +50,7 @@ fn unsupported(api: &str) -> String {
 impl wasmnest::plugin::host_api_call::Host for WasmPluginState {
     /// 插件互调（桌面认证中心路径）：移动不提供——共享产物的 `ConsentGate`
     /// 移动实现走宿主原语直答，不经互调
-    fn call(
-        &mut self,
-        _request_topic: String,
-        _payload_json: String,
-        _timeout_ms: u64,
-    ) -> Result<String, String> {
+    fn call(&mut self, _request_topic: String, _payload_json: String, _timeout_ms: u64) -> Result<String, String> {
         Err(unsupported("host-api-call.call"))
     }
 }
@@ -115,10 +110,7 @@ impl HostModule for MobileDesktopCompatModule {
         true
     }
 
-    fn register(
-        &self,
-        linker: &mut wasmtime::component::Linker<WasmPluginState>,
-    ) -> wasmtime::Result<()> {
+    fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
         type D = wasmtime::component::HasSelf<WasmPluginState>;
         wasmnest::plugin::host_api_call::add_to_linker::<WasmPluginState, D>(linker, |s| s)?;
         wasmnest::plugin::host_platform_desktop::add_to_linker::<WasmPluginState, D>(linker, |s| s)?;

@@ -159,7 +159,10 @@ async fn enabled_pref_roundtrip_and_persisted_in_system_partition() {
     );
 
     manager.set_enabled(&agent_hub, true).await.expect("set enabled");
-    assert!(manager.is_enabled(&agent_hub).await, "置 true 后生效；偏好行可读且为 true");
+    assert!(
+        manager.is_enabled(&agent_hub).await,
+        "置 true 后生效；偏好行可读且为 true"
+    );
     // 持久化契约：用户显式 true 也落行（可见取向显式化，不依赖缺省推断）
     let storage = manager.host().storage();
     let value = storage

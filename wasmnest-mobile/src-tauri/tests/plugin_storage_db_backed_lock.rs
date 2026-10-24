@@ -46,22 +46,13 @@ const FORBIDDEN: &[(&str, &str)] = &[
         "PluginStorage::new(app_data_dir",
         "manager.rs 旧构造（文件落盘基目录）回接",
     ),
-    (
-        "load_from_disk",
-        "storage.rs 旧文件读面复活（DB-backed 无磁盘加载）",
-    ),
-    (
-        "storage_path",
-        "storage.rs 旧文件路径推导复活",
-    ),
+    ("load_from_disk", "storage.rs 旧文件读面复活（DB-backed 无磁盘加载）"),
+    ("storage_path", "storage.rs 旧文件路径推导复活"),
     (
         "PLUGIN_STORAGE_EXT",
         "旧 .json 文件后缀常量复活（迁移用字面量过滤，不引常量）",
     ),
-    (
-        "storage.flush(",
-        "旧缓存刷盘 API 复活（DB 写入即时，无刷盘语义）",
-    ),
+    ("storage.flush(", "旧缓存刷盘 API 复活（DB 写入即时，无刷盘语义）"),
 ];
 
 #[test]

@@ -9,7 +9,7 @@
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
 use wasmnest_plugin_api_mobile::permission::PERMISSION_FS_WRITE;
 
-use crate::plugin::bindings::{wasmnest, check_permission, ctx_of, guarded};
+use crate::plugin::bindings::{check_permission, ctx_of, guarded, wasmnest};
 use wasmnest_wasm_core::runtime_util::block_on_async;
 
 wasmnest_host_kit::expect_host_module!(MODULE_NAME);
@@ -136,12 +136,7 @@ impl wasmnest::plugin::host_fs_mobile::Host for WasmPluginState {
         }
     }
 
-    fn save_to_document(
-        &mut self,
-        src_path: String,
-        suggested_name: String,
-        mime_type: String,
-    ) -> Result<(), String> {
+    fn save_to_document(&mut self, src_path: String, suggested_name: String, mime_type: String) -> Result<(), String> {
         let saf_io = saf_io_checked(
             self,
             &src_path,

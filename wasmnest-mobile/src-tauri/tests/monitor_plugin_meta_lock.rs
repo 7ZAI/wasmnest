@@ -21,8 +21,14 @@ fn plugin_meta_is_attached_to_snapshot_and_cleared_on_remove() {
     );
 
     let snapshot = registry.snapshot();
-    assert_eq!(snapshot["plugin_meta"]["com.wasmnest.monitor"]["kind"], "internal-business");
-    assert_eq!(snapshot["plugin_meta"]["com.wasmnest.ai-chatbox"]["kind"], "business-app");
+    assert_eq!(
+        snapshot["plugin_meta"]["com.wasmnest.monitor"]["kind"],
+        "internal-business"
+    );
+    assert_eq!(
+        snapshot["plugin_meta"]["com.wasmnest.ai-chatbox"]["kind"],
+        "business-app"
+    );
     assert!(
         snapshot["plugins"]["com.wasmnest.monitor"].is_object(),
         "元数据段不得替换插件指标段"

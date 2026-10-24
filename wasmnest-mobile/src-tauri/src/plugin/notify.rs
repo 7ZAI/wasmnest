@@ -20,7 +20,7 @@
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
 use wasmnest_plugin_api_mobile::permission::PERMISSION_NOTIFY;
 
-use crate::plugin::bindings::{wasmnest, check_permission};
+use crate::plugin::bindings::{check_permission, wasmnest};
 // 平台桥三件套（panic 守卫 / 端口 trait / 异步桥）只被 `#[cfg(target_os =
 // "android")]` 分支使用——import 与平台分支同门开合，避免非 Android 构建报未用导入
 #[cfg(target_os = "android")]

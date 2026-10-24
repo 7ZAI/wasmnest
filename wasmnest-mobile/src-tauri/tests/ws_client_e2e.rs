@@ -1,6 +1,5 @@
 //! 移动 host-websocket 客户端域全链路（票 11 §7.3；票 05 迁移动宿主集成测试）
 
-
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -26,11 +25,7 @@ struct CapturingDispatcher {
 }
 
 impl wasmnest_wasm_core::bus::MessageDispatcher for CapturingDispatcher {
-    fn dispatch_to_wasm(
-        &self,
-        _plugin_id: &str,
-        msg: &wasmnest_server_base::wire::BusMessage,
-    ) -> anyhow::Result<()> {
+    fn dispatch_to_wasm(&self, _plugin_id: &str, msg: &wasmnest_server_base::wire::BusMessage) -> anyhow::Result<()> {
         self.captured.lock().unwrap().push(msg.clone());
         Ok(())
     }
@@ -87,7 +82,9 @@ fn ws_client_domain_full_loop_with_real_component() {
                         texts.push(t.to_string());
                         if !echoed {
                             echoed = true;
-                            sink.send(WsMsg::Binary(b"echo-payload".to_vec())).await.expect("echo send");
+                            sink.send(WsMsg::Binary(b"echo-payload".to_vec()))
+                                .await
+                                .expect("echo send");
                         }
                     }
                     WsMsg::Close(_) => break,
@@ -104,13 +101,18 @@ fn ws_client_domain_full_loop_with_real_component() {
             Arc::new(std::sync::Mutex::new(Vec::new()));
         host_ctx
             .message_bus
-            .set_dispatcher(Arc::new(CapturingDispatcher { captured: Arc::clone(&captured) }))
+            .set_dispatcher(Arc::new(CapturingDispatcher {
+                captured: Arc::clone(&captured),
+            }))
             .await;
 
         let tmp = tempfile::tempdir().expect("tempdir");
         let runtime = mobile_runtime(Some(tmp.path().join("aot")));
-        let component = Component::from_binary(wasmnest_wasm_core::test_support::runtime_engine(&runtime), &build_test_component(&["ws-client"]))
-            .expect("compile ws component");
+        let component = Component::from_binary(
+            wasmnest_wasm_core::test_support::runtime_engine(&runtime),
+            &build_test_component(&["ws-client"]),
+        )
+        .expect("compile ws component");
         let mut plugin = runtime
             .instantiate_component(
                 &component,
@@ -146,8 +148,8 @@ fn ws_client_domain_full_loop_with_real_component() {
 
         // send-text：guest → 宿主 → echo 服务器（上行闭环）
         {
-            let args = serde_json::json!({ "op": "ws-send-text", "handle": handle, "text": "hello-ws-loop" })
-                .to_string();
+            let args =
+                serde_json::json!({ "op": "ws-send-text", "handle": handle, "text": "hello-ws-loop" }).to_string();
             let out = plugin.invoke_command("ws-op", &args).expect("call invoke");
             let v: serde_json::Value = serde_json::from_str(&out).expect("invoke json");
             assert!(v["ok"].as_bool().unwrap(), "send-text failed: {out}");
@@ -207,7 +209,10 @@ fn ws_client_domain_full_loop_with_real_component() {
         .await;
         {
             let cap = captured.lock().unwrap();
-            let close = cap.iter().find(|m| m.topic.ends_with(":ws:close")).expect("close event");
+            let close = cap
+                .iter()
+                .find(|m| m.topic.ends_with(":ws:close"))
+                .expect("close event");
             assert_eq!(close.payload["wasClean"], true, "对端回 1000 → wasClean=true");
             assert_eq!(close.payload["code"], 1000, "close 事件携带对端关闭码");
         }

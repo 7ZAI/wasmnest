@@ -17,11 +17,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use tauri::Manager;
 use wasmnest_wasm_core::host_api::ports::{
     AuthEnginePort, ConnectionEnginePort, HostEnginePorts, HostFactsPort, PrimaryTarget, SafIoPort,
     WsReconnectPolicyPort,
 };
-use tauri::Manager;
 
 // ==================== 子 trait 实现（宿主引擎类型直接 impl 外部端口 trait） ====================
 
@@ -64,7 +64,15 @@ impl ConnectionEnginePort for crate::connection::manager::ConnectionManager {
     async fn primary_target(&self) -> wasmnest_wasm_core::Result<Option<(PrimaryTarget, bool)>> {
         let target = crate::connection::manager::ConnectionManager::get_target(self).await;
         let connected = crate::connection::manager::ConnectionManager::is_connected(self).await;
-        Ok(target.map(|t| (PrimaryTarget { address: t.address, port: t.port }, connected)))
+        Ok(target.map(|t| {
+            (
+                PrimaryTarget {
+                    address: t.address,
+                    port: t.port,
+                },
+                connected,
+            )
+        }))
     }
 }
 
@@ -241,11 +249,9 @@ impl HostEnginePorts for HostPorts {
         addr: String,
         port: u16,
     ) -> wasmnest_wasm_core::Result<String> {
-        let dto = crate::peer::net::dial_peer_endpoint(
-            app.clone(),
-            crate::peer::net::DialEndpoint { node_id, addr, port },
-        )
-        .await?;
+        let dto =
+            crate::peer::net::dial_peer_endpoint(app.clone(), crate::peer::net::DialEndpoint { node_id, addr, port })
+                .await?;
         Ok(dto.status)
     }
 
@@ -271,15 +277,21 @@ impl HostEnginePorts for HostPorts {
         crate::peer::net::revoke_trusted_peer(app.clone(), node_id).await
     }
 
-    async fn peer_set_shared_roots(&self, app: &tauri::AppHandle, entries_json: String) -> wasmnest_wasm_core::Result<()> {
-        let seeds: Vec<SharedRootSeed> = serde_json::from_str(&entries_json)
-            .map_err(|e| crate::AppError::Serialization(e))?;
+    async fn peer_set_shared_roots(
+        &self,
+        app: &tauri::AppHandle,
+        entries_json: String,
+    ) -> wasmnest_wasm_core::Result<()> {
+        let seeds: Vec<SharedRootSeed> =
+            serde_json::from_str(&entries_json).map_err(|e| crate::AppError::Serialization(e))?;
         let entries = seeds
             .into_iter()
             .map(|s| wasmnest_server_peer_net::SharedDirEntry {
                 id: s.id,
                 name: s.name,
-                root: wasmnest_server_peer_net::SharedDirRoot::Saf { tree_uri: s.saf_tree_uri },
+                root: wasmnest_server_peer_net::SharedDirRoot::Saf {
+                    tree_uri: s.saf_tree_uri,
+                },
             })
             .collect();
         crate::peer::net::set_shared_roots(app.clone(), entries).await
@@ -288,14 +300,12 @@ impl HostEnginePorts for HostPorts {
     async fn peer_start_node(&self, _app: &tauri::AppHandle, caller: &str) -> wasmnest_wasm_core::Result<bool> {
         // 与 WIT host-peer 同一入口：服务租约按插件 id 记账
         let ports = wasmnest_server_peer_net::plugin_binding::ports::ports();
-        wasmnest_server_peer_net::plugin_binding::peer_start_node(&ports, caller)
-            .map_err(crate::AppError::Plugin)
+        wasmnest_server_peer_net::plugin_binding::peer_start_node(&ports, caller).map_err(crate::AppError::Plugin)
     }
 
     async fn peer_stop_node(&self, _app: &tauri::AppHandle, caller: &str) -> wasmnest_wasm_core::Result<bool> {
         let ports = wasmnest_server_peer_net::plugin_binding::ports::ports();
-        wasmnest_server_peer_net::plugin_binding::peer_stop_node(&ports, caller)
-            .map_err(crate::AppError::Plugin)
+        wasmnest_server_peer_net::plugin_binding::peer_stop_node(&ports, caller).map_err(crate::AppError::Plugin)
     }
 
     // ==================== peer：transfer / receive / remote ====================
@@ -304,7 +314,11 @@ impl HostEnginePorts for HostPorts {
         crate::peer::transfer::cancel_peer_transfer(app.clone(), batch_id).await
     }
 
-    async fn peer_cancel_receiving(&self, app: &tauri::AppHandle, batch_id: String) -> wasmnest_wasm_core::Result<bool> {
+    async fn peer_cancel_receiving(
+        &self,
+        app: &tauri::AppHandle,
+        batch_id: String,
+    ) -> wasmnest_wasm_core::Result<bool> {
         crate::peer::receive::cancel_peer_receiving(app.clone(), batch_id).await
     }
 
@@ -318,12 +332,22 @@ impl HostEnginePorts for HostPorts {
         crate::peer::transfer::send_files_to_peer_with_policy(app.clone(), node_id, paths, force_encrypt).await
     }
 
-    async fn peer_respond_transfer(&self, app: &tauri::AppHandle, batch_id: String, accept: bool) -> wasmnest_wasm_core::Result<()> {
+    async fn peer_respond_transfer(
+        &self,
+        app: &tauri::AppHandle,
+        batch_id: String,
+        accept: bool,
+    ) -> wasmnest_wasm_core::Result<()> {
         crate::peer::receive::respond_peer_transfer(app.clone(), batch_id, accept).await?;
         Ok(())
     }
 
-    async fn peer_set_receive_policy(&self, app: &tauri::AppHandle, mode: String, timeout_secs: u64) -> wasmnest_wasm_core::Result<()> {
+    async fn peer_set_receive_policy(
+        &self,
+        app: &tauri::AppHandle,
+        mode: String,
+        timeout_secs: u64,
+    ) -> wasmnest_wasm_core::Result<()> {
         crate::peer::receive::set_peer_receive_policy(app.clone(), mode, timeout_secs).await
     }
 
@@ -335,11 +359,19 @@ impl HostEnginePorts for HostPorts {
         crate::peer::transfer::resume_peer_transfer(app.clone(), batch_id).await
     }
 
-    async fn peer_set_download_dir(&self, app: &tauri::AppHandle, path: Option<String>) -> wasmnest_wasm_core::Result<()> {
+    async fn peer_set_download_dir(
+        &self,
+        app: &tauri::AppHandle,
+        path: Option<String>,
+    ) -> wasmnest_wasm_core::Result<()> {
         crate::peer::receive::set_peer_download_dir(app, path).await
     }
 
-    async fn peer_list_shared_roots(&self, app: &tauri::AppHandle, node_id: String) -> wasmnest_wasm_core::Result<String> {
+    async fn peer_list_shared_roots(
+        &self,
+        app: &tauri::AppHandle,
+        node_id: String,
+    ) -> wasmnest_wasm_core::Result<String> {
         let roots = crate::peer::remote::list_peer_shared_roots(app.clone(), node_id).await?;
         serde_json::to_string(&roots).map_err(|e| crate::AppError::Serialization(e))
     }
@@ -409,7 +441,11 @@ impl HostEnginePorts for HostPorts {
         crate::plugin::android_plugins::delete_file(&path).await
     }
 
-    async fn is_within_app_downloads_dir(&self, app: &tauri::AppHandle, path: &str) -> wasmnest_wasm_core::Result<bool> {
+    async fn is_within_app_downloads_dir(
+        &self,
+        app: &tauri::AppHandle,
+        path: &str,
+    ) -> wasmnest_wasm_core::Result<bool> {
         Ok(crate::plugin::android_plugins::is_within_app_downloads_dir(app, path).await)
     }
 
@@ -476,10 +512,7 @@ impl HostEnginePorts for HostPorts {
                 .run_mobile_plugin_async("checkNotificationPermission", serde_json::json!({}))
                 .await
                 .map_err(|e| format!("notification permission check failed: {e}"))?;
-            Ok(response
-                .get("granted")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false))
+            Ok(response.get("granted").and_then(|v| v.as_bool()).unwrap_or(false))
         }
         #[cfg(not(target_os = "android"))]
         {
@@ -499,10 +532,7 @@ impl HostEnginePorts for HostPorts {
                 .run_mobile_plugin_async("requestNotificationPermission", serde_json::json!({}))
                 .await
                 .map_err(|e| format!("notification permission request failed: {e}"))?;
-            Ok(response
-                .get("granted")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false))
+            Ok(response.get("granted").and_then(|v| v.as_bool()).unwrap_or(false))
         }
         #[cfg(not(target_os = "android"))]
         {

@@ -1,7 +1,6 @@
 //! 移动 host-terminal-stream / host-connection / jwt-auth 全链路
 //! （票 12 · ABI v15；票 05 迁移动宿主集成测试）
 
-
 use std::sync::Arc;
 use wasmnest_wasm_core::manager::runtime::{LoadedWasmPlugin, WasmRuntime};
 // 夹具构建器（票 08 批次三：住宿主测试 support，不再经内核 test_support）
@@ -26,11 +25,7 @@ struct CapturingDispatcher {
 }
 
 impl wasmnest_wasm_core::bus::MessageDispatcher for CapturingDispatcher {
-    fn dispatch_to_wasm(
-        &self,
-        _plugin_id: &str,
-        msg: &wasmnest_server_base::wire::BusMessage,
-    ) -> anyhow::Result<()> {
+    fn dispatch_to_wasm(&self, _plugin_id: &str, msg: &wasmnest_server_base::wire::BusMessage) -> anyhow::Result<()> {
         self.captured.lock().unwrap().push(msg.clone());
         Ok(())
     }
@@ -81,14 +76,18 @@ fn terminal_session_domain_full_loop_with_real_component() {
             Arc::new(std::sync::Mutex::new(Vec::new()));
         host_ctx
             .message_bus
-            .set_dispatcher(Arc::new(CapturingDispatcher { captured: Arc::clone(&captured) }))
+            .set_dispatcher(Arc::new(CapturingDispatcher {
+                captured: Arc::clone(&captured),
+            }))
             .await;
 
         let tmp = tempfile::tempdir().expect("tempdir");
         let runtime = mobile_runtime(Some(tmp.path().join("aot")));
-        let component =
-            Component::from_binary(wasmnest_wasm_core::test_support::runtime_engine(&runtime), &build_test_component(&["terminal-session"]))
-                .expect("compile terminal-session component");
+        let component = Component::from_binary(
+            wasmnest_wasm_core::test_support::runtime_engine(&runtime),
+            &build_test_component(&["terminal-session"]),
+        )
+        .expect("compile terminal-session component");
         // 权限真源 = 内核 PermissionManager（2026-10-14 桌面同构）：向共享上下文
         // 授权后再实例化（逐实例 `granted_permissions` 副本 / for_plugin 参数已退役）
         host_ctx.grant_permissions(
@@ -100,13 +99,7 @@ fn terminal_session_domain_full_loop_with_real_component() {
             ],
         );
         let mut plugin = runtime
-            .instantiate_component(
-                &component,
-                TEST_PLUGIN_ID,
-                Arc::clone(&host_ctx),
-                &[],
-                None,
-            )
+            .instantiate_component(&component, TEST_PLUGIN_ID, Arc::clone(&host_ctx), &[], None)
             .expect("instantiate terminal-session component");
 
         // activate（guest 订阅 ws:* 四 topic + ws:message 二进制）→
@@ -134,7 +127,9 @@ fn terminal_session_domain_full_loop_with_real_component() {
         )
         .await;
         {
-            let texts = mock.received_text(wasmnest_wasm_core::test_support::mock_plugin_ws::ENDPOINT_TERMINAL).await;
+            let texts = mock
+                .received_text(wasmnest_wasm_core::test_support::mock_plugin_ws::ENDPOINT_TERMINAL)
+                .await;
             assert_eq!(texts[0]["type"], "auth", "首帧必为宿主代发的 auth 帧");
             let token = texts[0]["token"].as_str().expect("auth token");
             assert_eq!(token, "t12-loop-token", "代发 token 与宿主认证状态同源");
@@ -152,17 +147,13 @@ fn terminal_session_domain_full_loop_with_real_component() {
         {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
             loop {
-                let got = captured
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .any(|m| {
-                        m.topic.ends_with(":ws:message")
-                            && m.payload_binary
-                                .as_deref()
-                                .map(|b| b.windows(10).any(|w| w == b"subscribed"))
-                                .unwrap_or(false)
-                    });
+                let got = captured.lock().unwrap().iter().any(|m| {
+                    m.topic.ends_with(":ws:message")
+                        && m.payload_binary
+                            .as_deref()
+                            .map(|b| b.windows(10).any(|w| w == b"subscribed"))
+                            .unwrap_or(false)
+                });
                 if got {
                     break;
                 }
@@ -173,9 +164,7 @@ fn terminal_session_domain_full_loop_with_real_component() {
                         .iter()
                         .map(|m| format!("{} (bin={})", m.topic, m.payload_binary.is_some()))
                         .collect();
-                    panic!(
-                        "timed out waiting for subscribed frame on ws:message; captured topics: {topics:?}"
-                    );
+                    panic!("timed out waiting for subscribed frame on ws:message; captured topics: {topics:?}");
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             }
@@ -194,7 +183,9 @@ fn terminal_session_domain_full_loop_with_real_component() {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
             loop {
                 let ok = {
-                    let out = plugin.invoke_command("terminal-op", r#"{"op":"ws-collect"}"#).expect("call invoke");
+                    let out = plugin
+                        .invoke_command("terminal-op", r#"{"op":"ws-collect"}"#)
+                        .expect("call invoke");
                     out.contains("no page channel")
                 };
                 if ok {
@@ -225,7 +216,9 @@ fn terminal_session_domain_full_loop_with_real_component() {
         )
         .await;
         {
-            let texts = mock.received_text(wasmnest_wasm_core::test_support::mock_plugin_ws::ENDPOINT_TERMINAL).await;
+            let texts = mock
+                .received_text(wasmnest_wasm_core::test_support::mock_plugin_ws::ENDPOINT_TERMINAL)
+                .await;
             let ack = texts.iter().find(|f| f["type"] == "ack").expect("ack frame");
             assert_eq!(ack["offset"], 65536, "ack offset 水位形状");
         }
@@ -233,7 +226,9 @@ fn terminal_session_domain_full_loop_with_real_component() {
         // primary-target：宿主无主连接目标 → 显性 Err（无头单例态；
         // fail-visible，禁空对象）——fail path 同样证明原语被真实驱动
         {
-            let out = plugin.invoke_command("terminal-op", r#"{"op":"ts-primary-target"}"#).expect("call invoke");
+            let out = plugin
+                .invoke_command("terminal-op", r#"{"op":"ts-primary-target"}"#)
+                .expect("call invoke");
             let v: serde_json::Value = serde_json::from_str(&out).expect("invoke json");
             // 测试进程可能已配 target（单例全局）——两种结果都合法，但形态
             // 必须二选一：合法 JSON 事实 或 显性 Err（禁第三种）

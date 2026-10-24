@@ -33,9 +33,8 @@ fn fixture_target_dir() -> PathBuf {
 }
 
 /// 测试组件字节缓存（按 features key），跨用例复用避免重复 cargo build
-static COMPONENT_CACHE: std::sync::OnceLock<
-    std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>,
-> = std::sync::OnceLock::new();
+static COMPONENT_CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>> =
+    std::sync::OnceLock::new();
 
 /// 构建真实插件组件：SDK `wasm_entry!` 宏产物（样本 = 合并后的
 /// `com.wasmnest.terminal-session`（终端域 + 任务域））
@@ -73,10 +72,9 @@ pub fn build_terminal_session_component() -> Vec<u8> {
         .expect("Failed to run cargo build for terminal-session component");
     assert!(status.success(), "terminal-session WASM build failed");
 
-    let core = std::fs::read(
-        fixture_target_dir().join("wasm32-unknown-unknown/release/bedcode_plugin_terminal_session.wasm"),
-    )
-    .expect("Failed to read terminal-session module after build");
+    let core =
+        std::fs::read(fixture_target_dir().join("wasm32-unknown-unknown/release/bedcode_plugin_terminal_session.wasm"))
+            .expect("Failed to read terminal-session module after build");
     // 宏产物必经 componentize（等效本函数内编码）；SDK 构建链已内置该步骤。
     // 此处直接编码 core module（若传入已组件化产物，编码器会拒绝）
     let component = wit_component::ComponentEncoder::default()
@@ -138,10 +136,9 @@ pub fn build_test_component(features: &[&str]) -> Vec<u8> {
         .expect("Failed to run cargo build for test component");
     assert!(status.success(), "Test component WASM build failed");
 
-    let core = std::fs::read(
-        fixture_target_dir().join("wasm32-unknown-unknown/release/wasmnest_plugin_component_test.wasm"),
-    )
-    .expect("Failed to read test component module after build");
+    let core =
+        std::fs::read(fixture_target_dir().join("wasm32-unknown-unknown/release/wasmnest_plugin_component_test.wasm"))
+            .expect("Failed to read test component module after build");
     let component = wit_component::ComponentEncoder::default()
         .validate(true)
         .module(&core)

@@ -56,12 +56,7 @@ fn mobile_src_root() -> PathBuf {
 /// 逐行扫描宿主源码（跳过纯注释行），返回命中的违规记录
 fn scan(retired: &[&str]) -> Vec<String> {
     let mut violations: Vec<String> = Vec::new();
-    for rel in [
-        "src/peer/net.rs",
-        "src/peer/ports.rs",
-        "src/peer/seam.rs",
-        "src/lib.rs",
-    ] {
+    for rel in ["src/peer/net.rs", "src/peer/ports.rs", "src/peer/seam.rs", "src/lib.rs"] {
         let path = mobile_src_root().join(rel);
         let content = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 {rel} 失败：{e}"));
         for (idx, raw_line) in content.lines().enumerate() {

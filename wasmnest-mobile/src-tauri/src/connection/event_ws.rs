@@ -112,9 +112,11 @@ pub async fn run_supervisor(
                         // 重连前需重新配对/认证，HTTP reauth 只会反复被拒（2026-09-29
                         // 616 次/98 秒日志风暴的直接放大器）；等新认证流（用户重扫 QR/
                         // 配对）再重建。
-                        Ok(event @ (WsClientEvent::Disconnected
+                        Ok(
+                            event @ (WsClientEvent::Disconnected
                             | WsClientEvent::Error { .. }
-                            | WsClientEvent::ServerClosed { .. })) => {
+                            | WsClientEvent::ServerClosed { .. }),
+                        ) => {
                             let close_code = match &event {
                                 WsClientEvent::ServerClosed { code, .. } => Some(*code),
                                 _ => None,

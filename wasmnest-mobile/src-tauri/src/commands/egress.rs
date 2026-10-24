@@ -50,10 +50,7 @@ pub fn egress_revoke_grants() -> Result<()> {
 /// 读取插件网络出站策略档位（`always_ask` | `default` | `always_allow`；缺省 default）
 #[tauri::command]
 pub fn egress_get_strategy(plugin_id: String) -> Result<String> {
-    Ok(crate::egress::policy()
-        .strategy_for(&plugin_id)
-        .as_str()
-        .to_string())
+    Ok(crate::egress::policy().strategy_for(&plugin_id).as_str().to_string())
 }
 
 /// 设置插件网络出站策略档位；未知档位显性报错（写入面不猜，见 [`AuthStrategy::parse_wire`]）

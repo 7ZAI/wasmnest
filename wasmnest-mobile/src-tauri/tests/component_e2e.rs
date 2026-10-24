@@ -11,20 +11,18 @@
 //! ws / 终端协议两个域名闭环各自独立成文件（`ws_client_e2e.rs` /
 //! `terminal_session_e2e.rs`）。
 
-
 use std::collections::HashSet;
 use std::sync::Arc;
 
 use wasmnest_host_kit::WasmPluginState;
-use wasmnest_wasm_core::manager::runtime::{LoadedWasmPlugin, WasmRuntime};
 use wasmnest_mobile_lib::plugin::bindings::wasmnest;
+use wasmnest_wasm_core::manager::runtime::{LoadedWasmPlugin, WasmRuntime};
 // 夹具构建器（票 08 批次三：住宿主测试 support，不再经内核 test_support）
 #[path = "support/fixtures.rs"]
 mod fixtures;
 use fixtures::{build_terminal_session_component, build_test_component};
 use wasmnest_wasm_core::test_support::{
-    build_component_linker, build_host_ctx, plugin_raw_store, probe_wasi_p2_reregistration,
-    test_engine, TEST_PLUGIN_ID,
+    build_component_linker, build_host_ctx, plugin_raw_store, probe_wasi_p2_reregistration, test_engine, TEST_PLUGIN_ID,
 };
 use wasmtime::component::Component;
 use wasmtime::ResourceLimiter;
@@ -81,16 +79,22 @@ fn test_component_roundtrip_and_host_impl() {
             .await
             .expect("preset storage key");
 
-        let runtime =
-            mobile_runtime(Some(tmp.path().join("aot")));
+        let runtime = mobile_runtime(Some(tmp.path().join("aot")));
         // 组件必须用 runtime 自身 Engine 编译（跨 Engine 实例化被 wasmtime 拒绝）
-        let component = Component::from_binary(wasmnest_wasm_core::test_support::runtime_engine(&runtime), &build_test_component(&[]))
-            .expect("compile test component");
+        let component = Component::from_binary(
+            wasmnest_wasm_core::test_support::runtime_engine(&runtime),
+            &build_test_component(&[]),
+        )
+        .expect("compile test component");
         let mut plugin = runtime
             .instantiate_component(
                 &component,
                 TEST_PLUGIN_ID,
-                ctx_with_grant(&host_ctx, TEST_PLUGIN_ID, HashSet::from([PERMISSION_STORAGE.to_string()])),
+                ctx_with_grant(
+                    &host_ctx,
+                    TEST_PLUGIN_ID,
+                    HashSet::from([PERMISSION_STORAGE.to_string()]),
+                ),
                 &[],
                 None,
             )
@@ -110,10 +114,7 @@ fn test_component_roundtrip_and_host_impl() {
         // ⚠️ 断言必须紧跟调用之后：若在调用前读 store 燃料，会读到未消耗的整额
         // （票 04 把 abi.version 原生探测换成 get_manifest 时曾因此断言空转——
         // 无任何导出调用可测）。
-        let manifest: serde_json::Value = serde_json::from_str(
-            &plugin.get_manifest().expect("manifest"),
-        )
-        .unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(&plugin.get_manifest().expect("manifest")).unwrap();
         {
             let (store, _) = plugin_raw_store(&mut plugin);
             let budget = store
@@ -148,8 +149,11 @@ fn test_component_business_methods_roundtrip() {
             .expect("preset storage key");
 
         let runtime = mobile_runtime(Some(tmp.path().join("aot")));
-        let component = Component::from_binary(wasmnest_wasm_core::test_support::runtime_engine(&runtime), &build_test_component(&[]))
-            .expect("compile test component");
+        let component = Component::from_binary(
+            wasmnest_wasm_core::test_support::runtime_engine(&runtime),
+            &build_test_component(&[]),
+        )
+        .expect("compile test component");
         // 统一权限门（单形态）：WASM 实例内 host-storage 走统一 PermissionManager——
         // 测试须把 manifest 权限 grant 进统一词表（生产路径在 activate 批准时做）
         host_ctx.grant_permissions(TEST_PLUGIN_ID, &[PERMISSION_STORAGE.to_string()]);
@@ -157,7 +161,11 @@ fn test_component_business_methods_roundtrip() {
             .instantiate_component(
                 &component,
                 TEST_PLUGIN_ID,
-                ctx_with_grant(&host_ctx, TEST_PLUGIN_ID, HashSet::from([PERMISSION_STORAGE.to_string()])),
+                ctx_with_grant(
+                    &host_ctx,
+                    TEST_PLUGIN_ID,
+                    HashSet::from([PERMISSION_STORAGE.to_string()]),
+                ),
                 &[],
                 None,
             )
@@ -185,18 +193,13 @@ fn test_component_business_methods_roundtrip() {
         );
 
         // manifest
-        let manifest: serde_json::Value =
-            serde_json::from_str(&plugin.get_manifest().expect("manifest")).unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(&plugin.get_manifest().expect("manifest")).unwrap();
         assert_eq!(manifest["id"], "com.wasmnest.component-test");
 
         // bus 事件回调（组件返回 Ok）：统一壳 on_message（单形态）——
         // BusMessage 拆为 topic/sender/payload 三参
         plugin
-            .on_message(
-                &"t".to_string(),
-                &"s".to_string(),
-                &serde_json::json!({}),
-            )
+            .on_message(&"t".to_string(), &"s".to_string(), &serde_json::json!({}))
             .expect("on_message");
 
         // 生命周期事件映射（auth/disconnect/session 各走一遍）
@@ -230,9 +233,11 @@ fn test_component_fuel_trap() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let host_ctx = build_host_ctx();
         let runtime = mobile_runtime(Some(tmp.path().join("aot")));
-        let component =
-            Component::from_binary(wasmnest_wasm_core::test_support::runtime_engine(&runtime), &build_test_component(&["spin-loop"]))
-                .expect("compile test component");
+        let component = Component::from_binary(
+            wasmnest_wasm_core::test_support::runtime_engine(&runtime),
+            &build_test_component(&["spin-loop"]),
+        )
+        .expect("compile test component");
         let mut plugin = runtime
             .instantiate_component(
                 &component,
@@ -272,9 +277,11 @@ fn test_component_fuel_trap_poisons_store_and_reinstantiate_recovers() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let host_ctx = build_host_ctx();
         let runtime = mobile_runtime(Some(tmp.path().join("aot")));
-        let component =
-            Component::from_binary(wasmnest_wasm_core::test_support::runtime_engine(&runtime), &build_test_component(&[]))
-                .expect("compile test component");
+        let component = Component::from_binary(
+            wasmnest_wasm_core::test_support::runtime_engine(&runtime),
+            &build_test_component(&[]),
+        )
+        .expect("compile test component");
 
         // 1. 实例 A：注入 1 单位燃料后直接调导出（绕过 invoke_command 的调用前续费）
         let mut plugin_a = runtime
@@ -289,8 +296,8 @@ fn test_component_fuel_trap_poisons_store_and_reinstantiate_recovers() {
         {
             let (store, instance) = plugin_raw_store(&mut plugin_a);
             store.set_fuel(1).expect("set tiny fuel");
-            let binding = wasmnest_mobile_lib::plugin::bindings::Plugin::new(&mut *store, instance)
-                .expect("bind exports");
+            let binding =
+                wasmnest_mobile_lib::plugin::bindings::Plugin::new(&mut *store, instance).expect("bind exports");
             let result = wasmnest_wasm_core::runtime_util::block_on_async(async {
                 binding
                     .wasmnest_plugin_command()
@@ -357,9 +364,11 @@ fn test_component_limiter_rejects_over_limit_memory() {
 
         // 集成层：guest 直接 memory.grow 300MB → limiter 拒绝 → 返回 {"grow":"failed"}
         let runtime = mobile_runtime(Some(tmp.path().join("aot")));
-        let component =
-            Component::from_binary(wasmnest_wasm_core::test_support::runtime_engine(&runtime), &build_test_component(&["big-alloc"]))
-                .expect("compile test component");
+        let component = Component::from_binary(
+            wasmnest_wasm_core::test_support::runtime_engine(&runtime),
+            &build_test_component(&["big-alloc"]),
+        )
+        .expect("compile test component");
         let mut plugin = runtime
             .instantiate_component(
                 &component,
@@ -401,9 +410,11 @@ fn test_sdk_macro_component_loads_and_activates() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let host_ctx = build_host_ctx();
         let runtime = mobile_runtime(Some(tmp.path().join("aot")));
-        let component =
-            Component::from_binary(wasmnest_wasm_core::test_support::runtime_engine(&runtime), &build_terminal_session_component())
-                .expect("compile terminal-session component");
+        let component = Component::from_binary(
+            wasmnest_wasm_core::test_support::runtime_engine(&runtime),
+            &build_terminal_session_component(),
+        )
+        .expect("compile terminal-session component");
         // 生产 manifest 权限集（activate 期 ws 属主 topic 订阅 + 认证状态探测按声明放行）
         let granted: HashSet<String> = [
             wasmnest_plugin_api_mobile::permission::PERMISSION_AUTH,
@@ -433,19 +444,14 @@ fn test_sdk_macro_component_loads_and_activates() {
         assert_eq!(plugin.deactivate().expect("deactivate"), 0);
 
         // manifest（宏内 `manifest()` 序列化 plugin.json）
-        let manifest: serde_json::Value =
-            serde_json::from_str(&plugin.get_manifest().expect("manifest")).unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(&plugin.get_manifest().expect("manifest")).unwrap();
         assert_eq!(manifest["id"], "com.wasmnest.terminal-session");
 
         // 命令调用：bedcode 应用对未知命令返回 Err → 宏序列化为 {"error": ...} JSON
-        let result = plugin
-            .invoke_command("no.such.cmd", "{}")
-            .expect("invoke_command");
+        let result = plugin.invoke_command("no.such.cmd", "{}").expect("invoke_command");
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert!(
-            v["error"]
-                .as_str()
-                .is_some_and(|s| s.contains("unknown command")),
+            v["error"].as_str().is_some_and(|s| s.contains("unknown command")),
             "命令错误应经宏转义为 error JSON，实际: {}",
             result
         );
@@ -468,9 +474,7 @@ fn test_component_aot_cache_hit() {
         std::fs::write(&src, &component_bytes).expect("write source component");
 
         // 首次编译：产物落缓存
-        runtime
-            .compile_component_from_file(&src)
-            .expect("first compile");
+        runtime.compile_component_from_file(&src).expect("first compile");
         let cache_files: Vec<_> = std::fs::read_dir(&cache_dir)
             .expect("cache dir")
             .filter_map(|e| e.ok())
@@ -501,10 +505,7 @@ fn test_component_aot_cache_hit() {
         let cache_mtime2 = std::fs::metadata(&cache_file)
             .and_then(|m| m.modified())
             .expect("cache mtime after second compile");
-        assert_eq!(
-            cache_mtime, cache_mtime2,
-            "二次编译未命中缓存（缓存文件被重写）"
-        );
+        assert_eq!(cache_mtime, cache_mtime2, "二次编译未命中缓存（缓存文件被重写）");
 
         // 产物不写回源目录：源目录无 .wasm/.cwasm 残留
         let src_dir: Vec<_> = std::fs::read_dir(tmp.path())

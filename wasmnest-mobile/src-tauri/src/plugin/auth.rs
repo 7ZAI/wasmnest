@@ -10,7 +10,7 @@
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
 use wasmnest_plugin_api_mobile::permission::PERMISSION_AUTH;
 
-use crate::plugin::bindings::{wasmnest, check_permission, ctx_of};
+use crate::plugin::bindings::{check_permission, ctx_of, wasmnest};
 use wasmnest_wasm_core::host_api::ports::PORT_NOT_WIRED;
 use wasmnest_wasm_core::runtime_util::block_on_async;
 

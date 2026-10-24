@@ -98,8 +98,7 @@ const KEPT_ADAPTER_FACE: &[(&str, &str)] = &[
 
 /// 逐行扫描（跳过纯注释行——模块头记账段落不算回接），返回命中记录
 fn scan_source_lines(path: &Path, needles: &[&str]) -> Vec<String> {
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("读取 {} 失败：{e}", path.display()));
+    let content = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("读取 {} 失败：{e}", path.display()));
     let mut hits: Vec<String> = Vec::new();
     for (idx, line) in content.lines().enumerate() {
         let trimmed = line.trim_start();
@@ -150,8 +149,7 @@ fn mobile_peer_adapter_face_stays() {
     let root = src_tauri_root();
     for (rel, needle) in KEPT_ADAPTER_FACE {
         let path = root.join(rel);
-        let content =
-            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 {} 失败：{e}", path.display()));
+        let content = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 {} 失败：{e}", path.display()));
         assert!(
             content.contains(needle),
             "适配面缺失：{rel} 中找不到 `{needle}`（能力域集中化后宿主仍须装配端口 / \
@@ -164,8 +162,7 @@ fn mobile_peer_adapter_face_stays() {
 #[test]
 fn mobile_depends_on_shared_peer_capability() {
     let path = src_tauri_root().join("Cargo.toml");
-    let content =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 {} 失败：{e}", path.display()));
+    let content = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 {} 失败：{e}", path.display()));
     for needle in ["wasmnest-server-peer-net", "wasmnest-server-base"] {
         assert!(
             content.contains(needle),

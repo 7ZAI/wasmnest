@@ -79,10 +79,7 @@ const RETAINED_FACE: [(&str, &str); 7] = [
         "src/plugin/terminal_stream.rs",
         "pub fn forward_output(",
     ),
-    (
-        "src/plugin/terminal_stream.rs",
-        "pub fn page_subscribe(",
-    ),
+    ("src/plugin/terminal_stream.rs", "pub fn page_subscribe("),
     (
         // 票 04：host-terminal-stream 属移动独有域 ⇒ 整面迁移动宿主 adapter
         // （WIT 方法名即 `forward_output`，不再有 `terminal_stream_` 前缀的壳函数）
@@ -248,8 +245,7 @@ fn mobile_terminal_retained_face_stays() {
     // 前端输出通道与认证出示将失去宿主承载。
     let root = mobile_root();
     for (rel, needle) in RETAINED_FACE {
-        let content =
-            std::fs::read_to_string(root.join(rel)).unwrap_or_else(|e| panic!("读取 {rel} 失败：{e}"));
+        let content = std::fs::read_to_string(root.join(rel)).unwrap_or_else(|e| panic!("读取 {rel} 失败：{e}"));
         assert!(
             content.contains(needle),
             "终端保留面缺失（票 12 只摘编排，不摘传输面）：{rel} 中找不到 `{needle}`"

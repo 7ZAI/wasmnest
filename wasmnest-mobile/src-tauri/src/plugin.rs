@@ -60,7 +60,6 @@ pub mod message_bus {
 /// 插件身份校验（目录名与 manifest id 一致性，防冒名）
 pub use wasmnest_wasm_core::manager::validation;
 
-
 /// WASM 运行时与 16 域 host 原语（Engine/Store/组件绑定/host_impl；批次 1b 迁入）
 pub use wasmnest_wasm_core::manager::runtime as wasm_runtime;
 

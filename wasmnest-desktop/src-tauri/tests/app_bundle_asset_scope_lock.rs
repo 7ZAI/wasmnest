@@ -61,8 +61,8 @@ fn assets_command_doc_does_not_claim_static_scope_guarantees_serving() {
     // tauri.conf.json 的静态作用域保证」——该断言对 WASMNEST_PLUGINS_DIR 形态不成立
     // （正是本锁钉住的坑）。注释与实现漂移会让下一个读代码的人以为静态作用域够用。
     let assets = read_file("src/plugin/assets.rs");
-    let claims_static_guarantee = assets.contains("assetProtocol.scope`（`$RESOURCE/**/*`）保证")
-        || assets.contains("由 `tauri.conf.json` 的");
+    let claims_static_guarantee =
+        assets.contains("assetProtocol.scope`（`$RESOURCE/**/*`）保证") || assets.contains("由 `tauri.conf.json` 的");
     assert!(
         !claims_static_guarantee,
         "plugin/assets.rs 的模块注释不得再声称落点由 tauri.conf.json 的静态作用域保证——\n\

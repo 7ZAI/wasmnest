@@ -5,9 +5,9 @@
 //! 编到 wasm32 时不能依赖 wasm-core；宿主侧不再消费它。
 
 pub use wasmnest_wasm_core::manifest::{
-    CommandContribution, ConfigProperty, LifecycleContribution, NavTabContribution,
-    PluginConfiguration, PluginContributes, PluginKind, PluginManifest, PluginPlatform,
-    PluginState, PluginType, SettingsContribution, TerminalContribution, ViewContribution,
+    CommandContribution, ConfigProperty, LifecycleContribution, NavTabContribution, PluginConfiguration,
+    PluginContributes, PluginKind, PluginManifest, PluginPlatform, PluginState, PluginType, SettingsContribution,
+    TerminalContribution, ViewContribution,
 };
 
 use serde::{Deserialize, Serialize};

@@ -351,7 +351,10 @@ pub async fn execute_proxy(request: HttpProxyRequest, app: Option<&tauri::AppHan
             })
             .or_insert_with(|| v.to_str().unwrap_or("").to_string());
     }
-    let has_crypto_resp_header = resp_headers.get("x-wasmnest-crypto").map(|v| v == "v1").unwrap_or(false);
+    let has_crypto_resp_header = resp_headers
+        .get("x-wasmnest-crypto")
+        .map(|v| v == "v1")
+        .unwrap_or(false);
 
     let raw_body = response
         .bytes()

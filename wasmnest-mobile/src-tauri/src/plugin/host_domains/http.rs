@@ -19,14 +19,12 @@
 
 use std::sync::Arc;
 
-use wasmnest_host_kit::WasmPluginState;
-use super::{current_handle, host_ctx};
 use super::support::guarded_host_call;
-use wasmnest_server_http::plugin_binding::egress::http_fetch as core_http_fetch;
-use wasmnest_server_http::plugin_binding::ports::{
-    BoxedBlocked, HttpEventSink, HttpPorts, OutboundAuth,
-};
+use super::{current_handle, host_ctx};
 use tauri::Emitter;
+use wasmnest_host_kit::WasmPluginState;
+use wasmnest_server_http::plugin_binding::egress::http_fetch as core_http_fetch;
+use wasmnest_server_http::plugin_binding::ports::{BoxedBlocked, HttpEventSink, HttpPorts, OutboundAuth};
 
 use crate::plugin::bindings::wasmnest;
 
@@ -35,7 +33,6 @@ impl wasmnest::plugin::host_http::Host for WasmPluginState {
         http_fetch(self, &request_json)
     }
 }
-
 
 // ==================== 能力域端口 adapter ====================
 
@@ -63,16 +60,13 @@ impl HttpPorts for StateHttpPorts {
         // （fail-closed：弹窗事务没有载体，收紧而非放行）。
         let origin = normalize_origin(url);
         let Some(app_handle) = self.app_handle.clone() else {
-            return OutboundAuth::CheckFailed(
-                "egress denied: app_handle unavailable (headless/test)".to_string(),
-            );
+            return OutboundAuth::CheckFailed("egress denied: app_handle unavailable (headless/test)".to_string());
         };
         let ports = self.ports.clone();
         let source = format!("plugin:{}", plugin_id);
         let url_owned = url.to_string();
         match tokio::task::block_in_place(|| {
-            current_handle()
-                .block_on(async move { ports.egress_check(&app_handle, &url_owned, &source).await })
+            current_handle().block_on(async move { ports.egress_check(&app_handle, &url_owned, &source).await })
         }) {
             Ok(()) => OutboundAuth::Allowed { origin },
             Err(reason) => OutboundAuth::Denied { reason, origin },
@@ -146,10 +140,7 @@ fn normalize_origin(url: &str) -> String {
 ///
 /// 流式分支：能力域注册 streamId 后立即返回（后台推流经 [`HttpPorts::event_sink`]
 /// 广播），非流式由能力域同步返回响应 JSON。
-pub(crate) fn http_fetch(
-    state: &WasmPluginState,
-    request_json: &str,
-) -> Result<Option<String>, String> {
+pub(crate) fn http_fetch(state: &WasmPluginState, request_json: &str) -> Result<Option<String>, String> {
     // 端口快照（能力域端口要求 `'static`，故在此一次性取句柄而非借 state）
     let ctx = host_ctx(state);
     let ports: Arc<dyn HttpPorts> = Arc::new(StateHttpPorts {
@@ -187,8 +178,7 @@ mod tests {
         let st = wasmnest_wasm_core::test_support::build_component_state("com.wasmnest.demo", &[]);
         let err = http_fetch(
             &st,
-            &serde_json::json!({ "method": "GET", "url": "http://192.168.1.5:4455/api/health" })
-                .to_string(),
+            &serde_json::json!({ "method": "GET", "url": "http://192.168.1.5:4455/api/health" }).to_string(),
         )
         .unwrap_err();
         assert!(err.contains("permission denied"), "got: {err}");
@@ -228,8 +218,7 @@ mod tests {
         let st = granted_state("com.wasmnest.demo");
         let err = http_fetch(
             &st,
-            &serde_json::json!({ "method": "GET", "url": "http://192.168.1.5:4455/api/health" })
-                .to_string(),
+            &serde_json::json!({ "method": "GET", "url": "http://192.168.1.5:4455/api/health" }).to_string(),
         )
         .unwrap_err();
         assert!(
@@ -245,9 +234,6 @@ mod tests {
             normalize_origin("https://h.example:8080/a/b?token=x"),
             "https://h.example:8080"
         );
-        assert_eq!(
-            normalize_origin("http://192.168.1.5:4455"),
-            "http://192.168.1.5:4455"
-        );
+        assert_eq!(normalize_origin("http://192.168.1.5:4455"), "http://192.168.1.5:4455");
     }
 }

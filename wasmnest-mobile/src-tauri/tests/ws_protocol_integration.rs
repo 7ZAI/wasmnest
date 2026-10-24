@@ -12,6 +12,7 @@ mod common;
 use std::sync::Arc;
 use std::time::Duration;
 
+use tokio::sync::{broadcast, oneshot};
 use wasmnest_mobile_lib::auth::AuthCredentials;
 use wasmnest_mobile_lib::connection::event_ws::run_supervisor;
 use wasmnest_mobile_lib::connection::manager::ConnectionManager;
@@ -21,15 +22,13 @@ use wasmnest_mobile_lib::enums::control::SessionControlAction;
 use wasmnest_mobile_lib::model::message::Message;
 use wasmnest_mobile_lib::router::MobileEvent;
 use wasmnest_mobile_lib::state::{clear_global_token, get_auth_manager, get_global_token, set_global_token};
-use tokio::sync::{broadcast, oneshot};
 
 #[path = "support/mock_plugin_ws.rs"]
 mod mock_plugin_ws;
 
 use common::{MockDesktopServer, MOCK_SESSION_TOKEN, TEST_DEVICE_ID, TEST_DEVICE_NAME};
 use mock_plugin_ws::{
-    ENDPOINT_SESSION_CONTROL, EVENT_SESSION_MODE_CHANGED, EVENT_TASK_SCHEDULED_CHANGED,
-    MockPluginWsServer,
+    MockPluginWsServer, ENDPOINT_SESSION_CONTROL, EVENT_SESSION_MODE_CHANGED, EVENT_TASK_SCHEDULED_CHANGED,
 };
 
 const EVENT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -312,9 +311,15 @@ async fn scenario_event_ws_first_message_is_jwt_auth() {
             serde_json::json!({ "session_id": "s1", "auto_approve": true }),
         )
         .await;
-    let ev = wait_event(&mut events, |ev| matches!(ev, MobileEvent::SyncSessionModeChanged { .. })).await;
+    let ev = wait_event(&mut events, |ev| {
+        matches!(ev, MobileEvent::SyncSessionModeChanged { .. })
+    })
+    .await;
     match ev {
-        MobileEvent::SyncSessionModeChanged { session_id, auto_approve } => {
+        MobileEvent::SyncSessionModeChanged {
+            session_id,
+            auto_approve,
+        } => {
             assert_eq!(session_id, "s1");
             assert!(auto_approve);
         }

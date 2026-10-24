@@ -198,8 +198,7 @@ fn crate_dir(crate_name: &str) -> PathBuf {
     // 组件化工具随桌面 SDK 发布（54fe8d3 迁 `packages/plugin-sdk-desktop/tools/componentize`，
     // 原平台仓 `tools/componentize` 已移入 SDK 包）——登记名不变，落点单独解析。
     if crate_name == "wasmnest-componentize" {
-        let candidate = repo_root()
-            .join("wasmnest-desktop/packages/plugin-sdk-desktop/tools/componentize");
+        let candidate = repo_root().join("wasmnest-desktop/packages/plugin-sdk-desktop/tools/componentize");
         if candidate.is_dir() {
             return candidate;
         }

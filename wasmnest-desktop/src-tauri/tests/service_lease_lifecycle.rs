@@ -285,8 +285,7 @@ async fn service_lease_lifecycle_flow() {
     // ==================== 8. backgroundTransport：租约跟运行期，不跟界面 ====================
     // 服务端型应用：启动成功即持有传输面；界面打开 / 关闭都不改变租约，
     // 停用由内核 `release_all_for` 统一回收。
-    let lifecycle =
-        wasmnest_desktop_lib::plugin::lifecycle::PluginLifecycleManager::new(plugin_host.clone());
+    let lifecycle = wasmnest_desktop_lib::plugin::lifecycle::PluginLifecycleManager::new(plugin_host.clone());
     lifecycle
         .activate_after_preauth(BG_HTTP_PLUGIN_ID)
         .await
@@ -316,10 +315,7 @@ async fn service_lease_lifecycle_flow() {
         vec![BG_HTTP_PLUGIN_ID.to_string()],
         "界面关闭不得释放运行期租约"
     );
-    assert!(
-        supervisor.is_running().await,
-        "界面关闭后传输面必须继续运行"
-    );
+    assert!(supervisor.is_running().await, "界面关闭后传输面必须继续运行");
 
     // 界面打开同样不重复记账（幂等 no-op）
     wasmnest_desktop_lib::commands::plugin_surface_open(BG_HTTP_PLUGIN_ID.to_string())

@@ -160,16 +160,24 @@ async fn mock_plugin_ws_auth_gate_accepts_expected_token() {
     let mut client = connect(&server.url(ENDPOINT_SESSION_CONTROL)).await;
 
     send_json(&mut client, auth_frame("secret")).await;
-    server.send_event(EVENT_SESSION_CREATED, serde_json::json!({"session_id": "s1"})).await;
+    server
+        .send_event(EVENT_SESSION_CREATED, serde_json::json!({"session_id": "s1"}))
+        .await;
     let msg = recv(&mut client).await; // 未关闭 → 事件可达
-    assert_eq!(as_json(&msg).get("type"), Some(&serde_json::Value::String("event".to_string())));
+    assert_eq!(
+        as_json(&msg).get("type"),
+        Some(&serde_json::Value::String("event".to_string()))
+    );
 }
 
 /// RequireToken 不匹配 / RejectAll：认证被拒 → close 4001（对齐桌面宿主坏 token 关闭码）
 #[tokio::test]
 async fn mock_plugin_ws_auth_gate_rejects_bad_token_and_reject_all() {
     let server = MockPluginWsServer::start().await;
-    server.set_auth_policy(ENDPOINT_SESSION_CONTROL, AuthPolicy::RequireToken("correct".to_string()));
+    server.set_auth_policy(
+        ENDPOINT_SESSION_CONTROL,
+        AuthPolicy::RequireToken("correct".to_string()),
+    );
     let mut client = connect(&server.url(ENDPOINT_SESSION_CONTROL)).await;
 
     send_json(&mut client, auth_frame("wrong")).await;
@@ -235,7 +243,11 @@ async fn mock_plugin_ws_client_count_observed_per_endpoint() {
 
     // 断开 → 连接数递减（夹具在连接任务退出时摘除）
     drop(sc);
-    wait_until(|| server.connected(ENDPOINT_SESSION_CONTROL) == 0, "session-control 连接数归零").await;
+    wait_until(
+        || server.connected(ENDPOINT_SESSION_CONTROL) == 0,
+        "session-control 连接数归零",
+    )
+    .await;
 
     // 重连 → 累计握手数递增（票 03 断线自愈断言会用到）
     let mut sc2 = connect(&server.url(ENDPOINT_SESSION_CONTROL)).await;
@@ -313,18 +325,28 @@ async fn mock_plugin_ws_terminal_frames_recorded_and_binary_fragments_replayed()
 
     // 二进制输入帧（原始控制字节）单独记录
     client.send(WsMsg::Binary(vec![0x03].into())).await.unwrap(); // Ctrl-C
-    let binary = server.wait_for_binary(ENDPOINT_TERMINAL, |b| !b.is_empty(), RECV_TIMEOUT).await;
+    let binary = server
+        .wait_for_binary(ENDPOINT_TERMINAL, |b| !b.is_empty(), RECV_TIMEOUT)
+        .await;
     assert_eq!(binary, vec![vec![0x03]], "binary 输入按到达序记录");
 
     // 插件 → 客户端：二进制输出分片（裸字节，无帧头/无 per-frame offset）+ 控制帧
     server.send_binary(ENDPOINT_TERMINAL, b"\x1b[31mred text").await;
     server.send_binary(ENDPOINT_TERMINAL, b" tail").await;
-    server.send_text(ENDPOINT_TERMINAL, &subscribed_frame("s1", "poll")).await;
+    server
+        .send_text(ENDPOINT_TERMINAL, &subscribed_frame("s1", "poll"))
+        .await;
     server.send_text(ENDPOINT_TERMINAL, &ring_resync_frame(5000)).await;
-    server.send_text(ENDPOINT_TERMINAL, &session_stopped_frame("s1", "stopped", Some(0))).await;
+    server
+        .send_text(ENDPOINT_TERMINAL, &session_stopped_frame("s1", "stopped", Some(0)))
+        .await;
 
     let m1 = recv(&mut client).await;
-    assert_eq!(m1, WsMsg::Binary(vec![0x1b, b'[', b'3', b'1', b'm', b'r', b'e', b'd', b' ', b't', b'e', b'x', b't'].into()), "输出=裸字节，逐字节一致");
+    assert_eq!(
+        m1,
+        WsMsg::Binary(vec![0x1b, b'[', b'3', b'1', b'm', b'r', b'e', b'd', b' ', b't', b'e', b'x', b't'].into()),
+        "输出=裸字节，逐字节一致"
+    );
     let m2 = recv(&mut client).await;
     assert_eq!(m2, WsMsg::Binary(b" tail".to_vec().into()), "分片按序到达");
     let m3 = recv(&mut client).await;
@@ -341,7 +363,9 @@ async fn mock_plugin_ws_terminal_frames_recorded_and_binary_fragments_replayed()
         matches!(raw, WsMsg::Text(t) if t == "not json at all"),
         "畸形帧原样可达（夹具不做 JSON 校验拦截）"
     );
-    server.send_text(ENDPOINT_TERMINAL, &terminal_error_frame("会话不存在")).await;
+    server
+        .send_text(ENDPOINT_TERMINAL, &terminal_error_frame("会话不存在"))
+        .await;
     let err = recv(&mut client).await;
     assert_eq!(as_json(&err), terminal_error_frame("会话不存在"), "error 帧形状锁死");
 }
@@ -354,7 +378,10 @@ async fn mock_plugin_ws_session_stopped_exit_code_optional() {
     assert_eq!(with_code["reason"], "killed");
 
     let without = session_stopped_frame("s1", "error", None);
-    assert!(without.get("exitCode").is_none(), "exitCode 缺省即不出现键（不伪造空值）");
+    assert!(
+        without.get("exitCode").is_none(),
+        "exitCode 缺省即不出现键（不伪造空值）"
+    );
     assert_eq!(without["sessionId"], "s1");
 }
 
@@ -364,10 +391,19 @@ async fn mock_plugin_ws_session_stopped_exit_code_optional() {
 #[tokio::test]
 async fn mock_plugin_ws_unknown_endpoint_closed_with_1008() {
     let server = MockPluginWsServer::start().await;
-    let url = format!("ws://{}:{}/ws/plugin/{}/no-such-endpoint", server.addr().ip(), server.addr().port(), PLUGIN_ID);
+    let url = format!(
+        "ws://{}:{}/ws/plugin/{}/no-such-endpoint",
+        server.addr().ip(),
+        server.addr().port(),
+        PLUGIN_ID
+    );
     let mut client = connect(&url).await;
     let msg = recv(&mut client).await;
-    assert_eq!(close_code(&msg), Some(UNKNOWN_ENDPOINT_CLOSE_CODE), "未知端点必须 close 1008");
+    assert_eq!(
+        close_code(&msg),
+        Some(UNKNOWN_ENDPOINT_CLOSE_CODE),
+        "未知端点必须 close 1008"
+    );
 }
 
 // ==================== 帧形状自检（字段名漂移即测试红） ====================
@@ -403,7 +439,11 @@ fn mock_plugin_ws_frame_shapes_match_spec() {
         "task:queue-changed",
         "task:scheduled-changed",
     ];
-    assert_eq!(ALL_BUSINESS_EVENTS.as_slice(), &expected_names[..], "7 类事件名不可漂移");
+    assert_eq!(
+        ALL_BUSINESS_EVENTS.as_slice(),
+        &expected_names[..],
+        "7 类事件名不可漂移"
+    );
     for name in ALL_BUSINESS_EVENTS {
         assert_keys(&event_frame(name, serde_json::json!({})), &["type", "event", "payload"]);
         assert_eq!(event_frame(name, serde_json::json!({}))["event"], name);
@@ -420,12 +460,24 @@ fn mock_plugin_ws_frame_shapes_match_spec() {
     assert_keys(&subscribed_frame("s1", "live"), &["type", "sessionId", "mode"]);
     assert_keys(&unsubscribed_frame(), &["type"]);
     assert_keys(&ring_resync_frame(100), &["type", "offset"]);
-    assert_keys(&session_stopped_frame("s1", "stopped", Some(0)), &["type", "sessionId", "reason", "exitCode"]);
-    assert_keys(&session_stopped_frame("s1", "stopped", None), &["type", "sessionId", "reason"]);
+    assert_keys(
+        &session_stopped_frame("s1", "stopped", Some(0)),
+        &["type", "sessionId", "reason", "exitCode"],
+    );
+    assert_keys(
+        &session_stopped_frame("s1", "stopped", None),
+        &["type", "sessionId", "reason"],
+    );
     assert_keys(&terminal_error_frame("boom"), &["type", "message"]);
 
     // ---- 禁令键：任何帧不得带旧 TB v3 / 旧信封残留字段 ----
-    let forbidden = ["from_offset", "history_end", "message_id", "stage", "payload.binary_offset"];
+    let forbidden = [
+        "from_offset",
+        "history_end",
+        "message_id",
+        "stage",
+        "payload.binary_offset",
+    ];
     let all_frames = [
         auth_frame("jwt"),
         event_frame("session:created", serde_json::json!({})),
@@ -464,7 +516,9 @@ async fn mock_plugin_ws_binary_output_is_raw_bytes_without_header() {
     }
 
     // 帧类型不串道：binary 之后注入的文本帧仍是文本帧
-    server.send_text(ENDPOINT_TERMINAL, &subscribed_frame("s1", "live")).await;
+    server
+        .send_text(ENDPOINT_TERMINAL, &subscribed_frame("s1", "live"))
+        .await;
     let msg = recv(&mut client).await;
     assert!(matches!(msg, WsMsg::Text(_)), "文本控制帧不得被包装成 binary");
 }

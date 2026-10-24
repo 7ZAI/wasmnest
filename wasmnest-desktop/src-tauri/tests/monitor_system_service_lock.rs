@@ -17,26 +17,25 @@ fn monitor_dir(end: &str) -> std::path::PathBuf {
         .join("servers")
         .join("monitor")
         .join(end);
-    assert!(dir.is_dir(), "monitor 工程应住 servers/monitor/{end}: {}", dir.display());
+    assert!(
+        dir.is_dir(),
+        "monitor 工程应住 servers/monitor/{end}: {}",
+        dir.display()
+    );
     dir
 }
 
 fn manifest(end: &str) -> Value {
     let path = monitor_dir(end).join("plugin.json");
-    let raw = fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("读取 {} 失败: {e}", path.display()));
-    serde_json::from_str(&raw)
-        .unwrap_or_else(|e| panic!("解析 {} 失败: {e}", path.display()))
+    let raw = fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 {} 失败: {e}", path.display()));
+    serde_json::from_str(&raw).unwrap_or_else(|e| panic!("解析 {} 失败: {e}", path.display()))
 }
 
 #[test]
 fn monitor_is_internal_business_system_service_on_both_ends() {
     for end in ["desktop", "mobile"] {
         let m = manifest(end);
-        assert_eq!(
-            m["id"], "com.wasmnest.monitor",
-            "{end} 的插件 id 不得随目录迁移变化"
-        );
+        assert_eq!(m["id"], "com.wasmnest.monitor", "{end} 的插件 id 不得随目录迁移变化");
         assert_eq!(
             m["type"], "internal-business",
             "{end} manifest 必须声明 L2 系统服务角色"
@@ -53,11 +52,9 @@ fn monitor_is_internal_business_system_service_on_both_ends() {
 
 #[test]
 fn desktop_host_exposes_monitor_panel_mount_contract() {
-    let src = fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../src/shell/mount/useAppMount.ts"),
-    )
-    .expect("read useAppMount.ts");
+    let src =
+        fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/shell/mount/useAppMount.ts"))
+            .expect("read useAppMount.ts");
     for needle in [
         "export interface MonitorPanelEnv",
         "export interface MonitorPanelHandle",
@@ -69,8 +66,7 @@ fn desktop_host_exposes_monitor_panel_mount_contract() {
     }
 
     let slot = fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../src/shell/mount/AppMountSlot.vue"),
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/shell/mount/AppMountSlot.vue"),
     )
     .expect("read AppMountSlot.vue");
     assert!(

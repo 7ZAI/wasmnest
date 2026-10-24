@@ -235,8 +235,14 @@ const SHARED_CORES: [(&str, &str); 4] = [
         "pub fn http_fetch(",
     ),
     ("../wasmnest-lib/wasmnest-host-api-core/src/fs.rs", "pub fn fs_read("),
-    ("../wasmnest-lib/wasmnest-host-api-core/src/storage.rs", "pub fn storage_get("),
-    ("../wasmnest-lib/wasmnest-host-api-core/src/bus.rs", "pub fn bus_publish("),
+    (
+        "../wasmnest-lib/wasmnest-host-api-core/src/storage.rs",
+        "pub fn storage_get(",
+    ),
+    (
+        "../wasmnest-lib/wasmnest-host-api-core/src/bus.rs",
+        "pub fn bus_publish(",
+    ),
 ];
 
 /// `(宿主 adapter 相对 plugin/ 路径, 必须转发的共享核针脚)`

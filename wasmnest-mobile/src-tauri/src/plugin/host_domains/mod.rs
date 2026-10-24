@@ -34,8 +34,8 @@ pub(crate) mod peer;
 pub(crate) mod support;
 pub(crate) mod ws;
 
-use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
 use crate::plugin::bindings::wasmnest;
+use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
 
 // ==================== 宿主上下文 / 运行时句柄 ====================
 
@@ -51,8 +51,7 @@ pub(crate) use crate::plugin::bindings::ctx_of as host_ctx;
 /// 纯 std 线程上回落 `runtime_util::ambient_handle()`（multi_thread + enable_all，
 /// 任务派生照常可用）。语义与 wasm-core `bare.rs` 的原实现逐字一致。
 pub(crate) fn current_handle() -> tokio::runtime::Handle {
-    tokio::runtime::Handle::try_current()
-        .unwrap_or_else(|_| wasmnest_wasm_core::runtime_util::ambient_handle())
+    tokio::runtime::Handle::try_current().unwrap_or_else(|_| wasmnest_wasm_core::runtime_util::ambient_handle())
 }
 
 // ==================== 停用回收聚合入口 ====================
@@ -64,10 +63,7 @@ pub(crate) fn current_handle() -> tokio::runtime::Handle {
 /// 停用后无转发目标，残留表位只会让后续转发打到已失效的页面通道）。
 /// 新域接入回收必须在此登记——漏登记 = 停用后连接泄漏（ADR 0022 §5.1.3
 /// 「停用可回收」硬要求）。
-pub fn purge_for_plugin(
-    host_ctx: &wasmnest_wasm_core::host_api::WasmHostContext,
-    plugin_id: &str,
-) -> usize {
+pub fn purge_for_plugin(host_ctx: &wasmnest_wasm_core::host_api::WasmHostContext, plugin_id: &str) -> usize {
     let mut purged = mdns::purge_for_plugin(&host_ctx.ports, plugin_id);
     purged += ws::purge_for_plugin(plugin_id);
     crate::plugin::terminal_stream::terminal_stream_gateway().clear_all();
@@ -89,12 +85,7 @@ pub const MODULE_INTERFACES: &[&str] = &[
 ];
 
 /// 本模块读写的权限位（各域权限门的并集；装载期一致性核对用）
-pub const MODULE_PERMISSIONS: &[&str] = &[
-    "network:http",
-    "peer",
-    "mdns",
-    "ws:client",
-];
+pub const MODULE_PERMISSIONS: &[&str] = &["network:http", "peer", "mdns", "ws:client"];
 
 /// 能力模块描述符（机制面：接口路径 / 权限位 / ABI 下界；禁带产品名词）
 const DESC: HostModuleDesc = HostModuleDesc {
@@ -120,10 +111,7 @@ impl HostModule for MobileHostCoreModule {
         true
     }
 
-    fn register(
-        &self,
-        linker: &mut wasmtime::component::Linker<WasmPluginState>,
-    ) -> wasmtime::Result<()> {
+    fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
         type D = wasmtime::component::HasSelf<WasmPluginState>;
         for iface in [
             wasmnest::plugin::host_http::add_to_linker::<WasmPluginState, D>,

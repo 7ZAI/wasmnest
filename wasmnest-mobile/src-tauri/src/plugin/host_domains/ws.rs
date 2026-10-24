@@ -32,10 +32,10 @@ use std::sync::Arc;
 
 use wasmnest_ws_client_engine::ports::{BoxedTask, ReconnectPolicy, WsClientPorts, WsTask};
 
-use wasmnest_host_kit::WasmPluginState;
-use super::{current_handle, host_ctx};
-use wasmnest_wasm_core::runtime_util::block_on_async;
 use super::support::guarded_host_call;
+use super::{current_handle, host_ctx};
+use wasmnest_host_kit::WasmPluginState;
+use wasmnest_wasm_core::runtime_util::block_on_async;
 
 use wasmnest_wasm_core::host_api::ports::HostEnginePorts;
 use wasmnest_wasm_core::runtime_util::spawn_with_error_boundary_on;
@@ -63,7 +63,6 @@ impl wasmnest::plugin::host_websocket::Host for WasmPluginState {
         ws_is_connected(self, &handle)
     }
 }
-
 
 // ==================== 移动端 WsClientPorts 适配器 ====================
 
@@ -155,12 +154,7 @@ impl WsClientPorts for StateWsClientPorts {
         self.host_ports.reconnect_bounds()
     }
 
-    fn reconnect_policy(
-        &self,
-        max_retries: u32,
-        base_ms: u64,
-        max_ms: u64,
-    ) -> Box<dyn ReconnectPolicy> {
+    fn reconnect_policy(&self, max_retries: u32, base_ms: u64, max_ms: u64) -> Box<dyn ReconnectPolicy> {
         Box::new(StateReconnectPolicy(self.host_ports.reconnect_policy(
             max_retries,
             base_ms,
@@ -207,39 +201,27 @@ pub(crate) fn ws_connect(state: &WasmPluginState, config_json: &str) -> Result<S
         "host_websocket_connect",
         Err("ws connect: handshake timed out after 5s".to_string()),
         || {
-            block_on_async(async move {
-                wasmnest_ws_client_engine::engine::connect(&ports, &plugin_id, config_json).await
-            })
+            block_on_async(
+                async move { wasmnest_ws_client_engine::engine::connect(&ports, &plugin_id, config_json).await },
+            )
         },
     )
 }
 
 /// 发送文本帧（UTF-8）
-pub(crate) fn ws_send_text(
-    state: &WasmPluginState,
-    handle: &str,
-    text: &str,
-) -> Result<(), String> {
+pub(crate) fn ws_send_text(state: &WasmPluginState, handle: &str, text: &str) -> Result<(), String> {
     let ports = StateWsClientPorts::from_state(state);
     wasmnest_ws_client_engine::engine::send_text(&ports, &state.plugin_id, handle, text)
 }
 
 /// 发送二进制帧
-pub(crate) fn ws_send_binary(
-    state: &WasmPluginState,
-    handle: &str,
-    payload: Vec<u8>,
-) -> Result<(), String> {
+pub(crate) fn ws_send_binary(state: &WasmPluginState, handle: &str, payload: Vec<u8>) -> Result<(), String> {
     let ports = StateWsClientPorts::from_state(state);
     wasmnest_ws_client_engine::engine::send_binary(&ports, &state.plugin_id, handle, payload)
 }
 
 /// 主动关闭连接：返回是否命中（幂等：未知句柄 false；命中退避中的旧句柄即取消重连）
-pub(crate) fn ws_close(
-    state: &WasmPluginState,
-    handle: &str,
-    close_json: &str,
-) -> Result<bool, String> {
+pub(crate) fn ws_close(state: &WasmPluginState, handle: &str, close_json: &str) -> Result<bool, String> {
     let ports = StateWsClientPorts::from_state(state);
     wasmnest_ws_client_engine::engine::close(&ports, &state.plugin_id, handle, close_json)
 }
@@ -274,11 +256,7 @@ mod tests {
     /// `grant_permissions`（与生产激活路径同一入口）+ `WasmPluginState::new` 装配
     /// （管理域测试同款路径，wasm-core-mobile-purity 票 04）。runtime 句柄不再进
     /// state——ws 引擎侧统一走 `current_handle()`（无上下文线程回落 ambient）。
-    fn state(
-        plugin_id: &str,
-        ws_granted: bool,
-        _runtime: tokio::runtime::Handle,
-    ) -> WasmPluginState {
+    fn state(plugin_id: &str, ws_granted: bool, _runtime: tokio::runtime::Handle) -> WasmPluginState {
         let ctx = wasmnest_wasm_core::test_support::build_host_ctx();
         let granted: Vec<String> = if ws_granted {
             vec![wasmnest_plugin_api_mobile::permission::PERMISSION_WS_CLIENT.to_string()]
@@ -326,17 +304,11 @@ mod tests {
 
         // 退避边界：端口直接透传宿主全局常量（引擎侧再对 config 做钳制）
         let (min_ms, max_ms) = ports.reconnect_bounds();
-        assert!(
-            min_ms >= 1_000,
-            "下限钳制是自愈风暴的教训沉淀（2026-09-29）"
-        );
+        assert!(min_ms >= 1_000, "下限钳制是自愈风暴的教训沉淀（2026-09-29）");
         assert!(max_ms >= min_ms);
 
         // 未认证 ⇒ token 空串（凭据不落插件面；引擎据此显性失败而非伪发 auth 帧）
-        assert!(
-            ports.global_token().is_empty(),
-            "无头宿主未认证 ⇒ token 空串"
-        );
+        assert!(ports.global_token().is_empty(), "无头宿主未认证 ⇒ token 空串");
 
         // 未授权插件 ⇒ 权限门假（fail-closed 的装配侧读数）
         assert!(!ports.check_permission("probe-plugin"), "未授权即拒");

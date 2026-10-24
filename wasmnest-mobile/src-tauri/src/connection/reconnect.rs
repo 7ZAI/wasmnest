@@ -11,8 +11,8 @@ use tokio::sync::RwLock;
 use tracing::info;
 
 use crate::system::constants::reconnect::{
-    CIRCUIT_BREAKER_SAME_CAUSE_LIMIT, DEFAULT_BACKOFF_MULTIPLIER, DEFAULT_INITIAL_DELAY_MS,
-    DEFAULT_MAX_DELAY_MS, DEFAULT_MAX_RETRIES, MIN_RECONNECT_DELAY_MS,
+    CIRCUIT_BREAKER_SAME_CAUSE_LIMIT, DEFAULT_BACKOFF_MULTIPLIER, DEFAULT_INITIAL_DELAY_MS, DEFAULT_MAX_DELAY_MS,
+    DEFAULT_MAX_RETRIES, MIN_RECONNECT_DELAY_MS,
 };
 
 /// 重连配置
@@ -594,14 +594,17 @@ mod tests {
         mgr.on_failure("cause-a".to_string()).await; // streak=2
         mgr.on_failure("cause-b".to_string()).await; // 换因 → streak=1
         mgr.on_failure("cause-a".to_string()).await; // 又换回 a → streak=1（重新起算，不是 3）
-        // 此刻连续同因 streak=1；再同因 (LIMIT-2) 次 → streak=LIMIT-1，仍未熔断
+                                                     // 此刻连续同因 streak=1；再同因 (LIMIT-2) 次 → streak=LIMIT-1，仍未熔断
         for _ in 0..(CIRCUIT_BREAKER_SAME_CAUSE_LIMIT - 2) {
             mgr.on_failure("cause-a".to_string()).await;
         }
         assert!(!mgr.is_abandoned().await, "换因重置后连续同因未达阈值不误熔断");
         // 再同因一次 → 连续同因达到 LIMIT 次 → 熔断
         mgr.on_failure("cause-a".to_string()).await;
-        assert!(mgr.is_abandoned().await, "换因后从 streak=1 重新起算，达到连续阈值即熔断");
+        assert!(
+            mgr.is_abandoned().await,
+            "换因后从 streak=1 重新起算，达到连续阈值即熔断"
+        );
     }
 
     /// M2：reset 后熔断判据复位（新一轮重连重新起算）

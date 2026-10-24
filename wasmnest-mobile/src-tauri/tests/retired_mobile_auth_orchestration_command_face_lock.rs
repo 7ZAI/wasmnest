@@ -76,7 +76,10 @@ const PLUGIN_AUTH_FACE: [(&str, &str); 5] = [
     ("rust/src/auth.rs", "fn request_pairing("),
     ("rust/src/auth.rs", "fn verify_pairing_code("),
     ("rust/src/commands.rs", "\"terminal-session.verify-pairing-code\""),
-    ("rust/src/commands.rs", "\"terminal-session.authenticate-with-biometric\""),
+    (
+        "rust/src/commands.rs",
+        "\"terminal-session.authenticate-with-biometric\"",
+    ),
     ("plugin.json", "\"auth\""),
 ];
 
@@ -187,10 +190,7 @@ fn auth_engine_projection_and_plugin_domain_stay() {
     for (rel, needle) in KEEP_FACE {
         let content = std::fs::read_to_string(root.join("src-tauri").join(rel))
             .unwrap_or_else(|e| panic!("读取 {rel} 失败：{e}"));
-        assert!(
-            content.contains(needle),
-            "认证保留面缺失：{rel} 中找不到 `{needle}`"
-        );
+        assert!(content.contains(needle), "认证保留面缺失：{rel} 中找不到 `{needle}`");
     }
     let app_root = app_paths::app_dir("bedcode", "mobile");
     for (rel, needle) in PLUGIN_AUTH_FACE {

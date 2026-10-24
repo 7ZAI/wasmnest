@@ -365,10 +365,7 @@ impl PluginManager {
         // host-peer 端口（wasm-core-mobile-purity 票 03）：wasm-core bare 面 19 条
         // 原语的薄转发经 crate `ports::ports()` 取本端口——权限判定 / 引擎上下文 /
         // 同步桥 / 服务注册表四面在此与宿主衔接（幂等，重复 init 首装胜出）
-        crate::plugin::peer_ports::install(
-            self.app_handle.as_ref().cloned(),
-            Arc::clone(&self.service_registry),
-        );
+        crate::plugin::peer_ports::install(self.app_handle.as_ref().cloned(), Arc::clone(&self.service_registry));
 
         // 组件路径无启动期签名表校验：契约由 WIT 编译期保证；组件形态由
         // instantiate_component 内的 `abi-form` 检查逐实例校验（移动 WIT 无该导出，
@@ -707,11 +704,7 @@ impl PluginManager {
         // 3. 合并未授权路径为单次弹窗(check_batch 内部已实现事件 emit + 30s 超时)
         let allowed = self
             .fs_auth
-            .check_batch(
-                plugin_id,
-                &paths,
-                wasmnest_wasm_core::security::fs_auth::FsOps::READ,
-            )
+            .check_batch(plugin_id, &paths, wasmnest_wasm_core::security::fs_auth::FsOps::READ)
             .await;
         if !allowed {
             return Err(crate::AppError::Plugin(
@@ -777,8 +770,7 @@ impl PluginManager {
         let Some((source, extension_path)) = gate else {
             return Err(crate::AppError::Plugin(format!("Plugin not found: {}", plugin_id)));
         };
-        let trusted_source =
-            source == PluginSource::ApkAsset || source == PluginSource::FrontendOnly;
+        let trusted_source = source == PluginSource::ApkAsset || source == PluginSource::FrontendOnly;
         // 生效权限集（桌面同款口径，`PluginHost::activate_plugin`）：受信来源 = manifest
         // 全量；用户安装 = 批准 ∩ 请求。**只算不授**：授予在审批门禁之后、guest
         // activate 之前（见 step 1.5）——未批准插件不得拿到任何权限。
@@ -806,9 +798,7 @@ impl PluginManager {
                 .map_err(|e| crate::AppError::Plugin(format!("Failed to verify plugin approval: {}", e)))?
             };
             match status {
-                ApprovalStatus::Approved => {
-                    effective_permissions(&requested, approval.as_ref(), false)
-                }
+                ApprovalStatus::Approved => effective_permissions(&requested, approval.as_ref(), false),
                 _ => {
                     // Pending / HashMismatch 一律置 NeedsApproval 并拒绝激活
                     let mut plugins = self.plugins.write().await;
@@ -872,10 +862,7 @@ impl PluginManager {
             // 必须可见，否则插件作者只能靠运行时 denied 反推（桌面同款告警）。
             // 用户安装插件不查：未批准位本就不在生效集，告警会误导。
             if trusted_source {
-                let dropped: Vec<&String> = requested
-                    .iter()
-                    .filter(|p| !granted.contains(p.as_str()))
-                    .collect();
+                let dropped: Vec<&String> = requested.iter().filter(|p| !granted.contains(p.as_str())).collect();
                 if !dropped.is_empty() {
                     tracing::warn!(
                         plugin_id = %plugin_id,
@@ -1311,9 +1298,7 @@ impl PluginManager {
     }
 
     /// 获取文件系统访问校验器引用
-    pub fn fs_auth(
-        &self,
-    ) -> &Arc<wasmnest_wasm_core::security::fs_auth::FsAuthChecker> {
+    pub fn fs_auth(&self) -> &Arc<wasmnest_wasm_core::security::fs_auth::FsAuthChecker> {
         &self.fs_auth
     }
 
@@ -1499,11 +1484,7 @@ impl crate::plugin::message_bus::MessageDispatcher for PluginManagerDispatcher {
 // ==================== 服务租约释放日志（生命周期路径共用） ====================
 
 /// 逐条记录租约释放结果：单 key 失败只记录、不阻断插件生命周期。
-fn log_release_reports(
-    plugin_id: &str,
-    reason: &str,
-    reports: Vec<wasmnest_server_base::service::ReleaseReport>,
-) {
+fn log_release_reports(plugin_id: &str, reason: &str, reports: Vec<wasmnest_server_base::service::ReleaseReport>) {
     for report in reports {
         match &report.outcome {
             Ok(outcome) => tracing::info!(
@@ -1635,14 +1616,13 @@ mod tests {
     /// 用真组件实例化一个 LoadedWasmPlugin 并塞入 manager.wasm_plugins
     async fn attach_wasm(manager: &PluginManager, pid: &str, features: &[&str]) {
         // 与生产同形：实例共享宿主唯一上下文（权限真源 = 管理器，2026-10-14 收口）
-        let host_ctx = manager
-            .wasm_host_ctx
-            .get()
-            .expect("host ctx initialized")
-            .clone();
+        let host_ctx = manager.wasm_host_ctx.get().expect("host ctx initialized").clone();
         let runtime = manager.wasm_runtime.get().expect("wasm runtime initialized");
-        let component =
-            Component::from_binary(wasmnest_wasm_core::test_support::runtime_engine(runtime), &build_test_component(features)).expect("compile test component");
+        let component = Component::from_binary(
+            wasmnest_wasm_core::test_support::runtime_engine(runtime),
+            &build_test_component(features),
+        )
+        .expect("compile test component");
         let loaded: LoadedWasmPlugin = runtime
             .instantiate_component(&component, pid, host_ctx, &[], None)
             .expect("instantiate component");
@@ -1999,14 +1979,8 @@ mod tests {
         let info = manager.get_info(pid).await.expect("info");
         assert_eq!(info.state, PluginState::Activated);
         // 生效权限集直接读权限真源（内核 PermissionManager），不再经 LoadedPlugin 镜像
-        assert!(
-            manager.has_permission(pid, "storage").await,
-            "批准且声明 → 生效"
-        );
-        assert!(
-            manager.has_permission(pid, "session:read").await,
-            "批准权限应生效"
-        );
+        assert!(manager.has_permission(pid, "storage").await, "批准且声明 → 生效");
+        assert!(manager.has_permission(pid, "session:read").await, "批准权限应生效");
         assert!(
             !manager.has_permission(pid, "terminal:output").await,
             "未批准权限不得生效（生效 = 批准 ∩ 请求）"
@@ -2066,10 +2040,7 @@ mod tests {
 
         manager.deactivate(pid).await.expect("deactivate");
 
-        assert!(
-            !manager.has_permission(pid, "storage").await,
-            "停用后权限全部撤销"
-        );
+        assert!(!manager.has_permission(pid, "storage").await, "停用后权限全部撤销");
     }
 
     #[tokio::test]
@@ -2228,11 +2199,7 @@ mod tests {
         seed_plugin(&manager, app, PluginState::Loaded).await;
         {
             let mut plugins = manager.plugins.write().await;
-            plugins
-                .get_mut(service)
-                .expect("service seeded")
-                .manifest
-                .kind = PluginKind::InternalBusiness;
+            plugins.get_mut(service).expect("service seeded").manifest.kind = PluginKind::InternalBusiness;
         }
 
         assert!(manager.is_autostart(service).await, "L2 缺省自启");
@@ -2243,10 +2210,7 @@ mod tests {
             "只有缺省自启的系统服务进入候选"
         );
 
-        manager
-            .set_autostart(service, false)
-            .await
-            .expect("set false");
+        manager.set_autostart(service, false).await.expect("set false");
         assert!(!manager.is_autostart(service).await, "显式 false 优先于角色缺省");
         assert!(manager.auto_start_candidates().await.is_empty());
     }
@@ -2263,13 +2227,11 @@ mod tests {
             let manifest = &mut plugins.get_mut(service).expect("seeded").manifest;
             manifest.name = "Meta Service".to_string();
             manifest.kind = PluginKind::InternalBusiness;
-            manifest.contributes.monitor_panels = vec![
-                wasmnest_wasm_core::manifest::MonitorPanelContribution {
-                    id: "health".to_string(),
-                    title: "Health".to_string(),
-                    order: 100,
-                },
-            ];
+            manifest.contributes.monitor_panels = vec![wasmnest_wasm_core::manifest::MonitorPanelContribution {
+                id: "health".to_string(),
+                title: "Health".to_string(),
+                order: 100,
+            }];
         }
 
         manager.sync_plugin_meta().await;
@@ -2391,9 +2353,7 @@ mod tests {
             starts: AtomicUsize::new(0),
             stops: AtomicUsize::new(0),
         });
-        registry
-            .register(probe.clone() as StdArc<dyn ScopedService>)
-            .unwrap();
+        registry.register(probe.clone() as StdArc<dyn ScopedService>).unwrap();
 
         let pid = "com.wasmnest.test.mgr-lease";
         seed_trusted_plugin(
@@ -2415,7 +2375,10 @@ mod tests {
         assert_eq!(probe.stops.load(Ordering::SeqCst), 1);
 
         // ② 激活失败 → 外层补偿释放半程租约
-        registry.acquire("test.mobile.lease", "com.wasmnest.missing").await.unwrap();
+        registry
+            .acquire("test.mobile.lease", "com.wasmnest.missing")
+            .await
+            .unwrap();
         assert!(manager.activate("com.wasmnest.missing").await.is_err());
         assert!(
             registry.snapshot().await[0].holders.is_empty(),

@@ -22,14 +22,14 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use wasmnest_mobile_lib::enums::auth::{AuthPayload, AuthStage};
-use wasmnest_mobile_lib::model::message::Message;
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::protocol::Message as WsMsg;
 use tokio_tungstenite::{accept_async, WebSocketStream};
+use wasmnest_mobile_lib::enums::auth::{AuthPayload, AuthStage};
+use wasmnest_mobile_lib::model::message::Message;
 
 /// mock 桌面端签发的会话令牌
 pub const MOCK_SESSION_TOKEN: &str = "test-jwt-token";

@@ -65,9 +65,9 @@ pub async fn shell_import_image(app_handle: AppHandle, namespace: String) -> Res
         tauri_plugin_dialog::FilePath::Path(path) => (path, None),
         tauri_plugin_dialog::FilePath::Url(url) => {
             if url.scheme() == "file" {
-                let path = url.to_file_path().map_err(|_| {
-                    AppError::InvalidInput(format!("shell asset: file url not convertible: {url}"))
-                })?;
+                let path = url
+                    .to_file_path()
+                    .map_err(|_| AppError::InvalidInput(format!("shell asset: file url not convertible: {url}")))?;
                 (path, None)
             } else {
                 let cache_path = copy_saf_to_cache(&app_handle, url.as_str()).await?;
@@ -102,7 +102,11 @@ pub async fn shell_import_image(app_handle: AppHandle, namespace: String) -> Res
     // 中转副本用完即删：失败不影响本次结果（资产已落盘），但要留痕
     if let Some(temp) = temp_copy {
         if let Err(e) = fs::remove_file(&temp) {
-            tracing::warn!("[ShellUi] SAF relay copy cleanup failed: path={} err={}", temp.display(), e);
+            tracing::warn!(
+                "[ShellUi] SAF relay copy cleanup failed: path={} err={}",
+                temp.display(),
+                e
+            );
         }
     }
 
@@ -175,12 +179,8 @@ fn read_head(path: &Path) -> Option<Vec<u8>> {
 /// 序号兼做存在性回退：撞名就继续推进。
 /// 先拷新、再删旧——新图落盘失败时至少还留着上一张可用，不会两头都空。
 fn store_asset(dir: &Path, namespace: &str, ext: &str, source: &Path) -> Result<String> {
-    fs::create_dir_all(dir).map_err(|e| {
-        AppError::Internal(format!(
-            "shell asset: create dir '{}' failed: {e}",
-            dir.display()
-        ))
-    })?;
+    fs::create_dir_all(dir)
+        .map_err(|e| AppError::Internal(format!("shell asset: create dir '{}' failed: {e}", dir.display())))?;
 
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -214,7 +214,11 @@ fn remove_stale_assets(dir: &Path, namespace: &str, keep: &str) {
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(e) => {
-            tracing::warn!("[ShellUi] asset dir unreadable for cleanup: dir={} err={}", dir.display(), e);
+            tracing::warn!(
+                "[ShellUi] asset dir unreadable for cleanup: dir={} err={}",
+                dir.display(),
+                e
+            );
             return;
         }
     };
@@ -378,13 +382,8 @@ mod tests {
     #[test]
     fn reports_error_when_source_missing() {
         let root = tempfile::tempdir().expect("tempdir");
-        let err = store_asset(
-            &root.path().join("ns"),
-            "ns",
-            "png",
-            &root.path().join("missing.png"),
-        )
-        .expect_err("源文件不存在应报错");
+        let err = store_asset(&root.path().join("ns"), "ns", "png", &root.path().join("missing.png"))
+            .expect_err("源文件不存在应报错");
         // 错误必须带操作上下文（AGENTS：禁止无上下文透传）
         assert!(format!("{err}").contains("copy"), "错误应含操作上下文: {err}");
     }

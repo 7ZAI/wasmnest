@@ -59,8 +59,7 @@ impl PeerPorts for HostPeerPorts {
         // `has_permission` 是 async（plugins 为 tokio RwLock）——经 wasm-core 唯一
         // 那份同步桥驱动；host fn 线程可能是 worker / 已让出 / 纯 std 线程，
         // 桥内已按 runtime flavor 分流（见 runtime_util 模块文档）
-        let allowed =
-            wasmnest_wasm_core::runtime_util::block_on_async(pm.has_permission(plugin_id, permission));
+        let allowed = wasmnest_wasm_core::runtime_util::block_on_async(pm.has_permission(plugin_id, permission));
         if !allowed {
             tracing::warn!(
                 plugin_id = %plugin_id,
@@ -75,10 +74,7 @@ impl PeerPorts for HostPeerPorts {
     fn peer_ctx(&self) -> Result<Arc<PeerCtx>, String> {
         // 引擎装配动作留宿主；无头口径与文案由能力域定义（HEADLESS_UNAVAILABLE），
         // 宿主只汇报「取不到」
-        let app = self
-            .app
-            .as_ref()
-            .ok_or_else(|| HEADLESS_UNAVAILABLE.to_string())?;
+        let app = self.app.as_ref().ok_or_else(|| HEADLESS_UNAVAILABLE.to_string())?;
         Ok(crate::peer::net::peer_ctx(app))
     }
 
@@ -98,10 +94,7 @@ pub fn install(
     app: Option<Arc<tauri::AppHandle>>,
     service_registry: Arc<wasmnest_server_base::service::ServiceRegistry>,
 ) {
-    wasmnest_server_peer_net::plugin_binding::install_ports(Arc::new(HostPeerPorts::new(
-        app,
-        service_registry,
-    )));
+    wasmnest_server_peer_net::plugin_binding::install_ports(Arc::new(HostPeerPorts::new(app, service_registry)));
 }
 
 #[cfg(test)]
@@ -114,9 +107,6 @@ mod tests {
     fn production_port_always_exposes_service_registry() {
         let registry = Arc::new(wasmnest_server_base::service::ServiceRegistry::new());
         let ports = HostPeerPorts::new(None, registry);
-        assert!(
-            ports.service_registry().is_some(),
-            "移动生产端口必须装配服务注册表"
-        );
+        assert!(ports.service_registry().is_some(), "移动生产端口必须装配服务注册表");
     }
 }

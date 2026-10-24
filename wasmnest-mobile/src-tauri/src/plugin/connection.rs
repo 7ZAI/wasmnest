@@ -10,7 +10,7 @@
 
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
 
-use crate::plugin::bindings::{wasmnest, ctx_of};
+use crate::plugin::bindings::{ctx_of, wasmnest};
 use wasmnest_wasm_core::runtime_util::block_on_async;
 
 wasmnest_host_kit::expect_host_module!(MODULE_NAME);
@@ -68,9 +68,7 @@ impl wasmnest::plugin::host_connection_target::Host for WasmPluginState {
         let Some((target, connected)) = block_on_async(async move { engine.primary_target().await })
             .map_err(|e| format!("connection primary-target: engine read failed: {e}"))?
         else {
-            return Err(
-                "connection: no primary target configured (device not paired/connected yet)".to_string(),
-            );
+            return Err("connection: no primary target configured (device not paired/connected yet)".to_string());
         };
         serde_json::to_string(&serde_json::json!({
             "address": target.address,

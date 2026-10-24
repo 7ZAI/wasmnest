@@ -7,9 +7,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::connection::event_ws;
 use crate::router::event;
-use crate::state::{
-    clear_global_token, get_auth_manager, get_connection_manager, get_global_token, set_global_token,
-};
+use crate::state::{clear_global_token, get_auth_manager, get_connection_manager, get_global_token, set_global_token};
 use crate::Result;
 
 /// 连接信息

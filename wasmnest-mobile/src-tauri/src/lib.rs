@@ -146,9 +146,12 @@ pub fn run() {
             // 真源漂移出旧形状 `plugin_auth_records`（缺 id），使 fs 授权记录读写
             // 全失败（2026-10-14 设备实证 `no such column: id`）。已装设备的旧形状
             // 库由内核侧对账迁移（`Database::init_schema` 内），宿主不再知表形状。
-            let plugin_db = Arc::new(std::sync::Mutex::new(wasmnest_wasm_core::db::Database::from_connection(
-                rusqlite::Connection::open(&db_path).map_err(|e| anyhow::anyhow!("Failed to open plugin DB: {}", e))?,
-            )));
+            let plugin_db = Arc::new(std::sync::Mutex::new(
+                wasmnest_wasm_core::db::Database::from_connection(
+                    rusqlite::Connection::open(&db_path)
+                        .map_err(|e| anyhow::anyhow!("Failed to open plugin DB: {}", e))?,
+                ),
+            ));
             // 主库 schema 幂等初始化（settings / plugin_storage / plugin_secrets /
             // plugin_auth_policies / plugin_auth_records + 版本迁移，全部由内核真源定义）
             plugin_db
@@ -260,13 +263,12 @@ pub fn run() {
         // bootstrap 会在导入任何插件模块之前重新取得密钥，「域内首个调用者生效」恒由
         // 宿主前端赢得；dev 下页面刷新也能重新取得（否则刷新后宿主面命令全数被拒）。
         .on_page_load(|webview, payload| {
-            let Some(channel) = webview.app_handle().try_state::<Arc<
-                wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry,
-            >>() else {
+            let Some(channel) = webview
+                .app_handle()
+                .try_state::<Arc<wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry>>()
+            else {
                 // 页面加载早于 setup 装配（不应发生）：留痕不 panic（与桌面钩子同口径）
-                tracing::warn!(
-                    "[PluginChannel] page load before FrontendChannelRegistry managed, session not reset"
-                );
+                tracing::warn!("[PluginChannel] page load before FrontendChannelRegistry managed, session not reset");
                 return;
             };
             tracing::debug!(
