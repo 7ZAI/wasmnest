@@ -27,11 +27,9 @@
     "target:clean": "cd src-tauri && cargo clean",
     "prebuild": "node scripts/check-target-size.js",
     "plugins:build": "node scripts/plugin-build.js --all",
-    "plugins:build:frontend": "node scripts/app-script.mjs ai-chatbox desktop build:frontend",
-    "plugins:build:rust": "node scripts/app-script.mjs ai-chatbox desktop build:rust",
-    "plugins:build:all": "pnpm run plugins:build",
-    "plugins:dev": "node scripts/plugin-dev.js",
-    "plugins:build:release": "node scripts/plugin-build.js"
+    "plugins:build:frontend": "node ../scripts/app-script.mjs ai-chatbox desktop build:frontend",
+    "plugins:build:rust": "node ../scripts/app-script.mjs ai-chatbox desktop build:rust",
+    "plugins:dev": "node scripts/plugin-dev.js"
   },
   "dependencies": {
     "@binblink/wasmnest-plugin-sdk-desktop": "workspace:*",
