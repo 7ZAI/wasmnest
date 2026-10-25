@@ -81,29 +81,6 @@ export default {
       approvals: '{count} pending',
       openPerms: 'Open permissions & authorization',
     },
-    app: {
-      stop: 'Stop',
-      subCommands: '{count} commands',
-      approval: {
-        title: 'Waiting for permission approval',
-        desc: 'manifest declares {perms} permission bits, {risks} of them high-risk. Approval is all-or-nothing; no per-bit selection.',
-        viewPerms: 'View permission details',
-        approveStart: 'Approve & start',
-      },
-      error: {
-        title: 'App error',
-        desc: 'This app failed to start (instance not running). See App Manager for details and retry.',
-        backHome: 'Back to home',
-      },
-      dormant: {
-        desc: 'App is not running. Starting opens it as a fullscreen card.',
-        start: 'Start & open',
-      },
-      noView: {
-        desc: 'This app has no host-mountable view. Check its capabilities in App Manager.',
-        backHome: 'Back to home',
-      },
-    },
     sys: {
       chip: 'System page · Card',
       apps: {
@@ -262,18 +239,6 @@ export default {
         hint: 'Skins only override shell CSS variables; palettes declared by an app root take precedence.',
       },
     },
-    perms: {
-      pending: '{count} apps awaiting approval',
-      pendingHint:
-        'Approval is all-or-nothing — per-bit selection would let high-risk bits slip through.',
-      pendingGo: 'Review',
-      appMeta: '{perms} permission bits · {risks} high-risk · {records} auth records',
-      manage: 'Manage',
-      secUser: 'Granted {count}',
-      secAuto: 'Auto-allowed {count}',
-      secFirstParty: 'First-party {count}',
-      secDeny: 'Denied {count}',
-    },
     apps: {
       sortHint:
         'Sorted by auth risk ("always allow" loosest first). Running apps cannot be uninstalled; enabling goes through the approval gate first.',
@@ -330,26 +295,11 @@ export default {
         user: 'User-installed',
       },
     },
-    boot: {
-      line: 'WasmNest · wasm-app platform starting',
-      skip: 'Click anywhere to skip',
-      stepRegistry: 'Installed app registry loaded ({count})',
-      stepAuth: 'Authorization policy fail-closed self-check',
-      stepReady: 'Runtime ready',
-    },
   },
   common: {
     button: {
       cancel: 'Cancel',
       stop: 'Stop',
-    },
-    status: {
-      error: 'Error',
-      unknown: 'Unknown',
-      running: 'Running',
-      stopped: 'Stopped',
-      asking: 'Waiting for Input',
-      starting: 'Starting',
     },
     misc: {
       terminalTitle: 'Terminal - {name}',
@@ -532,7 +482,6 @@ export default {
     },
   },
   settings: {
-    title: 'Settings',
     linkCrypto: {
       title: 'Link Encryption',
       master: 'Enable Link Encryption',
@@ -672,9 +621,6 @@ export default {
         fs: 'File',
         network: 'Network',
       },
-    },
-    ui: {
-      title: 'Interface',
     },
     appearance: {
       theme: 'Theme',

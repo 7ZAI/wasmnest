@@ -32,7 +32,6 @@ const frontendSourceGlobs = [
   'wasmnest-desktop/src/**/*.{ts,tsx,js,mjs,vue}',
   'wasmnest-desktop/packages/plugin-sdk-desktop/{src,template,dev-shell}/**/*.{ts,tsx,js,mjs,vue}',
   'wasmnest-mobile/src/**/*.{ts,tsx,js,mjs,vue}',
-  'wasmnest-mobile/plugins/*/src/**/*.{ts,tsx,js,mjs,vue}',
   'wasmnest-mobile/packages/plugin-sdk-mobile/{src,template,dev-shell}/**/*.{ts,tsx,js,mjs,vue}',
 ]
 

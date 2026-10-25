@@ -6,7 +6,7 @@
 # rustup 更新或源码构建）；nightly 自 2026-09-12 起 rust-std present。本脚本把
 # 桌面插件 wasip3 编译链固定到单一 nightly 版本，镜像加速安装，全流程可复现。
 #
-# 版本与切换点（单一事实来源，文档化决策见 docs/knowledge/wasip3-toolchain.md）：
+# 版本与切换点（单一事实来源；本文件头注即文档，不再引用 knowledge 目录）：
 #   - WASIP3_NIGHTLY=nightly-2026-09-16（rustc 1.100.0-nightly，spike 验证版本）
 #   - 切换点：stable >= 1.99（预计 2026-10 中，nightly 2026-09-12 起 std present）
 #     → rustup update + `rustup target add wasm32-wasip3`（stable）→ 本脚本去掉

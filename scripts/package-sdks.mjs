@@ -14,7 +14,7 @@
  *
  * 产物即 release 的独立附件（与 .github/workflows/sdk-publish.yml 发布同一条链；
  * 发布 workflow 只认本脚本产出的 tarball / .crate，不另行构建），
- * 与 scripts/package-plugins.mjs 输出的插件 zip 平级，按端分目录：
+ * 与 host:pack 输出的宿主产物平级，按端分目录：
  *   dist/sdk-packages/<target>/<sdk>-<sdk-version>.zip + 原始 .tgz / .crate + SHA256SUMS
  *
  * 版本约定：产物以各 SDK 自身版本命名（package.json version，CI 强制与 Cargo.toml 一致），
@@ -443,7 +443,7 @@ function crateTarball(t, c, expectedVersion) {
   return crateFile
 }
 
-// 与 package-plugins.mjs 同源的 zip 实现（CRC32 + store/deflate 自适应 + 目录条目显式）
+// 自带 zip 实现（CRC32 + store/deflate 自适应 + 目录条目显式）
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256)
   for (let n = 0; n < 256; n++) {
@@ -660,7 +660,7 @@ for (const t of targets()) {
     sumsLines,
     '```',
     '',
-    '安装与使用见 SDK 目录 README.md（本包内已附）与 `docs/knowledge/sdk-publish.md`。',
+    '安装与使用见 SDK 目录 README.md（本包内已附）。',
     '',
   ].join('\n')
   zipEntries.push({ name: 'index.md', data: Buffer.from(indexMd, 'utf-8') })

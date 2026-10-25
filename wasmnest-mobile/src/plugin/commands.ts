@@ -43,16 +43,6 @@ export async function pluginDeactivate(pluginId: string): Promise<void> {
   return await invoke('plugin_deactivate', { pluginId, credential })
 }
 
-/** 查询插件启用状态 */
-export async function pluginIsEnabled(pluginId: string): Promise<boolean> {
-  return await invoke('plugin_is_enabled', { pluginId })
-}
-
-/** 设置插件启用状态（应用「已启用 / 可用」偏好，不触发激活） */
-export async function pluginSetEnabled(pluginId: string, enabled: boolean): Promise<void> {
-  return await invoke('plugin_set_enabled', { pluginId, enabled })
-}
-
 /** 查询插件「启动时自动激活」偏好（缺省 false = 不自动启动） */
 export async function pluginIsAutostart(pluginId: string): Promise<boolean> {
   return await invoke('plugin_is_autostart', { pluginId })
@@ -108,12 +98,6 @@ export async function pluginInvoke(pluginId: string, command: string, args: any 
 export async function pluginInstallFromFile(path: string): Promise<string> {
   const credential = await ensureHostCredential()
   return await invoke('plugin_install_from_file', { path, credential })
-}
-
-/** 从 URL 下载 zip 插件包安装（宿主面凭证已绑定，ADR 0058） */
-export async function pluginDownload(zipUrl: string): Promise<string> {
-  const credential = await ensureHostCredential()
-  return await invoke('plugin_download', { zipUrl, credential })
 }
 
 /** 卸载插件（仅用户安装的插件；宿主面凭证已绑定，ADR 0058） */

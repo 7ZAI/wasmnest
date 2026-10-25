@@ -76,29 +76,6 @@ export default {
       approvals: '{count} 项待审批',
       openPerms: '打开权限与授权',
     },
-    app: {
-      stop: '停用',
-      subCommands: '{count} 个命令',
-      approval: {
-        title: '等待权限审批',
-        desc: 'manifest 声明 {perms} 个权限位，其中 {risks} 个高危位。批准是整单裁决，不做逐位勾选。',
-        viewPerms: '查看权限详情',
-        approveStart: '批准并启动',
-      },
-      error: {
-        title: '应用错误',
-        desc: '该应用启动失败（实例未在运行）。可在应用管理页查看详情后重试。',
-        backHome: '返回主屏',
-      },
-      dormant: {
-        desc: '应用未启动。启动后将以全屏卡片打开。',
-        start: '启动并打开',
-      },
-      noView: {
-        desc: '该应用没有可挂载的宿主视图，请从应用管理页查看其能力。',
-        backHome: '返回主屏',
-      },
-    },
     sys: {
       chip: '系统页 · 卡片',
       apps: {
@@ -256,17 +233,6 @@ export default {
         hint: '皮肤只覆盖平台外壳的 CSS 变量；应用根容器自己声明的配色优先。',
       },
     },
-    perms: {
-      pending: '{count} 个应用待审批',
-      pendingHint: '审批是整单裁决——逐位勾选会让「高危位混在低位里被顺手放行」。',
-      pendingGo: '去审批',
-      appMeta: '{perms} 权限位 · {risks} 高危 · {records} 条授权记录',
-      manage: '管理',
-      secUser: '已授权 {count}',
-      secAuto: '免询问放行 {count}',
-      secFirstParty: '内置免询问 {count}',
-      secDeny: '硬拒绝 {count}',
-    },
     apps: {
       sortHint:
         '按授权风险排序（「始终允许」最宽松置顶）。运行中的应用不可卸载；启用方向先过审批门。',
@@ -321,26 +287,11 @@ export default {
         user: '本地安装',
       },
     },
-    boot: {
-      line: 'WasmNest · wasm-app 平台启动中',
-      skip: '点击任意处跳过',
-      stepRegistry: '已装应用注册表加载（{count}）',
-      stepAuth: '授权策略层 fail-closed 自检',
-      stepReady: '运行时就绪',
-    },
   },
   common: {
     button: {
       cancel: '取消',
       stop: '停止',
-    },
-    status: {
-      error: '错误',
-      unknown: '未知',
-      running: '运行中',
-      stopped: '已停止',
-      asking: '等待输入',
-      starting: '启动中',
     },
     misc: {
       terminalTitle: '终端 - {name}',
@@ -505,7 +456,6 @@ export default {
     },
   },
   settings: {
-    title: '设置',
     linkCrypto: {
       title: '链路加密',
       master: '启用链路加密',
@@ -632,9 +582,6 @@ export default {
         fs: '文件',
         network: '网络',
       },
-    },
-    ui: {
-      title: '界面设置',
     },
     appearance: {
       theme: '主题',
