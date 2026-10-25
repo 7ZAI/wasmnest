@@ -8,7 +8,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{forget_context_menu_label, mark_first_context_menu_connect};
+    use crate::bootstrap::context_menu::{forget_context_menu_label, mark_first_context_menu_connect};
     use std::collections::HashSet;
     use std::sync::{Arc, Mutex};
 
@@ -38,11 +38,11 @@ mod tests {
 
         assert!(mark_first_context_menu_connect(&connected, "main"));
         assert!(
-            mark_first_context_menu_connect(&connected, "terminal-session-1"),
+            mark_first_context_menu_connect(&connected, "bedcode-1"),
             "终端窗口是独立 webview，不该被主窗口的去重记录挡住"
         );
-        assert!(!mark_first_context_menu_connect(&connected, "terminal-session-1"));
-        assert!(mark_first_context_menu_connect(&connected, "terminal-session-2"));
+        assert!(!mark_first_context_menu_connect(&connected, "bedcode-1"));
+        assert!(mark_first_context_menu_connect(&connected, "bedcode-2"));
     }
 
     /// 记录在去重表里的 label 必须与传入值一致（避免去重键被写错导致窗口被跳过）
@@ -50,11 +50,11 @@ mod tests {
     fn inserted_key_is_the_given_label() {
         let connected = Mutex::new(HashSet::new());
 
-        mark_first_context_menu_connect(&connected, "terminal-session-7");
+        mark_first_context_menu_connect(&connected, "bedcode-7");
 
         let seen = connected.lock().expect("锁未被中毒");
         assert_eq!(seen.len(), 1);
-        assert!(seen.contains("terminal-session-7"));
+        assert!(seen.contains("bedcode-7"));
     }
 
     /// 锁中毒时按「未见过」处理：不 panic，且仍返回 true（本次照常连接信号）
@@ -90,12 +90,12 @@ mod tests {
     fn reopened_window_with_same_label_reconnects_after_destroy() {
         let connected = Mutex::new(HashSet::new());
 
-        assert!(mark_first_context_menu_connect(&connected, "terminal-session-1"));
+        assert!(mark_first_context_menu_connect(&connected, "bedcode-1"));
         // 关窗 → 窗口销毁钩子清理
-        forget_context_menu_label(&connected, "terminal-session-1");
+        forget_context_menu_label(&connected, "bedcode-1");
         // 重开同会话：同 label、全新实例
         assert!(
-            mark_first_context_menu_connect(&connected, "terminal-session-1"),
+            mark_first_context_menu_connect(&connected, "bedcode-1"),
             "销毁后重开的同 label 窗口必须重新连接信号"
         );
     }
@@ -106,20 +106,20 @@ mod tests {
         let connected = Mutex::new(HashSet::new());
 
         mark_first_context_menu_connect(&connected, "main");
-        mark_first_context_menu_connect(&connected, "terminal-session-1");
-        mark_first_context_menu_connect(&connected, "terminal-session-2");
+        mark_first_context_menu_connect(&connected, "bedcode-1");
+        mark_first_context_menu_connect(&connected, "bedcode-2");
 
-        forget_context_menu_label(&connected, "terminal-session-1");
+        forget_context_menu_label(&connected, "bedcode-1");
 
         assert!(
             !mark_first_context_menu_connect(&connected, "main"),
             "主窗口仍在去重表里，不该因别的窗口销毁而重连"
         );
         assert!(
-            !mark_first_context_menu_connect(&connected, "terminal-session-2"),
+            !mark_first_context_menu_connect(&connected, "bedcode-2"),
             "其它终端窗口同样不受影响"
         );
-        assert!(mark_first_context_menu_connect(&connected, "terminal-session-1"));
+        assert!(mark_first_context_menu_connect(&connected, "bedcode-1"));
     }
 
     /// 边界：清理一个从未记录过的 label 不 panic、不影响已有记录（重复 Destroyed 等形态）
@@ -130,7 +130,7 @@ mod tests {
         mark_first_context_menu_connect(&connected, "main");
 
         forget_context_menu_label(&connected, "never-seen");
-        forget_context_menu_label(&connected, "terminal-session-9");
+        forget_context_menu_label(&connected, "bedcode-9");
 
         assert_eq!(connected.lock().expect("锁未被中毒").len(), 1);
         assert!(!mark_first_context_menu_connect(&connected, "main"));

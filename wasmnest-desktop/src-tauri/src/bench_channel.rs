@@ -150,40 +150,43 @@ mod tests {
     /// **闸门锁**：这条命令面不得漏进 release 产物。
     ///
     /// 门是 `#[cfg(debug_assertions)]` 的**声明处与注册处**两行；本测试
-    /// 从源码文本上钉死它们——模块声明与 `mod` 项必须在 lib.rs 里带 cfg 门，
-    /// 两条 `generate_handler!` 项也必须带 cfg 门。删掉任一门即红。
+    /// 从源码文本上钉死它们——模块声明在 lib.rs、`generate_handler!` 注册项在
+    /// bootstrap/mod.rs（2026-10-25 启动装配拆分随迁），两处都必须带 cfg 门。
+    /// 删掉任一门即红。
     #[test]
     fn bench_channel_surface_stays_debug_only() {
         let lib = std::fs::read_to_string("src/lib.rs").expect("read src/lib.rs");
-        let lines: Vec<&str> = lib.lines().collect();
+        let handler = std::fs::read_to_string("src/bootstrap/mod.rs").expect("read src/bootstrap/mod.rs");
 
         // 门在**属性行**上（`#[cfg(debug_assertions)]` 是 `mod` 的上一行），
         // 故每个待查项都要连同前一行一起看——只看命中行会把“门在前一行”误判为无门
-        let with_prev = |needle: &str| -> (String, String) {
-            let idx = lines
+        let with_prev = |haystack: &[&str], origin: &str, needle: &str| -> (String, String) {
+            let idx = haystack
                 .iter()
                 .position(|l| l.contains(needle))
-                .unwrap_or_else(|| panic!("src/lib.rs 应含 {needle}"));
-            let hit = lines[idx].trim().to_string();
+                .unwrap_or_else(|| panic!("{origin} 应含 {needle}"));
+            let hit = haystack[idx].trim().to_string();
             let prev = idx
                 .checked_sub(1)
-                .map(|i| lines[i].trim().to_string())
+                .map(|i| haystack[i].trim().to_string())
                 .unwrap_or_default();
             (hit, prev)
         };
 
-        let (hit, prev) = with_prev("mod bench_channel");
+        let lines: Vec<&str> = lib.lines().collect();
+        let (hit, prev) = with_prev(&lines, "src/lib.rs", "mod bench_channel");
         assert!(
             hit.contains("cfg(debug_assertions)") || prev.contains("cfg(debug_assertions)"),
             "bench_channel 模块声明必须带 #[cfg(debug_assertions)] 门，否则 release 产物会带基准命令面：{prev} / {hit}"
         );
 
+        let handler_lines: Vec<&str> = handler.lines().collect();
         for cmd in [
             "bench_channel_stream_bytes",
             "bench_channel_stream_text",
             "bench_channel_stream_raw",
         ] {
-            let (hit, prev) = with_prev(cmd);
+            let (hit, prev) = with_prev(&handler_lines, "src/bootstrap/mod.rs", cmd);
             assert!(
                 hit.contains("cfg(debug_assertions)") || prev.contains("cfg(debug_assertions)"),
                 "{cmd} 的注册必须紧邻 #[cfg(debug_assertions)] 门：{prev} / {hit}"

@@ -31,12 +31,12 @@ fn read_file(rel: &str) -> String {
     std::fs::read_to_string(src_tauri_root().join(rel)).expect("read source file")
 }
 
-/// lib.rs 的 generate_handler 注册块（去注释；注释里的命令名是记账，不是注册）
+/// bootstrap/mod.rs 的 generate_handler 注册块（2026-10-25 拆分自 lib.rs）（去注释；注释里的命令名是记账，不是注册）
 fn registered_block() -> String {
-    let lib = read_file("src/lib.rs");
+    let lib = read_file("src/bootstrap/mod.rs");
     let start = lib
         .find("generate_handler![")
-        .unwrap_or_else(|| panic!("lib.rs 必须包含 generate_handler![ 注册块"));
+        .unwrap_or_else(|| panic!("bootstrap/mod.rs 必须包含 generate_handler![ 注册块"));
     let body = &lib[start..];
     body.lines()
         .filter_map(|raw| {

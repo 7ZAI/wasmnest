@@ -33,14 +33,14 @@ fn pos(haystack: &str, needle: &str, file: &str) -> usize {
 
 #[test]
 fn boot_assembles_and_injects_service_registry_before_plugin_host() {
-    let lib = read("src/lib.rs");
-    let ports = pos(&lib, "install_server_ports_with", "lib.rs");
-    let registry = pos(&lib, "ServiceRegistry::new()", "lib.rs");
-    let transport = pos(&lib, "TransportService::register", "lib.rs");
-    let peer = pos(&lib, "PeerNodeService::register", "lib.rs");
+    let lib = read("src/bootstrap/mod.rs");
+    let ports = pos(&lib, "install_server_ports_with", "bootstrap/mod.rs");
+    let registry = pos(&lib, "ServiceRegistry::new()", "bootstrap/mod.rs");
+    let transport = pos(&lib, "TransportService::register", "bootstrap/mod.rs");
+    let peer = pos(&lib, "PeerNodeService::register", "bootstrap/mod.rs");
     // 注释里多次提到 `PluginHost::new` / `apply_autostart`，取**实际调用**形态
-    let plugin_host = pos(&lib, "block_on(wasm_core::PluginHost::new(", "lib.rs");
-    let autostart = pos(&lib, "block_on(lifecycle.apply_autostart())", "lib.rs");
+    let plugin_host = pos(&lib, "block_on(wasm_core::PluginHost::new(", "bootstrap/mod.rs");
+    let autostart = pos(&lib, "block_on(lifecycle.apply_autostart())", "bootstrap/mod.rs");
 
     assert!(
         ports < plugin_host,
@@ -101,11 +101,11 @@ fn surface_commands_acquire_and_release_transport() {
         );
     }
 
-    let lib = read("src/lib.rs");
+    let lib = read("src/bootstrap/mod.rs");
     for needle in ["commands::plugin_surface_open", "commands::plugin_surface_close"] {
         assert!(
             lib.contains(needle),
-            "lib.rs 未注册 `{needle}`（壳 invoke 会 command not found）"
+            "bootstrap/mod.rs 未注册 `{needle}`（壳 invoke 会 command not found）"
         );
     }
 
@@ -143,7 +143,7 @@ fn desktop_peer_port_exposes_service_registry() {
 
 #[test]
 fn retired_unowned_service_commands_stay_retired() {
-    let lib = read("src/lib.rs");
+    let lib = read("src/bootstrap/mod.rs");
     for retired in [
         "commands::server_start",
         "commands::server_stop",

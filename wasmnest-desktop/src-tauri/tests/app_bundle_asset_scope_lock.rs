@@ -29,14 +29,14 @@ fn read_file(rel: &str) -> String {
 
 #[test]
 fn resolved_plugins_dir_is_allowed_in_asset_protocol_scope() {
-    let lib = read_file("src/lib.rs");
+    let lib = read_file("src/bootstrap/mod.rs");
 
     let resolved_at = lib
         .find("let plugins_dir")
-        .unwrap_or_else(|| panic!("lib.rs 必须解析出 plugins_dir（应用整包根目录）"));
+        .unwrap_or_else(|| panic!("bootstrap/mod.rs 必须解析出 plugins_dir（应用整包根目录）"));
     let scope_at = lib.find("asset_protocol_scope()").unwrap_or_else(|| {
         panic!(
-            "lib.rs 启动装配必须按解析出的 plugins_dir 动态放行 asset protocol 作用域：\n\
+            "bootstrap/mod.rs 启动装配必须按解析出的 plugins_dir 动态放行 asset protocol 作用域：\n\
              静态作用域（tauri.conf.json 的 $RESOURCE/$APPCONFIG/$APPDATA）覆盖不到\n\
              WASMNEST_PLUGINS_DIR 指向的任意目录 → asset 协议 403 → 挂载包动态 import\n\
              失败（「应用界面加载失败，可重试」）+ 应用图标回退成壳内通用 glyph。\n\
