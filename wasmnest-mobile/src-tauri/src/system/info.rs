@@ -50,18 +50,6 @@ impl SystemInfo {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
         }
     }
-
-    /// 采集未完成时的兜底实例（前端早于采集 invoke 时不 panic）
-    pub fn fallback() -> Self {
-        Self {
-            os_name: std::env::consts::OS.to_string(),
-            os_version: String::new(),
-            device_name: crate::system::constants::auth::DEFAULT_DEVICE_NAME.to_string(),
-            hostname: String::new(),
-            local_ips: Vec::new(),
-            app_version: env!("CARGO_PKG_VERSION").to_string(),
-        }
-    }
 }
 
 /// 用户设置的设备名称

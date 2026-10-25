@@ -17,12 +17,15 @@
 //!
 //! 只扫非注释非测试区：模块头「为什么」说明段落是记账，`#[cfg(test)]` 区内对
 //! 构造器/解析器的直接调用是单测自检，均不算回接。
+//!
+//! 扫描面 = `src/egress/` 生产文件（mod / policy / url；`tests.rs` 是测试模块不算
+//! 生产区）。2026-10-25 随 egress.rs 目录化拆分（5d30495）迁路径。
 
 use std::path::{Path, PathBuf};
 
 /// 锁 1 出现即红：映射单点旁路 / 写入面读面解析
 const MAPPING_BYPASS_NEEDLES: [&str; 2] = [
-    // egress.rs：StrategyStep::of 的实参必须是 strategy_for 读出的档位，
+    // egress/policy.rs：StrategyStep::of 的实参必须是 strategy_for 读出的档位，
     // 出现 `StrategyStep::of(AuthStrategy::` = 硬编码档位绕过策略读取
     "StrategyStep::of(AuthStrategy::",
     // commands/egress.rs：写入面必须 parse_wire（未知值显性报错）；
@@ -43,6 +46,9 @@ const REQUIRED_SAFETY_SYMBOLS: [&str; 5] = [
 /// （decide 管线第 3 步 record_hit + request_consent 的 verdict.deny 落账）；
 /// 只余 1 处 = 管线第 3 步被删，deny 不再优先于 always_allow 档。
 const DENY_EFFECT_MIN_OCCURRENCES: usize = 2;
+
+/// 生产区扫描面：egress 目录化的策略引擎文件（不含 tests.rs 测试模块）
+const EGRESS_PRODUCTION_FILES: [&str; 3] = ["src/egress/mod.rs", "src/egress/policy.rs", "src/egress/url.rs"];
 
 fn mobile_src_root() -> PathBuf {
     // CARGO_MANIFEST_DIR = <repo>/wasmnest-mobile/src-tauri
@@ -73,16 +79,16 @@ fn scan_production_lines(path: &Path, mut visit: impl FnMut(usize, &str)) -> std
 #[test]
 fn egress_mapping_single_point_and_wire_vocabulary() {
     let mut violations: Vec<String> = Vec::new();
-    let egress_rs = mobile_src_root().join("src/egress.rs");
+    let policy_rs = mobile_src_root().join("src/egress/policy.rs");
     let commands_rs = mobile_src_root().join("src/commands/egress.rs");
 
-    // 锁 1：映射单点旁路（egress.rs 生产区）
-    scan_production_lines(&egress_rs, &mut |idx: usize, line: &str| {
+    // 锁 1：映射单点旁路（egress/policy.rs 生产区）
+    scan_production_lines(&policy_rs, &mut |idx: usize, line: &str| {
         if line.contains(MAPPING_BYPASS_NEEDLES[0]) {
-            violations.push(format!("src/egress.rs:{}: {}", idx + 1, line.trim()));
+            violations.push(format!("src/egress/policy.rs:{}: {}", idx + 1, line.trim()));
         }
     })
-    .expect("read src/egress.rs");
+    .expect("read src/egress/policy.rs");
 
     // 锁 1：写入面读面解析（commands/egress.rs）
     scan_production_lines(&commands_rs, &mut |idx: usize, line: &str| {
@@ -101,21 +107,25 @@ fn egress_mapping_single_point_and_wire_vocabulary() {
 
 #[test]
 fn egress_safety_obligations_stay_in_place() {
-    let egress_rs = mobile_src_root().join("src/egress.rs");
-    let content = std::fs::read_to_string(&egress_rs).expect("read egress.rs");
     let mut missing: Vec<&str> = Vec::new();
     for symbol in REQUIRED_SAFETY_SYMBOLS {
         // 在场断言只认生产区（测试区对构造器/解析器的直接调用是单测自检，
-        // 不能用来掩盖删除）
-        let mut in_tests = false;
+        // 不能用来掩盖删除）；目录化拆分后逐文件累计生产区命中
         let mut found = 0;
-        for raw in content.lines() {
-            let line = raw.trim_start();
-            if line.starts_with("#[cfg(test)]") || line.starts_with("mod tests") {
-                in_tests = true;
-            }
-            if !in_tests && line.contains(symbol) {
-                found += 1;
+        for file in EGRESS_PRODUCTION_FILES {
+            let path = mobile_src_root().join(file);
+            let mut in_tests = false;
+            for raw in std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("read {file}: {e}"))
+                .lines()
+            {
+                let line = raw.trim_start();
+                if line.starts_with("#[cfg(test)]") || line.starts_with("mod tests") {
+                    in_tests = true;
+                }
+                if !in_tests && line.contains(symbol) {
+                    found += 1;
+                }
             }
         }
         if found == 0 {
@@ -131,17 +141,21 @@ fn egress_safety_obligations_stay_in_place() {
 
 #[test]
 fn egress_deny_effect_beats_all_allow_paths() {
-    let egress_rs = mobile_src_root().join("src/egress.rs");
-    let content = std::fs::read_to_string(&egress_rs).expect("read egress.rs");
-    let mut in_tests = false;
     let mut deny_uses = 0;
-    for raw in content.lines() {
-        let line = raw.trim_start();
-        if line.starts_with("#[cfg(test)]") || line.starts_with("mod tests") {
-            in_tests = true;
-        }
-        if !in_tests && line.contains("AUTH_EFFECT_DENY") {
-            deny_uses += 1;
+    for file in EGRESS_PRODUCTION_FILES {
+        let path = mobile_src_root().join(file);
+        let mut in_tests = false;
+        for raw in std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {file}: {e}"))
+            .lines()
+        {
+            let line = raw.trim_start();
+            if line.starts_with("#[cfg(test)]") || line.starts_with("mod tests") {
+                in_tests = true;
+            }
+            if !in_tests && line.contains("AUTH_EFFECT_DENY") {
+                deny_uses += 1;
+            }
         }
     }
     assert!(

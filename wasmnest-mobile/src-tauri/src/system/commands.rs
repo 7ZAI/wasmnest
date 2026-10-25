@@ -47,25 +47,3 @@ pub async fn save_app_settings(
 pub fn ping() -> String {
     "pong".to_string()
 }
-
-/// 获取应用版本
-#[tauri::command]
-pub fn get_app_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
-}
-
-/// 获取系统基本信息（OS / 设备名称 / IP 地址，启动时采集一次）
-///
-/// 采集在 setup 的异步 spawn 中完成，前端过早 invoke 时返回兜底实例而非 panic
-#[tauri::command]
-pub fn get_system_info() -> crate::system::info::SystemInfo {
-    crate::state::try_get_system_info()
-        .map(|i| i.as_ref().clone())
-        .unwrap_or_else(crate::system::info::SystemInfo::fallback)
-}
-
-/// 获取本地 IP 地址（移动端不适用，返回空列表）
-#[tauri::command]
-pub fn get_local_ip_addresses() -> Vec<String> {
-    vec![]
-}

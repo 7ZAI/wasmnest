@@ -6,7 +6,6 @@
 // 随迁 bootstrap/（context_menu_test / run_with_test），crate 内私有项测试口径不变。
 mod bootstrap;
 pub mod commands;
-pub mod crypto;
 // 第一方免弹窗归属清单（产品数据真源，票 08/P0-2；判定逻辑在 wasm-core）
 pub mod first_party_dirs;
 // 宿主侧插件能力面（能力域端口 adapter / 强制引用行 / 白名单条目同处）——

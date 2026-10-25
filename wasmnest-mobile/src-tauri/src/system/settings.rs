@@ -108,12 +108,4 @@ impl SettingsManager {
         let settings = self.settings.read().await;
         Ok(settings.get_all())
     }
-
-    /// 保存到文件
-    #[allow(dead_code)] // 预留：供未来持久化触发
-    async fn save(&self) -> Result<()> {
-        let settings = self.settings.read().await;
-        settings.save(&self.path)?;
-        Ok(())
-    }
 }

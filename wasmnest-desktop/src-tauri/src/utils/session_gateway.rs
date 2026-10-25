@@ -49,11 +49,9 @@ use crate::wasm_core::{AppError, Result};
 const API_LIST: &str = "com.wasmnest.bedcode.session-list";
 const API_GET: &str = "com.wasmnest.bedcode.session-get";
 const API_CREATE: &str = "com.wasmnest.bedcode.session-create";
-const API_CLOSE: &str = "com.wasmnest.bedcode.session-close";
 const API_REMOVE: &str = "com.wasmnest.bedcode.session-remove";
 const API_RESIZE: &str = "com.wasmnest.bedcode.session-resize";
 const API_INPUT: &str = "com.wasmnest.bedcode.session-input";
-const API_HISTORY: &str = "com.wasmnest.bedcode.session-history";
 
 /// 插件不可用时的显性错误（无降级；会话真源已不在宿主）
 fn plugin_required_error(what: &str) -> AppError {
@@ -145,19 +143,6 @@ pub async fn start(
 
 // ==================== 生命周期动作 ====================
 
-/// 停止会话（登记 Stopping + `host-pty.kill`；终态由插件 pty:exit 收尾并广播）
-pub async fn stop(host_ctx: &WasmHostContext, session_id: &str, _source_device: Option<String>) -> Result<()> {
-    let v = call_session_api(
-        host_ctx,
-        API_CLOSE,
-        "session stop",
-        serde_json::json!({ "sessionId": session_id }),
-    )?;
-    tracing::info!(session_id = %session_id, "session stop requested via plugin");
-    let _ = v;
-    Ok(())
-}
-
 /// 移除会话（摘记录 + kill + 广播 SessionRemoved；source_device 参与广播排除语义）
 pub async fn remove(host_ctx: &WasmHostContext, session_id: &str, source_device: Option<String>) -> Result<()> {
     call_session_api(
@@ -226,29 +211,3 @@ pub async fn special_key(host_ctx: &WasmHostContext, session_id: &str, key: &str
     )?;
     Ok(())
 }
-
-// ==================== 输出面（websocket 业务下沉票 08：插件互调，宿主不再直读环） ====================
-
-/// 一次性历史快照（插件 reply 原样透传：`{data, minOffset, snapshotOffset,
-/// historyBytes}`）。
-///
-/// **插件必需（websocket 业务下沉票 08）**：宿主不再持有「会话 id → pty 句柄」的
-/// 广播映射（`hostBroadcastSessionId` / `broadcast_handle_for_session` 已退役，PTY
-/// 引擎不再知道 session id）；历史快照改经插件互调 api——插件用自己的
-/// `session record.pty_id` 调 `host-pty.ring-fetch` 拉净驻留历史
-/// （spec §4.3：from 旧于环驻留起点时 minOffset 如实上报缺口，客户端据此判定
-/// 截断，不假装连续）。
-///
-/// 会话不存在 / 插件未激活 → 显性 `Err`（fail-visible，不静默当「无数据」）。
-pub async fn history_snapshot(host_ctx: &WasmHostContext, session_id: &str, from: u64) -> Result<serde_json::Value> {
-    call_session_api(
-        host_ctx,
-        API_HISTORY,
-        "session history",
-        serde_json::json!({ "sessionId": session_id, "from": from }),
-    )
-}
-
-// 票 11：`unsubscribe_output`（向内核输出环退订）随 `session/` 目录删除。
-// 票 08：`history_snapshot` 不再直读宿主 `PtyRing`——会话输出环读取归插件
-// （`session-history` 互调 api），宿主不再持有会话级环句柄。

@@ -294,17 +294,9 @@ pub fn run() {
             commands::connection::ws_clear_token,
             // Link Crypto Context（issue 09：事件 WS 链路加密桥）
             commands::connection::set_link_crypto_context,
-            // Egress Policy（外网授权弹窗回执 + 设置页查看/撤销 + 桌面端目标声明）
+            // Egress Policy（外网授权弹窗回执 + 桌面端目标声明；设置页管理面已随死路由退役）
             commands::egress::egress_consent_resolve,
-            commands::egress::egress_list_grants,
-            commands::egress::egress_revoke_grants,
             commands::egress::egress_declare_desktop_target,
-            // Egress 三档策略 + 记录管理（票 19：ADR 0022 2026-09-28 对齐）
-            commands::egress::egress_get_strategy,
-            commands::egress::egress_set_strategy,
-            commands::egress::egress_list_records,
-            commands::egress::egress_revoke_record,
-            commands::egress::egress_purge_plugin,
             // HTTP 代理（ticket 03：统一请求出口，request_id 多路复用）
             commands::http_proxy::http_request,
             commands::http_proxy::http_cancel,
@@ -343,9 +335,6 @@ pub fn run() {
             system::commands::save_app_settings,
             // Utility
             system::commands::ping,
-            system::commands::get_app_version,
-            system::commands::get_system_info,
-            system::commands::get_local_ip_addresses,
             // 壳 UI 资产（选图 + 落 $APPDATA；前端零资源访问红线下由宿主代劳）
             system::shell_ui::shell_import_image,
             // Android Specific

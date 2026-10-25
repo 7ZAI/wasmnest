@@ -161,39 +161,6 @@ impl PluginLifecycleManager {
             .map_err(|e| crate::AppError::Plugin(format!("停用插件 '{plugin_id}' 失败: {e}")))
     }
 
-    /// 人工批准插件权限（仅 `UserInstalled` 来源需要；整单批准 + 内容哈希钉扎）
-    pub async fn approve(&self, plugin_id: &str) -> Result<Vec<String>> {
-        self.host
-            .approve_plugin(plugin_id)
-            .await
-            .map_err(|e| crate::AppError::Plugin(format!("批准插件 '{plugin_id}' 失败: {e}")))
-    }
-
-    /// 卸载插件（停用 → 丢私有库 → 删安装目录 → 清插件存储 → 撤销审批与持久化）
-    ///
-    /// 清理完成后**回收本编排层自持的启用 / 自启偏好**（`plugin.enabled.{id}` /
-    /// `plugin.autostart.{id}`）：这两把 key 以系统分区属主写入，wasm-core
-    /// `uninstall_plugin` 不识别、`clear_all(id)` 也清不到——不清理则卸载后同 id
-    /// 重装静默继承旧偏好（移动端 manager.rs 同款回收；偏好清理失败 warn 留痕，
-    /// 不阻断卸载——插件本体已卸，残留行由重装覆盖 / 下次卸载再清）。
-    pub async fn uninstall(&self, plugin_id: &str) -> Result<()> {
-        // 系统服务（L1/L2）随宿主分发，卸载入口只为用户安装的 L3 应用保留。
-        // 判据 = manifest kind（宿主硬门，UI 隐藏不是唯一防线）。
-        if let Some(info) = self.host.get_plugin(plugin_id).await {
-            if info.kind.is_role_driven() {
-                return Err(crate::AppError::Plugin(format!(
-                    "系统服务不可卸载: {plugin_id}（随宿主分发）"
-                )));
-            }
-        }
-        self.host
-            .uninstall_plugin(plugin_id)
-            .await
-            .map_err(|e| crate::AppError::Plugin(format!("卸载插件 '{plugin_id}' 失败: {e}")))?;
-        remove_prefs(&self.host.storage(), plugin_id).await;
-        Ok(())
-    }
-
     // ==================== 偏好（移动端同款 key 语义；只改偏好，不触发当前进程启停） ====================
 
     /// 应用「主屏入口可见性」偏好（缺省 `true` = 显示；`false` = 用户停用）
@@ -335,23 +302,6 @@ async fn write_bool_pref(storage: &PluginStorage, prefix: &str, plugin_id: &str,
         .set(SYSTEM_PLUGIN_ID, &key, serde_json::json!(value))
         .await
         .map_err(|e| crate::AppError::Plugin(format!("写插件偏好 '{key}' 失败: {e}")))
-}
-
-/// 回收某插件的启用 / 自启偏好行（卸载时调用；与移动端 `manager.rs` uninstall
-/// 同款回收——wasm-core 不知这两把 key，`clear_all(id)` 清不到系统分区）。
-/// 失败不阻断卸载，warn 留痕供审计（键含插件 id，不会误删他插件行）。
-async fn remove_prefs(storage: &PluginStorage, plugin_id: &str) {
-    for prefix in [ENABLED_KEY_PREFIX, AUTOSTART_KEY_PREFIX] {
-        let key = format!("{prefix}{plugin_id}");
-        if let Err(e) = storage.delete(SYSTEM_PLUGIN_ID, &key).await {
-            tracing::warn!(
-                plugin_id = %plugin_id,
-                key = %key,
-                error = %e,
-                "[PluginLifecycle] pref cleanup on uninstall failed (row left; will be overwritten on next install)"
-            );
-        }
-    }
 }
 
 // ==================== 命令面（D3：桌面补移动端同款缺失臂，语义逐字一致） ====================
@@ -541,43 +491,6 @@ mod tests {
             read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.e", true).await,
             "启用偏好坏行按缺省可见解读（不在坏行时静默隐藏应用）"
         );
-    }
-
-    #[tokio::test]
-    async fn remove_prefs_clears_both_pref_rows_and_keeps_other_plugins() {
-        let storage = storage();
-        write_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.x", true)
-            .await
-            .expect("enabled x");
-        write_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.x", true)
-            .await
-            .expect("autostart x");
-        // 其他插件偏好不受影响（隔离：只清目标插件的两行）
-        write_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.y", true)
-            .await
-            .expect("enabled y");
-
-        remove_prefs(&storage, "com.wasmnest.test.x").await;
-
-        // 行已删 → 各自回到 key 缺省取向（可见 / 不自启）
-        assert!(
-            read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.x", true).await,
-            "卸载清行后启用回到缺省可见"
-        );
-        assert!(
-            !read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.x", false).await,
-            "卸载清行后自启回到缺省关"
-        );
-        assert!(read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.y", true).await);
-    }
-
-    #[tokio::test]
-    async fn remove_prefs_is_idempotent_when_absent() {
-        let storage = storage();
-        // 无偏好行的插件卸载：不得报错、不得误删任何行（断言 = 各 key 缺省取向）
-        remove_prefs(&storage, "com.wasmnest.test.z").await;
-        assert!(read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.z", true).await);
-        assert!(!read_bool_pref(&storage, AUTOSTART_KEY_PREFIX, "com.wasmnest.test.z", false).await);
     }
 
     #[tokio::test]

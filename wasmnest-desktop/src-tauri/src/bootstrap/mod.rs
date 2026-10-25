@@ -14,7 +14,6 @@ mod run_with_test;
 
 #[cfg(debug_assertions)]
 use crate::bench_channel;
-use crate::server::peer_net_cmds;
 use crate::wasm_core;
 use crate::Result;
 use crate::{commands, plugin, server, system};
@@ -822,7 +821,6 @@ pub fn run() {
             // Utility
             commands::ping,
             commands::get_app_version,
-            commands::get_startup_time,
             commands::confirm_window_close,
             // Dev Console Relay（仅 dev：前端 console 日志转发，写 runtime.*.log + frontend.*.log 单独文件，见 commands.rs Dev Console Log Relay 节）
             #[cfg(debug_assertions)]
@@ -853,7 +851,6 @@ pub fn run() {
             commands::plugin_uninstall,
             commands::plugin_mark_error,
             commands::plugin_frontend_load_report,
-            commands::plugin_get_activated_state,
             // 生命周期偏好/状态（D3：桌面补移动端同款缺失臂，语义逐字一致；编排层在
             // plugin/lifecycle.rs，与 api_bridge 的清单/启停/审批/卸载臂并存）
             plugin::lifecycle::plugin_is_enabled,
@@ -867,12 +864,7 @@ pub fn run() {
             commands::plugin_storage_delete,
             // `plugin_terminal_send_input` 随票 08 注销：终端输入改走插件
             // 命令通道 `session.input`（宿主不再替插件导流输入）
-            commands::plugin_list_commands,
-            commands::plugin_list_views,
-            commands::plugin_find_file_handler,
             commands::plugin_invoke,
-            commands::plugin_list_rust_commands,
-            commands::plugin_dev_reload,
             commands::plugin_fs_auth_respond,
             commands::plugin_network_auth_respond,
             commands::plugin_auth_overview,
@@ -894,15 +886,6 @@ pub fn run() {
             // net.transport 的 acquire / release
             commands::plugin_surface_open,
             commands::plugin_surface_close,
-            // Peer Net（命令壳在 peer_net_cmds——引擎实现不持有 AppHandle，
-            // server-lib-split）；节点启停已退役，由 host-peer 原语按引用记账
-            // Phase 4（issue 13）：对等网络产品面已整体迁入 file-transfer 插件
-            // （WIT host-peer 13 原语），主前端命令面退役——仅保留生命周期、
-            // 首连确认与信任管理（宿主级兜底路径）。其余查询/管理命令的函数体
-            // 暂留一版（部分仍为 host_impl 内部簿记调用），下版本删除。
-            peer_net_cmds::respond_peer_consent,
-            peer_net_cmds::list_trusted_peers,
-            peer_net_cmds::revoke_trusted_peer,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

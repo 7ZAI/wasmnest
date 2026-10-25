@@ -30,19 +30,13 @@ pub enum IoEvent {
 pub struct IoManager {
     /// 事件广播器（供外部订阅）
     event_tx: broadcast::Sender<IoEvent>,
-    /// 运行标记（预留：用于健康检查 / 重连控制）
-    #[allow(dead_code)]
-    running: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl IoManager {
     /// 创建新的 IO 管理器
     pub fn new() -> Arc<Self> {
         let (event_tx, _) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
-        Arc::new(Self {
-            event_tx,
-            running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        })
+        Arc::new(Self { event_tx })
     }
 
     /// 获取事件接收器
@@ -61,7 +55,6 @@ impl Default for IoManager {
     fn default() -> Self {
         Self {
             event_tx: broadcast::channel(BROADCAST_CHANNEL_CAPACITY).0,
-            running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 }
