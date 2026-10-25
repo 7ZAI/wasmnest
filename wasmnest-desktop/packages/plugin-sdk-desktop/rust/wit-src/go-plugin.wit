@@ -1,0 +1,23 @@
+package wasmnest:plugin@0.0.1;
+
+/// Go 后端组件专用 world（issue #21「应用后端 Go 语言支持」Phase 1，SDK Go 壳）
+///
+/// 与 `world plugin` 的唯一差异：`include wasi:cli/command@0.2.0`——TinyGo 的
+/// wasip2 目标按 WASI command 形态产出组件（导入 clocks / random / io /
+/// filesystem / sockets / cli 标准面并导出 `wasi:cli/run`），宿主 linker 的
+/// WASI p2 面默认全开恰好覆盖，多出的 run 导出宿主不探测、无害（Phase 0 spike
+/// 实证，2026-10-26，见应用仓 issue #21 spike 记录）。
+///
+/// 导出面与 `world plugin` 完全一致（五个必选导出，由 Go SDK 壳 `sdk.Entry`
+/// 全量接线）；可选探测导出（events-binary / events-ws / events-task /
+/// auth-policy）首期不提供——宿主按名探测、缺失容忍，不影响加载（spec #21
+/// Implementation Decisions；Rust 侧等价物是 `wasm_entry!` 宏）。
+///
+/// 本文件是 Go 绑定生成的真源之一：`go/tools/gen-bindings.mjs` 把本文件与
+/// 拼装产物 `rust/wit/*.wit`（compose-wit.mjs 维护）以及 TinyGo 发行版自带的
+/// wasi-cli WIT（`lib/wasi-cli/wit/`，按 wasm-tools `deps/` 单层约定平铺——
+/// 嵌套 deps 不被发现）组装成 `go/wit/` 后经 wit-bindgen-go 生成 `go/gen/`。
+world go-plugin {
+    include plugin;
+    include wasi:cli/command@0.2.0;
+}

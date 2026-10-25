@@ -1,0 +1,24 @@
+{
+  "id": "com.wasmnest.go-sdk-probe",
+  "name": "Go SDK Probe",
+  "version": "0.0.1",
+  "platform": "desktop",
+  "description": "SDK Go 壳验证组件（issue #21 Phase 1）：sdk.Entry 五必选导出 + host 包装端到端",
+  "author": "WasmNest",
+  "main": "index.js",
+  "pluginType": "wasm",
+  "rustLibrary": "go_sdk_probe",
+  "permissions": [],
+  "contributes": {
+    "commands": [
+      {
+        "id": "go-sdk.ping",
+        "title": "Ping"
+      },
+      {
+        "id": "go-sdk.echo",
+        "title": "Echo"
+      }
+    ]
+  }
+}
