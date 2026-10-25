@@ -42,10 +42,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 
 # Security
 rand = "0.8"
-jsonwebtoken = "9"
 
-# Encoding
-encoding_rs = "0.8"
 base64 = "0.22"
 hex = "0.4"
 
@@ -61,11 +58,9 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Error handling
 anyhow = "1"
-thiserror = "1"
 
 # Logging
 tracing = { version = "0.1", features = ["log"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Async trait for dyn compatibility
 async-trait = "0.1"
@@ -98,8 +93,6 @@ wasmtime = "48"
 # HTTP client (WASM plugin HTTP proxy + remote download + 认证端点 .json() 解析)
 reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls", "json"] }
 
-# 传输引擎工具（CancellationToken 取消 + ReaderStream 文件流，与桌面端 transfer 同语义）
-tokio-util = { version = "0.7", features = ["io"] }
 
 # Regex for SQL table name extraction
 regex = "1"
@@ -130,9 +123,6 @@ wasmnest-server-base = { path = "../../../wasmnest-lib/wasmnest-server-base" }
 wasmnest-server-http = { path = "../../../wasmnest-lib/wasmnest-server-http" }
 # WS 客户端引擎（票 05 收口：host-websocket 的 WIT 实现住宿主）
 wasmnest-ws-client-engine = { path = "../../../wasmnest-lib/wasmnest-ws-client-engine" }
-# 共享机制实现核（票 05 收口：12 个 core 域 adapter 直连
-# `wasmnest-host-api-core::{storage,bus,database,fs,log,gate}`，机制语义双端单点）
-wasmnest-host-api-core = { path = "../../../wasmnest-lib/wasmnest-host-api-core" }
 # 插件机制内核（统一 state / HostModule / ModuleRegistry）——移动独有域 adapter
 # 自带 bindgen 需 host-kit 的 state 与自报面（wasm-core-mobile-purity 票 04，
 # 与桌面 src-tauri 同形）

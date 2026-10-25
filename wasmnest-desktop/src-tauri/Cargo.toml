@@ -62,34 +62,15 @@ tauri-plugin-process = "2"
 
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "process", "test-util"] }
-# 进程组信号（kill_process_group unix 分支：直接系统调用，避免外部 kill 命令引入的 SIGCHLD reaper 竞争）
-libc = "0.2"
 
 # Database
 # hooks feature：SQLite progress handler（宿主侧硬中断慢查询，DB 执行护栏票据 05）
 rusqlite = { version = "0.32", features = ["bundled", "hooks"] }
 
 # Security
-rand = "0.8"
 jsonwebtoken = "9"
 # 生物凭证验签（EC P-256 / ECDSA-SHA256，与移动端 Keystore 生成的密钥配套）
 p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
-# 通用加密/解密工具（HTTP 加密、非对称加密、文件加密传输）
-# aes-gcm：对称 AEAD（AES-256-GCM），用于 HTTP 报文与文件分块加密
-aes-gcm = "0.10"
-# chacha20poly1305：备选对称 AEAD，性能不依赖 AES-NI
-chacha20poly1305 = "0.10"
-# x25519-dalek：椭圆曲线 Diffie-Hellman 密钥协商（端到端加密 ECDH）；
-# static_secrets 启用可复用的长期密钥对（StaticSecret），便于持久化私钥
-x25519-dalek = { version = "2", features = ["static_secrets"] }
-# rsa：常规非对称加密（RSA-OAEP / PSS 签名；pem 启用 PKCS#8/#1 编解码）
-rsa = { version = "0.9", features = ["sha2", "pem"] }
-# sha2：SHA-256 摘要
-sha2 = "0.10"
-# zip：用户插件 zip 包解压安装（与移动端同版本 4.6）
-zip = "4.6"
-# hkdf：密钥派生（HKDF-SHA256）
-hkdf = "0.12"
 
 # Encoding
 encoding_rs = "0.8"
@@ -106,9 +87,6 @@ uuid = { version = "1", features = ["v4", "serde"] }
 # Date/Time
 chrono = { version = "0.4", features = ["serde"] }
 
-# Error handling
-anyhow = "1"
-thiserror = "1"
 
 # Logging
 tracing = { version = "0.1", features = ["log", "attributes"] }
@@ -139,8 +117,6 @@ mdns-sd = "0.20"
 # Network utilities
 local-ip-address = "0.6"
 
-# System info (CPU/memory metrics)
-sysinfo = "0.33"
 
 # Plugin API
 # 发布形态：crates.io 精确版本（本地开发经平台仓根 .cargo/config.toml 的
@@ -207,12 +183,7 @@ dirs = "6.0.0"
 # Actix Web (HTTP + WS server)
 actix-web = "4"
 actix = "0.13"
-actix-web-actors = "4"
-actix-rt = "2"
 
-# PTY management
-portable-pty = "0.8"
-wasmtime-wasi = { version = "48", features = ["p3"] }
 
 # Windows：WM_SETTINGCHANGE 广播（CLI PATH 注册后通知新终端/agent 进程生效）
 # + 文件定位 COM API（SHOpenFolderAndSelectItems / ShellExecuteExW，见 commands/opener.rs）
@@ -235,6 +206,8 @@ webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
 tauri-plugin-wdio = "1"
 
 [dev-dependencies]
+# 伪随机（测试 nonce/密钥生成；运行依赖的随机在 wasm-core/crypto-engine）
+rand = "0.8"
 tempfile = "3"
 # 集成测试 HTTP 配对（POST /api/auth/* 换取 JWT）：已为运行依赖，dev 复用同版本
 reqwest = { version = "0.12", features = ["json"] }
