@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * dev-shell 样式与桌面宿主真源漂移锁
  *
@@ -5,6 +6,9 @@
  * dev-shell 随 npm 包分发，不能反向 import 宿主 src（发布物内路径不存在），
  * 故保留副本。本锁钉死两者字节一致——宿主样式变更时必须同步副本，否则红。
  * （Seam 3：改副本不同步 / 改真源不同步都会在这里爆。）
+ *
+ * 纯 node 文本比对锁：模块顶层 fileURLToPath(new URL(...)) 在包 vitest 配置的
+ * happy-dom 默认环境下报「The URL must be of scheme file」，故显式声明 node。
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
