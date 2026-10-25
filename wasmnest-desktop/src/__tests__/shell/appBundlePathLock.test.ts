@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs'
  */
 
 const USE_APP_MOUNT = 'src/shell/mount/useAppMount.ts'
-const LIB_RS = 'src-tauri/src/lib.rs'
+const BOOTSTRAP_RS = 'src-tauri/src/bootstrap/mod.rs'
 const ASSETS_RS = 'src-tauri/src/plugin/assets.rs'
 
 describe('应用挂载包路径单一来源锁', () => {
@@ -29,9 +29,10 @@ describe('应用挂载包路径单一来源锁', () => {
   })
 
   it('宿主注册命令并装配目录状态（缺一即运行期 unknown command / 无状态）', () => {
-    const lib = readFileSync(LIB_RS, 'utf-8')
-    expect(lib).toContain('plugin::assets::plugin_get_asset_dir')
-    expect(lib).toContain('plugin::assets::AppAssetsDir')
+    // 命令注册 / 状态装配在 bootstrap（2026-10-25 大文件拆分后自 lib.rs 迁来）
+    const bootstrap = readFileSync(BOOTSTRAP_RS, 'utf-8')
+    expect(bootstrap).toContain('plugin::assets::plugin_get_asset_dir')
+    expect(bootstrap).toContain('plugin::assets::AppAssetsDir')
     const assets = readFileSync(ASSETS_RS, 'utf-8')
     expect(assets).toContain('pub fn plugin_get_asset_dir')
     expect(assets).toContain('pub struct AppAssetsDir')
