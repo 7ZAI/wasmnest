@@ -16,11 +16,6 @@ declare module '*.vue' {
   export default component
 }
 
-declare module '@xterm/xterm/css/xterm.css' {
-  const content: string
-  export default content
-}
-
 declare module '*.md?raw' {
   const content: string
   export default content
