@@ -23,15 +23,13 @@
 - **文档字面 ≠ 事实**：引用任何路径 / 命令 / 锁名 / 版本前先用 `ls` / `rg` 核对；与实际不符先修文档再继续。
 - **最小改动**：只改任务必要文件；禁止顺手重构相邻代码、擅自升级依赖（wasmtime / SDK 升级先做双端影响评估）；设计取舍不猜，先问用户。
 - **项目阶段（研发起步期）**：无真实用户、无对外 ABI 兼容义务——破坏性变更可直接进行，但跨仓契约按 tag 钉住（docs/contracts.md §1），退役面必须 **fail-visible**（点名缺失 + 给出路），禁止静默降级成「查不到就返回空」。
-- **LayerFS 强制工作面（四仓统一，2026-10-24）**：项目文件（四仓代码 / 文档 / 配置 / 资源）的一切读写与命令一律走 LayerFS MCP（`layerfs_*`），流程与门禁真源 = `docs/public/layerfs.md`，与本文件硬约束同级。工具不可用（无工具 / `layerfs_status` 失败 / `sudo` 被 no_new_privs 阻断）⇒ **停手报告**，禁止回退宿主 Edit/Write。唯一例外：本规范自身的 bootstrap 与工具配置；落地同步只允许按 public 文档 §6 执行。
-
 ### 0.1 Agent 工作流（vibe coding 简则）
 
-1. **开工自检**：`git status` 认领改动来源；读相关模块头注释与 `docs/codemap.md` §6 任务路由表的「必读」；确认要改的是哪一端（桌面 / 移动 / SDK / 工具）。项目文件改动先按 `docs/public/layerfs.md` §3 过 LayerFS 前置检查（工具可用 / 基线 tree 一致），未通过即停手报告。
+1. **开工自检**：`git status` 认领改动来源；读相关模块头注释与 `docs/codemap.md` §6 任务路由表的「必读」；确认要改的是哪一端（桌面 / 移动 / SDK / 工具）。
 2. **边界判定**：动宿主侧前先过 §2 三问（能离宿主实现吗 → 携带产品语义吗 → 才放宿主）；改跨仓面（WIT / 清单 / 应用注册表）先读 docs/contracts.md / docs/boundaries.md。判不准就停下问用户。
 3. **小步实现**：最小 diff 完成一个可验证单元；不并行夹带无关改动；生成物不手改（docs/contracts.md §6）。
 4. **针对性验证**：按 docs/testing.md §3 跑改动类型对应的最小测试集；改锁 / 改注册表 / 改 WIT 时必须跑对应锁。
-5. **交付说明**：列出「改了什么 / 为什么 / 跑了什么命令与结果 / 没跑什么与风险」；凡按 docs/git.md §3 边界需要跨仓同步的（清单、子模块指针、应用注册表），逐项点名。LayerFS 任务的交付说明另含分支 / publish / 四仓 tree 门禁结果（`docs/public/layerfs.md` §6）。
+5. **交付说明**：列出「改了什么 / 为什么 / 跑了什么命令与结果 / 没跑什么与风险」；凡按 docs/git.md §3 边界需要跨仓同步的（清单、子模块指针、应用注册表），逐项点名。
 
 ## 1. 仓速览（完整代码导航 → `docs/codemap.md`）
 
@@ -88,10 +86,10 @@
 | `docs/backend.md` | Rust 规范：命名 / AppError / Command 纪律 / 调试面门控 / 注释命名（后端面） |
 | `docs/security.md` | 安全与日志红线：密钥禁令 / fail-closed / 加密引擎中性原语 / tracing 分级 / 结构化字段 |
 | `docs/testing.md` | 单元测试形态 / 测试工具链 / 完成定义与验证清单（迁移期口径 2026-10-18）/ 锁纪律（Seam 3） |
-| `docs/public/layerfs.md` ★ | **LayerFS 开发流程（强制，四仓共享）**：单项目映射 / 分支与 Commit 纪律 / 开工基线核对 / 发布与 rebase / 落地 git 与 tree 门禁 / bootstrap / 并行与回退；本机部署事实见 `docs/layerfs.md` |
 | `docs/git.md` | 提交规范 / 能力仓 sibling 钉版纪律 / 三仓提交顺序与 tag 规则 / 文件回滚规范 |
 | `docs/boundaries.md` | 依赖方向（禁止反向引用）/ 跨仓锁 / Agent 禁行清单 |
-| `docs/public/` ★ | **四仓共享通用规范真源**（其他仓经 `../wasmnest/docs/public/` 引用）：`git.md`（git 提交）/ `commenting.md`（注释与命名）/ `testing.md`（测试与验证底线）/ `versioning.md`（版本号管理：只有发布时 bump，dev 不 bump）/ `issues.md`（GitHub Issues = 跨会话存续 backlog 真源）/ `layerfs.md`（LayerFS 开发流程，强制）——通用部分单一真源，本仓 docs 不复制 |
+| `docs/docker.md` | 本机 Docker 部署事实：版本与 API / data-root / docker 组 / 镜像源 / 清理 |
+| `docs/public/` ★ | **四仓共享通用规范真源**（其他仓经 `../wasmnest/docs/public/` 引用）：`git.md`（git 提交）/ `commenting.md`（注释与命名）/ `testing.md`（测试与验证底线）/ `versioning.md`（版本号管理：只有发布时 bump，dev 不 bump）/ `issues.md`（GitHub Issues = 跨会话存续 backlog 真源）——通用部分单一真源，本仓 docs 不复制 |
 
 **文档字面 ≠ 事实**：任何文档（含 `docs/`）都只是导航与判据，改结构 / 文案前先 `ls` / `rg` 核对；引用旧仓（`../../BedCode/`）内容时注意它与三仓现状的差异，机制以新仓代码为准。
 
