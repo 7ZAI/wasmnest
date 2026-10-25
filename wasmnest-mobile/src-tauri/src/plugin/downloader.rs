@@ -290,7 +290,7 @@ mod tests {
     use super::*;
     use std::io::Write;
 
-    /// 构造一个合法插件 zip（ts-only 形态免 wasm 产物，platform 可指定）
+    /// 构造一个合法插件 zip（frontend 形态免 wasm 产物，platform 可指定）
     fn build_zip(dir: &Path, id: &str, platform: &str) -> std::path::PathBuf {
         let zip_path = dir.join(format!("{}.zip", id));
         let file = std::fs::File::create(&zip_path).unwrap();
@@ -300,7 +300,7 @@ mod tests {
             "name": "Test Plugin",
             "version": "1.0.0",
             "platform": platform,
-            "pluginType": "ts-only",
+            "pluginType": "frontend",
             "main": "index.js",
             "permissions": [],
             "contributes": {}

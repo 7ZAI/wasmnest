@@ -3,22 +3,38 @@
 use wasmnest_plugin_api_mobile::types::*;
 
 #[test]
-fn test_plugin_type_kebab_case() {
-    // 线协议 kebab-case：宿主按字面量解析 plugin.json 的 pluginType 字段；
-    // 移动端比桌面端多 Wasm 变体
-    assert_eq!(serde_json::to_value(PluginType::Rust).unwrap(), serde_json::json!("rust"));
-    assert_eq!(serde_json::to_value(PluginType::RustTs).unwrap(), serde_json::json!("rust-ts"));
-    assert_eq!(serde_json::to_value(PluginType::TsOnly).unwrap(), serde_json::json!("ts-only"));
-    assert_eq!(serde_json::to_value(PluginType::Wasm).unwrap(), serde_json::json!("wasm"));
+fn test_plugin_type_wire_lowercase() {
+    // 线协议 lowercase（2026-10-26 形态三档重定义，wasmnest-apps#21）：宿主按
+    // 字面量解析 plugin.json 的 pluginType 字段；词汇只表达形态，不表达语言
+    assert_eq!(serde_json::to_value(PluginType::Frontend).unwrap(), serde_json::json!("frontend"));
+    assert_eq!(serde_json::to_value(PluginType::Backend).unwrap(), serde_json::json!("backend"));
+    assert_eq!(serde_json::to_value(PluginType::Full).unwrap(), serde_json::json!("full"));
     assert_eq!(
-        serde_json::from_value::<PluginType>(serde_json::json!("wasm")).unwrap(),
-        PluginType::Wasm
+        serde_json::from_value::<PluginType>(serde_json::json!("full")).unwrap(),
+        PluginType::Full
     );
-    assert!(serde_json::from_value::<PluginType>(serde_json::json!("rust_ts")).is_err());
+    assert!(serde_json::from_value::<PluginType>(serde_json::json!("Full")).is_err());
+}
+#[test]
+fn test_plugin_type_retired_values_rejected_with_migration_path() {
+    // 退役值 fail-visible（含移动端原 wasm）：点名旧值 + 迁移出路
+    for (old, expect_path) in [
+        ("ts-only", "'frontend'"),
+        ("rust", "'backend'"),
+        ("rust-ts", "'full'"),
+        ("wasm", "'full'"),
+    ] {
+        let err = serde_json::from_value::<PluginType>(serde_json::json!(old))
+            .expect_err("retired value must be rejected");
+        let msg = err.to_string();
+        assert!(msg.contains(old), "须点名旧值 {old}: {msg}");
+        assert!(msg.contains(expect_path), "须给出新值出路 {expect_path}: {msg}");
+        assert!(msg.contains("已退役"), "须说明退役事实: {msg}");
+    }
 }
 #[test]
 fn test_plugin_type_default() {
-    assert_eq!(PluginType::default(), PluginType::TsOnly);
+    assert_eq!(PluginType::default(), PluginType::Frontend);
 }
 #[test]
 fn test_plugin_state_camel_case_tag() {

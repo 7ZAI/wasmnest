@@ -42,7 +42,7 @@ describe('PluginManifest 结构', () => {
   })
 
   it('pluginType 含 wasm（移动端特有）', () => {
-    expectTypeOf<PluginType>().toEqualTypeOf<'rust' | 'rust-ts' | 'ts-only' | 'wasm'>()
+    expectTypeOf<PluginType>().toEqualTypeOf<'frontend' | 'backend' | 'full'>()
   })
 
   it('platform 仅允许三个 wire 值且必填', () => {

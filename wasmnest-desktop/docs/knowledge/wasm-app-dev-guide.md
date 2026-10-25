@@ -149,7 +149,7 @@ apps/my-app/desktop/
   "description": "插件描述文本",         // 插件功能说明
   "author": "Author Name",             // 作者
   "main": "index.js",                  // TS 入口文件（编译后），TS-only 必填
-  "pluginType": "ts-only",            // 插件类型：ts-only | rust-ts | rust
+  "pluginType": "frontend",           // 产物形态三档：frontend | backend | full（语言无关，wasmnest-apps#21）
   "rustLibrary": "",                   // WASM 库文件名（仅 rust-ts 需要）
   "permissions": ["storage", "ui:sidebar"],  // 请求的权限列表
 

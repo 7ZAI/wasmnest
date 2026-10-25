@@ -65,7 +65,7 @@ A minimal plugin needs just two files:
   "author": "you",
   "icon": "🧩",
   "main": "index.js",
-  "pluginType": "ts-only",
+  "pluginType": "frontend",
   "permissions": ["storage", "ui:input"],
   "contributes": {
     "commands": [{ "id": "my-plugin.hello", "title": "Hello" }],

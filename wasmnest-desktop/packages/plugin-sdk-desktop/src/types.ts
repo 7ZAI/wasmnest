@@ -14,8 +14,13 @@ export interface Disposable {
   dispose(): void
 }
 
-/** 插件类型 */
-export type PluginType = 'rust' | 'rust-ts' | 'ts-only'
+/**
+ * 插件产物形态（语言无关三形态，2026-10-26 语义重定义，wasmnest-apps#21）
+ *
+ * 词汇只表达形态（是否携带 wasm 后端 / 前端产物），不表达后端语言。
+ * 旧值 rust / rust-ts / ts-only 已退役：manifest-validate 点名拒绝并给出迁移出路。
+ */
+export type PluginType = 'frontend' | 'backend' | 'full'
 
 /**
  * 组件装配角色（manifest `type` 字段，core-plugin-manager · ADR 0032）
@@ -64,7 +69,7 @@ export interface PluginManifest {
   author: string
   main: string
   pluginType: PluginType
-  /** WASM 库文件名（仅 rust-ts 类型插件使用） */
+  /** WASM 库文件名（携带 wasm 后端的形态使用：backend / full；键名暂保留历史拼写，见 wasmnest-apps#21 键位子决策） */
   rustLibrary?: string
   /** 插件图标：图片路径（相对插件目录）或内联 SVG 标记 */
   icon?: string
@@ -613,7 +618,7 @@ export interface PluginInfo {
   author: string
   main: string
   pluginType: PluginType
-  /** WASM 库文件名（仅 rust-ts 类型插件使用） */
+  /** WASM 库文件名（携带 wasm 后端的形态使用：backend / full；键名暂保留历史拼写，见 wasmnest-apps#21 键位子决策） */
   rustLibrary?: string
   permissions: string[]
   state: PluginState

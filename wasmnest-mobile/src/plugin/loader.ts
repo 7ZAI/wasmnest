@@ -101,7 +101,7 @@ class PluginLoaderClass {
   private async loadManifests(manifests: PluginInfo[]): Promise<void> {
     for (const manifest of manifests) {
       // Rust-only 插件：前端无需加载
-      if (manifest.pluginType === 'rust') {
+      if (manifest.pluginType === 'backend') {
         logger.log(`[PluginLoader] Rust plugin ${manifest.id} managed by backend`)
         continue
       }

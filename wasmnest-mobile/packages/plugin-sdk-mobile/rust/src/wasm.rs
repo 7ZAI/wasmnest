@@ -80,7 +80,7 @@ mod tests {
                 description: String::new(),
                 author: String::new(),
                 main: String::new(),
-                plugin_type: PluginType::Wasm,
+                plugin_type: PluginType::Full,
                 permissions: vec![],
                 contributes: PluginContributes::default(),
                 icon: None,

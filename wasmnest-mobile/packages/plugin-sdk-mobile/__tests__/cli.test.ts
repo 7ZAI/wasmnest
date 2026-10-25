@@ -53,7 +53,7 @@ function runValidate(permissions: string[]) {
       version: '0.0.1',
       platform: 'mobile',
       main: 'index.js',
-      pluginType: 'wasm',
+      pluginType: 'full',
       rustLibrary: 'wasmnest_plugin_cli_fixture',
       permissions,
       contributes: {},

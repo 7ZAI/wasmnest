@@ -65,7 +65,7 @@ wasmnest-plugin dev --host           # 监听局域网，手机浏览器访问 h
   "author": "you",
   "icon": "🧩",
   "main": "index.js",
-  "pluginType": "ts-only",
+  "pluginType": "frontend",
   "permissions": ["storage", "ui:input"],
   "contributes": {
     "commands": [{ "id": "my-plugin.hello", "title": "Hello" }],

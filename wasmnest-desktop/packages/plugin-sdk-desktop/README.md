@@ -30,7 +30,7 @@ wasmnest-plugin-desktop create com.example.my-app "My App" --author "you" --rust
 cd my-app
 pnpm install
 ppnpm run dev        # 浏览器开发环境（Dev Shell：空壳宿主 + HMR）
-ppnpm run build      # 构建产物 dist/（vite 前端 + rust-ts 时 cargo wasm32）
+ppnpm run build      # 构建产物 dist/（vite 前端 + full 形态时 cargo wasm32）
 ppnpm run manifest   # 按源码自动填充 plugin.json 的 contributes / permissions
 ```
 
@@ -40,7 +40,7 @@ ppnpm run manifest   # 按源码自动填充 plugin.json 的 contributes / permi
 wasmnest-plugin-desktop build --resources-dir ../wasmnest-desktop/src-tauri/resources/plugins/desktop
 # 把产物复制到 src-tauri/resources/plugins/desktop/{id}/（内置 wasm 应用随安装包分发的方式）
 
-wasmnest-plugin-desktop build --frontend-only / --rust-only   # 只构建一半（rust-ts）
+wasmnest-plugin-desktop build --frontend-only / --rust-only   # 只构建一半（full 形态）
 wasmnest-plugin-desktop dev [pluginDir] [--port <port>] [--host] [--open]
 wasmnest-plugin-desktop manifest --check   # 只检查不写入（CI）
 wasmnest-plugin-desktop validate [--dir]   # 校验 plugin.json（id 格式 / 必填 / pluginType / 权限白名单 / 产物存在性）
@@ -65,7 +65,7 @@ wasmnest-plugin-desktop doctor             # 环境自检（Node / Rust / wasm32
   "description": "示例插件",
   "author": "you",
   "main": "index.js",
-  "pluginType": "ts-only",
+  "pluginType": "frontend",
   "permissions": ["storage", "ui:sidebar"],
   "contributes": {
     "commands": [{ "id": "my-plugin.hello", "title": "Hello" }],
@@ -76,7 +76,7 @@ wasmnest-plugin-desktop doctor             # 环境自检（Node / Rust / wasm32
 
 必填字段：`name` / `version` / `platform` / `main` / `pluginType` / `permissions` / `contributes`
 （校验真源 `bin/manifest-validate.js`；宿主反序列化无缺省，缺失即拒装）。
-`pluginType` 取值 `rust` / `rust-ts` / `ts-only`；`rust-ts` 时必须给 `rustLibrary`
+`pluginType` 取值 `frontend` / `backend` / `full`（语言无关三形态，2026-10-26 重定义，旧值 rust / rust-ts / ts-only 已退役）；`full` 时必须给 `rustLibrary`
 （与 Cargo.toml 包名一致）。
 
 > `sandbox` 已从 manifest 退役（审计票 06 裁决 2：前端不做隔离）——Rust 端类型会

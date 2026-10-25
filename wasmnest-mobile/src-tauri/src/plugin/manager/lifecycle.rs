@@ -171,13 +171,13 @@ impl PluginManager {
             );
         }
 
-        if plugin_type != PluginType::Wasm {
-            // TS-only 插件：仅标记状态
+        if !plugin_type.has_backend() {
+            // 纯前端插件：仅标记状态（无 wasm 实例，无 guest 生命周期）
             let mut plugins = self.plugins.write().await;
             if let Some(plugin) = plugins.get_mut(plugin_id) {
                 plugin.state = PluginState::Activated;
             }
-            tracing::info!(plugin_id = %plugin_id, "Plugin activated (ts-only)");
+            tracing::info!(plugin_id = %plugin_id, "Plugin activated (frontend-only)");
             return Ok(());
         }
 
@@ -308,8 +308,8 @@ impl PluginManager {
             return Ok(());
         }
 
-        // 2. WASM 插件：取实例句柄（短锁），执行 deactivate 导出（不持 map 守卫）
-        if plugin_type == PluginType::Wasm {
+        // 2. 携带 wasm 后端的插件：取实例句柄（短锁），执行 deactivate 导出（不持 map 守卫）
+        if plugin_type.has_backend() {
             let wasm_plugin = {
                 let wasm_plugins = self.wasm_plugins.read().await;
                 wasm_plugins.get(plugin_id).cloned()

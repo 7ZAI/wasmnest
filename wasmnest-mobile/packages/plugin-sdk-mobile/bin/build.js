@@ -85,7 +85,8 @@ function cmdDev(positional, flags) {
  */
 function startBuildWatch(cwd, resourcesDir, manifest) {
   const { id, main = 'index.js', rustLibrary, pluginType } = manifest
-  const hasWasm = pluginType === 'wasm' && rustLibrary
+  // 形态三档（wasmnest-apps#21）：backend / full 都携带 wasm 后端
+  const hasWasm = (pluginType === 'full' || pluginType === 'backend') && rustLibrary
   const viteBin = findViteBin(cwd)
   if (!viteBin) {
     console.error(
@@ -161,7 +162,8 @@ function cmdBuild(flags) {
   }
   const manifest = readJson(manifestPath, 'plugin.json')
   const { id, main, rustLibrary, pluginType } = manifest
-  const hasWasm = pluginType === 'wasm' && rustLibrary
+  // 形态三档（wasmnest-apps#21）：backend / full 都携带 wasm 后端
+  const hasWasm = (pluginType === 'full' || pluginType === 'backend') && rustLibrary
   const frontendOnly = flags['frontend-only'] === true
   const rustOnly = flags['rust-only'] === true
   const resourcesDir = flags['resources-dir']
