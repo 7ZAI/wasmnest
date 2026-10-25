@@ -37,7 +37,7 @@ describe('组件化工具随桌面 SDK 发布', () => {
   })
 
   it('CLI 候选链优先桌面 SDK 落点，旧平台仓落点只作兜底', () => {
-    const source = readFileSync(join(SDK_ROOT, 'bin/cli.js'), 'utf-8')
+    const source = readFileSync(join(SDK_ROOT, 'bin/lib.js'), 'utf-8')
     const newAt = source.indexOf("'wasmnest-desktop', 'packages', 'plugin-sdk-desktop', 'tools'")
     const legacyAt = source.indexOf("join('tools', 'componentize', 'Cargo.toml')")
 

@@ -12,7 +12,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const CLI = fileURLToPath(new URL('../bin/cli.js', import.meta.url))
+// VALID_* 常量 2026-10-25 随 CLI 拆分迁 bin/scaffold.js（白名单真源随迁）
+// VALID_* 常量 2026-10-25 随 CLI 拆分迁 bin/scaffold.js（源码扫描目标随迁）
+const CLI = fileURLToPath(new URL('../bin/scaffold.js', import.meta.url))
+// 运行时入口仍是 bin/cli.js（门面持有 main 派发）
+const CLI_ENTRY = fileURLToPath(new URL('../bin/cli.js', import.meta.url))
 const RUST_PERMISSION = fileURLToPath(new URL('../rust/src/permission.rs', import.meta.url))
 
 /** CLI 里的 JS 白名单（解析 Set 字面量，避免为测试导出运行时内部常量） */
@@ -56,7 +60,7 @@ function runValidate(permissions: string[]) {
     }),
   )
   try {
-    return spawnSync(process.execPath, [CLI, 'validate', '--dir', dir], {
+    return spawnSync(process.execPath, [CLI_ENTRY, 'validate', '--dir', dir], {
       encoding: 'utf-8',
     })
   } finally {
