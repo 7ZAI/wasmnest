@@ -8,7 +8,7 @@
 # - 能力仓依赖全部固定为 git tag，桌面 SDK 固定为 crates.io 精确版本，
 #   本地开发经平台仓根 `.cargo/config.toml` 的 [patch] 指回兄弟目录（不进发布包）。
 # 安装通道 = crates.io（平台仓刻意无根 workspace，`cargo install --git` 不能定位本 crate，
-# 见票据「关键裁决」）。发布前置：wasmnest-plugin-api =0.0.1 已上 crates.io。
+# 见票据「关键裁决」）。批 2（issue #36）起宿主不再依赖桌面 SDK，发布无 SDK 前置。
 name = "wasmnest-desktop-runtime"
 version = "0.0.1"
 license = "MIT"
@@ -118,10 +118,11 @@ mdns-sd = "0.20"
 local-ip-address = "0.6"
 
 
-# Plugin API
-# 发布形态：crates.io 精确版本（本地开发经平台仓根 .cargo/config.toml 的
-# [patch.crates-io] 指回 wasmnest-desktop/packages/plugin-sdk-desktop/rust）。
-wasmnest-plugin-api = { version = "=0.0.1" }
+# Plugin API 依赖已摘除（批 2，issue #36）：权限词汇 / FORM_COMPONENT / 事件 topic
+# 词汇真源已上提 wasm-core（permission / manager::runtime / host_api::topics），
+# 宿主生产源码与测试全部经 wasm_core 垫片消费 core 真源。core 的 desktop-assembly
+# feature 对桌面 SDK 的传递依赖（原生插件体系 / intercall 词汇）由票 10（E2a-A）
+# 整体迁桌面宿主时清偿——本 crate 不再直接依赖 SDK，发布不再前置 SDK 上 crates.io。
 # ==================== 能力仓依赖（git tag 固定，可发布） ====================
 # L2：12 条 wasmnest-lib 依赖从 path 改为 git tag。理由：`cargo package` / 外部工程
 # 消费时不存在 `../../../wasmnest-lib` 兄弟目录，path 依赖会让 crate 不可发布；

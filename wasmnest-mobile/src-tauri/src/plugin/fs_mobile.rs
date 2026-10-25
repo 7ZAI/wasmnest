@@ -7,7 +7,7 @@
 //! （真源在宿主 `saf_io.rs`，白名单 / 弹窗 / 持久授权不迁移）。
 
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_plugin_api_mobile::permission::PERMISSION_FS_WRITE;
+use wasmnest_wasm_core::permission::PERMISSION_FS_WRITE;
 
 use crate::plugin::bindings::{check_permission, ctx_of, guarded, wasmnest};
 use wasmnest_wasm_core::runtime_util::block_on_async;

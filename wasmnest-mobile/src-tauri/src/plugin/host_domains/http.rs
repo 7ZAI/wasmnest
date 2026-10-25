@@ -167,7 +167,7 @@ mod tests {
     fn granted_state(plugin_id: &str) -> WasmPluginState {
         wasmnest_wasm_core::test_support::build_component_state(
             plugin_id,
-            &[wasmnest_plugin_api_mobile::permission::PERMISSION_NETWORK_HTTP],
+            &[wasmnest_wasm_core::permission::PERMISSION_NETWORK_HTTP],
         )
     }
 

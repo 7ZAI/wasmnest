@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_plugin_api_mobile::permission::PERMISSION_TERMINAL_OUTPUT;
+use wasmnest_wasm_core::permission::PERMISSION_TERMINAL_OUTPUT;
 
 use crate::plugin::bindings::{check_permission, guarded, wasmnest};
 

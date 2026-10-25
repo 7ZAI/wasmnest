@@ -140,7 +140,7 @@ async fn service_lease_lifecycle_flow() {
         None,
         Vec::new(),
         wasmnest_desktop_lib::wasm_core::manager::runtime::AbiPolicy {
-            form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
+            form: Some(wasmnest_desktop_lib::wasm_core::manager::runtime::FORM_COMPONENT),
         },
         Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
         None,

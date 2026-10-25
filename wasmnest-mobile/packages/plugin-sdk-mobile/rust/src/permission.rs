@@ -1,6 +1,12 @@
 //! Permission Manager (Mobile)
 //!
 //! 移动端插件权限校验 — 包含移动端特有权限（ui:navtab, ui:settings）
+//!
+//! **权限词汇真源 = `wasmnest-wasm-core::permission`**（双端唯一真源）；本文件是
+//! SDK guest 面拷贝 + 移动专属增量位（差异集是否全数属增量待核对，见平台仓
+//! issue #36 批 2）。宿主权限门已改读 core 真源（issue #36 批 1）；退役权限位的
+//! fail-visible 判定（`check_retired_permissions`）已随批 2 上提 core，本文件只留
+//! 「退役位不得回流白名单」的反向不变量测试；`session:write` 漂移已同批清除。
 
 use std::collections::{HashMap, HashSet};
 
@@ -8,7 +14,9 @@ use std::collections::{HashMap, HashSet};
 /// `terminal:input` 已随票 15 阶段 B 整面退役（host-terminal / TerminalAPI）
 pub const PERMISSION_TERMINAL_OUTPUT: &str = "terminal:output";
 pub const PERMISSION_SESSION_READ: &str = "session:read";
-pub const PERMISSION_SESSION_WRITE: &str = "session:write";
+// v27 退役（会话引擎下沉票 10，core 真源同口径）：`session:write`（宿主会话写
+// 原语随 `host-session` 整 interface 删除）——移动 SDK 词汇曾漏删（漂移），
+// 批 2 收口同批清除（issue #36）。
 pub const PERMISSION_UI_SETTINGS: &str = "ui:settings";
 /// 动态路由：注册/跳转插件路由页（宿主 addRoute/removeRoute）
 pub const PERMISSION_UI_ROUTE: &str = "ui:route";
@@ -48,7 +56,6 @@ pub const PERMISSION_METRICS_READ: &str = "metrics:read";
 pub static VALID_PERMISSIONS: &[&str] = &[
     PERMISSION_TERMINAL_OUTPUT,
     PERMISSION_SESSION_READ,
-    PERMISSION_SESSION_WRITE,
     PERMISSION_UI_SETTINGS,
     PERMISSION_UI_ROUTE,
     PERMISSION_UI_DIALOG,
@@ -67,47 +74,17 @@ pub static VALID_PERMISSIONS: &[&str] = &[
     PERMISSION_METRICS_READ,
 ];
 
-/// 已退役权限位（票 2026-10-10 批次 C2）
-///
-/// 宿主壳改纯 surface 形态后，`ui.registerToolboxPage` / `ui.registerNavTab` /
-/// `ui.registerTerminalToolbarItem` / `ui.registerTerminalView` 四个旧嵌入扩展点
-/// 整面退役，对应的 `ui:toolbox` / `ui:navtab` / `ui:input` 三个权限位随之失效。
-///
-/// 为什么必须显式登记而不是「从 VALID_PERMISSIONS 删掉就算」：权限位不在白名单时
-/// `grant_permissions` 会**静默丢弃**——旧插件声明了退役位却照常加载、只是能力
-/// 凭空消失，排查时看到的是「功能莫名不好使」而非「这个位已经没了」。
-/// 登记在此 + 装载期显式报错（§5.1.3 fail-visible 形态③），断链才可见。
-pub static RETIRED_PERMISSIONS: &[(&str, &str)] = &[
-    ("ui:toolbox", "registerToolboxPage"),
-    ("ui:navtab", "registerNavTab"),
-    (
-        "ui:input",
-        "registerTerminalToolbarItem / registerTerminalView",
-    ),
-];
-
-/// 校验清单未声明退役权限位；命中即返回指名错误
-///
-/// 供宿主装载期调用（`wasmnest-mobile/src-tauri/src/plugin/loader.rs`）。
-/// 返回 `Err` 而非 bool：调用方需要把「哪个位、为什么、迁移到哪」原样写进错误，
-/// 静默的 bool 只会退化成又一处静默降级。
-pub fn check_retired_permissions(plugin_id: &str, permissions: &[String]) -> Result<(), String> {
-    for (perm, retired_api) in RETIRED_PERMISSIONS {
-        if permissions.iter().any(|p| p == perm) {
-            return Err(format!(
-                "plugin '{plugin_id}' declares retired permission '{perm}'                  (retired extension point: ui.{retired_api}).                  The host shell now loads apps only through ui.registerSurface —                  replace it with registerSurface, and use registerRoute + openPage for in-app sub-pages."
-            ));
-        }
-    }
-    Ok(())
-}
+/// 已退役权限位（票 2026-10-10 批次 C2）：`ui:toolbox` / `ui:navtab` / `ui:input`
+/// 三个权限位随移动壳旧嵌入扩展点整面退役。**退役表与装载期判定机制已上提
+/// wasm-core `permission.rs`**（批 2 收口，issue #36；guest 面本无此 API）——
+/// 本模块只保留「退役位不得回流白名单」的反向不变量测试。
+static RETIRED_PERMISSIONS: &[&str] = &["ui:toolbox", "ui:navtab", "ui:input"];
 
 static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
     // 票 12：terminal-stream.forwardOutput（终端输出流窄转发）复用本词汇；
     // TerminalAPI（sendInput/onOutput）已随票 15 阶段 B 退役，terminal.onOutput 同批移除
     (PERMISSION_TERMINAL_OUTPUT, &["terminal-stream.forwardOutput"]),
     (PERMISSION_SESSION_READ, &["session.list", "session.get", "session.onStatusChange"]),
-    (PERMISSION_SESSION_WRITE, &["session.create", "session.stop"]),
     (PERMISSION_UI_SETTINGS, &["ui.registerSettingsSection"]),
     (PERMISSION_UI_ROUTE, &["ui.registerRoute", "ui.openPage", "ui.goBack"]),
     (PERMISSION_UI_DIALOG, &["ui.showDialog"]),
@@ -295,7 +272,6 @@ mod tests {
         for p in [
             PERMISSION_TERMINAL_OUTPUT,
             PERMISSION_SESSION_READ,
-            PERMISSION_SESSION_WRITE,
             PERMISSION_UI_SETTINGS,
             PERMISSION_UI_ROUTE,
             PERMISSION_NETWORK_HTTP,
@@ -331,32 +307,12 @@ mod tests {
     }
 
     #[test]
-    fn test_retired_permissions_rejected_at_load() {
-        // 票 2026-10-10 C2 fail-visible 形态③：清单声明退役权限位必须装载期报错，
-        // 而不是「不在白名单 → grant 静默丢弃 → 功能凭空消失」
-        for (perm, _) in RETIRED_PERMISSIONS {
-            let err = check_retired_permissions("p", &[perm.to_string()])
-                .expect_err("{perm} 应被判为退役权限位");
-            assert!(err.contains(perm), "报错应指名权限位: {err}");
-            assert!(err.contains("registerSurface"), "报错应给出迁移出路: {err}");
-        }
-    }
-
-    #[test]
-    fn test_retired_permissions_allow_clean_manifest() {
-        // 反例面：只用存活权限位的清单不得被误伤
-        assert!(check_retired_permissions(
-            "p",
-            &["session:read".to_string(), "ui:route".to_string(), "storage".to_string()]
-        )
-        .is_ok());
-    }
-
-    #[test]
     fn test_retired_permissions_absent_from_valid_whitelist() {
-        // 退役位必须同时不在 VALID_PERMISSIONS / PERMISSION_API_MAP 里——
-        // 只加退役表不删白名单等于没退役（双重保险，防后续有人「顺手加回去」）
-        for (perm, _) in RETIRED_PERMISSIONS {
+        // 退役位必须不在 VALID_PERMISSIONS / PERMISSION_API_MAP 里——只加退役表
+        // 不删白名单等于没退役（防后续有人「顺手加回去」）。判定机制本体已上提
+        // core（`wasm-core` `permission::check_retired_permissions`，批 2 / #36）；
+        // 本表硬编码三枚移动壳退役位做反向不变量（SDK 不 dep core，无法引其表）。
+        for perm in RETIRED_PERMISSIONS {
             assert!(!VALID_PERMISSIONS.contains(perm), "{perm} 不应仍在白名单");
             assert!(
                 !PERMISSION_API_MAP.iter().any(|(p, _)| p == perm),

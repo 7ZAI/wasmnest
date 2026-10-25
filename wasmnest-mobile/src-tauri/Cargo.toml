@@ -107,8 +107,9 @@ zip = "4.6"
 log = "0.4"
 android_logger = "0.14"
 
-# Plugin SDK (Mobile)
-wasmnest-plugin-api-mobile = { path = "../packages/plugin-sdk-mobile/rust" }
+# Plugin SDK (Mobile)：批 2 摘生产依赖（issue #36）——权限词汇 / retired 闸门 /
+# BusMessage 载荷改读 wasm-core 与 server-base 真源；SDK crate 降为 dev-dependency
+# （仅 manifest kind 锁跨核 SDK 类型对账消费）
 # 对等网络共享基础设施（节点身份 + 自签证书，issue peer-network/01）
 # 2026-10-22 peer-net-dissolve：底座拆分并入 wasmnest-server-peer-net（base/），本依赖删除
 # 对等网络能力域（双端共享纯引擎形态：节点装配 / 会话控制面 / 引擎事件桥 +
@@ -134,6 +135,10 @@ wasmnest-link-crypto = { path = "../../../wasmnest-lib/link-crypto" }
 p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
 
 [dev-dependencies]
+
+# Plugin SDK (Mobile)：仅测试面消费（manifest kind 锁跨核 SDK 类型对账；
+# 批 2 起生产依赖已摘，issue #36）
+wasmnest-plugin-api-mobile = { path = "../packages/plugin-sdk-mobile/rust" }
 
 # 测试支持面（夹具构建器 + MockPorts；批次 2b 宿主集成测试消费）。
 # 票 06 批次 03：随主依赖切根 crate——`test-support` feature 的移动面

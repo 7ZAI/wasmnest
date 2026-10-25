@@ -169,10 +169,9 @@ impl PluginLoader {
                     // 这里**显式拒绝装载**而不是让它落进 grant 的静默丢弃分支——
                     // 否则旧插件会「加载成功但功能凭空消失」，排查方向被带偏
                     // （§5.1.3 fail-visible 形态③）。
-                    if let Err(e) = wasmnest_plugin_api_mobile::permission::check_retired_permissions(
-                        &plugin_id,
-                        &manifest.permissions,
-                    ) {
+                    if let Err(e) =
+                        wasmnest_wasm_core::permission::check_retired_permissions(&plugin_id, &manifest.permissions)
+                    {
                         tracing::error!("[PluginLoader] Rejecting plugin {:?}: {}", plugin_id, e);
                         seen_ids.remove(&plugin_id);
                         continue;

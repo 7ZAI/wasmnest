@@ -694,7 +694,7 @@ async fn test_boot_activates_system_components_before_app_plugins() {
         None,
         Vec::new(),
         wasmnest_wasm_core::manager::runtime::AbiPolicy {
-            form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
+            form: Some(wasmnest_desktop_lib::wasm_core::manager::runtime::FORM_COMPONENT),
         },
         std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
         None,
@@ -819,7 +819,7 @@ async fn setup_three_layer_host(tmp_dir: &tempfile::TempDir, l2_manifest_extra: 
         None,
         Vec::new(),
         wasmnest_wasm_core::manager::runtime::AbiPolicy {
-            form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
+            form: Some(wasmnest_desktop_lib::wasm_core::manager::runtime::FORM_COMPONENT),
         },
         std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
         None,

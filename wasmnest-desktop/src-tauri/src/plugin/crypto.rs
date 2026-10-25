@@ -27,9 +27,9 @@
 use wasmnest_crypto_engine::registry::{resolve_aead, resolve_kdf, resolve_key_agreement};
 use wasmnest_host_kit::ports::downcast_host;
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_plugin_api::permission::{PERMISSION_CRYPTO_AEAD, PERMISSION_CRYPTO_ASYM, PERMISSION_CRYPTO_KDF};
 use wasmnest_wasm_core::host_api::check_permission;
 use wasmnest_wasm_core::host_api::context::{PermissionScope, WasmHostContext};
+use wasmnest_wasm_core::permission::{PERMISSION_CRYPTO_AEAD, PERMISSION_CRYPTO_ASYM, PERMISSION_CRYPTO_KDF};
 
 use crate::plugin::bindings::wasmnest;
 

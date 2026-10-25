@@ -589,7 +589,7 @@ pub fn run() {
                 // 桌面 ABI 规格（端事实由宿主注入：wasm-core 零端 ABI 知识，
                 // 版本上限 + abi-form 要求来自桌面 SDK 组装后的契约）
                 wasm_core::manager::runtime::AbiPolicy {
-                    form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
+                    form: Some(wasm_core::manager::runtime::FORM_COMPONENT),
                 },
                 // 桌面端事实（平台标识 / 入站服务器端口；单形态收口后从 wasm-core
                 // 迁出的端差异实现——file-transfer 在激活期经 platform() 探测端值）

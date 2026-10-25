@@ -118,7 +118,7 @@ async fn init_test_app_context() {
             None,
             Vec::new(),
             wasmnest_wasm_core::manager::runtime::AbiPolicy {
-                form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
+                form: Some(wasmnest_desktop_lib::wasm_core::manager::runtime::FORM_COMPONENT),
             },
             std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts),
             None,

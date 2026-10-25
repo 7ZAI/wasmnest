@@ -91,10 +91,8 @@ impl StateWsClientPorts {
             runtime: current_handle().clone(),
             // 权限真源 = 内核 PermissionManager（`WasmHostContext::has_permission`）；
             // 构造时取快照（reader / writer 任务会长期持有本端口，权限门零延迟）
-            permitted: host_ctx(state).has_permission(
-                &state.plugin_id,
-                wasmnest_plugin_api_mobile::permission::PERMISSION_WS_CLIENT,
-            ),
+            permitted: host_ctx(state)
+                .has_permission(&state.plugin_id, wasmnest_wasm_core::permission::PERMISSION_WS_CLIENT),
         })
     }
 }
@@ -259,7 +257,7 @@ mod tests {
     fn state(plugin_id: &str, ws_granted: bool, _runtime: tokio::runtime::Handle) -> WasmPluginState {
         let ctx = wasmnest_wasm_core::test_support::build_host_ctx();
         let granted: Vec<String> = if ws_granted {
-            vec![wasmnest_plugin_api_mobile::permission::PERMISSION_WS_CLIENT.to_string()]
+            vec![wasmnest_wasm_core::permission::PERMISSION_WS_CLIENT.to_string()]
         } else {
             Vec::new()
         };
@@ -283,7 +281,7 @@ mod tests {
                 err,
                 format!(
                     "permission denied: {}",
-                    wasmnest_plugin_api_mobile::permission::PERMISSION_WS_CLIENT
+                    wasmnest_wasm_core::permission::PERMISSION_WS_CLIENT
                 ),
                 "拒绝文案必须与移动 SDK 权限字面量一致"
             );

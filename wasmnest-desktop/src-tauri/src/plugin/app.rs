@@ -12,9 +12,9 @@
 
 use wasmnest_host_kit::ports::downcast_host;
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_plugin_api::permission::{PERMISSION_APP_CLI, PERMISSION_APP_PATH};
 use wasmnest_wasm_core::host_api::check_permission;
 use wasmnest_wasm_core::host_api::context::{PermissionScope, ServicesScope, WasmHostContext};
+use wasmnest_wasm_core::permission::{PERMISSION_APP_CLI, PERMISSION_APP_PATH};
 use wasmnest_wasm_core::runtime_util::block_on_async;
 
 use crate::plugin::bindings::wasmnest;

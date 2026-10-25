@@ -30,9 +30,9 @@ use std::sync::Arc;
 use wasmnest_discovery_engine::ports::BoxedTask;
 use wasmnest_discovery_engine::{DiscoveryPorts, DiscoveryTask};
 use wasmnest_host_kit::ports::{downcast_host, HostPorts};
-use wasmnest_plugin_api::permission::PERMISSION_MDNS;
 use wasmnest_wasm_core::host_api::check_permission;
 use wasmnest_wasm_core::host_api::context::WasmHostContext;
+use wasmnest_wasm_core::permission::PERMISSION_MDNS;
 
 // 能力模块白名单条目与强制引用行**必须同处**（本文件），两者不漂移——漏引用 ⇒
 // 该 crate 的 inventory 自报静态不进最终二进制（装载期 missing 方向点名）；漏白名单

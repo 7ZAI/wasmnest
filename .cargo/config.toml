@@ -113,7 +113,9 @@ wasmnest-server-websocket = { path = "../wasmnest-lib/wasmnest-server-websocket"
 wasmnest-server-peer-net = { path = "../wasmnest-lib/wasmnest-server-peer-net" }
 
 [patch.crates-io]
-# 桌面 Rust SDK：wasmnest-wasm-core 的 desktop-assembly feature 依赖 `wasmnest-plugin-api`，
-# 宿主自身也直接消费；本地开发用工作树代码而非（尚未发布的）registry 副本。
+# 桌面 Rust SDK：wasmnest-wasm-core 的 desktop-assembly feature 依赖 `wasmnest-plugin-api`
+# （原生插件体系 / intercall 词汇，票 10 E2a-A 迁桌面宿主时随依赖删除）；宿主 crate
+# 已不再直接依赖 SDK（批 2，issue #36）。本地开发用工作树代码而非（尚未发布的）
+# registry 副本。
 wasmnest-plugin-api = { path = "wasmnest-desktop/packages/plugin-sdk-desktop/rust" }
 wasmnest-plugin-api-macros = { path = "wasmnest-desktop/packages/plugin-sdk-desktop/rust-macros" }

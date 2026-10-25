@@ -8,7 +8,7 @@
 //! 权限位 `auth`（fail-closed，未声明即拒——与 ws:client 同语义）。
 
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_plugin_api_mobile::permission::PERMISSION_AUTH;
+use wasmnest_wasm_core::permission::PERMISSION_AUTH;
 
 use crate::plugin::bindings::{check_permission, ctx_of, wasmnest};
 use wasmnest_wasm_core::host_api::ports::PORT_NOT_WIRED;

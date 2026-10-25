@@ -273,7 +273,7 @@ async fn init_test_app_context() {
             None,       // 整核抽出 §3.3：无头测试不注入 PeerCtxProvider（HEADLESS_UNAVAILABLE 语义不变）
             Vec::new(), // 票 08/P0-2：第一方豁免表宿主注入，无头测试空表（无免弹窗项）
             wasmnest_wasm_core::manager::runtime::AbiPolicy {
-                form: Some(wasmnest_plugin_api::form::FORM_COMPONENT),
+                form: Some(wasmnest_desktop_lib::wasm_core::manager::runtime::FORM_COMPONENT),
             }, // 桌面 ABI 规格（宿主注入；夹具为桌面 SDK 产物）
             std::sync::Arc::new(wasmnest_desktop_lib::plugin::host_facts::DesktopHostFacts), // 桌面端事实（宿主注入；内核零端名）
             None, // 平台选择器：无头夹具不开系统对话框（内核缺省 fail-visible 选择器）

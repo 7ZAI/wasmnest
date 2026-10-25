@@ -108,16 +108,9 @@ impl crate::plugin::message_bus::MessageDispatcher for PluginManagerDispatcher {
     fn dispatch_to_wasm(&self, plugin_id: &str, msg: &wasmnest_server_base::wire::BusMessage) -> anyhow::Result<()> {
         let wasm_plugins = self.wasm_plugins.clone();
         let pid = plugin_id.to_string();
-        // 与 wasm-core 统一后的总线 trait 同型（票 02 M3）；bare 壳导出仍取
-        // 移动 SDK 载荷形状（绑定层词汇，T-05 归位时随迁），此处做形状一致的
-        // 值转换——两类型逐字段同构，形状由 `wasmnest-server-base::wire::drift_lock` 钉死
-        let msg = wasmnest_plugin_api_mobile::BusMessage {
-            topic: msg.topic.clone(),
-            sender: msg.sender.clone(),
-            payload: msg.payload.clone(),
-            payload_binary: msg.payload_binary.clone(),
-            timestamp: msg.timestamp,
-        };
+        // 载荷形状真源 = `wasmnest-server-base::wire::BusMessage`（批 2 摘移动 SDK
+        // 依赖，issue #36；SDK 侧类型是 guest 面拷贝，形状由跨端 wire 漂移锁钉死）
+        // ——直接消费入参字段派发，不再经 SDK 类型中转。
         wasmnest_wasm_core::runtime_util::block_on_async(async move {
             let wasm_plugin = {
                 let map = wasm_plugins.read().await;

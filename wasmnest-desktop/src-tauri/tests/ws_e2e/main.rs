@@ -21,7 +21,9 @@ use support::{sdk_fixture_artifact_bytes, session_apis};
 // `setup_wasm_runtime` 由 `support::*` 提供（宿主包装：注入 DesktopGuestEvents +
 // DesktopHostFacts）；内核 test_support 的同名入口不注入派发器，误用会让
 // `events` 投递走 UnwiredGuestEvents 而失败——勿把内核同名项加回上面的显式列表。
-use wasmnest_plugin_api::host::{ws_event_topic, WS_CLIENT_CONNECT, WS_CLIENT_DISCONNECT, WS_CLOSE, WS_OPEN};
+use wasmnest_desktop_lib::wasm_core::host_api::topics::{
+    ws_event_topic, WS_CLIENT_CONNECT, WS_CLIENT_DISCONNECT, WS_CLOSE, WS_OPEN,
+};
 
 /// 读下一条**非事件广播**帧（2026-09-26：session-control 端点现承载 WS 事件广播
 /// ——session:created / stopped / removed 事件帧会抢在动作回显前到达，收动作回包

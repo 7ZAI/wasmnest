@@ -208,7 +208,7 @@ pub fn effective_permissions(
         }
     };
     // storage 恒授予：插件自身配置空间的读写（与 SDK PermissionManager 语义一致）
-    effective.insert(wasmnest_plugin_api_mobile::permission::PERMISSION_STORAGE.to_string());
+    effective.insert(wasmnest_wasm_core::permission::PERMISSION_STORAGE.to_string());
     effective
 }
 

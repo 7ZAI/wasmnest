@@ -25,10 +25,10 @@ use std::sync::Arc;
 use uuid::Uuid;
 use wasmnest_host_kit::ports::downcast_host;
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_plugin_api::permission::PERMISSION_PROCESS;
 use wasmnest_wasm_core::host_api::check_permission;
 use wasmnest_wasm_core::host_api::context::{PermissionScope, ProcessScope, ServicesScope, WasmHostContext};
 use wasmnest_wasm_core::host_api::unit_executor::UnitExecutor;
+use wasmnest_wasm_core::permission::PERMISSION_PROCESS;
 use wasmnest_wasm_core::runtime_util::block_on_async;
 use wasmnest_wasm_core::system::error_boundary::spawn_with_error_boundary;
 

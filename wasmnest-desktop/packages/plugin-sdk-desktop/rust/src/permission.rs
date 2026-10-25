@@ -1,13 +1,15 @@
 //! Permission Manager
 //!
-//! 插件权限校验 — 双重校验的后端最终仲裁层
-//! 从桌面端 permission.rs 迁移，作为 api crate 的一部分供插件和主应用共用
+//! 插件权限校验 — 双重校验的后端最终仲裁层（guest 编译期消费面）
 //!
-//! **权限词汇单一真源**：本文件的 [`VALID_PERMISSIONS`] 与 [`PERMISSION_API_MAP`]
-//! 是桌面端唯一的权限清单。打包 CLI（`bin/cli.js`）与宿主前端（`src/plugin/permission.ts`）
-//! 的列表都是**生成物**，由 `cargo run --manifest-path rust/Cargo.toml --example
-//! gen_permission_vocabulary`（即 SDK 的 `pnpm run gen:permissions`）重出，
-//! 禁止手抄；三处一致性由宿主 `plugin/permission.rs` 的词汇漂移锁断言。
+//! **权限词汇真源 = `wasmnest-wasm-core::permission`**（2026-10-14 移动权限面收口
+//! 裁定：双端唯一真源、机制层零 SDK 依赖）。本文件是 SDK guest 面的同形拷贝，供
+//! 插件编译期引用常量；打包 CLI 生成物 `bin/permission-vocabulary.json` 由本文件
+//! 经 `cargo run --manifest-path rust/Cargo.toml --example gen_permission_vocabulary`
+//! （即 SDK 的 `pnpm run gen:permissions`）重出，禁止手抄。core 真源 ↔ 生成物的
+//! 一致性由跨端测试仓 `cross-end-tests` 的 `permission_vocabulary_lock.rs` 断言
+//! （生成物链：core ←锁→ JSON ←gen← 本文件）。宿主权限门已改读 core 真源、不再
+//! 经本文件（平台仓 issue #36 批 1）。
 
 use std::collections::{HashMap, HashSet};
 
@@ -125,6 +127,14 @@ pub const PERMISSION_CRYPTO_KDF: &str = "crypto:kdf";
 /// 只读、只含计数与 plugin_id；但可读**全局**插件维度，能推断其他应用活跃度，
 /// 故单独立位（与 `session:read` 同款判据：能读到「别人在做什么」必须可单独拒绝）。
 pub const PERMISSION_METRICS_READ: &str = "metrics:read";
+/// 系统通知与提醒反馈（共享域契约 `host-notify`，ADR 0052 D3）：通知 / 震动 / 声音
+/// 是用户打扰面，独立成位、fail-closed。无前端 API 面（WASM-only 权限）。
+///
+/// **双端口径**（批 2 收口，平台仓 issue #36）：真源与门禁落点在 core /
+/// 移动宿主（词汇锁扫描面已扩移动宿主源码）；桌面 host-notify 实现暂无独立
+/// 权限门（缺口已记录于 #36）。本位进桌面词汇是为与 core 真源集合相等
+/// （词汇锁①）——桌面插件声明它当前是惰性位。
+pub const PERMISSION_NOTIFY: &str = "notify";
 
 
 /// 权限词汇反射表：`(常量标识符, 权限串)`
@@ -168,6 +178,7 @@ pub const PERMISSION_VOCABULARY: &[(&str, &str)] = &[
     (stringify!(PERMISSION_CRYPTO_ASYM), PERMISSION_CRYPTO_ASYM),
     (stringify!(PERMISSION_CRYPTO_KDF), PERMISSION_CRYPTO_KDF),
     (stringify!(PERMISSION_METRICS_READ), PERMISSION_METRICS_READ),
+    (stringify!(PERMISSION_NOTIFY), PERMISSION_NOTIFY),
 ];
 
 /// 合法权限集合 — 桌面端权限词汇的**唯一真源**（由 [`PERMISSION_VOCABULARY`] 派生）

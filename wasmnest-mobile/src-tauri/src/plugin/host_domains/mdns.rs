@@ -88,10 +88,8 @@ impl StateDiscoveryPorts {
             app: host_ctx(state).app_handle.clone(),
             // 权限真源 = 内核 PermissionManager（`WasmHostContext::has_permission`）；
             // 构造时取快照（引擎事件线程会长期持有本端口，目的权限门零延迟）
-            permitted: host_ctx(state).has_permission(
-                &state.plugin_id,
-                wasmnest_plugin_api_mobile::permission::PERMISSION_MDNS,
-            ),
+            permitted: host_ctx(state)
+                .has_permission(&state.plugin_id, wasmnest_wasm_core::permission::PERMISSION_MDNS),
         })
     }
 
@@ -244,7 +242,7 @@ mod tests {
     /// 短路（零守护 / 零 spawn），其余行为契约由引擎 crate 单测覆盖
     fn state(plugin_id: &str, mdns_granted: bool) -> WasmPluginState {
         let granted: Vec<&str> = if mdns_granted {
-            vec![wasmnest_plugin_api_mobile::permission::PERMISSION_MDNS]
+            vec![wasmnest_wasm_core::permission::PERMISSION_MDNS]
         } else {
             Vec::new()
         };

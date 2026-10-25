@@ -13,9 +13,9 @@
 
 use wasmnest_host_kit::ports::downcast_host;
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_plugin_api::permission::PERMISSION_CONNECTION_READ;
 use wasmnest_wasm_core::host_api::check_permission;
 use wasmnest_wasm_core::host_api::context::{PermissionScope, WasmHostContext};
+use wasmnest_wasm_core::permission::PERMISSION_CONNECTION_READ;
 use wasmnest_wasm_core::runtime_util::block_on_async;
 
 use crate::plugin::bindings::wasmnest;
@@ -120,8 +120,8 @@ pub(crate) fn connection_list(perm: &dyn PermissionScope, plugin_id: &str) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wasmnest_plugin_api::permission::PERMISSION_SESSION_READ;
     use wasmnest_wasm_core::host_api::grant_permissions;
+    use wasmnest_wasm_core::permission::PERMISSION_SESSION_READ;
     use wasmnest_wasm_core::test_support::build_host_ctx_at;
 
     const PLUGIN: &str = "com.test.connection";

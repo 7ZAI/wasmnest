@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::{Mutex, RwLock};
-use wasmnest_plugin_api::host::{pty_event_topic, PTY_EXIT};
+use wasmnest_desktop_lib::wasm_core::host_api::topics::{pty_event_topic, PTY_EXIT};
 
 use wasmnest_desktop_lib::wasm_core::host_api::context::PermissionScope;
 // 宿主环容量上限真源：用常量而不是字面量，上限调整时本用例的「超限拒绝」语义

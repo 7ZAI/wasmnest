@@ -18,7 +18,7 @@
 //! `{ vibrate?, sound? }` 缺省均 true；震动时长域内钳制 [1, 5000]。
 
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_plugin_api_mobile::permission::PERMISSION_NOTIFY;
+use wasmnest_wasm_core::permission::PERMISSION_NOTIFY;
 
 use crate::plugin::bindings::{check_permission, wasmnest};
 // 平台桥三件套（panic 守卫 / 端口 trait / 异步桥）只被 `#[cfg(target_os =
