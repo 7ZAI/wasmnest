@@ -197,6 +197,13 @@ jobs:
         working-directory: wasmnest/wasmnest-desktop
         run: pnpm run test:run
 
+      # dev-shell 漂移锁（contractDrift / visualParity / hostStyleParity）只在 SDK 包
+      # 自身 vitest 配置里，宿主根 test:run 不覆盖——补跑（此前仅随 sdk-publish
+      # 发布链执行，PR 门禁看不到）
+      - name: vitest（SDK dev-shell 漂移锁）
+        working-directory: wasmnest/wasmnest-desktop/packages/plugin-sdk-desktop
+        run: pnpm run test:run
+
   # ---------------------------------------------------------------- 移动 node 层
   node-mobile:
     name: node-mobile
@@ -265,6 +272,12 @@ jobs:
 
       - name: vitest（宿主测试树）
         working-directory: wasmnest/wasmnest-mobile
+        run: pnpm run test:run
+
+      # 移动 SDK 契约测试（cli 白名单回归 / componentize 落点 / dev-shell 漂移锁）：
+      # 此前本仓 CI 永不执行（sdk-publish.yml 写死 --target desktop），PR 门禁补上
+      - name: vitest（SDK 契约 + dev-shell 漂移锁）
+        working-directory: wasmnest/wasmnest-mobile/packages/plugin-sdk-mobile
         run: pnpm run test:run
 
   # ----------------------------------------------------- Rust PR 层：check + 快速锁
