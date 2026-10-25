@@ -14,21 +14,22 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.Plugin
+import org.json.JSONArray
 
 /**
  * Tauri 插件 - SAF 文件/目录选择器
  *
  * 用 Android Storage Access Framework 弹系统选择器（免任何存储权限）：
  * - pickDirectory：ACTION_OPEN_DOCUMENT_TREE，选共享目录（挂载根）
- * - pickFile：ACTION_OPEN_DOCUMENT，选本地文件（上传用）
+ * - pickFile：ACTION_OPEN_DOCUMENT + EXTRA_ALLOW_MULTIPLE，多选本地文件（上传用）
  *
- * 选择后调用 takePersistableUriPermission 持久化授权（重启仍有效），
- * 并把 SAF Uri 拆成 (authority, documentId, primaryDir) 返回；
+ * 选择后对每个 URI 调用 takePersistableUriPermission 持久化授权（重启仍有效），
+ * 并把 SAF Uri 拆成 (authority, documentId, primaryDir) 逐项返回；
  * 真实路径解析（externalstorage/downloads provider → /storage/...）由 Rust 侧
  * saf_path 模块完成（可单测），Kotlin 侧只负责选择器与 Uri 元数据提取。
  *
  * 文件选择额外尝试 _data 列直读真实路径（Downloads/Media 等 provider 有效），
- * 命中则优先返回，Rust 侧解析失败时以此兜底。
+ * 命中则由 Rust 侧优先直读，否则按 content URI 逐个中转复制。
  *
  * 由 Rust 端 android_plugins.rs 注册（SafPickerPlugin）。
  * gen/android 重建恢复清单：本文件须恢复（参见 docs/codemap.md §3.2）。
@@ -121,21 +122,24 @@ class SafPickerPlugin(private val activity: Activity) : Plugin(activity) {
 
     // ==================== 文件选择（上传） ====================
 
-    /// 弹系统文件选择器
+    /// 弹系统文件选择器（多选）
     @Command
     fun pickFile(invoke: Invoke) {
         try {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.type = "*/*"
+            // 多选：系统 DocumentsUI 以复选框呈现；只选一项时结果仍走 Intent.data
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             launchPicker(intent) { result ->
-                android.util.Log.i(TAG, "fileResult: code=${result.resultCode} data=${result.data}")
+                android.util.Log.i(
+                    TAG,
+                    "fileResult: code=${result.resultCode} data=${result.data} clip=${result.data?.clipData}",
+                )
                 when (result.resultCode) {
                     Activity.RESULT_OK -> {
-                        val data = result.data
-                        // Intent.data 为 Java 平台类型，需显式标注 Uri? 才能经空检查智能转换
-                        val uri: Uri? = data?.data ?: data?.clipData?.getItemAt(0)?.uri
-                        if (uri == null) {
+                        val uris = collectPickedUris(result.data)
+                        if (uris.isEmpty()) {
                             android.util.Log.e(
                                 TAG,
                                 "fileResult: RESULT_OK but no uri in data/clipData",
@@ -143,11 +147,23 @@ class SafPickerPlugin(private val activity: Activity) : Plugin(activity) {
                             invoke.reject("No file selected")
                             return@launchPicker
                         }
-                        persistPermission(uri)
+                        // 逐项持久化授权：Rust 侧按 content URI 逐个中转复制
+                        uris.forEach { persistPermission(it) }
                         invoke.resolve(
-                            baseResult(uri).apply {
-                                put("documentId", DocumentsContract.getDocumentId(uri))
-                                put("dataPath", queryDataPath(uri))
+                            JSObject().apply {
+                                put(
+                                    "files",
+                                    JSONArray().apply {
+                                        uris.forEach { uri ->
+                                            put(
+                                                baseResult(uri).apply {
+                                                    put("documentId", documentIdOf(uri))
+                                                    put("dataPath", queryDataPath(uri))
+                                                },
+                                            )
+                                        }
+                                    },
+                                )
                             },
                         )
                     }
@@ -188,6 +204,28 @@ class SafPickerPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     // ==================== 工具 ====================
+
+    /// 汇总选择结果的全部 URI：多选在 clipData.items，单选在 Intent.data；
+    /// 两者并集去重（部分 provider 的单选项会同时出现在两处）
+    private fun collectPickedUris(data: Intent?): List<Uri> {
+        if (data == null) return emptyList()
+        val uris = LinkedHashSet<Uri>()
+        data.clipData?.let { clip ->
+            for (index in 0 until clip.itemCount) {
+                clip.getItemAt(index)?.uri?.let(uris::add)
+            }
+        }
+        data.data?.let(uris::add)
+        return uris.toList()
+    }
+
+    /// SAF document id（个别 provider 不支持时返回空串，不拖垮其余选中项）
+    private fun documentIdOf(uri: Uri): String = try {
+        DocumentsContract.getDocumentId(uri)
+    } catch (e: Exception) {
+        android.util.Log.w(TAG, "getDocumentId unavailable for $uri: ${e.message}")
+        ""
+    }
 
     /// 公共元数据：uri / authority / 显示名 / 主存储根（供 Rust 端路径解析）
     private fun baseResult(uri: Uri): JSObject {

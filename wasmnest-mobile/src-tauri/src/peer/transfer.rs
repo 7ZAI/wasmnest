@@ -64,34 +64,30 @@ pub(crate) async fn active_transfers_json(app: &AppHandle) -> crate::Result<Stri
 
 // ==================== 发送源选择（平台原语，保留） ====================
 //
-// 选择待发送文件（Android：SAF 选择器 → 可读路径优先 / SAF 中转复制兜底；
-// 单次单个，可多次累加）。属 `host-platform` 平台原语（与传输编排无关），
+// 选择待发送文件（Android：SAF 多选 → 逐项可读路径优先 / SAF 中转复制兜底；
+// 一次选择全部返回，成一批发送）。属 `host-platform` 平台原语（与传输编排无关），
 // 不随引擎集中化迁移。
 
-/// 分区存储下 `_data` 直读路径（/storage/emulated/0/...）经 std::fs::open 会
-/// EACCES（真机实证：上传 72MB 文件 `Permission denied (os error 13)`）——
-/// 需先探活可读性，不可读则把 content URI 中转复制到 app 私有 cache 再发送
-/// （私有路径 std::fs 恒可读）。
+/// 多选上传源：逐个解析「`_data` 可读直读 → 否则 SAF 中转复制」，返回全部路径。
+///
+/// 任一中转失败即显性报错（已复制的缓存残留由激活期 `cleanup_stale_copies`
+/// 清扫）——静默跳过会少传文件且用户无从察觉。用户取消返回空数组。
 ///
 /// 真入口 = host-platform `pick-files`（票 10 起无前端命令面）
 pub(crate) async fn peer_pick_files(app_handle: AppHandle) -> crate::Result<Vec<String>> {
-    let Some(meta) = crate::plugin::android_plugins::pick_file_android_meta().await? else {
-        // 用户取消选择
-        return Ok(Vec::new());
-    };
-    // 快速路径：`_data` 直读路径可打开（All Files Access 已授权等场景）→ 零复制
-    if !meta.data_path.is_empty() && std::fs::File::open(&meta.data_path).is_ok() {
-        return Ok(vec![meta.data_path]);
+    let metas = crate::plugin::android_plugins::pick_files_android_meta().await?;
+    let mut paths = Vec::with_capacity(metas.len());
+    for meta in metas {
+        // 快速路径：`_data` 直读路径可打开（All Files Access 已授权等场景）→ 零复制
+        if !meta.data_path.is_empty() && std::fs::File::open(&meta.data_path).is_ok() {
+            paths.push(meta.data_path);
+            continue;
+        }
+        // 分区存储兜底：content URI → app 私有 cache 中转复制（保留原始文件名）
+        let dest_name = relay_upload_dest_name(&meta.display_name);
+        paths.push(relay_copy_upload_source(&app_handle, &meta.uri, &dest_name).await?);
     }
-    // 分区存储兜底：content URI → app 私有 cache 中转复制（保留原始文件名）
-    if meta.uri.is_empty() {
-        return Err(crate::AppError::Plugin(
-            "file pick returned neither readable path nor SAF uri".to_string(),
-        ));
-    }
-    let dest_name = relay_upload_dest_name(&meta.display_name);
-    let path = relay_copy_upload_source(&app_handle, &meta.uri, &dest_name).await?;
-    Ok(vec![path])
+    Ok(paths)
 }
 
 async fn relay_copy_upload_source(app: &AppHandle, uri: &str, dest_name: &str) -> crate::Result<String> {

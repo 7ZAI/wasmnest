@@ -69,9 +69,11 @@ pub async fn pick_directory_android() -> crate::Result<Option<String>> {
 
 /// SAF 文件选择原始元数据（content URI 读授权凭据 + 展示名 + `_data` 直读路径）
 ///
-/// 上传方向须保留 content URI：分区存储下 `_data` 直读路径（/storage/emulated/0/...）
-/// 经 std::fs::open 会 EACCES（真机实证），而 content URI 持持久化读授权，
-/// 可经 ContentResolver（SafIo 中转复制/流直传）读取。
+/// 一次多选返回多项（`pick_files_android_meta`）；上传方向须保留 content URI：
+/// 分区存储下 `_data` 直读路径（/storage/emulated/0/...）经 std::fs::open 会
+/// EACCES（真机实证），而 content URI 持持久化读授权，可经 ContentResolver
+/// （SafIo 中转复制/流直传）读取。
+#[derive(Debug)]
 pub struct PickedFileMeta {
     /// SAF content URI（`takePersistableUriPermission` 已取；读内容须经 ContentResolver）
     pub uri: String,
@@ -81,12 +83,13 @@ pub struct PickedFileMeta {
     pub data_path: String,
 }
 
-/// 弹系统文件选择器，返回 SAF 原始元数据（用户取消返回 None）
+/// 弹系统文件选择器（支持多选），返回全部选中项的 SAF 原始元数据
 ///
 /// 不再在 Kotlin 侧解析真实路径——解析结果（`_data` / externalstorage raw:）
 /// 在分区存储下不可直读，交由调用方按「可读路径优先、否则 SAF 中转」兜底。
+/// 用户取消返回空数组。
 #[cfg(target_os = "android")]
-pub async fn pick_file_android_meta() -> crate::Result<Option<PickedFileMeta>> {
+pub async fn pick_files_android_meta() -> crate::Result<Vec<PickedFileMeta>> {
     let handle = SAF_PICKER_HANDLE
         .get()
         .ok_or_else(|| crate::AppError::Plugin("SafPickerPlugin not registered".to_string()))?;
@@ -94,22 +97,42 @@ pub async fn pick_file_android_meta() -> crate::Result<Option<PickedFileMeta>> {
         .run_mobile_plugin_async("pickFile", serde_json::json!({}))
         .await
         .map_err(|e| crate::AppError::Plugin(format!("Failed to invoke pickFile: {}", e)))?;
+    parse_picked_files(&response)
+}
+
+/// 解析 Kotlin `pickFile` 响应：取消 → 空数组；成功 → `files[]` 全量元数据。
+///
+/// 缺 `files` 数组或任一条目缺 uri 一律显性报错：静默丢一个用户选中的文件
+/// 比整次失败更难排查。纯函数，跨平台单测覆盖。
+#[cfg(any(target_os = "android", test))]
+fn parse_picked_files(response: &serde_json::Value) -> crate::Result<Vec<PickedFileMeta>> {
     if response.get("cancelled").and_then(|v| v.as_bool()).unwrap_or(false) {
-        return Ok(None);
+        return Ok(Vec::new());
     }
-    Ok(Some(PickedFileMeta {
-        uri: response.get("uri").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        display_name: response
-            .get("displayName")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-        data_path: response
-            .get("dataPath")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-    }))
+    let Some(files) = response.get("files").and_then(|v| v.as_array()) else {
+        return Err(crate::AppError::Plugin(
+            "pickFile response missing files array".to_string(),
+        ));
+    };
+    let mut metas = Vec::with_capacity(files.len());
+    for (index, file) in files.iter().enumerate() {
+        let uri = file.get("uri").and_then(|v| v.as_str()).unwrap_or("");
+        if uri.is_empty() {
+            return Err(crate::AppError::Plugin(format!(
+                "pickFile response files[{index}] missing uri"
+            )));
+        }
+        metas.push(PickedFileMeta {
+            uri: uri.to_string(),
+            display_name: file
+                .get("displayName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            data_path: file.get("dataPath").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        });
+    }
+    Ok(metas)
 }
 
 /// 非 Android 平台 SAF 选择器不可用（iOS 走系统文档选择器，另行实现）
@@ -121,7 +144,7 @@ pub async fn pick_directory_android() -> crate::Result<Option<String>> {
 }
 
 #[cfg(not(target_os = "android"))]
-pub async fn pick_file_android_meta() -> crate::Result<Option<PickedFileMeta>> {
+pub async fn pick_files_android_meta() -> crate::Result<Vec<PickedFileMeta>> {
     Err(crate::AppError::Plugin(
         "SAF picker unavailable on this platform".to_string(),
     ))
@@ -190,4 +213,67 @@ pub async fn pick_shared_directory_android() -> crate::Result<Option<(String, St
     Err(crate::AppError::Plugin(
         "SAF directory picker unavailable on this platform".to_string(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_picked_files;
+    use serde_json::json;
+
+    /// 多选：files[] 全部保留，顺序与选择一致
+    #[test]
+    fn parse_picked_files_keeps_every_selected_item() {
+        let response = json!({
+            "files": [
+                { "uri": "content://p/a.txt", "displayName": "a.txt", "dataPath": "/sdcard/a.txt" },
+                { "uri": "content://p/b.bin", "displayName": "b.bin", "dataPath": "" }
+            ]
+        });
+        let metas = parse_picked_files(&response).expect("multi payload");
+        assert_eq!(metas.len(), 2);
+        assert_eq!(metas[0].uri, "content://p/a.txt");
+        assert_eq!(metas[0].display_name, "a.txt");
+        assert_eq!(metas[0].data_path, "/sdcard/a.txt");
+        assert_eq!(metas[1].uri, "content://p/b.bin");
+        assert_eq!(metas[1].data_path, "");
+    }
+
+    /// 取消：空结果（不是错误）
+    #[test]
+    fn parse_picked_files_treats_cancel_as_empty() {
+        let metas = parse_picked_files(&json!({ "cancelled": true })).expect("cancel");
+        assert!(metas.is_empty());
+    }
+
+    /// 缺 files 载荷：显性报错而非静默返回空（空会让调用方误判为用户取消）
+    #[test]
+    fn parse_picked_files_rejects_missing_files_payload() {
+        let err = parse_picked_files(&json!({})).expect_err("missing files must fail");
+        assert!(err.to_string().contains("files array"), "got: {err}");
+    }
+
+    /// 任一条目缺 uri：整次失败并点名下标（不静默丢用户选中的文件）
+    #[test]
+    fn parse_picked_files_rejects_item_without_uri() {
+        let response = json!({
+            "files": [
+                { "uri": "content://p/a.txt" },
+                { "displayName": "broken" }
+            ]
+        });
+        let err = parse_picked_files(&response).expect_err("missing uri must fail");
+        assert!(err.to_string().contains("files[1]"), "got: {err}");
+    }
+
+    /// 可选字段缺失按空串归一（displayName/dataPath 在部分 provider 上可能没有）
+    #[test]
+    fn parse_picked_files_defaults_optional_fields() {
+        let metas = parse_picked_files(&json!({
+            "files": [{ "uri": "content://p/x" }]
+        }))
+        .expect("minimal payload");
+        assert_eq!(metas.len(), 1);
+        assert_eq!(metas[0].display_name, "");
+        assert_eq!(metas[0].data_path, "");
+    }
 }
