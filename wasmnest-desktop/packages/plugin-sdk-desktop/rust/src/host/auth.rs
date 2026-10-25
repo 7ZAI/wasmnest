@@ -9,7 +9,7 @@ use super::HostError;
 /// 权限 `auth`（声明即信任）；密钥明文不落宿主日志（只记长度）。
 ///
 /// v24（2026-09-22 用户裁定「认证记录下沉」）：`pairings` / `connection_history`
-/// 不再留宿主主库，认证记录归认证中心（`com.wasmnest.terminal-session`）私有库，
+/// 不再留宿主主库，认证记录归认证中心（`com.wasmnest.bedcode`）私有库，
 /// 由互调 api 服务——本 trait 的**记录面七函数退役删除**（`auth_trusted_devices_list`
 /// / `auth_trusted_device_revoke` / `auth_connection_history_list` /
 /// `auth_connection_history_clear` / `auth_trusted_device_upsert` /
@@ -48,7 +48,7 @@ pub trait HostAuth {
 
     // ==================== v33：设备入场 JWT 签发/验签原语退役（ADR 0033） ====================
     // 原 `auth_device_token_issue` / `auth_device_token_verify` 两方法**删除**：入场
-    // 密钥的生成 / 签发 / 验签归认证中心自持（`com.wasmnest.terminal-session` 的
+    // 密钥的生成 / 签发 / 验签归认证中心自持（`com.wasmnest.bedcode` 的
     // `pairing::jwt` + `pairing::keys`），宿主不再持有任何设备 JWT 密码学。认证中心
     // 只经 `host-auth` 的 `secret-*` 取存密钥材料（属主隔离照旧）。
     // 破坏性：旧产物（v32 SDK 构建）实例化期即被拒（`stale_artifact_rebuild_hint`

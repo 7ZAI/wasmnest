@@ -96,7 +96,7 @@ export interface ShellAppEntry {
 /**
  * 宿主挂载运行面路由表（桌面 UI 宿主修正 2026-10-17）：应用前端由壳经挂载槽承载
  * 其独立构建的前端整包（机制 B，非贡献面）。每个有前端界面的挂载包都在此登记
- * （现状 6 个：terminal-session / agent-hub / ai-chatbox / file-transfer / monitor /
+ * （现状 6 个：bedcode / agent-hub / ai-chatbox / file-transfer / monitor /
  * auth-center）；`auth-center` 住应用仓 `servers/` 分组（服务型 wasm）；
  * 无前端界面的应用无挂载路由。registerSurface 契约为多应用扩展预留（防回接锁保持）。
  *
@@ -104,7 +104,7 @@ export interface ShellAppEntry {
  * lib 名 / 目录 slug 三件，id 不在豁免内）——此处用改名后的终态 id；产物目录
  * 由构建脚本按 `PLUGIN_ID` 同步重建。
  */
-export const TERMINAL_PLUGIN_ID = 'com.wasmnest.terminal-session'
+export const TERMINAL_PLUGIN_ID = 'com.wasmnest.bedcode'
 export const AGENT_HUB_PLUGIN_ID = 'com.wasmnest.agent-hub'
 export const AI_CHATBOX_PLUGIN_ID = 'com.wasmnest.ai-chatbox'
 export const FILE_TRANSFER_PLUGIN_ID = 'com.wasmnest.file-transfer'

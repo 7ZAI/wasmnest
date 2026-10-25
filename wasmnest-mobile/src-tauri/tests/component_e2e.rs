@@ -414,7 +414,7 @@ fn test_sdk_macro_component_loads_and_activates() {
             wasmnest_wasm_core::test_support::runtime_engine(&runtime),
             &build_terminal_session_component(),
         )
-        .expect("compile terminal-session component");
+        .expect("compile bedcode component");
         // 生产 manifest 权限集（activate 期 ws 属主 topic 订阅 + 认证状态探测按声明放行）
         let granted: HashSet<String> = [
             wasmnest_plugin_api_mobile::permission::PERMISSION_AUTH,
@@ -432,12 +432,12 @@ fn test_sdk_macro_component_loads_and_activates() {
         let mut plugin = runtime
             .instantiate_component(
                 &component,
-                "com.wasmnest.terminal-session",
-                ctx_with_grant(&host_ctx, "com.wasmnest.terminal-session", granted),
+                "com.wasmnest.bedcode",
+                ctx_with_grant(&host_ctx, "com.wasmnest.bedcode", granted),
                 &[],
                 None,
             )
-            .expect("instantiate terminal-session component");
+            .expect("instantiate bedcode component");
 
         // 激活/停用（bedcode 应用：activate 期订阅 ws 属主 topic + 认证状态探测）
         assert_eq!(plugin.activate().expect("activate"), 0);
@@ -445,7 +445,7 @@ fn test_sdk_macro_component_loads_and_activates() {
 
         // manifest（宏内 `manifest()` 序列化 plugin.json）
         let manifest: serde_json::Value = serde_json::from_str(&plugin.get_manifest().expect("manifest")).unwrap();
-        assert_eq!(manifest["id"], "com.wasmnest.terminal-session");
+        assert_eq!(manifest["id"], "com.wasmnest.bedcode");
 
         // 命令调用：bedcode 应用对未知命令返回 Err → 宏序列化为 {"error": ...} JSON
         let result = plugin.invoke_command("no.such.cmd", "{}").expect("invoke_command");

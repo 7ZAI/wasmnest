@@ -1,6 +1,6 @@
 //! host-terminal / terminal-hooks 退役锁（票 15 阶段 B · 移动端）
 //!
-//! 票 15 阶段 A 把终端消费 UI 域整体迁入 `com.wasmnest.terminal-session` 插件
+//! 票 15 阶段 A 把终端消费 UI 域整体迁入 `com.wasmnest.bedcode` 插件
 //! 前端后，本批（阶段 B，ABI **v16→17**）把宿主→插件的终端回调/写入面整层退役：
 //!
 //! - WIT：import `host-terminal`（send）与导出 `terminal-hooks`

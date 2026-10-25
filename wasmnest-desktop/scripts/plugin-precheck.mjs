@@ -62,12 +62,12 @@ export const PLUGIN_WATCH_CMDS = [
     wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_ai_chatbox.wasm',
   },
   {
-    // terminal-session（bedcode）：前端挂载包在 dev 期**不参与 watch**——它的整包
+    // bedcode（bedcode）：前端挂载包在 dev 期**不参与 watch**——它的整包
     // 构建最重（实测 ~20s），且每次写入 resources 都会让宿主重启一次。改了它的 UI
     // 请单独重建：`pnpm run plugins:build` 或该目录 `node scripts/build.js --frontend-only`。
     // 条目保留只为 ensurePluginWasm 的 WASM 缺失/陈旧补建（Rust 侧自启照旧）。
     slug: 'bedcode',
-    id: 'com.wasmnest.terminal-session',
+    id: 'com.wasmnest.bedcode',
     args: [],
     skipWatch: true,
     // 票 03 起本插件走仓库共享 wasip3 构建链（cdylib 直出 Component）

@@ -1109,9 +1109,9 @@ mod tests {
 
     #[test]
     fn split_plugin_tag_recognizes_plugin_prefix() {
-        let msg = "[plugin:com.wasmnest.terminal-session] task-status body: {\"status\":\"idle\"}";
+        let msg = "[plugin:com.wasmnest.bedcode] task-status body: {\"status\":\"idle\"}";
         let (tag, rest) = split_plugin_tag(msg).expect("should split plugin tag");
-        assert_eq!(tag, "[plugin:com.wasmnest.terminal-session]");
+        assert_eq!(tag, "[plugin:com.wasmnest.bedcode]");
         assert_eq!(rest, " task-status body: {\"status\":\"idle\"}");
     }
 
@@ -1157,7 +1157,7 @@ mod tests {
         tracing::subscriber::with_default(subscriber, || {
             tracing::debug!(
                 target: "test::log",
-                "[plugin:com.wasmnest.terminal-session] task-status body: {}",
+                "[plugin:com.wasmnest.bedcode] task-status body: {}",
                 "{\"status\":\"idle\"}",
             );
             tracing::info!("Session created: test");
@@ -1182,7 +1182,7 @@ mod tests {
 
         // 插件标签出现且被品红着色
         assert!(
-            out.contains("[plugin:com.wasmnest.terminal-session]"),
+            out.contains("[plugin:com.wasmnest.bedcode]"),
             "plugin tag should be present, got:\n{out}"
         );
         // 品红（35m）仅出现一次：只用于插件标签，宿主日志不被染成品红

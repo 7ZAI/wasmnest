@@ -130,7 +130,7 @@ async fn test_server_auth_policy_closed_loop() {
 
     // ============ 激活真实认证中心产物 ============
     let wasm_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm");
+        .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
     if !wasm_path.exists() {
         eprintln!("[skip] session wasip3 artifact not built");
         return;
@@ -308,12 +308,12 @@ async fn test_server_auth_policy_closed_loop() {
 
 /// 2026-09-29 事故真源回归锁（spec §10 票 05 第 1 条）：**多候选必须落在注册者身上**
 ///
-/// 复刻事故：agent-hub（按 id 排序在 terminal-session **之前**、且 SDK 无条件导出
+/// 复刻事故：agent-hub（按 id 排序在 bedcode **之前**、且 SDK 无条件导出
 /// auth-policy 默认拒绝实现）先行激活成候选；旧裁决按「能力探测 + 排序取首个」
 /// 会选中 agent-hub 而全局拒绝。新裁决只认注册表（ADR 0031 K1/K4）：
-/// ① 只注册 terminal-session（agent-hub 不注册）→ 注册表属主 = terminal-session；
+/// ① 只注册 bedcode（agent-hub 不注册）→ 注册表属主 = bedcode；
 /// ② 未撤销 token 放行（若旧逻辑选中 agent-hub，其默认拒绝会让它 Err）；
-/// ③ 撤销后拒绝原因来自 terminal-session 私有库 trust 真源（deny_kind=policy）；
+/// ③ 撤销后拒绝原因来自 bedcode 私有库 trust 真源（deny_kind=policy）；
 /// ④ 停用未注册者（agent-hub）不影响注册表（purge 只碰本人）。
 #[tokio::test(flavor = "multi_thread")]
 async fn test_auth_center_multi_candidate_registration_lock() {
@@ -328,9 +328,9 @@ async fn test_auth_center_multi_candidate_registration_lock() {
     const CENTER_METHODS: [&str; 4] = ["pairing_code", "qr", "biometric", "jwt"];
     let session_id = bridge::SESSION_PLUGIN_ID;
 
-    // agent-hub 与 terminal-session 两个 wasm 产物都必须可加载
+    // agent-hub 与 bedcode 两个 wasm 产物都必须可加载
     let session_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm");
+        .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
     let hub_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../resources/plugins/desktop/com.wasmnest.agent-hub/wasmnest_plugin_agent_hub.wasm");
     if !session_wasm.exists() || !hub_wasm.exists() {
@@ -373,7 +373,7 @@ async fn test_auth_center_multi_candidate_registration_lock() {
         }
     }
 
-    // 只注册 terminal-session 为认证中心；agent-hub 即使排序在前也不被选中
+    // 只注册 bedcode 为认证中心；agent-hub 即使排序在前也不被选中
     let _ = registry::register(
         bridge::SESSION_PLUGIN_ID,
         CENTER_METHODS.iter().map(|s| s.to_string()).collect(),
@@ -384,8 +384,8 @@ async fn test_auth_center_multi_candidate_registration_lock() {
         "注册表只认注册者（agent-hub 排序在前也不被选中）"
     );
 
-    // token 用**中心自己那份密钥环**（本用例给 terminal-session 种子）签出：
-    // 验签方只能是 terminal-session；若旧逻辑选中 agent-hub 的默认拒绝实现，
+    // token 用**中心自己那份密钥环**（本用例给 bedcode 种子）签出：
+    // 验签方只能是 bedcode；若旧逻辑选中 agent-hub 的默认拒绝实现，
     // 它既没有这把密钥也验不过 → 裁决必错，与本用例要锁的「注册表说了算」同向
     const TEST_KEY: [u8; 32] = [0x5a; 32];
     let token = wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(
@@ -400,12 +400,12 @@ async fn test_auth_center_multi_candidate_registration_lock() {
     let decision = bridge::enforce_connection_policy(host.as_ref(), &token);
     assert!(
         decision.is_ok(),
-        "裁决必须落在已注册的 terminal-session 身上（agent-hub 未被注册即使排序在前）: \
+        "裁决必须落在已注册的 bedcode 身上（agent-hub 未被注册即使排序在前）: \
          decision={decision:?} registry={:?}",
         registry::center().map(|e| e.owner)
     );
 
-    // 撤销该设备（软删私有库真源 is_active=0）→ 拒绝，原因来自 terminal-session 策略
+    // 撤销该设备（软删私有库真源 is_active=0）→ 拒绝，原因来自 bedcode 策略
     {
         let db_path = std::env::temp_dir()
             .join(format!("wasmnest-hosttest-pluginroot-{}", std::process::id()))
@@ -431,7 +431,7 @@ async fn test_auth_center_multi_candidate_registration_lock() {
     let deny = bridge::enforce_connection_policy(host.as_ref(), &token).expect_err("撤销后必须拒绝");
     assert!(
         deny.contains("revoked"),
-        "拒绝原因来自 terminal-session 的 trust 策略（deny_kind=policy）: {deny}"
+        "拒绝原因来自 bedcode 的 trust 策略（deny_kind=policy）: {deny}"
     );
 
     // 停用 agent-hub（未注册者）→ 注册表与裁决不受影响（purge 只碰本人）
@@ -462,13 +462,13 @@ fn test_auth_center_deny_kinds_are_distinguishable() {
     assert!(state.is_none(), "无中心（fail-closed 可判）");
     let _ = register_inner(
         &mut state,
-        "com.wasmnest.terminal-session",
+        "com.wasmnest.bedcode",
         vec!["pairing_code".to_string()],
     );
 
     let no_center = "no auth center registered".to_string();
     // deny_kind=unavailable
-    let unavailable = "auth center unavailable: plugin 'com.wasmnest.terminal-session' not loaded".to_string();
+    let unavailable = "auth center unavailable: plugin 'com.wasmnest.bedcode' not loaded".to_string();
     // deny_kind=policy（中心原样 reason）
     let policy = "device revoked from trust list".to_string();
 
@@ -484,11 +484,11 @@ fn test_auth_center_deny_kinds_are_distinguishable() {
     assert!(!policy.contains("no auth center") && !policy.contains("unavailable"));
     // 边界：unavailable 文案点名中心属主（排障不需要猜是哪个中心）
     assert!(
-        unavailable.contains("com.wasmnest.terminal-session"),
+        unavailable.contains("com.wasmnest.bedcode"),
         "unavailable 文案必须点名中心属主: {unavailable}"
     );
 
-    purge_inner(&mut state, "com.wasmnest.terminal-session");
+    purge_inner(&mut state, "com.wasmnest.bedcode");
 }
 
 /// 依赖缺失：应用插件声明未知能力名 → 激活失败，错误信息指明能力名

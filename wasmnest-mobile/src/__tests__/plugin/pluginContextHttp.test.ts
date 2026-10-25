@@ -2,14 +2,14 @@
  * Plugin Context 会话 API 单测（票 13：会话控制迁插件；票 15 阶段 B：TerminalAPI 退役）
  *
  * 验证 `session.list` 自宿主 HTTP 代理换插件命令面
- * （`@/plugin/sessionCommands` → plugin_invoke `com.wasmnest.terminal-session`）后：
+ * （`@/plugin/sessionCommands` → plugin_invoke `com.wasmnest.bedcode`）后：
  * 1. 权限判定不变（缺权限快速失败，抛「lacks permission」）
  * 2. 有权限时经 `sessionCommands`（listSessions）发请求，
  *    不再经 useMobileCommands 的 WS 信封命令
  * 3. 失败语义：`code!=0` → 抛 Error(message)（前端归一化口径不变）
  * 4. `context.terminal`（TerminalAPI）已随票 15 阶段 B 整面退役：
  *    PluginContext 不再有 terminal 字段（外部插件输入改走
- *    `terminal-session.send-http-input` HTTP 通道 / 订阅帧直写）
+ *    `bedcode.send-http-input` HTTP 通道 / 订阅帧直写）
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createPluginContext } from '@/plugin/context'

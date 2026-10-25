@@ -5,7 +5,7 @@
 //! - [`auth_center`]：L2 桥接门（问中心一次 + `deny_kind` 三态分类 + 组合式零解析转发）
 //!
 //! `jwt`（宿主自持 HS256 签发/验签）与 `host_secrets`（宿主属主密钥托管）已随
-//! ADR 0033 整模块退役——入场密钥的真源在认证中心（`com.wasmnest.terminal-session`）；
+//! ADR 0033 整模块退役——入场密钥的真源在认证中心（`com.wasmnest.bedcode`）；
 //! `biometric`（生物凭证验签/挑战管理）已随 B-downsink（2026-09-30）退役——生物
 //! 公钥托管与验签执行下沉认证中心私有库（`auth_records::biometric_key_*` + WASM 内
 //! p256）。宿主认证面只剩「问中心」这一个方向。

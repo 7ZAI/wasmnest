@@ -11,7 +11,7 @@ import { clearAppRoutes, forgetAppRoute, lastRouteOf, rememberAppRoute } from '@
  * 停用 / 卸载清掉；进程内内存态。
  */
 
-const APP = 'com.wasmnest.terminal-session'
+const APP = 'com.wasmnest.bedcode'
 const OTHER = 'com.wasmnest.agent-hub'
 
 describe('应用页面记忆（appSession）', () => {

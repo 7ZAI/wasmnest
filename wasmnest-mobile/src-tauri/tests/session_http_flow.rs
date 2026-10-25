@@ -1,7 +1,7 @@
 //! 会话控制 HTTP wire 契约集成测试（票 13 改造）
 //!
 //! 客户端已迁插件：原宿主 `session::http::SessionHttpClient` + `commands::session`
-//! 整体退役，会话控制（list/start/stop/remove/input）由 `com.wasmnest.terminal-session`
+//! 整体退役，会话控制（list/start/stop/remove/input）由 `com.wasmnest.bedcode`
 //! 插件经 **host-http**（`jwtAuth` 宿主代注 Bearer，token 不落插件）直连桌面
 //! `/api/sessions*`。本文件锁「宿主 host-http 执行器 + 桌面 wire 契约」：
 //!
@@ -79,7 +79,7 @@ impl HttpPorts for HostLevelPorts {
 /// 执行器包装：源起能力域真执行器（同步接口），在异步用例里经 block_in_place 驱动
 async fn exec(request: &serde_json::Value) -> Result<Value, String> {
     let request_json = request.to_string();
-    let plugin_id = "com.wasmnest.terminal-session";
+    let plugin_id = "com.wasmnest.bedcode";
     let ports: Arc<dyn HttpPorts> = Arc::new(HostLevelPorts);
     tokio::task::block_in_place(|| {
         // 非流式请求必带 `{status, body, headers}` 响应 JSON；解码失败 = 契约破损

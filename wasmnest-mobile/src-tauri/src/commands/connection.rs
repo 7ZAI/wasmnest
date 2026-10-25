@@ -153,7 +153,7 @@ pub async fn get_ws_token() -> Result<String> {
     Ok(get_global_token())
 }
 
-/// 获取常驻事件 WS 的完整 URL（`ws://{address}:{port}/ws/plugin/com.wasmnest.terminal-session/session-control`）
+/// 获取常驻事件 WS 的完整 URL（`ws://{address}:{port}/ws/plugin/com.wasmnest.bedcode/session-control`）
 ///
 /// 事件通道建连地址（票 03 自 `/ws/event` 迁往桌面插件端点）：目标设备未保存（未 connect）时报错。
 #[tauri::command]

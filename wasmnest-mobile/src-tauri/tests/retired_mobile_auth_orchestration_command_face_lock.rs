@@ -1,7 +1,7 @@
 //! 认证编排命令面退役锁（票 14 阶段 B · 移动端）
 //!
 //! 配对 / QR / 生物挑战的**流程编排**自宿主 `commands::auth` 迁
-//! `com.wasmnest.terminal-session` 插件配对域（WIT `host-auth` 触达引擎）：
+//! `com.wasmnest.bedcode` 插件配对域（WIT `host-auth` 触达引擎）：
 //! 五个宿主命令（`ws_request_pairing` / `ws_verify_pairing_code` /
 //! `ws_authenticate_with_qr` / `ws_authenticate_with_biometric` /
 //! `ws_get_auth_status`——最后者零消费者直接退役）与三个流程事件发射 helper
@@ -75,10 +75,10 @@ const KEEP_FACE: [(&str, &str); 7] = [
 const PLUGIN_AUTH_FACE: [(&str, &str); 5] = [
     ("rust/src/auth.rs", "fn request_pairing("),
     ("rust/src/auth.rs", "fn verify_pairing_code("),
-    ("rust/src/commands.rs", "\"terminal-session.verify-pairing-code\""),
+    ("rust/src/commands.rs", "\"bedcode.verify-pairing-code\""),
     (
         "rust/src/commands.rs",
-        "\"terminal-session.authenticate-with-biometric\"",
+        "\"bedcode.authenticate-with-biometric\"",
     ),
     ("plugin.json", "\"auth\""),
 ];

@@ -5,7 +5,7 @@
 //! 仓库里的边界锁全是**结构锁**：`crate_boundary_lock`（依赖边登记表 + 双向断言）、
 //! 各传输面的 `dependency_direction_lock`（禁止横向边）、`HostModuleDesc` 的产品名词
 //! 词段锁。它们管的是「边是否合法」「描述符词汇是否干净」——但**没有一条管合法边
-//! 位置上装的是不是业务代码**。于是一条 `com.wasmnest.terminal-session` 字面量写在
+//! 位置上装的是不是业务代码**。于是一条 `com.wasmnest.bedcode` 字面量写在
 //! 能力 crate 里能通过全部现有测试绿灯通过。
 //!
 //! 本锁补的就是这个缺口：**扫描能力域 crate 的生产代码文本**，命中即红。
@@ -112,12 +112,12 @@ const PRODUCT_ID_PREFIX: &str = "com.wasmnest.";
 
 /// 格式占位段：出现在**格式校验类**夹具 / 示例里的裸占位不是产品身份
 ///
-/// 只收「明显不是任何真实插件」的中性词。真实产品插件名（terminal-session /
+/// 只收「明显不是任何真实插件」的中性词。真实产品插件名（bedcode /
 /// agent-hub / file-transfer / ai-chatbox …）一律不在此表——出现在生产代码里就红。
 const PLACEHOLDER_SEGMENTS: &[&str] = &["xxx", "test", "other", "example", "sample"];
 
 /// 已退役的宿主面词汇（AGENTS §5.3）：`host-session` / `host-terminal` 连同权限位
-/// 整体退役，业务下沉到 `com.wasmnest.terminal-session`。任何形态的生产引用都红。
+/// 整体退役，业务下沉到 `com.wasmnest.bedcode`。任何形态的生产引用都红。
 ///
 /// 后两个是本轮实际删掉的死常量名（原 `wasmnest-server-base/src/constants.rs` 的
 /// `PLUGIN_SESSION_RING_FETCH_MAX_BYTES` / `ENV_WASMNEST_SESSION_ID`，零消费者）。
@@ -437,7 +437,7 @@ fn scanner_is_not_vacuous() {
     fs::create_dir_all(&src_dir).expect("建 src 目录");
     fs::write(
         src_dir.join("probe.rs"),
-        "let live = \"com.wasmnest.terminal-session\";\n\
+        "let live = \"com.wasmnest.bedcode\";\n\
          // com.wasmnest.agent-hub\n\
          #[cfg(test)]\n\
          mod tests {\n\
@@ -449,7 +449,7 @@ fn scanner_is_not_vacuous() {
     let text = probe.lines.join("\n");
 
     assert!(
-        text.contains("com.wasmnest.terminal-session"),
+        text.contains("com.wasmnest.bedcode"),
         "生产区的真命中必须被保留，实得 {text:?}"
     );
     assert!(
@@ -486,7 +486,7 @@ fn placeholder_segments_do_not_mask_real_product_segments() {
     );
     // 反例：真实产品段必须被认出（逐一列举，防有人把真产品名塞进占位表）
     for real in [
-        "terminal-session",
+        "bedcode",
         "agent-hub",
         "file-transfer",
         "ai-chatbox",
@@ -636,7 +636,7 @@ fn retired_host_surfaces_are_not_reintroduced_in_capability_crates() {
     assert!(
         hits.is_empty(),
         "退役宿主面词汇回接（AGENTS §5.3 已连同权限位整体退役，业务归 \
-         com.wasmnest.terminal-session）：\n  - {}",
+         com.wasmnest.bedcode）：\n  - {}",
         hits.join("\n  - ")
     );
 }

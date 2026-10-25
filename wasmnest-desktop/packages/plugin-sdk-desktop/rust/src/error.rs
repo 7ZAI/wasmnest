@@ -7,7 +7,7 @@
 //!   "code":…, "params":…}`）；宿主桥（`invoke_wasm_command`）只做机制检测 + 形状校验 +
 //!   透传，**不解释业务语义**；
 //! - `code` 约定 = 插件 i18n **注册后的完整 key**（`<plugin_id>.<namespace>.<name>`，
-//!   如 `com.wasmnest.terminal-session.session.error.sessionNotFound`），前端消费层在
+//!   如 `com.wasmnest.bedcode.session.error.sessionNotFound`），前端消费层在
 //!   宿主 `errors.*` 无此码时回退到裸 code 查找插件自注册文案（零映射层、零漂移）；
 //! - 畸形 / 未标记错误 → 宿主按 `host.internal` + 插件标识参数兜底，原文只进日志。
 
@@ -73,7 +73,7 @@ pub fn user_facing_string(code: &'static str, params: Value) -> String {
 /// ```ignore
 /// fn invoke_command(name: &str, _args: serde_json::Value) -> anyhow::Result<serde_json::Value> {
 ///     if name == "session.get" {
-///         bail_with_code!("com.wasmnest.terminal-session.session.error.sessionNotFound");
+///         bail_with_code!("com.wasmnest.bedcode.session.error.sessionNotFound");
 ///     }
 ///     bail_with_code!("com.wasmnest.demo.throttled", serde_json::json!({ "waitSecs": 5 }));
 ///     Ok(serde_json::Value::Null)

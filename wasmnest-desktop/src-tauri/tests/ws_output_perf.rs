@@ -3,7 +3,7 @@
 //! 复用现有 PTY 输出性能基线（`.scratch/2026-09-21-terminal-output-consumer-perf/`：
 //! P1–P3 测的是 `ring-fetch` 消费侧成本——宿主 ring 直读 / JSON-RPC 命令通道反例 /
 //! 真 PTY 追赶），本探针补最后一段：**「插件 ring-fetch + WIT binary + WS send」**
-//! 端到端路径——真实 Actix server + 真实 terminal-session WASM 插件 + 真实 bash PTY
+//! 端到端路径——真实 Actix server + 真实 bedcode WASM 插件 + 真实 bash PTY
 //! + 真实 WS 客户端，经 `/ws/plugin/.../terminal` 订阅后以 poll 帧驱动 drain，
 //! 测二进制输出帧的**到达吞吐**（收到字节 / 耗时 → MB/s）、帧大小与 ring 截断
 //! （`ring_resync` 帧计数）。
@@ -165,9 +165,9 @@ fn perf_ws_terminal_output_throughput() {
     let _ws_guard = lock_ws_fixture_e2e();
     let _serial = session_plugin_db_guard();
 
-    const PLUGIN_ID: &str = "com.wasmnest.terminal-session";
+    const PLUGIN_ID: &str = "com.wasmnest.bedcode";
     let wasm_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm");
+        .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
     if !wasm_path.exists() {
         eprintln!("[skip] session wasip3 artifact not built");
         return;
@@ -265,7 +265,7 @@ fn perf_ws_terminal_output_throughput() {
             )),
         )
         .expect("register declared terminal endpoint");
-        assert_eq!(entry.mount_path, "/ws/plugin/com.wasmnest.terminal-session/terminal");
+        assert_eq!(entry.mount_path, "/ws/plugin/com.wasmnest.bedcode/terminal");
 
         // 种子配置 + 创建真实会话（bash PTY）
         let config_out = plugin

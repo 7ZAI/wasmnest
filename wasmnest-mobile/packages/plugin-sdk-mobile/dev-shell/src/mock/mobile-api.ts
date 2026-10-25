@@ -132,7 +132,7 @@ async function routeHttpRequest(
   const query = new URLSearchParams(queryString || '')
   const sessionId = query.get('session_id') || strField(body, 'session_id') || ''
 
-  const BASE = '/api/plugin/com.wasmnest.terminal-session'
+  const BASE = '/api/plugin/com.wasmnest.bedcode'
 
   if (pathname === `${BASE}/task-queue/list`) {
     if (!sessionId) return fail('missing sessionId')

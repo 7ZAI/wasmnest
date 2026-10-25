@@ -220,7 +220,7 @@ impl HostPluginDatabase for WasmHost {
 // ==================== HostSession（v27 已退役） ====================
 
 // `host-session` 整 interface 在 ABI v27 删除（票 10）：会话真源在
-// `com.wasmnest.terminal-session` 登记域，宿主侧不再有「会话」原语域。
+// `com.wasmnest.bedcode` 登记域，宿主侧不再有「会话」原语域。
 // 插件要用会话能力一律经 `host-pty`（PTY 引擎）与自家登记域。
 
 // ==================== HostConnection ====================

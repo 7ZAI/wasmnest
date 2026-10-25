@@ -3,7 +3,7 @@
  *
  * 插件前端禁止直连 @tauri-apps/api；此处由宿主创建页面 Channel 并登记
  * （terminal_page_subscribe，裸字节 Raw 投递），把「按序字节回调」交给插件。
- * 链路订阅（terminal-session.subscribe）仍由插件命令面负责。
+ * 链路订阅（bedcode.subscribe）仍由插件命令面负责。
  */
 
 import { Channel } from '@tauri-apps/api/core'

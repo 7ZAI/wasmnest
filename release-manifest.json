@@ -8,7 +8,7 @@
   "contract": {
     "package": "wasmnest:plugin",
     "version": "0.0.1",
-    "witSha256": "1263306337ee1d86b41844480324c726eb4084435332a73fbb2625225f469bf8"
+    "witSha256": "c03c72fb29c7775f642d9e165f3c468c6c712ffe0b39d811aa41e4792e87ea1c"
   },
   "hostRuntime": {
     "version": "0.0.1",
@@ -34,7 +34,7 @@
         "mobile": { "artifact": "wasmnest_plugin_ai_chatbox.wasm" }
       }
     },
-    "com.wasmnest.terminal-session": {
+    "com.wasmnest.bedcode": {
       "path": "apps/bedcode",
       "ends": {
         "desktop": { "artifact": "bedcode_plugin_terminal_session.wasm" },

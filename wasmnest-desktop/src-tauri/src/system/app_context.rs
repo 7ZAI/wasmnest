@@ -19,7 +19,7 @@ pub struct AppContext {
     /// 数据库实例
     db: Arc<std::sync::Mutex<Database>>,
     // 票 11：`session_manager` / `config_manager` 两个内核会话域字段已删除——
-    // 会话真源在 `com.wasmnest.terminal-session` 登记域，宿主经 `session_gateway`
+    // 会话真源在 `com.wasmnest.bedcode` 登记域，宿主经 `session_gateway`
     // 窄转发层互调，不再持有内核会话对象。
     /// 插件宿主（生命周期管理）
     plugin_host: Arc<PluginHost>,

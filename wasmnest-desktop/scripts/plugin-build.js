@@ -6,7 +6,7 @@
  * 生产构建脚本，委托给各插件的构建系统
  *
  * 用法：node scripts/plugin-build.js [--plugin <plugin-id> | --all]
- * 默认构建 com.wasmnest.terminal-session（终端会话中心）插件
+ * 默认构建 com.wasmnest.bedcode（终端会话中心）插件
  * --all 遍历下方 PLUGINS 注册表（名单单一真源，CI/release 的 `pnpm run plugins:build` 走这条）
  *
  * 桌面端语义（2026-09-25）：wasm 插件对外称 wasm 应用；三仓拆分后源码目录为
@@ -54,7 +54,7 @@ const PLUGINS = {
     group: 'servers',
     slug: 'monitor',
   },
-  'com.wasmnest.terminal-session': {
+  'com.wasmnest.bedcode': {
     group: 'apps',
     slug: 'bedcode',
   },
@@ -67,7 +67,7 @@ const PLUGINS = {
 
 // 解析参数
 const args = process.argv.slice(2)
-let targetPlugin = 'com.wasmnest.terminal-session'
+let targetPlugin = 'com.wasmnest.bedcode'
 let buildAll = false
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--plugin' && args[i + 1]) {

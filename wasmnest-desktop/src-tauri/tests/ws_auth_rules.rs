@@ -9,7 +9,7 @@
 //! 4. 连接建立后 10s 内未完成认证 → 服务端主动 close 4001（spec §4.3 超时窗口）
 //!
 //! 原理：进程内真实启动 Actix HTTP+WS 服务器（OS 分配端口）→ 真实
-//! tokio-tungstenite 客户端连 `/ws/plugin/com.wasmnest.terminal-session/session-control`
+//! tokio-tungstenite 客户端连 `/ws/plugin/com.wasmnest.bedcode/session-control`
 //! （manifest `contributes.wsEndpoints` 声明，auth=jwt）+ HTTP /api/auth/* 配对 →
 //! 首条消息直接验证服务端 gate 行为。
 //!
@@ -44,9 +44,9 @@ type WsSend = futures_util::stream::SplitSink<WebSocketStream<TcpStream>, WsMsg>
 // ==================== 基建 ====================
 
 /// 会话中心插件 id（认证端点编排的权威实现方）
-const SESSION_PLUGIN_ID: &str = "com.wasmnest.terminal-session";
+const SESSION_PLUGIN_ID: &str = "com.wasmnest.bedcode";
 /// 插件端点挂载路径（host 注入命名空间段，manifest 声明 `session-control` 后缀）
-const SESSION_CONTROL_PATH: &str = "/ws/plugin/com.wasmnest.terminal-session/session-control";
+const SESSION_CONTROL_PATH: &str = "/ws/plugin/com.wasmnest.bedcode/session-control";
 
 /// 随包插件产物目录（`cargo test` 前须重建产物，见 AGENTS §3）
 ///
@@ -55,9 +55,9 @@ const SESSION_CONTROL_PATH: &str = "/ws/plugin/com.wasmnest.terminal-session/ses
 fn bundled_plugins_dir() -> PathBuf {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/plugins/desktop");
     assert!(
-        dir.join("com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm")
+        dir.join("com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm")
             .exists(),
-        "插件产物缺失：先跑 `node scripts/plugin-build.js --plugin com.wasmnest.terminal-session`（workdir wasmnest-desktop），目录 {}",
+        "插件产物缺失：先跑 `node scripts/plugin-build.js --plugin com.wasmnest.bedcode`（workdir wasmnest-desktop），目录 {}",
         dir.display()
     );
     dir
@@ -146,7 +146,7 @@ async fn init_test_app_context() {
         plugin_host
             .activate_plugin(SESSION_PLUGIN_ID, false)
             .await
-            .expect("activate com.wasmnest.terminal-session (bundled artifact)");
+            .expect("activate com.wasmnest.bedcode (bundled artifact)");
 
         let mdns_advertiser = Arc::new(tokio::sync::RwLock::new(MdnsAdvertiser::new()));
         let system_info = Arc::new(SystemInfo::collect());

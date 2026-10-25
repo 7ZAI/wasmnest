@@ -22,14 +22,14 @@ fn run_command(plugin: &mut LoadedWasmPlugin, name: &str, args: &str) -> serde_j
     serde_json::from_str(&raw).unwrap_or_else(|e| panic!("[a03] 命令返回非法 JSON: {e} ({raw})"))
 }
 
-/// P1-b：真实 terminal-session wasip3 产物全链路闭环（activate → status → manifest
+/// P1-b：真实 bedcode wasip3 产物全链路闭环（activate → status → manifest
 /// → deactivate）——all imports must resolve + 注册表闸门写表。
 #[test]
 fn a03_p1b_wasip3_artifact_full_closed_loop() {
     // 认证中心注册表闸门（ADR 0031 K1 单中心 desk）：同步用例用自带 runtime 取 permit
     let gate_rt = tokio::runtime::Runtime::new().expect("auth center gate runtime");
     let wasm_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm");
+        .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
     if !wasm_path.exists() {
         eprintln!("[skip] a03_p1b: session wasip3 产物未构建");
         return;
@@ -46,7 +46,7 @@ fn a03_p1b_wasip3_artifact_full_closed_loop() {
     // 会话登记域建表（P1-b 起阻断激活）需要 storage；会话面 host-pty 需要
     // pty:spawn/pty:io（与 manifest 权限表同源）
     host_ctx.grant_permissions(
-        "com.wasmnest.terminal-session",
+        "com.wasmnest.bedcode",
         &[
             "auth".to_string(),
             "broadcast".to_string(),
@@ -69,7 +69,7 @@ fn a03_p1b_wasip3_artifact_full_closed_loop() {
     let mut plugin = wasm_runtime
         .load_plugin_from_file(
             &wasm_path,
-            "com.wasmnest.terminal-session",
+            "com.wasmnest.bedcode",
             Arc::clone(&host_ctx),
             &[],
             None,
@@ -86,7 +86,7 @@ fn a03_p1b_wasip3_artifact_full_closed_loop() {
     // 命令面（session.status 回显 manifest 声明，宿主侧无业务依赖）
     let v = run_command(&mut plugin, "session.status", "{}");
     assert_eq!(
-        v["plugin"], "com.wasmnest.terminal-session",
+        v["plugin"], "com.wasmnest.bedcode",
         "session.status 必须回显插件 ID: {v}"
     );
     assert!(
@@ -96,7 +96,7 @@ fn a03_p1b_wasip3_artifact_full_closed_loop() {
     // v27（票 10）：终端 hooks 导出已删，不再断言透传语义。
     // manifest 往返
     let m: serde_json::Value = serde_json::from_str(&plugin.get_manifest().expect("manifest")).unwrap();
-    assert_eq!(m["id"], "com.wasmnest.terminal-session");
+    assert_eq!(m["id"], "com.wasmnest.bedcode");
     // guest `activate` 会 `auth-center-register` / `deactivate` 会 `auth-center-unregister`
     // → 写进程级单中心注册表（进程级单例）；本用例是同步 `#[test]`，故用自带
     // runtime 取闸门 permit，并只包住写表的那一行。

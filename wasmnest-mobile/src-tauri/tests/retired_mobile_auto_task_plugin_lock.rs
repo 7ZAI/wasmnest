@@ -1,7 +1,7 @@
 //! auto-task 独立插件退役锁（票 16 · 移动端，spec D6 选项 A）
 //!
 //! 票 16 把移动端 `com.wasmnest.auto-task`（TS 面板 + 极简 rust 壳）**整体并入**
-//! `com.wasmnest.terminal-session`（移动版 app，与桌面同名不同职责，C8）：
+//! `com.wasmnest.bedcode`（移动版 app，与桌面同名不同职责，C8）：
 //! 任务队列面板 / 工具箱「任务记录 + 定时任务」/ 桌面任务域 HTTP 客户端按域重组
 //! 进 `wasm-apps/bedcode/src/task/`；旧 id / 视图 id `auto-task.toolbox` /
 //! 命令 id `auto-task.*` 与极简 rust 壳随合并退役（rust 壳 `invoke_command` 显式
@@ -17,7 +17,7 @@
 //! 合并后的正向面（反向断言钉住，防「顺手清光」）：
 //! - `wasm-apps/bedcode/`：权限并集（auth/bus/session:read/storage/
 //!   terminal:output/ws:client）+ 任务域基址 + 任务路由
-//! - 宿主 fs_auth 白名单条目换为 `com.wasmnest.terminal-session`
+//! - 宿主 fs_auth 白名单条目换为 `com.wasmnest.bedcode`
 //!
 //! 票 2026-10-10 批次 C2 的退役追加：`ui:toolbox` / `ui:navtab` / `ui:input` 三个权限位
 //! 与 `registerToolboxPage` / `registerTerminalToolbarItem` 两处调用**从正向面转为退役面**
@@ -137,7 +137,7 @@ fn retired_auto_task_commands_are_not_registered() {
 
 #[test]
 fn frontend_and_dev_shell_have_no_retired_auto_task_literal() {
-    // 宿主前端与 dev-shell 均已切到新前缀（`com.wasmnest.terminal-session`）；
+    // 宿主前端与 dev-shell 均已切到新前缀（`com.wasmnest.bedcode`）；
     // 旧基址 / 视图 id / 命令 id 字面量重新出现 = 前端绕过合并后的 app 走旧通道。
     let repo = mobile_repo_root();
     let mut violations: Vec<String> = Vec::new();
@@ -184,7 +184,7 @@ fn merged_task_domain_and_plugin_retirement_stay() {
     let manifest = std::fs::read_to_string(&manifest_path)
         .unwrap_or_else(|e| panic!("读取 {} 失败：{e}", manifest_path.display()));
     for needle in [
-        "\"com.wasmnest.terminal-session\"",
+        "\"com.wasmnest.bedcode\"",
         "\"auth\"",
         "\"bus\"",
         "\"session:read\"",
@@ -205,8 +205,8 @@ fn merged_task_domain_and_plugin_retirement_stay() {
         "\"ui:toolbox\"",
         "\"ui:navtab\"",
         "\"ui:input\"",
-        "terminal-session.toolbox",
-        "terminal-session.task-toolbar",
+        "bedcode.toolbox",
+        "bedcode.task-toolbar",
     ] {
         assert!(
             !manifest.contains(retired),
@@ -243,8 +243,8 @@ fn merged_task_domain_and_plugin_retirement_stay() {
 
     let api = std::fs::read_to_string(app_root.join("src/task/api.ts")).expect("读取任务域 api.ts 失败");
     assert!(
-        api.contains("/api/plugin/com.wasmnest.terminal-session"),
-        "任务域 HTTP 基址未切到 com.wasmnest.terminal-session"
+        api.contains("/api/plugin/com.wasmnest.bedcode"),
+        "任务域 HTTP 基址未切到 com.wasmnest.bedcode"
     );
 
     // 插件侧源码零旧 id 字样（合并后的 app 自身不得再提旧 id）

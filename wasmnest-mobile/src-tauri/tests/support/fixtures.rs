@@ -26,7 +26,7 @@ mod app_paths;
 
 /// 夹具共享 target 目录（`wasmnest-mobile/target/fixtures`）
 ///
-/// terminal-session 插件与 plugin-component-test 夹具原本各写各自 `target/`，
+/// bedcode 插件与 plugin-component-test 夹具原本各写各自 `target/`，
 /// 把 SDK / wit-bindgen / serde 这份相同依赖图编译两遍（各 ~170M）；共享后只编译一遍。
 fn fixture_target_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../target/fixtures")
@@ -37,14 +37,14 @@ static COMPONENT_CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::H
     std::sync::OnceLock::new();
 
 /// 构建真实插件组件：SDK `wasm_entry!` 宏产物（样本 = 合并后的
-/// `com.wasmnest.terminal-session`（终端域 + 任务域））
+/// `com.wasmnest.bedcode`（终端域 + 任务域））
 ///
 /// 与 `build_test_component` 同链路：cargo build（wasm32，wasm feature）→
 /// wit-component 编码。被测对象是 SDK 宏生成的组件（区别于手写 Guest impl
 /// 的 plugin-component-test）——宏展开错误 / export! 接线错误在此暴露。
 pub fn build_terminal_session_component() -> Vec<u8> {
     let cache = COMPONENT_CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
-    const KEY: &str = "terminal-session";
+    const KEY: &str = "bedcode";
     if let Some(bytes) = cache.lock().unwrap().get(KEY) {
         return bytes.clone();
     }
@@ -69,12 +69,12 @@ pub fn build_terminal_session_component() -> Vec<u8> {
             &manifest_path,
         ])
         .status()
-        .expect("Failed to run cargo build for terminal-session component");
-    assert!(status.success(), "terminal-session WASM build failed");
+        .expect("Failed to run cargo build for bedcode component");
+    assert!(status.success(), "bedcode WASM build failed");
 
     let core =
         std::fs::read(fixture_target_dir().join("wasm32-unknown-unknown/release/bedcode_plugin_terminal_session.wasm"))
-            .expect("Failed to read terminal-session module after build");
+            .expect("Failed to read bedcode module after build");
     // 宏产物必经 componentize（等效本函数内编码）；SDK 构建链已内置该步骤。
     // 此处直接编码 core module（若传入已组件化产物，编码器会拒绝）
     let component = wit_component::ComponentEncoder::default()
@@ -86,12 +86,12 @@ pub fn build_terminal_session_component() -> Vec<u8> {
     assert_eq!(
         &component[..4],
         [0x00, 0x61, 0x73, 0x6d],
-        "terminal-session 组件应以 core module 段起始"
+        "bedcode 组件应以 core module 段起始"
     );
     assert_eq!(
         &component[4..8],
         [0x0d, 0x00, 0x01, 0x00],
-        "terminal-session 组件头应为 0d 00 01 00"
+        "bedcode 组件头应为 0d 00 01 00"
     );
 
     cache.lock().unwrap().insert(KEY.to_string(), component.clone());

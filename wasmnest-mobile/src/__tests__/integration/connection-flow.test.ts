@@ -488,7 +488,7 @@ describe('连接流：useMobileConnection × useHttpApi × terminalBuffer store'
   it('事件通道就绪：ws_event_channel_ready → 触发一次会话对账（重连期间变化靠全量拉取补齐，票 03）', async () => {
     // 通道就绪 = session-control 极简认证首帧发出（Rust 发射）；事件不重放，
     // 对账 = 拉会话全量 → store 收敛（消费端按 id 去重/状态收敛）。
-    // 票 13：会话控制面迁插件命令（plugin_invoke → com.wasmnest.terminal-session）
+    // 票 13：会话控制面迁插件命令（plugin_invoke → com.wasmnest.bedcode）
     const sessions = [
       makeSessionSummary({ id: 's1', name: 'dev', status: 'running' }),
       makeSessionSummary({ id: 's2', name: 'itest', status: 'stopped' }),
@@ -500,7 +500,7 @@ describe('连接流：useMobileConnection × useHttpApi × terminalBuffer store'
     // 通道就绪后换装 sessions 响应（默认 mock 只答 /api/health 探测波形）
     mockInvoke.mockImplementation((cmd: string, args?: any) => {
       if (cmd === 'plugin_invoke') {
-        if (args?.command === 'terminal-session.list-sessions') {
+        if (args?.command === 'bedcode.list-sessions') {
           return Promise.resolve({ code: 0, message: 'ok', data: { sessions } })
         }
         return Promise.resolve(undefined)
@@ -513,19 +513,19 @@ describe('连接流：useMobileConnection × useHttpApi × terminalBuffer store'
 
     // 恰好一次插件命令全量拉取 → 列表落入 activeSessions
     const sessionCalls = mockInvoke.mock.calls.filter(
-      ([c, a]: any[]) => c === 'plugin_invoke' && a?.command === 'terminal-session.list-sessions',
+      ([c, a]: any[]) => c === 'plugin_invoke' && a?.command === 'bedcode.list-sessions',
     )
     expect(sessionCalls).toHaveLength(1)
     expect(conn.activeSessions.value.map((s: any) => s.id)).toEqual(['s1', 's2'])
   })
 
   it('sendInput 经插件命令输入面：成功形状 + 载荷透传（data/specialKey 原样携带）', async () => {
-    // 票 13：HTTP 输入通道随会话控制迁插件（terminal-session.send-http-input，
+    // 票 13：HTTP 输入通道随会话控制迁插件（bedcode.send-http-input，
     // 插件经 host-http + jwtAuth 直发桌面）；specialKey 原样透传（桌面端翻译），
     // 本端不解释
     mockInvoke.mockImplementation((cmd: string, args?: any) => {
       if (cmd === 'plugin_invoke') {
-        if (args?.command === 'terminal-session.send-http-input') {
+        if (args?.command === 'bedcode.send-http-input') {
           return Promise.resolve({ code: 0, message: 'ok' })
         }
         return Promise.resolve(undefined)
@@ -536,7 +536,7 @@ describe('连接流：useMobileConnection × useHttpApi × terminalBuffer store'
     await conn.sendInput('s1', 'ls -la', 'ctrl+c')
 
     const calls = mockInvoke.mock.calls.filter(
-      ([c, a]: any[]) => c === 'plugin_invoke' && a?.command === 'terminal-session.send-http-input',
+      ([c, a]: any[]) => c === 'plugin_invoke' && a?.command === 'bedcode.send-http-input',
     )
     expect(calls).toHaveLength(1)
     expect((calls[0][1] as any).args).toEqual({ sessionId: 's1', data: 'ls -la', specialKey: 'ctrl+c' })
@@ -545,7 +545,7 @@ describe('连接流：useMobileConnection × useHttpApi × terminalBuffer store'
   it('sendInput 业务错误：code!=0 → sendInput throw（不静默吞错）', async () => {
     mockInvoke.mockImplementation((cmd: string, args?: any) => {
       if (cmd === 'plugin_invoke') {
-        if (args?.command === 'terminal-session.send-http-input') {
+        if (args?.command === 'bedcode.send-http-input') {
           return Promise.resolve({ code: 1002, message: 'session not found' })
         }
         return Promise.resolve(undefined)

@@ -144,7 +144,7 @@
 
 ### 5.1 构建注册表与工具链
 
-- **桌面**：应用名单单一真源 = `scripts/plugin-build.js` 的 `PLUGINS`（5 个：agent-hub / ai-chatbox / bedcode(terminal-session) / file-transfer / monitor）；`pnpm run plugins:build`（= `--all`，CI/release 走这条）遍历它。
+- **桌面**：应用名单单一真源 = `scripts/plugin-build.js` 的 `PLUGINS`（5 个：agent-hub / ai-chatbox / bedcode / file-transfer / monitor）；`pnpm run plugins:build`（= `--all`，CI/release 走这条）遍历它。
 - **移动**：无宿主侧注册表，`scripts/plugin-build.js` 自动扫描 `apps/*/mobile`。
 - 桌面一般应用走 `wasm32-wasip3`（cdylib 直出 Component）；**file-transfer 例外**：双端单产物，走 `wasm32-unknown-unknown` + 桌面 SDK 的 `tools/componentize`（随 npm 包发布；产物落应用仓共享 target `<appsRoot>/target/wasm-apps/…`）。
 
@@ -154,7 +154,7 @@
 | --- | --- |
 | `pnpm run plugins:dev -- --plugin <id>` | 单插件 dev 构建（桌面 `scripts/plugin-dev.js`；可用 id 见 §5.1 PLUGINS 键，如 `com.wasmnest.ai-chatbox`） |
 | `node scripts/plugin-build.js --plugin <id>` | 单插件全量（前端 + rust）构建 |
-| `node scripts/plugin-build.js` | 无参数默认构建 `com.wasmnest.terminal-session`（bedcode） |
+| `node scripts/plugin-build.js` | 无参数默认构建 `com.wasmnest.bedcode`（bedcode） |
 | `pnpm run plugins:build:frontend` / `plugins:build:rust` | 桌面便捷转发（ai-chatbox 单 app，走 `app-script.mjs`） |
 | `node ../scripts/app-script.mjs <slug> <desktop\|mobile> <script>` | 转发应用仓单 app 脚本（见 §5.3） |
 

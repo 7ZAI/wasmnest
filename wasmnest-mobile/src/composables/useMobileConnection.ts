@@ -237,7 +237,7 @@ async function init() {
       logger.log('[MobileConnection] Paired')
 
       // 先回读宿主凭据再落已配对设备：认证成功路径已整体迁插件命令面
-      // （terminal-session.verify-pairing-code / authenticate-with-*，不走本 composable
+      // （bedcode.verify-pairing-code / authenticate-with-*，不走本 composable
       // 的 verifyPairingCode / authenticateWithBiometric），宿主不会经过
       // saveCredentials；localStorage 镜像与内存 authCredentials 因此必须在**本回调**
       // 补齐——否则镜像永空，连接历史走「存量凭据静默换新」时 authenticate() 拿不到

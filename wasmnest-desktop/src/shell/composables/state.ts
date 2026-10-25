@@ -128,7 +128,7 @@ export type AppTone = (typeof APP_TONES)[number]
 /**
  * 插件 id → 色调档（确定性哈希，双端一致）。
  *
- * 显式理由：原型按产品 id 硬编码色调映射（terminal-session=primary 等）是
+ * 显式理由：原型按产品 id 硬编码色调映射（bedcode=primary 等）是
  * B5 业务默认值，宿主红线禁止——改为纯机制哈希，新增插件自动获得稳定配色，
  * 不因产品命名而特殊。
  */

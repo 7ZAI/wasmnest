@@ -2,7 +2,7 @@
 //!
 //! 原理：进程内真实启动 Actix HTTP+WS 服务器（OS 分配端口）→ 真实
 //! tokio-tungstenite 客户端模拟移动端 → 经**插件 WS 端点**驱动真实 PTY 闭环：
-//! `/ws/plugin/com.wasmnest.terminal-session/session-control`（会话控制：
+//! `/ws/plugin/com.wasmnest.bedcode/session-control`（会话控制：
 //! start/list/stop，宿主只转原始帧，协议归插件 `ws_control`）→
 //! `host-pty.spawn` 真实 bash → `/ws/plugin/.../terminal`（终端流：JWT 认证 →
 //! subscribe → 输入 → ring-fetch 二进制输出帧 → `session_stopped` 停止帧）
@@ -40,11 +40,11 @@ type WsRecv = futures_util::stream::SplitStream<WebSocketStream<TcpStream>>;
 type WsSend = futures_util::stream::SplitSink<WebSocketStream<TcpStream>, WsMsg>;
 
 /// 会话中心插件 id
-const SESSION_PLUGIN_ID: &str = "com.wasmnest.terminal-session";
+const SESSION_PLUGIN_ID: &str = "com.wasmnest.bedcode";
 /// 会话控制端点挂载路径（host 注入命名空间段，manifest 声明后缀 `session-control`）
-const SESSION_CONTROL_PATH: &str = "/ws/plugin/com.wasmnest.terminal-session/session-control";
+const SESSION_CONTROL_PATH: &str = "/ws/plugin/com.wasmnest.bedcode/session-control";
 /// 终端流端点挂载路径（manifest 声明后缀 `terminal`）
-const TERMINAL_PATH: &str = "/ws/plugin/com.wasmnest.terminal-session/terminal";
+const TERMINAL_PATH: &str = "/ws/plugin/com.wasmnest.bedcode/terminal";
 
 /// 随包插件产物目录（`cargo test` 前须重建产物，见 AGENTS §3）
 ///
@@ -53,9 +53,9 @@ const TERMINAL_PATH: &str = "/ws/plugin/com.wasmnest.terminal-session/terminal";
 fn bundled_plugins_dir() -> PathBuf {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/plugins/desktop");
     assert!(
-        dir.join("com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm")
+        dir.join("com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm")
             .exists(),
-        "插件产物缺失：先跑 `node scripts/plugin-build.js --plugin com.wasmnest.terminal-session`（workdir wasmnest-desktop），目录 {}",
+        "插件产物缺失：先跑 `node scripts/plugin-build.js --plugin com.wasmnest.bedcode`（workdir wasmnest-desktop），目录 {}",
         dir.display()
     );
     dir
@@ -140,7 +140,7 @@ async fn init_test_app_context() {
         plugin_host
             .activate_plugin(SESSION_PLUGIN_ID, false)
             .await
-            .expect("activate com.wasmnest.terminal-session (bundled artifact)");
+            .expect("activate com.wasmnest.bedcode (bundled artifact)");
 
         let mdns_advertiser = Arc::new(tokio::sync::RwLock::new(MdnsAdvertiser::new()));
         let system_info = Arc::new(SystemInfo::collect());
@@ -360,7 +360,7 @@ async fn pty_session_chain_flow() {
     // 1a. 播种插件私有库配置（互调 config-upsert；无头集成测试无前端命令通道，
     // 这是唯一种子路径）
     let config = plugin_api_call(
-        "com.wasmnest.terminal-session.config-upsert",
+        "com.wasmnest.bedcode.config-upsert",
         serde_json::json!({
             "name": "itest-chain",
             "environment": "linux",

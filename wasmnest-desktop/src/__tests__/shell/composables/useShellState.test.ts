@@ -66,7 +66,7 @@ import { useShellState } from '@/shell/composables/useShellState'
 import { useShellApps } from '@/shell/composables/useShellApps'
 
 /** 测试用应用 id（= pluginId；ADR 0056 后 id 家族 = com.wasmnest，与 useShellApps 真源一致） */
-const TERMINAL_PLUGIN_ID = 'com.wasmnest.terminal-session'
+const TERMINAL_PLUGIN_ID = 'com.wasmnest.bedcode'
 
 describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + 真实生命周期）', () => {
   const apps = useShellApps()

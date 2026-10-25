@@ -75,7 +75,7 @@ package wasmnest:plugin@0.0.1;
 ///   ② export 删 `terminal-hooks` 整 interface 与 `events` 的
 ///   `on-session-lifecycle` / `on-input-submitted`；
 ///   ③ 权限位退役 `session:write` / `terminal:observe`。
-///   会话真源在 `com.wasmnest.terminal-session` 登记域（P1-b 起），宿主侧只留
+///   会话真源在 `com.wasmnest.bedcode` 登记域（P1-b 起），宿主侧只留
 ///   `host-pty`（引擎）与 `host-connection`（连接清单）。旧产物在**实例化**阶段
 ///   即可诊断失败（点明缺失 interface + 重建指引，见宿主
 ///   `stale_artifact_rebuild_hint`），须按 v27 SDK 重建
@@ -287,7 +287,7 @@ interface host-app {
 ///
 /// **为什么单独成 interface**：这份事实的主语是宿主 WS 服务的连接注册表
 /// （`WsSessionRegistry`），不是插件自己开的 socket（那是 `host-websocket` 的
-/// `ws:client` / `ws:server`），也不是会话（会话真源已在 `com.wasmnest.terminal-session`
+/// `ws:client` / `ws:server`），也不是会话（会话真源已在 `com.wasmnest.bedcode`
 /// 登记域）。它历史上住进 `host-session` 只是当时顺手——而 `host-session` 整 interface
 /// 已在 v27 退役，这份**只有宿主机进程知道、且零会话语义**的事实因此必须
 /// 换个家活下来（ADR 0022 v12 裁决 5「迁独立原语」）；**迁出后唯一的调用入口就是本
@@ -331,7 +331,7 @@ interface host-connection-registry {
 /// - `link-identity-parts`（1 条）：链路身份 Kd 公钥材料（只含公开材料），
 ///   来自 `link_crypto::identity_parts`
 /// - `auth-center-register` / `auth-center-unregister`（2 条）：认证中心显式注册与
-///   注销（ADR 0031）。真实认证执行在认证中心插件（`com.wasmnest.terminal-session`），
+///   注销（ADR 0031）。真实认证执行在认证中心插件（`com.wasmnest.bedcode`），
 ///   本组只是宿主进程内的发现协议与唯一性仲裁
 /// - `auth-methods-list` / `auth-method-invoke`（2 条）：组合式认证方法（ADR 0031）
 ///
@@ -363,7 +363,7 @@ interface host-auth-center {
 
     // ==================== v24：认证记录下沉（2026-09-22 用户裁定） ====================
     // 用户裁定：`pairings` / `connection_history` 不再留宿主主库（§8「留宿主」
-    // 口径撤销），认证记录归认证中心（`com.wasmnest.terminal-session`）私有库，
+    // 口径撤销），认证记录归认证中心（`com.wasmnest.bedcode`）私有库，
     // 经其互调 api（`auth-records-import` / `devices-list` / `history-list`）服务。
     // 宿主 host-auth 记录面原语（v18/v19 七函数：trusted-devices-list /
     // trusted-device-revoke / connection-history-list / connection-history-clear /
@@ -386,7 +386,7 @@ interface host-auth-center {
     // ==================== v34：生物凭证面退役（B-downsink，2026-09-30） ====================
     // 原 `biometric-credential-bound` / `biometric-verify-signature` /
     // `biometric-credential-bind` 三函数**删除**（破坏性）：认证中心
-    // （`com.wasmnest.terminal-session`）自持生物公钥（本插件私有库 `auth_biometric_keys`）
+    // （`com.wasmnest.bedcode`）自持生物公钥（本插件私有库 `auth_biometric_keys`）
     // 并在 WASM 内用 p256 验签，宿主不再托管任何生物凭证材料（宿主
     // `utils/auth/biometric.rs` 与 `host_secrets` 的生物键同批退役）。旧产物
     // （v33 SDK 构建）仍 import 这三函数 → **实例化期**即被拒，
@@ -395,7 +395,7 @@ interface host-auth-center {
 
     // ==================== v33：设备入场 JWT 签发/验签退役（ADR 0033） ====================
     // 原 `device-token-issue` / `device-token-verify` 两函数**删除**（破坏性）：
-    // 认证中心（`com.wasmnest.terminal-session`）自持入场密钥并自签自验，宿主不再
+    // 认证中心（`com.wasmnest.bedcode`）自持入场密钥并自签自验，宿主不再
     // 持有任何设备 JWT 密码学，`utils/auth/jwt.rs` 整个退役。旧产物（v32 SDK
     // 构建）仍 import 这两个函数 → **实例化期**即被拒，`stale_artifact_rebuild_hint`
     // 点名「按 v33 SDK 重建」，不是 trap 也不是静默降级。
@@ -613,7 +613,7 @@ interface events-task {
 /// 可选导出（**不进 `plugin` world 必选导出列表**——同 events-binary/events-ws）：
 /// 宿主实例化后动态探测 `auth-policy#verify-device-token`；未导出
 /// 的插件（旧 SDK 产物 / 非权威插件）不提供策略，宿主中间件仅对**在册认证中心**
-/// （`com.wasmnest.terminal-session`，经 `auth-center-register` 显式登记）调用本导出——
+/// （`com.wasmnest.bedcode`，经 `auth-center-register` 显式登记）调用本导出——
 /// 独立认证中心插件已整体退役，不存在第二个候选。
 ///
 /// 入参 = 设备入场 JWT token（**中心自持密钥并自行验签**，ADR 0033：宿主不再持有

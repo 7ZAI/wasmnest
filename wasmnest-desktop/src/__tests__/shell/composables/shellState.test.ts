@@ -29,7 +29,7 @@ import {
 
 describe('卡片键', () => {
   it('app / sys 键构造与解析互逆', () => {
-    expect(appCardKey('terminal-session')).toBe('app:terminal-session')
+    expect(appCardKey('bedcode')).toBe('app:bedcode')
     expect(sysCardKey('settings')).toBe('sys:settings')
     expect(cardKind(appCardKey('x'))).toBe('app')
     expect(cardKind(sysCardKey('x'))).toBe('sys')
@@ -124,13 +124,13 @@ describe('主屏图标状态点（运行 + 会话 / 自启；2026-10-20 假绿�
 
 describe('应用图标色调（机制级哈希，spec-c §4：零产品映射）', () => {
   it('同一插件 id 色调确定（幂等）', () => {
-    expect(toneOf('terminal-session')).toBe(toneOf('terminal-session'))
+    expect(toneOf('bedcode')).toBe(toneOf('bedcode'))
     expect(toneOf('ai-chatbox')).toBe(toneOf('ai-chatbox'))
   })
 
   it('返回值始终在合法档位内', () => {
     for (const id of [
-      'terminal-session',
+      'bedcode',
       'ai-chatbox',
       'file-transfer',
       'agent-hub',
@@ -144,7 +144,7 @@ describe('应用图标色调（机制级哈希，spec-c §4：零产品映射）
   it('不同 id 覆盖多个档位（哈希分布不塌缩到单档）', () => {
     const tones = new Set(
       [
-        'terminal-session',
+        'bedcode',
         'ai-chatbox',
         'file-transfer',
         'agent-hub',

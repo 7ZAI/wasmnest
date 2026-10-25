@@ -137,7 +137,7 @@ function lookupMessage(
 ): string {
   const interpolate = (key: string): string => i18n.global.t(key, params ?? {})
   if (i18n.global.te(`errors.${code}`)) return interpolate(`errors.${code}`)
-  // 插件注册码：key = code 全文（如 com.wasmnest.terminal-session.session.error.sessionNotFound），
+  // 插件注册码：key = code 全文（如 com.wasmnest.bedcode.session.error.sessionNotFound），
   // 插件 registerMessages 以扁平 key merge 进宿主 i18n。vue-i18n 的 `te` 只按点路径解析
   // 嵌套、不识别扁平索引，而 `t` 对未注册 key 返回 key 原文——用「t !== code」判定
   // 是否已注册（实证：te=false 但 t 能取到扁平 key 文案）。

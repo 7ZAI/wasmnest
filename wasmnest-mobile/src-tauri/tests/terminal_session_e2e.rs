@@ -85,9 +85,9 @@ fn terminal_session_domain_full_loop_with_real_component() {
         let runtime = mobile_runtime(Some(tmp.path().join("aot")));
         let component = Component::from_binary(
             wasmnest_wasm_core::test_support::runtime_engine(&runtime),
-            &build_test_component(&["terminal-session"]),
+            &build_test_component(&["bedcode"]),
         )
-        .expect("compile terminal-session component");
+        .expect("compile bedcode component");
         // 权限真源 = 内核 PermissionManager（2026-10-14 桌面同构）：向共享上下文
         // 授权后再实例化（逐实例 `granted_permissions` 副本 / for_plugin 参数已退役）
         host_ctx.grant_permissions(
@@ -100,7 +100,7 @@ fn terminal_session_domain_full_loop_with_real_component() {
         );
         let mut plugin = runtime
             .instantiate_component(&component, TEST_PLUGIN_ID, Arc::clone(&host_ctx), &[], None)
-            .expect("instantiate terminal-session component");
+            .expect("instantiate bedcode component");
 
         // activate（guest 订阅 ws:* 四 topic + ws:message 二进制）→
         // connect(jwt-auth) + subscribe 帧一次到位

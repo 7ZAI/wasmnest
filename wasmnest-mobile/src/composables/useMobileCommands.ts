@@ -97,7 +97,7 @@ export async function wsClearToken(): Promise<void> {
 }
 
 // ==================== Auth Commands（票 14 阶段 B：配对 / 认证编排迁插件） ====================
-// 配对 / QR / 生物挑战流程归 `com.wasmnest.terminal-session` 插件（WIT host-auth
+// 配对 / QR / 生物挑战流程归 `com.wasmnest.bedcode` 插件（WIT host-auth
 // 触达宿主引擎，凭据零过境——插件拿不到 token，JWT 由宿主落地 global token +
 // 凭据表）。流程事件（ws_pairing_request / ws_pairing_verified / ws_paired /
 // ws_auth_failed）由插件经 host-events 广播，事件名与载荷与退役前逐字一致，
@@ -133,7 +133,7 @@ export async function wsGetAuthCredentials(): Promise<AuthCredentials | null> {
 export async function wsRequestPairing(): Promise<void> {
   await invoke('plugin_invoke', {
     pluginId: TERMINAL_PLUGIN_ID,
-    command: 'terminal-session.request-pairing',
+    command: 'bedcode.request-pairing',
     args: {},
   })
 }
@@ -144,7 +144,7 @@ export async function wsRequestPairing(): Promise<void> {
 export async function wsVerifyPairingCode(code: string): Promise<AuthCredentials | null> {
   const outcome = await invoke<PluginAuthOutcome>('plugin_invoke', {
     pluginId: TERMINAL_PLUGIN_ID,
-    command: 'terminal-session.verify-pairing-code',
+    command: 'bedcode.verify-pairing-code',
     args: { code },
   })
   return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
@@ -156,7 +156,7 @@ export async function wsVerifyPairingCode(code: string): Promise<AuthCredentials
 export async function wsAuthenticateWithQr(token: string): Promise<AuthCredentials | null> {
   const outcome = await invoke<PluginAuthOutcome>('plugin_invoke', {
     pluginId: TERMINAL_PLUGIN_ID,
-    command: 'terminal-session.authenticate-with-qr',
+    command: 'bedcode.authenticate-with-qr',
     args: { token },
   })
   return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
@@ -168,7 +168,7 @@ export async function wsAuthenticateWithQr(token: string): Promise<AuthCredentia
 export async function wsAuthenticateWithBiometric(): Promise<AuthCredentials | null> {
   const outcome = await invoke<PluginAuthOutcome>('plugin_invoke', {
     pluginId: TERMINAL_PLUGIN_ID,
-    command: 'terminal-session.authenticate-with-biometric',
+    command: 'bedcode.authenticate-with-biometric',
     args: {},
   })
   return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
@@ -442,7 +442,7 @@ export function useMobileCommands() {
     wsVerifyPairingCode,
     wsAuthenticateWithQr,
 
-    // Session（票 13：会话控制整体迁插件 com.wasmnest.terminal-session——
+    // Session（票 13：会话控制整体迁插件 com.wasmnest.bedcode——
     // 列表/起停删/直发输入经 src/plugin/sessionCommands.ts 的 plugin_invoke 命令面）
 
     // Android-specific
@@ -490,13 +490,13 @@ export function clearAuthCredentials() {
 }
 // ==================== 终端页面通道（票 15 收敛：协议面已入插件内部） ====================
 // 订阅协议面（订阅/退订/输入/ack/状态）随终端 UI 域迁入
-// `com.wasmnest.terminal-session` 插件前端（插件内部经 context.commands 调用）；
+// `com.wasmnest.bedcode` 插件前端（插件内部经 context.commands 调用）；
 // 宿主只保留**页面 Channel 传输机制**——`terminal_page_subscribe/unsubscribe`
 // 是 Tauri 传输登记面，由宿主 `plugin/terminal-stream.ts`
 // （mobileApi.openTerminalStream）封装给插件消费。
 
 /** 终端能力所在插件的命令 id（D6 选项 A：与桌面同名，职责不同；票 14 认证编排亦经此插件） */
-const TERMINAL_PLUGIN_ID = 'com.wasmnest.terminal-session'
+const TERMINAL_PLUGIN_ID = 'com.wasmnest.bedcode'
 
 /**
  * 段2：登记页面级 Tauri Channel（输出帧唯一出口，裸字节推送）。

@@ -30,8 +30,8 @@ use wasmnest_desktop_lib::plugin::lifecycle::{
     PluginLifecycleManager, AUTOSTART_KEY_PREFIX, ENABLED_KEY_PREFIX, SYSTEM_PLUGIN_ID,
 };
 
-/// 目录名后缀（随包产物；`com.wasmnest.terminal-session` 的实现 id 尾段）
-const TERMINAL_SESSION_ID_SUFFIX: &str = "terminal-session";
+/// 目录名后缀（随包产物；`com.wasmnest.bedcode` 的实现 id 尾段）
+const TERMINAL_SESSION_ID_SUFFIX: &str = "bedcode";
 const AGENT_HUB_ID_SUFFIX: &str = "agent-hub";
 
 /// 构造编排层（同一宿主的薄包装）

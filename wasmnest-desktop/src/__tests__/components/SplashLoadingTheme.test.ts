@@ -28,7 +28,7 @@ const SPLASH_COMPONENT = 'src/components/SplashLoading.vue'
 const INDEX_HTML = 'index.html'
 /** 静态首屏样式：2026-10-07 从 index.html 内联 <style> 搬出（见文件头注的 CSP 原因） */
 const STATIC_SPLASH_CSS = 'public/splash.css'
-// desktop-host-frontend-downsink（2026-10-17）：宿主前端整体下沉 terminal-session
+// desktop-host-frontend-downsink（2026-10-17）：宿主前端整体下沉 bedcode
 // wasm-app，样式真源随之迁入 app 工程（src/style.css）
 const STYLE_CSS = 'src/style.css'
 

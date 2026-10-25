@@ -397,11 +397,11 @@ function bedcodeBuildFixture() {
   // 插件工程最小面：源清单（ROOT/plugin.json）
   writeFileSync(
     join(fx, 'apps', 'bedcode', 'desktop', 'plugin.json'),
-    `${JSON.stringify({ id: 'com.wasmnest.terminal-session', name: 'BedCode', rustLibrary: 'bedcode_plugin_terminal_session' }, null, 2)}\n`,
+    `${JSON.stringify({ id: 'com.wasmnest.bedcode', name: 'BedCode', rustLibrary: 'bedcode_plugin_terminal_session' }, null, 2)}\n`,
   )
   // 产物目录预置 wasm：--frontend-only 的语义 = 复用上一份 wasm
   const outDir = join(fx, 'out')
-  const resDir = join(outDir, 'com.wasmnest.terminal-session')
+  const resDir = join(outDir, 'com.wasmnest.bedcode')
   mkdirSync(resDir, { recursive: true })
   writeFileSync(join(resDir, 'bedcode_plugin_terminal_session.wasm'), 'wasm-bytes')
 

@@ -223,7 +223,7 @@ const saved = await context.storage.get<typeof config.properties>(PLUGIN_CONFIG_
 
 ## Event Constants
 
-Event topics follow the `{domain}:{action}` convention; each domain owns its event names in its own WASM app package (single source of truth). The SDK ships no business-specific event names. For example, the terminal-session app (`wasm-apps/bedcode`) subscribes to its task status event:
+Event topics follow the `{domain}:{action}` convention; each domain owns its event names in its own WASM app package (single source of truth). The SDK ships no business-specific event names. For example, the bedcode app (`wasm-apps/bedcode`) subscribes to its task status event:
 
 ```ts
 // Inside an app, subscribe to its domain event (string literal or a local constant)

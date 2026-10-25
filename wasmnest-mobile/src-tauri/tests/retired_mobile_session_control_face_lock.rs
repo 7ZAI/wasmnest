@@ -2,7 +2,7 @@
 //!
 //! 会话控制（list / start / stop / remove / input-HTTP）自宿主
 //! `session::http::SessionHttpClient` + `session::SessionManager` +
-//! `commands::session`（三命令）整体迁 `com.wasmnest.terminal-session` 插件：
+//! `commands::session`（三命令）整体迁 `com.wasmnest.bedcode` 插件：
 //! 插件经 host-http（`jwtAuth` 宿主代注 Bearer，token 不落插件，C4）直连桌面
 //! `/api/sessions*`；宿主 `ws_disconnect` 的「停活跃会话」死分支（活跃态簿记
 //! 只在零消费者的死命令路径写入 ⇒ 恒 None）同批退役。
@@ -148,16 +148,16 @@ const PLUGIN_SESSION_FACE: [(&str, &str); 7] = [
     ("rust/src/session.rs", "fn list_sessions("),
     ("rust/src/session.rs", "fn send_http_input("),
     ("rust/src/session.rs", "\"jwtAuth\": true"),
-    ("rust/src/commands.rs", "\"terminal-session.list-sessions\""),
-    ("rust/src/commands.rs", "\"terminal-session.send-http-input\""),
+    ("rust/src/commands.rs", "\"bedcode.list-sessions\""),
+    ("rust/src/commands.rs", "\"bedcode.send-http-input\""),
     ("plugin.json", "\"network:http\""),
-    ("plugin.json", "\"terminal-session.start-session\""),
+    ("plugin.json", "\"bedcode.start-session\""),
 ];
 
 /// 宿主前端命令面封装必须仍在
 const FRONTEND_FACE: [(&str, &str); 3] = [
-    ("src/plugin/sessionCommands.ts", "'terminal-session.list-sessions'"),
-    ("src/plugin/sessionCommands.ts", "'terminal-session.stop-session'"),
+    ("src/plugin/sessionCommands.ts", "'bedcode.list-sessions'"),
+    ("src/plugin/sessionCommands.ts", "'bedcode.stop-session'"),
     ("src/composables/useMobileConnection.ts", "sessionCommands."),
 ];
 

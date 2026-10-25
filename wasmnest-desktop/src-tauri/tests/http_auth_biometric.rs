@@ -118,7 +118,7 @@ async fn mint_token_via_biometric(
 }
 
 /// 会话中心插件 id（认证端点编排的权威实现方）
-const SESSION_PLUGIN_ID: &str = "com.wasmnest.terminal-session";
+const SESSION_PLUGIN_ID: &str = "com.wasmnest.bedcode";
 
 /// 随包插件产物目录（`cargo test` 前须重建产物，见 AGENTS §3）
 ///
@@ -127,9 +127,9 @@ const SESSION_PLUGIN_ID: &str = "com.wasmnest.terminal-session";
 fn bundled_plugins_dir() -> PathBuf {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/plugins/desktop");
     assert!(
-        dir.join("com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm")
+        dir.join("com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm")
             .exists(),
-        "插件产物缺失：先跑 `node scripts/plugin-build.js --plugin com.wasmnest.terminal-session`（workdir wasmnest-desktop），目录 {}",
+        "插件产物缺失：先跑 `node scripts/plugin-build.js --plugin com.wasmnest.bedcode`（workdir wasmnest-desktop），目录 {}",
         dir.display()
     );
     dir
@@ -151,7 +151,7 @@ fn session_plugin_db_root() -> &'static PathBuf {
 /// `auth_records::store::SCHEMA`：auth_pairings / auth_connection_history）
 fn session_plugin_db_path() -> PathBuf {
     session_plugin_db_root()
-        .join("com.wasmnest.terminal-session")
+        .join("com.wasmnest.bedcode")
         .join("plugin.db")
 }
 
@@ -289,7 +289,7 @@ async fn init_test_app_context() {
         plugin_host
             .activate_plugin(SESSION_PLUGIN_ID, false)
             .await
-            .expect("activate com.wasmnest.terminal-session (bundled artifact)");
+            .expect("activate com.wasmnest.bedcode (bundled artifact)");
 
         let mdns_advertiser = Arc::new(tokio::sync::RwLock::new(MdnsAdvertiser::new()));
         let system_info = Arc::new(SystemInfo::collect());

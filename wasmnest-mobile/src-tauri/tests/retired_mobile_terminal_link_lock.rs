@@ -1,7 +1,7 @@
 //! 终端订阅协议客户端退役锁（票 12 · 移动端）
 //!
 //! 票 12 把宿主侧的**终端订阅协议客户端**整体迁入
-//! `com.wasmnest.terminal-session` wasm app（D6 选项 A）并退役：
+//! `com.wasmnest.bedcode` wasm app（D6 选项 A）并退役：
 //! `terminal_link.rs`（1,363 行：`TerminalLink` / `TerminalLinkManager` /
 //! `TerminalEventSink` / link_io 重连 / special-key 翻译）+ `enums/special_key.rs`
 //! + `terminal_*` 前端命令面八命令。协议状态机（subscribe 门控 / ack 节流 /
@@ -156,7 +156,7 @@ fn scan(root: &Path, files: &[String], needles: &[&str]) -> Vec<String> {
 #[test]
 fn retired_terminal_link_symbols_are_absent() {
     // 终端订阅协议客户端（链路状态机 / 重连 / 按键翻译）在宿主侧整体退役，
-    // 协议逻辑归 `com.wasmnest.terminal-session` 插件（票 12）。
+    // 协议逻辑归 `com.wasmnest.bedcode` 插件（票 12）。
     let root = mobile_root().join("src");
     let mut files: Vec<String> = Vec::new();
     collect_rs(&root, &root, &mut files);

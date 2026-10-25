@@ -38,12 +38,12 @@
 移动 18→19 退役，authorizer 纵深 / 前缀校验删除）；**插件数据库能力 = 插件私有库**
 （`host-plugin-database`，声明 `storage` 位——每插件独立 .db 文件、属主分区、无前缀
 约束、停用回收），KV（`host-storage`）同走 `storage`；权限按风险域拆分（如 `pty:spawn` / `pty:io`、`ws:client` / `ws:server`、`task:run` + 每单元 kind 既有域权限门双门），拆分后同步点必须同步落：**权限词汇唯一真源是桌面 SDK `packages/plugin-sdk-desktop/rust/src/permission.rs`**（打包 CLI 与前端合法集读的都是它的生成物 `bin/permission-vocabulary.json` / `src/plugin/permission-vocabulary.ts`，加/拆位后跑 SDK `pnpm run gen:permissions` 重出，禁止再手抄清单），随后落宿主能力清单与 host_impl 权限门——漏任一处即词汇漂移锁翻红（断言集合相等而非包含）；**插件构建链的映射表**（`packages/plugin-sdk-desktop/bin/manifest-gen.js` 的 `RUST_PERMISSION_RULES` / `FRONTEND_PERMISSION_RULES`）同为消费方——退役/改名权限位必须同步改表，表含词汇表外权限时 manifest-gen **加载即抛错**（词汇自检护栏；权限词汇唯一真源是 `permission.rs`）
-- [ ] **会话真源在插件**：会话登记 / 状态机 / 生命周期分发 / 输入输出编排归 `com.wasmnest.terminal-session` 私有登记域（`sessions` / `session_annotations` 两表为落盘真源）；宿主读会话事实**一律经** `utils/session_gateway.rs`（互调 api），插件未激活**显性报错**；**禁止**新增任何「宿主内核持有会话」代码（防回接锁 `retired_kernel_session_domain_is_not_reintroduced`；架构现状与退役清单见 AGENTS.md §5，WS 终端通道与变更明细见 ADR 0022）。连接清单读取挂独立位 **`connection:read`**（只授 `session:read` 不再能读）。插件用 PTY：manifest 声明 `pty:spawn`（创建/终止）+ `pty:io`（数据面）+ `dependencies: ["host-pty"]`，并发条数用 **`ptyQuota`** 自我声明（构建期只校形态=正整数，加载期 0 或 > `PLUGIN_PTY_SESSIONS_CEILING_PER_PLUGIN`(64) 直接拒 manifest **不夹取**，未声明回落默认档 8；会话插件声明 8，与退役前内核上限同档）
+- [ ] **会话真源在插件**：会话登记 / 状态机 / 生命周期分发 / 输入输出编排归 `com.wasmnest.bedcode` 私有登记域（`sessions` / `session_annotations` 两表为落盘真源）；宿主读会话事实**一律经** `utils/session_gateway.rs`（互调 api），插件未激活**显性报错**；**禁止**新增任何「宿主内核持有会话」代码（防回接锁 `retired_kernel_session_domain_is_not_reintroduced`；架构现状与退役清单见 AGENTS.md §5，WS 终端通道与变更明细见 ADR 0022）。连接清单读取挂独立位 **`connection:read`**（只授 `session:read` 不再能读）。插件用 PTY：manifest 声明 `pty:spawn`（创建/终止）+ `pty:io`（数据面）+ `dependencies: ["host-pty"]`，并发条数用 **`ptyQuota`** 自我声明（构建期只校形态=正整数，加载期 0 或 > `PLUGIN_PTY_SESSIONS_CEILING_PER_PLUGIN`(64) 直接拒 manifest **不夹取**，未声明回落默认档 8；会话插件声明 8，与退役前内核上限同档）
 - [ ] **插件事件面（websocket 业务下沉 v28 起）**：宿主 `host-events.broadcast-sync` 已退役
   （`SyncEvent` / `SyncPayload` 同步广播面删除，旧 `/ws/event` 与 `Message::SyncData` 不再存在）。
   插件事件一律 **`host-bus.publish`（属主私有 topic，跨插件用 public topic）+ `host-events.emit`**
   （桌面前端 Tauri 事件），载荷由插件自定义 JSON。宿主不再按事件类型/载荷决定广播目标或生成
-  刷新通知——会话/设备/任务事件真源与派生视图都在 `com.wasmnest.terminal-session`。
+  刷新通知——会话/设备/任务事件真源与派生视图都在 `com.wasmnest.bedcode`。
 - [ ] **插件分类（manifest `type` / `lifecycle`，ADR 0032）**：两个字段**正交**，都缺省即旧行为
   （`type` 不写 = L3 业务应用，`lifecycle` 不写 = 常驻），既有工程零迁移。取值域真源是 SDK
   `packages/plugin-sdk-desktop/rust/src/types.rs`（`PluginKind` / `InstanceLifecycle`），

@@ -9,7 +9,7 @@ import { invoke } from '@tauri-apps/api/core'
  * 收敛记录（2026-09-21）：原先声明的 `session.*`（默认执行环境 / WSL 发行版 /
  * 工作目录 / 启动命令 / 会话超时）、`network.qr_host`、`ui.show_preview`、
  * `ui.max_cached_terminals`、`ui.notify_in_background` 实测**全无消费者**——
- * 会话默认值已迁入 `com.wasmnest.terminal-session` 插件存储（`session.formDefaults`），
+ * 会话默认值已迁入 `com.wasmnest.bedcode` 插件存储（`session.formDefaults`），
  * QR host 归插件（`pairing.qrHost`），其余为移动端旧字段残留 → 一并删除。
  * 保存仍为整表回传（Rust 侧 AppConfig 反序列化时缺段用默认值补齐）。
  */

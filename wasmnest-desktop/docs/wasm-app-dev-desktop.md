@@ -82,7 +82,7 @@ pnpm run build -- --frontend-only / --rust-only   # 只构建一半（rust-ts �
 | `context.i18n` | `getI18n()` 取宿主 i18n 实例；`registerMessages` / `t` 自动加插件 ID 前缀 |
 
 内置 wasm 应用（住应用仓 `../wasmnest-apps/apps/`）：`ai-chatbox`（侧边栏 AI 面板 + 终端工具栏项）、
-`bedcode`（会话中心：配对信任 / 会话编排 / 任务队列，会话事实真源；插件 id `com.wasmnest.terminal-session`）、
+`bedcode`（会话中心：配对信任 / 会话编排 / 任务队列，会话事实真源；插件 id `com.wasmnest.bedcode`）、
 `file-transfer`（局域网文件传输）、`agent-hub`（Agent CLI 管理台）、`monitor`（只读运行指标）。
 
 ## 4. 浏览器开发环境（Dev Shell）

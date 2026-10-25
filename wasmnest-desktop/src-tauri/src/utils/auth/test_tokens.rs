@@ -14,7 +14,7 @@
 //! 注册表真源仍在 wasm-core `host_api::auth_center`（公开面取用）。
 //!
 //! 前置条件：中心已在册（`host_api::auth_center::is_registered()`）且其注册 methods 含
-//! `jwt`——`com.wasmnest.terminal-session` 的 `activate` 会自注册
+//! `jwt`——`com.wasmnest.bedcode` 的 `activate` 会自注册
 //! `["pairing_code", "qr", "biometric", "jwt"]`（ADR 0031 K9）。
 
 use wasmnest_wasm_core::host_api::auth_center;

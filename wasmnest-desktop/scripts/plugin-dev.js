@@ -6,7 +6,7 @@
  * 开发模式统一构建脚本，委托给各插件的构建系统
  *
  * 用法：node scripts/plugin-dev.js [--plugin <plugin-id>]
- * 默认构建 com.wasmnest.terminal-session（终端会话中心）插件
+ * 默认构建 com.wasmnest.bedcode（终端会话中心）插件
  */
 
 import { spawn } from 'child_process'
@@ -37,14 +37,14 @@ const PLUGINS = {
     group: 'servers',
     slug: 'monitor',
   },
-  // terminal-session（bedcode）：dev 期前端**不参与 watch**（整包构建最重且每次
+  // bedcode（bedcode）：dev 期前端**不参与 watch**（整包构建最重且每次
   // 写入 resources 都触发宿主重启，见 dev-run.js PLUGIN_WATCH_CMDS 条目注释）。
   // 保留条目 + frontendRetired 只为显性提示：改它的前端请单独重建
   // `pnpm run plugins:build` 或应用目录 `node scripts/build.js --frontend-only`，
   // Rust 侧 = 应用目录 `node scripts/build.js`；走 `plugins:dev` 直接报错引导。
   // （desktop-host-frontend-downsink 遗留：曾并入宿主 vite，壳恢复后为独立挂载包，
   //   hostAppBoundaryLock 钉住其 src/entry.ts mountApp 契约。）
-  'com.wasmnest.terminal-session': {
+  'com.wasmnest.bedcode': {
     slug: 'bedcode',
     frontendRetired: true,
   },
@@ -52,7 +52,7 @@ const PLUGINS = {
 
 // 解析参数
 const args = process.argv.slice(2)
-let targetPlugin = 'com.wasmnest.terminal-session'
+let targetPlugin = 'com.wasmnest.bedcode'
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--plugin' && args[i + 1]) {
     targetPlugin = args[i + 1]
@@ -69,7 +69,7 @@ if (!config) {
 
 console.log(`\n=== Plugin Dev: ${targetPlugin} ===\n`)
 
-// terminal-session（bedcode）走 plugins:dev 没有前端可 watch（整包 dev 期不参与
+// bedcode（bedcode）走 plugins:dev 没有前端可 watch（整包 dev 期不参与
 // watch，理由见 PLUGINS 条目注释）——显性提示替代 pnpm 的 Missing script（fail-visible）
 if (config.frontendRetired) {
   console.error(`[plugin-dev] ${targetPlugin} 前端不参与 dev watch（bedcode 整包构建重，见 dev-run.js PLUGIN_WATCH_CMDS 条目注释）：`)

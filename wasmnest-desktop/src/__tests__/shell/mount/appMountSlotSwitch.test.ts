@@ -70,7 +70,7 @@ vi.mock('vue-i18n', async (importOriginal) => {
 
 import AppMountSlot from '@/shell/mount/AppMountSlot.vue'
 
-const APP_A = 'com.wasmnest.terminal-session'
+const APP_A = 'com.wasmnest.bedcode'
 const APP_B = 'com.wasmnest.ai-chatbox'
 
 /** 每次挂载返回一个可断言卸载的句柄 */

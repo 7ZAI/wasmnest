@@ -77,7 +77,7 @@ The platform consumes the capability repo directly through Cargo sibling paths (
 
 | App | Plugin id | Ends | Capability |
 | --- | --- | --- | --- |
-| **BedCode** | `com.wasmnest.terminal-session` | desktop + mobile | Terminal session center: pairing and trust, session lifecycle orchestration, task queue and agent integration; the mobile side is a remote terminal controller |
+| **BedCode** | `com.wasmnest.bedcode` | desktop + mobile | Terminal session center: pairing and trust, session lifecycle orchestration, task queue and agent integration; the mobile side is a remote terminal controller |
 | **AI Chatbox** | `com.wasmnest.ai-chatbox` | desktop + mobile | Multi-provider AI chat: streaming output, multi-session management, JSONL conversation logs |
 | **File Transfer** | `com.wasmnest.file-transfer` | desktop + mobile | LAN peer discovery and bidirectional file transfer: queues, pause/resume, resumable transfers, shared directories |
 | **Agent Hub** | `com.wasmnest.agent-hub` | desktop | Unified console for Agent CLIs: install/uninstall, Skills management, provider configuration, usage stats |

@@ -266,7 +266,7 @@ describe('授权记录四分区（票 07）', () => {
     ).toBe('~/.agents')
     expect(
       firstPartyLabel({
-        pluginId: 'com.wasmnest.terminal-session',
+        pluginId: 'com.wasmnest.bedcode',
         kind: 'project-segment',
         value: '.claude',
       }),

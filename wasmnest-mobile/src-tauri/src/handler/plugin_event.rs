@@ -3,7 +3,7 @@
 //! ## 为什么是独立模块（替代 `handler/sync.rs`）
 //!
 //! 桌面端 WS 业务硬切（ABI v28）后 `/ws/event` 端点删除，业务事件改由
-//! `com.wasmnest.terminal-session` 在声明端点 `session-control` 上广播，帧壳
+//! `com.wasmnest.bedcode` 在声明端点 `session-control` 上广播，帧壳
 //! `{"type":"event","event":"<name>","payload":{...}}`（票 02 定稿）。旧链路
 //! （`Message::SyncData` 信封 → `SyncHandler`）随之失源——本模块把插件事件帧
 //! 翻译成既有 [`MobileEvent`] 变体，**前端 `ws_sync_*` 事件名与 store 收敛

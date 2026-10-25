@@ -1,7 +1,7 @@
 //! Mobile-to-Desktop Request Builders
 //!
 //! 票 04：会话控制 / 终端输入 / 配置查询已迁桌面 HTTP 面；票 13 会话控制进一步
-//! 下沉插件 `com.wasmnest.terminal-session`（宿主 `SessionHttpClient` /
+//! 下沉插件 `com.wasmnest.bedcode`（宿主 `SessionHttpClient` /
 //! `SessionManager` 已退役，前端经 `src/plugin/sessionCommands.ts`）。
 //! `SessionRequest` / `TerminalRequest` / `ConfigRequest` /
 //! `ResponseParser` 随之退役删除。本文件只保留认证信封构建器 `AuthRequest`——

@@ -77,7 +77,7 @@ WasmNest 由四个平级仓库组成，默认按同场（sibling）布局摆放�
 
 | 应用 | 插件 id | 端 | 能力 |
 | --- | --- | --- | --- |
-| **BedCode** | `com.wasmnest.terminal-session` | 桌面 + 移动 | 终端会话中心：配对与信任、会话生命周期编排、任务队列与 Agent 集成；移动端为远程终端控制端 |
+| **BedCode** | `com.wasmnest.bedcode` | 桌面 + 移动 | 终端会话中心：配对与信任、会话生命周期编排、任务队列与 Agent 集成；移动端为远程终端控制端 |
 | **AI Chatbox** | `com.wasmnest.ai-chatbox` | 桌面 + 移动 | 多供应商 AI 对话：流式输出、多会话管理、JSONL 对话日志 |
 | **File Transfer** | `com.wasmnest.file-transfer` | 桌面 + 移动 | 内网对端发现与双向文件传输：队列、暂停 / 恢复、断点续传、共享目录 |
 | **Agent Hub** | `com.wasmnest.agent-hub` | 桌面 | Agent CLI 统一管理台：安装 / 卸载、Skills 管理、供应商配置、使用统计 |

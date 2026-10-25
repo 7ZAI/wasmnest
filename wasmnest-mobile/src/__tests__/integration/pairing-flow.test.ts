@@ -73,7 +73,7 @@ function installInvokeMock() {
         return Promise.resolve({ address: DEVICE.address, port: DEVICE.port, status: 'connected' })
       case 'plugin_invoke':
         // 配对编排域命令：verify-pairing-code 默认受理（凭据零过境，插件只拿 accepted）
-        if (payload?.command === 'terminal-session.verify-pairing-code') {
+        if (payload?.command === 'bedcode.verify-pairing-code') {
           return Promise.resolve({ accepted: true })
         }
         return Promise.resolve(undefined)
@@ -131,7 +131,7 @@ describe('配对流：useMobileConnection 配对状态机 × 凭据持久化', (
     const ok = await conn.verifyPairingCode('123456')
     expect(ok).toBe(true)
     const verifyCall = mockInvoke.mock.calls.find(
-      ([cmd, payload]) => cmd === 'plugin_invoke' && (payload as { command?: string })?.command === 'terminal-session.verify-pairing-code',
+      ([cmd, payload]) => cmd === 'plugin_invoke' && (payload as { command?: string })?.command === 'bedcode.verify-pairing-code',
     )
     expect(verifyCall).toBeDefined()
     expect((verifyCall?.[1] as { args: { code: string } }).args).toEqual({ code: '123456' })
@@ -191,7 +191,7 @@ describe('配对流：useMobileConnection 配对状态机 × 凭据持久化', (
   it('配对码错误：插件返回 accepted=false → 不取凭据、不保存、返回 false、状态不进入 paired', async () => {
     // 配对码验证失败（桌面端业务拒绝，插件只拿到 accepted=false）
     mockInvoke.mockImplementation((cmd: string, payload?: { command?: string }) => {
-      if (cmd === 'plugin_invoke' && payload?.command === 'terminal-session.verify-pairing-code') {
+      if (cmd === 'plugin_invoke' && payload?.command === 'bedcode.verify-pairing-code') {
         return Promise.resolve({ accepted: false })
       }
       return Promise.resolve(undefined)

@@ -48,7 +48,7 @@ vi.mock('@/utils/invoke', () => ({ invoke: vi.fn(async () => null) }))
 import AppPreviewTile from '@/shell/mount/AppPreviewTile.vue'
 import type { AppPreviewEnv, AppPreviewHandle } from '@/shell/mount/useAppMount'
 
-const APP_ID = 'com.wasmnest.terminal-session'
+const APP_ID = 'com.wasmnest.bedcode'
 
 /** 预览句柄（unmount 可断言） */
 function makeHandle(): AppPreviewHandle & { unmount: ReturnType<typeof vi.fn> } {

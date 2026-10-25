@@ -107,7 +107,7 @@ pnpm run package     # = wasmnest-plugin package：产出 dist/{id}.zip
 
 ```bash
 cd wasmnest-mobile && pnpm run plugins:build          # 全部
-cd wasmnest-mobile && pnpm run plugins:build -- --plugin com.wasmnest.terminal-session
+cd wasmnest-mobile && pnpm run plugins:build -- --plugin com.wasmnest.bedcode
 ```
 
 ---
@@ -362,7 +362,7 @@ SAF 选择器、系统通知）仍需真机验证。首次运行自动安装 dev
 | SDK 模板 | `wasmnest-mobile/packages/plugin-sdk-mobile/template/` |
 | SDK 浏览器开发环境 | `wasmnest-mobile/packages/plugin-sdk-mobile/dev-shell/` |
 | 插件宿主 | `wasmnest-mobile/src-tauri/src/plugin/`（manager / loader / downloader / wasm_runtime / wasm_host / registry / commands / storage / transfer / saf_io / saf_path / fs_auth / approval / message_bus / validation / android_plugins） |
-| 内置 wasm 应用 | 应用仓 `../wasmnest-apps/apps/{ai-chatbox,bedcode,file-transfer,monitor}`（`bedcode` 目录 = 显示名 BedCode，插件 id `com.wasmnest.terminal-session`） |
+| 内置 wasm 应用 | 应用仓 `../wasmnest-apps/apps/{ai-chatbox,bedcode,file-transfer,monitor}`（`bedcode` 目录 = 显示名 BedCode，插件 id `com.wasmnest.bedcode`） |
 | 应用管理页 | `wasmnest-mobile/src/shell/components/screens/ShellAppsScreen.vue`（壳内系统屏） |
 | 前端插件运行时 | `wasmnest-mobile/src/plugin/`（loader / registry / context / commands / events / permission / shared-runtime / routes / dialog-host / components） |
 | 宿主壳（平台机制） | `wasmnest-mobile/src/shell/`（运行面挂载 / 权限总览与审批 / 通知栏 / 设置）——壳内不落业务页面（ADR 0046） |

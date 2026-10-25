@@ -115,7 +115,7 @@ interface host-fs-mobile {
 /// 权限位 `terminal:output`（既有词汇复用，fail-closed）。
 /// 插件停用时登记的通道随宿主窄转发层 purge 回收。
 ///
-/// 消费者：`com.wasmnest.terminal-session`（终端订阅协议客户端）。
+/// 消费者：`com.wasmnest.bedcode`（终端订阅协议客户端）。
 interface host-terminal-stream {
     /// 转发一段输出字节到 session-id 对应的前端页面通道（裸字节原样投递）。
     /// 通道未登记（页面未订阅 / 已卸载）→ Err：字节由调用方丢弃（页面重进
@@ -156,7 +156,7 @@ interface host-connection-target {
 /// 权限位 `auth`（fail-closed，未声明即拒）：本域触发设备入场认证与凭据
 /// 落地，是安全敏感面，不与任何既有能力混位。
 ///
-/// 消费者：`com.wasmnest.terminal-session`（配对 / 认证编排域）。
+/// 消费者：`com.wasmnest.bedcode`（配对 / 认证编排域）。
 /// **为什么叫 client**：桌面分片曾声明同名 `host-auth`，但两者函数集**零交集**——
 /// 桌面侧是「认证中心角色」（密钥托管 / 中心注册 / 组合式认证发现），本 interface 是
 /// 「设备入场客户端」（配对 / 配对码 / QR / 生物凭证 / 凭据事实）。同名不同角色会在

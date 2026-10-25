@@ -44,9 +44,9 @@ use wasmnest_wasm_core::test_support::{
 use wasmnest_wasm_core::wasmtime::component::Component;
 
 /// 随包真产物（`pnpm run plugins:build` 落点；相对 crate 根）
-const WASM_REL: &str = "resources/plugins/mobile/com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm";
+const WASM_REL: &str = "resources/plugins/mobile/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm";
 /// 插件 id（与 manifest 逐字一致）
-const PLUGIN_ID: &str = "com.wasmnest.terminal-session";
+const PLUGIN_ID: &str = "com.wasmnest.bedcode";
 /// 假桌面端点（真协议形状夹具）
 const ENDPOINT: &str = mock_plugin_ws::ENDPOINT_TERMINAL;
 /// 测试会话 id
@@ -210,7 +210,7 @@ fn mobile_terminal_plugin_pipe_contracts() {
         // ==================== P-001 prewarm 只建连（不发 subscribe） ====================
         world
             .invoke(
-                "terminal-session.prewarm",
+                "bedcode.prewarm",
                 serde_json::json!({ "sessionId": SESSION_ID }),
             )
             .await
@@ -229,7 +229,7 @@ fn mobile_terminal_plugin_pipe_contracts() {
         // ==================== P-002 subscribe → 重放到达页面通道 ====================
         world
             .invoke(
-                "terminal-session.subscribe",
+                "bedcode.subscribe",
                 serde_json::json!({ "sessionId": SESSION_ID }),
             )
             .await
@@ -287,7 +287,7 @@ fn mobile_terminal_plugin_pipe_contracts() {
         let rendered = got.len() as u64;
         world
             .invoke(
-                "terminal-session.ack-rendered",
+                "bedcode.ack-rendered",
                 serde_json::json!({ "sessionId": SESSION_ID, "offset": rendered }),
             )
             .await
@@ -325,7 +325,7 @@ fn mobile_terminal_plugin_pipe_contracts() {
         loop {
             let state = world
                 .invoke(
-                    "terminal-session.get-state",
+                    "bedcode.get-state",
                     serde_json::json!({ "sessionId": SESSION_ID }),
                 )
                 .await

@@ -16,7 +16,7 @@ pub mod state;
 pub mod system;
 
 /// 假插件端点夹具（票 01 基线与夹具）：本地 WS server 模拟桌面插件
-/// `com.wasmnest.terminal-session` 的 session-control / terminal 端点。
+/// `com.wasmnest.bedcode` 的 session-control / terminal 端点。
 /// 单测（`#[cfg(test)]`）经此路径复用 `tests/support/mock_plugin_ws.rs`；
 /// 集成测试在 `tests/` 内经 `#[path = "support/mock_plugin_ws.rs"]` 自行引入。
 /// 仅测试构建生效（生产构建零影响）。
@@ -317,7 +317,7 @@ pub fn run() {
             commands::connection::set_auto_reconnect,
             commands::connection::get_ws_token,
             commands::connection::get_ws_url,
-            // Terminal Link（票 12 协议客户端已迁插件 com.wasmnest.terminal-session）：
+            // Terminal Link（票 12 协议客户端已迁插件 com.wasmnest.bedcode）：
             // terminal_subscribe / unsubscribe / unsubscribe_all / remove /
             // send_input / ack_rendered / get_history / get_state 八命令已随
             // terminal_link.rs 退役，前端走插件命令面（plugin_invoke）；
@@ -326,13 +326,13 @@ pub fn run() {
             plugin::commands::terminal_page_subscribe,
             plugin::commands::terminal_page_unsubscribe,
             // Auth Commands（票 14 阶段 B：配对 / QR / 生物挑战编排已迁
-            // com.wasmnest.terminal-session 插件，宿主只余引擎事实面）
+            // com.wasmnest.bedcode 插件，宿主只余引擎事实面）
             commands::auth::ws_authenticate,
             commands::auth::ws_get_auth_credentials,
             commands::auth::ws_bind_biometric_credential,
             commands::auth::ws_unbind_biometric_credential,
             commands::auth::ws_get_biometric_key_status,
-            // Session Commands（票 13：会话控制整体迁插件 com.wasmnest.terminal-session——
+            // Session Commands（票 13：会话控制整体迁插件 com.wasmnest.bedcode——
             // 三命令零消费者随 session.rs / commands/session.rs 退役；前端走
             // src/plugin/sessionCommands.ts 的 plugin_invoke 命令面）
             // Settings (移动端使用 JSON 文件)

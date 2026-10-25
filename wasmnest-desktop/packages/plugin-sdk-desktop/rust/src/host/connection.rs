@@ -2,7 +2,7 @@
 //!
 //! 主语是**宿主 WS 服务的连接注册表**，不是插件自己开的 socket（那是
 //! [`crate::host::HostWebsocket`] 的 `ws:client` / `ws:server`），也不是会话
-//! （会话真源在 `com.wasmnest.terminal-session` 登记域）。这份事实只有宿主机进程
+//! （会话真源在 `com.wasmnest.bedcode` 登记域）。这份事实只有宿主机进程
 //! 知道，故必须是宿主原语；又与会话无关，故不随 `host-session` interface 退役。
 
 use super::HostError;

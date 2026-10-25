@@ -756,13 +756,13 @@ mod tests {
     #[test]
     fn test_auth_setting_set_whitelist_and_persist() {
         let host_ctx = build_host_ctx_at(None);
-        grant_permissions(&host_ctx, "com.wasmnest.terminal-session", &[PERMISSION_AUTH]);
+        grant_permissions(&host_ctx, "com.wasmnest.bedcode", &[PERMISSION_AUTH]);
 
         // 白名单外键拒绝（settings 表是宿主真源，不接受任意键写入）
         let err = auth_setting_set(
             host_ctx.as_ref(),
             host_ctx.as_ref(),
-            "com.wasmnest.terminal-session",
+            "com.wasmnest.bedcode",
             "network.port",
             "1",
         )
@@ -773,7 +773,7 @@ mod tests {
             let err = auth_setting_set(
                 host_ctx.as_ref(),
                 host_ctx.as_ref(),
-                "com.wasmnest.terminal-session",
+                "com.wasmnest.bedcode",
                 "pairing_code_ttl",
                 bad,
             )
@@ -784,7 +784,7 @@ mod tests {
         auth_setting_set(
             host_ctx.as_ref(),
             host_ctx.as_ref(),
-            "com.wasmnest.terminal-session",
+            "com.wasmnest.bedcode",
             "pairing_code_ttl",
             "600",
         )
@@ -792,7 +792,7 @@ mod tests {
         auth_setting_set(
             host_ctx.as_ref(),
             host_ctx.as_ref(),
-            "com.wasmnest.terminal-session",
+            "com.wasmnest.bedcode",
             "qr_token_ttl",
             "120",
         )
@@ -812,11 +812,11 @@ mod tests {
         let db_path = dir.path().join("settings.db");
         {
             let host_ctx = file_host_ctx(&db_path);
-            grant_permissions(&host_ctx, "com.wasmnest.terminal-session", &[PERMISSION_AUTH]);
+            grant_permissions(&host_ctx, "com.wasmnest.bedcode", &[PERMISSION_AUTH]);
             auth_setting_set(
                 host_ctx.as_ref(),
                 host_ctx.as_ref(),
-                "com.wasmnest.terminal-session",
+                "com.wasmnest.bedcode",
                 "pairing_code_ttl",
                 "900",
             )

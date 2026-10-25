@@ -141,8 +141,8 @@ impl CommandGuest for ComponentTestPlugin {
             }
         }
 
-        // terminal-session：票 12 ABI v15 面驱动（真实组件闭环用）
-        #[cfg(feature = "terminal-session")]
+        // bedcode：票 12 ABI v15 面驱动（真实组件闭环用）
+        #[cfg(feature = "bedcode")]
         if name == "terminal-op" {
             let args: serde_json::Value = serde_json::from_str(&args_json).unwrap_or_default();
             match args["op"].as_str() {

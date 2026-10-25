@@ -77,14 +77,14 @@ beforeEach(() => {
   prefsMocks.prefs.value.skin = 'dusk'
   authMocks.overview.mockResolvedValue([
     {
-      pluginId: 'com.wasmnest.terminal-session',
+      pluginId: 'com.wasmnest.bedcode',
       name: 'BedCode',
       strategies: [],
       firstPartyDirs: [],
       records: [
         {
           id: 1,
-          pluginId: 'com.wasmnest.terminal-session',
+          pluginId: 'com.wasmnest.bedcode',
           resource: 'fs',
           target: '/repo',
           effect: 'allow',
@@ -95,7 +95,7 @@ beforeEach(() => {
         },
         {
           id: 2,
-          pluginId: 'com.wasmnest.terminal-session',
+          pluginId: 'com.wasmnest.bedcode',
           resource: 'network',
           target: 'http://127.0.0.1:8765',
           effect: 'deny',
@@ -134,9 +134,9 @@ describe('设置页「恢复初始设置」', () => {
     await vi.waitFor(() => expect(toastMocks.success).toHaveBeenCalled())
 
     // allow → 撤销；deny → 移除
-    expect(authMocks.revoke).toHaveBeenCalledWith('com.wasmnest.terminal-session', 'fs', '/repo')
+    expect(authMocks.revoke).toHaveBeenCalledWith('com.wasmnest.bedcode', 'fs', '/repo')
     expect(authMocks.removeRecord).toHaveBeenCalledWith(
-      'com.wasmnest.terminal-session',
+      'com.wasmnest.bedcode',
       'network',
       'http://127.0.0.1:8765',
     )

@@ -438,6 +438,6 @@ pub fn emit_paired(app: &AppHandle) {
 }
 
 // 票 14 阶段 B：ws_pairing_request / ws_pairing_verified / ws_auth_failed 的
-// 发射点已随配对编排迁 `com.wasmnest.terminal-session` 插件（经 host-events
+// 发射点已随配对编排迁 `com.wasmnest.bedcode` 插件（经 host-events
 // emit，事件名不变——前端监听零改动）；宿主侧同名 helper 退役，防回接见
 // retired_mobile_auth_orchestration_command_face_lock

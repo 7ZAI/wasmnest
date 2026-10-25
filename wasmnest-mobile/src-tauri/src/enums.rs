@@ -3,7 +3,7 @@
 //! 公共枚举类型定义
 //!
 //! `special_key`（KeyCode / KeyCombo 按键翻译）已随票 12 终端订阅协议客户端
-//! 迁入 `com.wasmnest.terminal-session` wasm app（等价移植进插件 `keys.rs`，
+//! 迁入 `com.wasmnest.bedcode` wasm app（等价移植进插件 `keys.rs`，
 //! 语义逐字节一致；桌面侧同款先例 = `wasm-apps/bedcode/rust/src/keys.rs`
 //! 票 06 下沉）——宿主不再消费按键组合，只收插件算好的裸字节。
 

@@ -7,7 +7,7 @@
 //! 会话操作在宿主侧原本散在三线各自直连 `SessionManager`（桌面 Tauri 命令 /
 //! 移动端 HTTP 控制器 / 移动端 WS 服务），同一条规则被写多遍。本模块是**宿主侧
 //! 调用会话的唯一收口点**：消费面只调这里的函数，不再直接碰 `SessionManager` /
-//! `session_*_bridge`。P1-b 起会话真源已在 `com.wasmnest.terminal-session` 插件
+//! `session_*_bridge`。P1-b 起会话真源已在 `com.wasmnest.bedcode` 插件
 //! 登记域，本层全部实现 = 插件互调 api 调用（无内核执行器、无内核裁决副本）。
 //!
 //! ## 今日策略（P1-b 真源切换完成 + 2026-09-25 零业务类型收口）
@@ -31,7 +31,7 @@
 //! 本层接口**不再持有任何会话业务类型**（`SessionInfo/View/Status/ResizeOutcome/...`
 //! 已随 `protocol/` 会话域整体退役）：查询/创建/尺寸/历史一律 `serde_json::Value`
 //! 原样透传插件 reply，宿主不解析、不解释、不校验业务字段——字段形状契约归插件
-//! 产出口（`com.wasmnest.terminal-session` 的 `session/view.rs` 形状锁 + 插件集成
+//! 产出口（`com.wasmnest.bedcode` 的 `session/view.rs` 形状锁 + 插件集成
 //! 测试），宿主只是互调 api 的机械转发面。
 //!
 //! ## 不属于本层
@@ -46,19 +46,19 @@ use crate::wasm_core::manager::runtime::WasmHostContext;
 use crate::wasm_core::{AppError, Result};
 
 /// 插件互调 api（短名由 `#[plugin_api]` 宏按 manifest.api 比对防漂移）
-const API_LIST: &str = "com.wasmnest.terminal-session.session-list";
-const API_GET: &str = "com.wasmnest.terminal-session.session-get";
-const API_CREATE: &str = "com.wasmnest.terminal-session.session-create";
-const API_CLOSE: &str = "com.wasmnest.terminal-session.session-close";
-const API_REMOVE: &str = "com.wasmnest.terminal-session.session-remove";
-const API_RESIZE: &str = "com.wasmnest.terminal-session.session-resize";
-const API_INPUT: &str = "com.wasmnest.terminal-session.session-input";
-const API_HISTORY: &str = "com.wasmnest.terminal-session.session-history";
+const API_LIST: &str = "com.wasmnest.bedcode.session-list";
+const API_GET: &str = "com.wasmnest.bedcode.session-get";
+const API_CREATE: &str = "com.wasmnest.bedcode.session-create";
+const API_CLOSE: &str = "com.wasmnest.bedcode.session-close";
+const API_REMOVE: &str = "com.wasmnest.bedcode.session-remove";
+const API_RESIZE: &str = "com.wasmnest.bedcode.session-resize";
+const API_INPUT: &str = "com.wasmnest.bedcode.session-input";
+const API_HISTORY: &str = "com.wasmnest.bedcode.session-history";
 
 /// 插件不可用时的显性错误（无降级；会话真源已不在宿主）
 fn plugin_required_error(what: &str) -> AppError {
     AppError::Plugin(format!(
-        "session plugin not active: {what} requires com.wasmnest.terminal-session"
+        "session plugin not active: {what} requires com.wasmnest.bedcode"
     ))
 }
 
@@ -211,7 +211,7 @@ pub async fn input(host_ctx: &WasmHostContext, session_id: &str, data: &str) -> 
 }
 
 /// 写入特殊键（工具栏停止/复制等）：**票 06 下沉**——按键组合 → 转义字节的
-/// 翻译已移至插件（`com.wasmnest.terminal-session` 读 `specialKey` 自译自写，
+/// 翻译已移至插件（`com.wasmnest.bedcode` 读 `specialKey` 自译自写，
 /// 统一直写语义，绕过提交行重建）。宿主此处只转发组合串，不再消费
 /// `KeyCombo`/`to_pty_bytes`（pte 输入路径触点清零）。
 pub async fn special_key(host_ctx: &WasmHostContext, session_id: &str, key: &str) -> Result<()> {

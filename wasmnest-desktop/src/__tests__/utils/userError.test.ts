@@ -170,7 +170,7 @@ describe('showUserError：友好提示 + 日志 + 重试', () => {
   describe('showUserError：插件注册码（ADR 0030 决定 4 裸 key 回退）', () => {
     // 插件域码 = 插件 registerMessages 后的完整 key；宿主 i18n 不预埋，
     // 消费层以裸 key 回退查找（零映射层）。此处模拟插件已注册该 key。
-    const PLUGIN_CODE = 'com.wasmnest.terminal-session.session.error.sessionNotFound'
+    const PLUGIN_CODE = 'com.wasmnest.bedcode.session.error.sessionNotFound'
 
     beforeAll(() => {
       i18n.global.mergeLocaleMessage('zh-CN', { [PLUGIN_CODE]: '会话不存在或已结束' })

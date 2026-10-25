@@ -106,7 +106,7 @@ echo "基线：passed=$BASE_PASSED failed=${BASE_FAILED:-0}"
 # ==================== 逐块拆分（逐文件事务） ====================
 # 每个文件独立成事务：备份 → 拆 → cargo check。
 # 红了就只回滚这一个文件并继续下一个——不累积到末尾才发现整仓爆掉
-#（terminal-session 那次就是累积了 13 个文件才炸出 228 个错误，定位成本极高）。
+#（bedcode 那次就是累积了 13 个文件才炸出 228 个错误，定位成本极高）。
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT

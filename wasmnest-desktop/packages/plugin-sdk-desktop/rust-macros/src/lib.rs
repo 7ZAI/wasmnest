@@ -706,9 +706,9 @@ mod tests {
             std::path::Path::new("/p/plugins/foo/rust/../plugin.json"),
             std::path::Path::new("/p/plugins/foo/rust")
         ));
-        // 对侧插件的清单：file-transfer 的 client 镜像 terminal-session
+        // 对侧插件的清单：file-transfer 的 client 镜像 bedcode
         assert!(!is_own_package_manifest(
-            std::path::Path::new("/p/plugins/terminal-session/plugin.json"),
+            std::path::Path::new("/p/plugins/bedcode/plugin.json"),
             std::path::Path::new("/p/plugins/file-transfer/rust")
         ));
         // 兄弟包前缀相似不得误判（`foo` 与 `foo-bar`）

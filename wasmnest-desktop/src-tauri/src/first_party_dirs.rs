@@ -40,11 +40,11 @@ pub fn first_party_dirs() -> Vec<(&'static str, Vec<TrustedDir>)> {
             ],
         ),
         (
-            // terminal-session 的 agent 集成面：`task/hooks.rs` 在会话启动前把 hooks / 扩展
+            // bedcode 的 agent 集成面：`task/hooks.rs` 在会话启动前把 hooks / 扩展
             // 写进项目根的 `.claude` / `.codex` / `.pi` / `.opencode`，并清理全局
             // `~/.claude/settings.json` 里属于本插件的那段。项目根由用户选，目录段名由
             // 各 CLI 约定——只有段名是能写进清单的那一半。
-            "com.wasmnest.terminal-session",
+            "com.wasmnest.bedcode",
             vec![
                 TrustedDir::ProjectSegment(".claude"),
                 TrustedDir::ProjectSegment(".codex"),
@@ -77,7 +77,7 @@ mod tests {
         }
         // 已知消费者清单（增删条目必须同时交代这里与上方归属注释）
         let ids: Vec<&str> = list.iter().map(|(id, _)| *id).collect();
-        assert_eq!(ids, vec!["com.wasmnest.agent-hub", "com.wasmnest.terminal-session"]);
+        assert_eq!(ids, vec!["com.wasmnest.agent-hub", "com.wasmnest.bedcode"]);
     }
 
     /// 目录形态合法：Home 相对路径不以 `/` 开头（join 后必须落在家目录内），

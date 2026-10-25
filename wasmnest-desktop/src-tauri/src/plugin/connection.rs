@@ -6,7 +6,7 @@
 //! 见 [`super::bindings`] 模块文档）。
 //!
 //! 在册连接域（票 04，自会话域迁入）：返回的是宿主 WS 服务的连接注册表原始条目
-//! （`WsSessionRegistry`），与会话真源（`com.wasmnest.terminal-session` 登记域）
+//! （`WsSessionRegistry`），与会话真源（`com.wasmnest.bedcode` 登记域）
 //! 无关。权限判据 `connection:read`（票 04 起替代 `session:read`）。**票 10 起本面
 //! 是唯一入口**：旧别名已随 `host-session` interface 删除（`session:read` 这把第二
 //! 钥匙彻底不存在）。

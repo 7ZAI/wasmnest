@@ -48,11 +48,11 @@ pub const PLACEHOLDER_CLIENT_ADDR: &str = "0.0.0.0:0";
 /// WebSocket 默认路径（WsClientConfig 默认值）
 pub const WS_DEFAULT_PATH: &str = "/";
 
-// 注：原 `WS_PLUGIN_TERMINAL_PATH`（终端流端点 `/ws/plugin/com.wasmnest.terminal-session/terminal`）
+// 注：原 `WS_PLUGIN_TERMINAL_PATH`（终端流端点 `/ws/plugin/com.wasmnest.bedcode/terminal`）
 // 已随票 12 终端订阅协议客户端迁插件删除——端点 URL 的拼装真源在终端插件
 // （`wasm-apps/bedcode/rust/src/lib.rs` 的 TERMINAL_WS_PATH），宿主零消费。
 
-/// 桌面 wasm 应用 `com.wasmnest.terminal-session` 的 WS 端点基础路径
+/// 桌面 wasm 应用 `com.wasmnest.bedcode` 的 WS 端点基础路径
 ///
 /// 宿主路由形如 `/ws/plugin/{plugin-id}/{path}`（桌面 WS 业务硬切后的唯一形态，
 /// 旧 `/ws/event` 与 `/ws/terminal/session/{id}` 已删除 → 404）。
@@ -62,13 +62,13 @@ pub const WS_DEFAULT_PATH: &str = "/";
 /// 自称「WS 路径字面量唯一出处」却与那条并存，两个都写同一段字面量：一旦只改
 /// 其一就会拼出不一致的 URL。保留它作为该插件路径前缀的唯一出处，新增端点应
 /// 写完整路径常量；若两者继续并存，需重新裁定谁是字面量真源。
-pub const WS_PLUGIN_BASE_PATH: &str = "/ws/plugin/com.wasmnest.terminal-session";
+pub const WS_PLUGIN_BASE_PATH: &str = "/ws/plugin/com.wasmnest.bedcode";
 
 /// 常驻事件通道端点（票 03：`session-control`，替代已删除的 `/ws/event`）
 ///
 /// 认证首帧 `{"type":"auth","token":"<jwt>"}`；入站只有事件帧
 /// `{"type":"event","event":"<name>","payload":{...}}`（票 02 定稿帧壳）。
-pub const WS_PLUGIN_SESSION_CONTROL_PATH: &str = "/ws/plugin/com.wasmnest.terminal-session/session-control";
+pub const WS_PLUGIN_SESSION_CONTROL_PATH: &str = "/ws/plugin/com.wasmnest.bedcode/session-control";
 
 /// 认证类 WS 关闭码（桌面端语义，M1/ADR 0031）：4001 = 认证被拒（auth-policy
 /// 拒绝/无中心 fail-closed）、4003 = 链路加密失败。收到这类 close 说明「重连前

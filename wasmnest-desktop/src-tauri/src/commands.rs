@@ -27,7 +27,7 @@ use wasmnest_server_core::supervisor::{ServerStatusInfo, ServerSupervisor};
 // `get_session` / `resize_session` / `write_to_session` / `send_special_key`
 // （连同插件前端的终端输入通道 `plugin_terminal_send_input`）。
 //
-// 为什么能整族删：会话真源自 P1-b 起在 `com.wasmnest.terminal-session` 插件，
+// 为什么能整族删：会话真源自 P1-b 起在 `com.wasmnest.bedcode` 插件，
 // 这五条当时就已经只是「宿主命令名 → 窄转发层 → 插件互调 api」的薄壳；插件前端
 // 改走自家命令通道后壳里再无消费者（宿主前端 `stores/session.ts` 与
 // `composables/commands/sessionCommands.ts` 均无生产调用方，同批退役）。

@@ -202,7 +202,7 @@ const PLUGIN_WATCH_CMDS = [
   },
   {
     slug: 'bedcode',
-    id: 'com.wasmnest.terminal-session',
+    id: 'com.wasmnest.bedcode',
     args: [
       resolve(ROOT, 'packages/plugin-sdk-mobile/bin/cli.js'),
       'build', '--watch',

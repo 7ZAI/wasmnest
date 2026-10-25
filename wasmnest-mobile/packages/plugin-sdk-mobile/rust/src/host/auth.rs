@@ -7,7 +7,7 @@
 //!
 //! 权限位 `auth`（fail-closed，未声明即拒）。
 //!
-//! 消费者：`com.wasmnest.terminal-session`（配对 / 认证编排域）。
+//! 消费者：`com.wasmnest.bedcode`（配对 / 认证编排域）。
 
 use crate::host::HostError;
 

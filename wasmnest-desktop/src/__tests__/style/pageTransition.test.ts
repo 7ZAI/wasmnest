@@ -3,7 +3,7 @@
  *
  * 背景：本次收敛前，桌面端「整视图 / 分区切换」散落着 5 套各自为政的过渡
  * （宿主 `page` 0.2s/8px、agent-hub `ah-page`、file-transfer `ft-page`、
- * terminal-session 三处同名 `tab-fade` 但时长各不相同、ai-chatbox `page-fade` 与
+ * bedcode 三处同名 `tab-fade` 但时长各不相同、ai-chatbox `page-fade` 与
  * `view-slide`），且全部用 `mode="out-in"`。
  *
  * 两个缺陷：

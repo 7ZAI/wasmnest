@@ -1013,10 +1013,10 @@ fn test_ws_two_plugin_isolation() {
     }));
 }
 
-/// 票 09b：会话控制声明端点的直连往返（真实 terminal-session 插件产物）
+/// 票 09b：会话控制声明端点的直连往返（真实 bedcode 插件产物）
 ///
 /// 旧 `/ws/event` `Message::SessionControl` 协议之外的声明式路由：客户端直连
-/// `/ws/plugin/com.wasmnest.terminal-session/session-control`（manifest
+/// `/ws/plugin/com.wasmnest.bedcode/session-control`（manifest
 /// `contributes.wsEndpoints` 声明 + 激活期登记，auth=jwt）→ 首消息 JWT 认证 →
 /// 文本动作帧 → 插件 `ws_control` 域分派 → 响应动作帧回包。宿主只做认证与
 /// 帧转发（PluginChannel），动作「是什么业务」的解释在插件。
@@ -1048,9 +1048,9 @@ fn test_session_control_endpoint_direct_roundtrip() {
     // 会话插件私有库进程级共享：与会话闭环用例串行（见锁文档）
     let _serial = session_plugin_db_guard();
 
-    const PLUGIN_ID: &str = "com.wasmnest.terminal-session";
+    const PLUGIN_ID: &str = "com.wasmnest.bedcode";
     let wasm_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm");
+        .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
     if !wasm_path.exists() {
         eprintln!("[skip] session wasip3 artifact not built");
         return;
@@ -1153,7 +1153,7 @@ fn test_session_control_endpoint_direct_roundtrip() {
         .expect("register declared session/control endpoint");
         assert_eq!(
             entry.mount_path,
-            "/ws/plugin/com.wasmnest.terminal-session/session-control"
+            "/ws/plugin/com.wasmnest.bedcode/session-control"
         );
 
         // 真实入场凭证：经认证中心签发（ADR 0033：宿主无签发面），与 WS 认证
@@ -1384,7 +1384,7 @@ fn test_session_control_endpoint_direct_roundtrip() {
 
 /// 票 04：WS 终端流端点闭环（真实 PTY 输入 → 二进制输出帧 → 停止帧）
 ///
-/// 客户端经 `/ws/plugin/com.wasmnest.terminal-session/terminal` 直连（auth=jwt）：
+/// 客户端经 `/ws/plugin/com.wasmnest.bedcode/terminal` 直连（auth=jwt）：
 /// 订阅 → binary 输入直写 PTY → ring-fetch 游标拉取 → 二进制帧输出 →
 /// 未订阅输入显性 error → 会话停止 → 尾帧后 `session_stopped` 停止帧 →
 /// 退订/断连清理。宿主只转原始帧（不解析终端帧、不读 session id、不维护订阅表）。
@@ -1410,9 +1410,9 @@ fn test_terminal_stream_endpoint_closed_loop() {
     let _ws_guard = lock_ws_fixture_e2e();
     let _serial = session_plugin_db_guard();
 
-    const PLUGIN_ID: &str = "com.wasmnest.terminal-session";
+    const PLUGIN_ID: &str = "com.wasmnest.bedcode";
     let wasm_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm");
+        .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
     if !wasm_path.exists() {
         eprintln!("[skip] session wasip3 artifact not built");
         return;
@@ -1511,7 +1511,7 @@ fn test_terminal_stream_endpoint_closed_loop() {
             )),
         )
         .expect("register declared terminal endpoint");
-        assert_eq!(entry.mount_path, "/ws/plugin/com.wasmnest.terminal-session/terminal");
+        assert_eq!(entry.mount_path, "/ws/plugin/com.wasmnest.bedcode/terminal");
 
         // 种子配置 + 创建真实会话（bash PTY）
         let config_out = plugin
@@ -1698,7 +1698,7 @@ fn test_terminal_stream_endpoint_closed_loop() {
 
 /// 票 07 e2e：设备派生事件与认证记录 touch/close 归插件闭环
 ///
-/// 真 Actix server + 真实 terminal-session WASM 插件 + 真实 WS 客户端：
+/// 真 Actix server + 真实 bedcode WASM 插件 + 真实 WS 客户端：
 ///
 /// - 正例：带 JWT（fingerprint）的客户端连入 `session-control` 端点 → 宿主发布
 ///   `<owner>::ws:client-connect` → 插件经 `connection-context` 取已脱敏指纹 →
@@ -1732,9 +1732,9 @@ fn test_ws_device_events_and_auth_records_closed_loop() {
     // 会话插件私有库进程级共享：与会话闭环用例串行（见锁文档）
     let _serial = session_plugin_db_guard();
 
-    const PLUGIN_ID: &str = "com.wasmnest.terminal-session";
+    const PLUGIN_ID: &str = "com.wasmnest.bedcode";
     let wasm_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm");
+        .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
     if !wasm_path.exists() {
         eprintln!("[skip] session wasip3 artifact not built");
         return;
@@ -1836,7 +1836,7 @@ fn test_ws_device_events_and_auth_records_closed_loop() {
         .expect("register declared session/control endpoint");
         assert_eq!(
             entry.mount_path,
-            "/ws/plugin/com.wasmnest.terminal-session/session-control"
+            "/ws/plugin/com.wasmnest.bedcode/session-control"
         );
 
         // ==================== 播种认证记录（私有库真源，auth-records-import） ====================
@@ -1844,7 +1844,7 @@ fn test_ws_device_events_and_auth_records_closed_loop() {
         // （close_open 的关闭对象；真实路径 = HTTP 认证成功后 record_event 追加）
         call_api(
             &host_ctx,
-            "com.wasmnest.terminal-session.auth-records-import",
+            "com.wasmnest.bedcode.auth-records-import",
             serde_json::json!({
                 "pairings": [{
                     "id": "p-dev-1",
@@ -1877,7 +1877,7 @@ fn test_ws_device_events_and_auth_records_closed_loop() {
         tokio::time::sleep(std::time::Duration::from_millis(400)).await;
         let devices_after_ghost = call_api(
             &host_ctx,
-            "com.wasmnest.terminal-session.devices-list",
+            "com.wasmnest.bedcode.devices-list",
             serde_json::json!({}),
         )
         .expect("devices-list after ghost");
@@ -1912,7 +1912,7 @@ fn test_ws_device_events_and_auth_records_closed_loop() {
             for _ in 0..40 {
                 let devices = call_api(
                     &host_ctx,
-                    "com.wasmnest.terminal-session.devices-list",
+                    "com.wasmnest.bedcode.devices-list",
                     serde_json::json!({}),
                 )
                 .expect("devices-list poll");
@@ -1940,7 +1940,7 @@ fn test_ws_device_events_and_auth_records_closed_loop() {
             for _ in 0..40 {
                 let history = call_api(
                     &host_ctx,
-                    "com.wasmnest.terminal-session.history-list",
+                    "com.wasmnest.bedcode.history-list",
                     serde_json::json!("p-dev-1"),
                 )
                 .expect("history-list poll");

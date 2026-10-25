@@ -2,7 +2,7 @@
 //!
 //! 背景：宿主 HTTP `/api` scope 挂着 `auth_gateway` 中间件（`from_fn`），**每个
 //! 请求**都会走 `enforce_connection_policy` → `call_auth_policy` → 真实
-//! terminal-session WASM 插件的 `auth-policy.verify-device-token` 导出。本探针
+//! bedcode WASM 插件的 `auth-policy.verify-device-token` 导出。本探针
 //! **v33（ADR 0033）后只剩一段**：验签与策略收进同一次调用——
 //! `call_capability_export`（导出名经 `wasm_core::contract::export_item` 派生，
 //! ADR 0051 D3）一次跨界，
@@ -61,7 +61,7 @@ fn fmt_us(secs: f64, n: usize) -> f64 {
 fn auth_center_hotpath_cost_probe() {
     let gate_rt = tokio::runtime::Runtime::new().expect("auth center gate runtime");
     let wasm_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.terminal-session/bedcode_plugin_terminal_session.wasm");
+        .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
     if !wasm_path.exists() {
         eprintln!("[skip] auth_center_perf: session wasip3 产物未构建");
         return;
@@ -73,7 +73,7 @@ fn auth_center_hotpath_cost_probe() {
         ctx.set_plugin_db_root(Some(isolate));
     }
     host_ctx.grant_permissions(
-        "com.wasmnest.terminal-session",
+        "com.wasmnest.bedcode",
         &[
             "auth".to_string(),
             "broadcast".to_string(),
@@ -106,14 +106,14 @@ fn auth_center_hotpath_cost_probe() {
     const PROBE_KEY: [u8; 32] = [0x5a; 32];
     wasmnest_desktop_lib::utils::auth::test_tokens::seed_keyring(
         &host_ctx,
-        "com.wasmnest.terminal-session",
+        "com.wasmnest.bedcode",
         &PROBE_KEY,
     );
 
     let mut plugin = wasm_runtime
         .load_plugin_from_file(
             &wasm_path,
-            "com.wasmnest.terminal-session",
+            "com.wasmnest.bedcode",
             Arc::clone(&host_ctx),
             &[],
             None,

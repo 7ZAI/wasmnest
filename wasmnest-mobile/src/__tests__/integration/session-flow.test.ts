@@ -3,7 +3,7 @@
  *
  * 协作实体：真实 useMobileConnection（配置加载 / 会话启停 / sync 事件状态
  * 联动） + useHttpApi（配置 HTTP REST：/api/configs） +
- * plugin/sessionCommands（会话控制：plugin_invoke → com.wasmnest.terminal-session，
+ * plugin/sessionCommands（会话控制：plugin_invoke → com.wasmnest.bedcode，
  * 票 13 自宿主 HTTP 代理迁入）。
  * 终端 buffer 联动（markSessionRunning / markSessionStopped / clearBuffer）已随
  * 终端 UI 域迁终端插件（票 15），其契约测试在
@@ -122,15 +122,15 @@ function installProxyMock(): void {
       return Promise.resolve(mockProxyResponse({ code: 0, message: 'ok' }))
     }
     if (cmd === 'plugin_invoke') {
-      // 会话控制命令面（com.wasmnest.terminal-session；返回形状与退役前 HTTP 信封一致）
+      // 会话控制命令面（com.wasmnest.bedcode；返回形状与退役前 HTTP 信封一致）
       const command: string = args?.command || ''
-      if (command === 'terminal-session.list-sessions') {
+      if (command === 'bedcode.list-sessions') {
         return Promise.resolve({ code: 0, message: 'ok', data: { sessions: [] } })
       }
-      if (command === 'terminal-session.start-session') {
+      if (command === 'bedcode.start-session') {
         return Promise.resolve({ code: 0, message: 'ok', data: { sessionId: 'session-1', status: 'running' } })
       }
-      if (command === 'terminal-session.stop-session' || command === 'terminal-session.remove-session') {
+      if (command === 'bedcode.stop-session' || command === 'bedcode.remove-session') {
         return Promise.resolve({ code: 0, message: 'ok' })
       }
       return Promise.resolve(undefined)
@@ -203,11 +203,11 @@ describe('会话流：useMobileConnection 会话管理 × useHttpApi × sync 事
     const result = await conn.startSession('config-1')
     await flushAsync()
     expect(result.sessionId).toBe('session-1')
-    // 票 13：会话控制经 plugin_invoke → com.wasmnest.terminal-session（不再经 http_request）
-    const startCall = pluginInvokeCalls('terminal-session.start-session')[0] as
+    // 票 13：会话控制经 plugin_invoke → com.wasmnest.bedcode（不再经 http_request）
+    const startCall = pluginInvokeCalls('bedcode.start-session')[0] as
       | { pluginId: string; args: { configId: string } }
       | undefined
-    expect(startCall?.pluginId).toBe('com.wasmnest.terminal-session')
+    expect(startCall?.pluginId).toBe('com.wasmnest.bedcode')
     expect(startCall?.args).toEqual({ configId: 'config-1' })
     expect(invokeCalls('http_request').filter(([a]) =>
       (a as { request: { url: string } }).request.url.includes('/api/sessions'),
@@ -263,7 +263,7 @@ describe('会话流：useMobileConnection 会话管理 × useHttpApi × sync 事
     await conn.stopSession('session-1')
     await flushAsync()
     expect(conn.activeSessions.value[0].status).toBe('stopped')
-    const stopCall = pluginInvokeCalls('terminal-session.stop-session')[0] as
+    const stopCall = pluginInvokeCalls('bedcode.stop-session')[0] as
       | { pluginId: string; args: { sessionId: string } }
       | undefined
     expect(stopCall?.args).toEqual({ sessionId: 'session-1' })
@@ -286,7 +286,7 @@ describe('会话流：useMobileConnection 会话管理 × useHttpApi × sync 事
     await conn.removeSession('session-1')
     await flushAsync()
     expect(conn.activeSessions.value).toHaveLength(0)
-    const removeCall = pluginInvokeCalls('terminal-session.remove-session')[0] as
+    const removeCall = pluginInvokeCalls('bedcode.remove-session')[0] as
       | { pluginId: string; args: { sessionId: string } }
       | undefined
     expect(removeCall?.args).toEqual({ sessionId: 'session-1' })

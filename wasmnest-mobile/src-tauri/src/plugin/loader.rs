@@ -357,12 +357,12 @@ mod tests {
 
             // 插件目录布局：{plugins_dir}/{plugin_id}/plugin.json + {rustLibrary}.wasm
             // （与 APK assets / dev 资源目录解压后的布局一致）
-            let plugin_dir = tmp.path().join("com.wasmnest.terminal-session");
+            let plugin_dir = tmp.path().join("com.wasmnest.bedcode");
             std::fs::create_dir_all(&plugin_dir).expect("create plugin dir");
             std::fs::write(
                 plugin_dir.join(PLUGIN_MANIFEST_FILE),
                 r#"{
-                    "id": "com.wasmnest.terminal-session",
+                    "id": "com.wasmnest.bedcode",
                     "name": "BedCode",
                     "version": "1.0.0-beta",
                     "platform": "mobile",
@@ -389,11 +389,11 @@ mod tests {
             let (plugins, wasm_plugins) = PluginLoader::load_all(tmp.path(), &runtime, &host_ctx);
 
             // manifest 注册 + 组件实例落表
-            assert!(plugins.contains_key("com.wasmnest.terminal-session"));
+            assert!(plugins.contains_key("com.wasmnest.bedcode"));
             let mut loaded = wasm_plugins
                 .into_iter()
-                .find(|(id, _)| id == "com.wasmnest.terminal-session")
-                .expect("terminal-session 组件必须被 loader 实例化")
+                .find(|(id, _)| id == "com.wasmnest.bedcode")
+                .expect("bedcode 组件必须被 loader 实例化")
                 .1;
 
             // 实例可用：activate 导出调用（宏内 HostLog 接线走真实 host 日志）

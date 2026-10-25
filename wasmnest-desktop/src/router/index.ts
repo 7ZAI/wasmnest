@@ -10,7 +10,7 @@
  * - 未匹配路由 → 显性 not-found（退役面 /plugins 等直达时兜底，不白屏）。
  *
  * 应用路由前缀（bedcode 保持既有路径，深链 /terminal-window/:id 语义不变）：
- * - com.wasmnest.terminal-session：/pairing /sessions /tasks /settings(.*)?
+ * - com.wasmnest.bedcode：/pairing /sessions /tasks /settings(.*)?
  *   /server /history /terminal-window/:id
  * - com.wasmnest.agent-hub：/hub
  * - com.wasmnest.ai-chatbox：/chat

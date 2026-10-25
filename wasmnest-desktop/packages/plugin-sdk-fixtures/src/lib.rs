@@ -969,7 +969,7 @@ pub mod sdk {
                     }
                 }
                 // ==================== 会话中心互调闭环 ====================
-                // caller 角色指向 com.wasmnest.terminal-session（宿主测试加载真实会话中心产物）：
+                // caller 角色指向 com.wasmnest.bedcode（宿主测试加载真实会话中心产物）：
                 // `consent-decide` 两阶段决策流 + `trust-list` / `trust-revoke` 统一视图与撤销
                 // + 未声明 api 门禁拒绝（ADR 0017）
 
@@ -981,7 +981,7 @@ pub mod sdk {
                         "fingerprintShort": "aabbccdd",
                         "deviceName": "消费方模拟对端",
                     }));
-                    let client = SdkTestApiClient::new("com.wasmnest.terminal-session").with_timeout(5000);
+                    let client = SdkTestApiClient::new("com.wasmnest.bedcode").with_timeout(5000);
                     match client.call_json("consent-decide", peer) {
                         Ok(v) => Ok(serde_json::json!({ "decision": v })),
                         Err(e) => Err(anyhow::anyhow!("{}", e)),
@@ -998,7 +998,7 @@ pub mod sdk {
                             obj.insert("userDecision".to_string(), serde_json::json!(ud));
                         }
                     }
-                    let client = SdkTestApiClient::new("com.wasmnest.terminal-session").with_timeout(5000);
+                    let client = SdkTestApiClient::new("com.wasmnest.bedcode").with_timeout(5000);
                     match client.call_json("consent-decide", peer) {
                         Ok(v) => Ok(serde_json::json!({ "decision": v })),
                         Err(e) => Err(anyhow::anyhow!("{}", e)),
@@ -1006,7 +1006,7 @@ pub mod sdk {
                 }
                 // 统一信任视图（零参 api）
                 "test_session_trust_list" => {
-                    let client = SdkTestApiClient::new("com.wasmnest.terminal-session").with_timeout(5000);
+                    let client = SdkTestApiClient::new("com.wasmnest.bedcode").with_timeout(5000);
                     match client.call_json("trust-list", serde_json::Value::Null) {
                         Ok(v) => Ok(v),
                         Err(e) => Err(anyhow::anyhow!("{}", e)),
@@ -1015,7 +1015,7 @@ pub mod sdk {
                 // 撤销统一条目（id 经 args 传入）
                 "test_session_trust_revoke" => {
                     let id = args.get("id").and_then(|v| v.as_str()).unwrap_or("ghost");
-                    let client = SdkTestApiClient::new("com.wasmnest.terminal-session").with_timeout(5000);
+                    let client = SdkTestApiClient::new("com.wasmnest.bedcode").with_timeout(5000);
                     match client.call_json("trust-revoke", serde_json::json!(id)) {
                         Ok(v) => Ok(v),
                         Err(e) => Err(anyhow::anyhow!("{}", e)),
@@ -1023,7 +1023,7 @@ pub mod sdk {
                 }
                 // 未声明 api：宿主门禁拒绝
                 "test_session_undeclared" => {
-                    let client = SdkTestApiClient::new("com.wasmnest.terminal-session").with_timeout(2000);
+                    let client = SdkTestApiClient::new("com.wasmnest.bedcode").with_timeout(2000);
                     match client.call_json("ghost-api", serde_json::Value::Null) {
                         Ok(v) => Ok(serde_json::json!({ "unexpected": v })),
                         Err(e) => Err(anyhow::anyhow!("{}", e)),
@@ -1032,7 +1032,7 @@ pub mod sdk {
                 // 任意命令名兜底：回显 `name` / `args`。
                 // 属主任务测试（owner_e2e）用 `echo-0` / `echo-1` … 这类序号化命令名
                 // 验证「应答与请求配对 + 完成序 = 入队序」，没有固定命令表可用。
-                // （`session_e2e` 里断言 `Unknown command` 的是 terminal-session
+                // （`session_e2e` 里断言 `Unknown command` 的是 bedcode
                 // 插件，不走本夹具。）
                 other => Ok(serde_json::json!({ "name": other, "args": args })),
             }

@@ -1,7 +1,7 @@
 //! 会话摘要线协议（原宿主 `enums/summary.rs`，票 01 收编为单一事实源）
 //!
 //! 字段名即 wire 键名（snake_case，无 `rename_all`）；插件产出口
-//! （`com.wasmnest.terminal-session` 的 `session::view`）必须逐字对齐本形状，
+//! （`com.wasmnest.bedcode` 的 `session::view`）必须逐字对齐本形状，
 //! 键名漂移会让宿主反序列化 `SyncPayload::SessionCreated` 整条失败。
 
 use serde::{Deserialize, Serialize};
