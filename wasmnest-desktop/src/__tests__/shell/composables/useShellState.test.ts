@@ -569,18 +569,32 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       const s = useShellState()
       seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
       await s.openApp(TERMINAL_PLUGIN_ID)
-      await s.stopApp(TERMINAL_PLUGIN_ID)
+      const ok = await s.stopApp(TERMINAL_PLUGIN_ID)
       expect(apps.deactivate).toHaveBeenCalledWith(TERMINAL_PLUGIN_ID)
       expect(s.cards.value).toEqual([])
+      expect(ok, '实例真停用 = 返回成功（服务停止确认弹窗据此收起）').toBe(true)
       expect(toastSuccess, '停止是静默动作，不落 toast').not.toHaveBeenCalled()
     })
 
     it('stopApp 无卡运行：直接真停用', async () => {
       const s = useShellState()
       seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
-      await s.stopApp(TERMINAL_PLUGIN_ID)
+      const ok = await s.stopApp(TERMINAL_PLUGIN_ID)
       expect(apps.deactivate).toHaveBeenCalledWith(TERMINAL_PLUGIN_ID)
+      expect(ok).toBe(true)
       expect(toastSuccess, '停止是静默动作，不落 toast').not.toHaveBeenCalled()
+    })
+
+    it('stopApp 停用失败：返回 false（实例仍在运行，确认面不得收起）', async () => {
+      const s = useShellState()
+      seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
+      rememberAppRoute(TERMINAL_PLUGIN_ID, '/tasks')
+      vi.mocked(apps.deactivate).mockResolvedValueOnce(false)
+      const ok = await s.stopApp(TERMINAL_PLUGIN_ID)
+      expect(ok).toBe(false)
+      expect(lastRouteOf(TERMINAL_PLUGIN_ID), '停用失败 = 实例仍在跑，页面记忆保留').toBe(
+        '/tasks',
+      )
     })
 
     it('uninstallApp：卸载 + 摘运行面 + 关弹窗', async () => {

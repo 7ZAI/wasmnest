@@ -213,10 +213,15 @@ function confirmUninstall() {
   void state.uninstallApp(state.dialogAppId.value)
 }
 
-/** 服务停止确认：确认后停用服务（stopApp 收口真实生命周期） */
-function confirmStopService() {
-  if (!state.dialogAppId.value) return
-  void state.stopApp(state.dialogAppId.value)
+/**
+ * 服务停止确认：确认后停用服务（stopApp 收口真实生命周期）。
+ * 停止成功才收起弹窗——失败保留确认面供重试，错误提示由 showUserError 统一发出。
+ */
+async function confirmStopService() {
+  const appId = state.dialogAppId.value
+  if (!appId) return
+  const ok = await state.stopApp(appId)
+  if (ok) close()
 }
 </script>
 

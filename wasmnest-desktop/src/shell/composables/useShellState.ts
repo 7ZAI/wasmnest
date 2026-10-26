@@ -276,15 +276,18 @@ function activateCard(key: CardKey): void {
  * `showUserError` 统一发出，不静默丢运行中实例）；系统页卡 = 只关页面。
  * 关的是当前全屏面 → 切 MRU 次卡路由；移除最后一张卡（无论是否为当前面）
  * 一律回主屏，不把多任务层留在空态。
+ *
+ * 返回是否真的关掉（true = 卡已摘 / 页已关；false = 停用失败，卡片与运行面保留）。
+ * 调用方（stopApp → 服务停止确认弹窗）据此决定是否收起确认面。
  */
-async function closeCard(key: CardKey, _silent = false): Promise<void> {
+async function closeCard(key: CardKey, _silent = false): Promise<boolean> {
   if (cardKind(key) === 'app') {
     const appId = cardId(key)
     const apps = useShellApps()
     const ok = await apps.deactivate(appId)
     if (!ok) {
       // 失败提示已由 showUserError 统一发出（ADR 0030）；lastError 是错误码，不可展示
-      return // 停用失败：卡片与运行面保留（不留「关了还在跑」的假象）
+      return false // 停用失败：卡片与运行面保留（不留「关了还在跑」的假象）
     }
     // 实例已停用 = 用户关掉了这个应用：页面记忆随之作废（下次是全新开始），
     // 否则「关了再开」会莫名其妙跳回上次那页
@@ -293,11 +296,12 @@ async function closeCard(key: CardKey, _silent = false): Promise<void> {
   cards.value = mruRemove(cards.value, key)
   if (cards.value.length === 0) {
     goHome()
-    return
+    return true
   }
   if (activeCard.value === key) {
     activateCard(cards.value[0])
   }
+  return true
 }
 
 /** 回主屏（清面态 + 路由回 '/'；后台实例与它们的页面记忆都保留） */
@@ -403,20 +407,25 @@ async function approveAndStart(appId: string): Promise<boolean> {
   return true
 }
 
-/** 停用应用（真实动作：deactivate 真停用 + 摘运行面） */
-async function stopApp(appId: string): Promise<void> {
+/**
+ * 停用应用（真实动作：deactivate 真停用 + 摘运行面）。
+ *
+ * 返回真实结果——true = 实例已停；false = 实例仍在运行（卡片 / 服务保留；
+ * 错误提示由 showUserError 统一发出，ADR 0030）。服务停止确认弹窗
+ * （ShellDialogLayer stop-service 分支）据此决定是否收起。
+ */
+async function stopApp(appId: string): Promise<boolean> {
   const key = appCardKey(appId)
   if (cards.value.includes(key)) {
-    await closeCard(key)
-  } else {
-    // 无卡运行（后台运行但未产卡）：直接真停用
-    const apps = useShellApps()
-    const ok = await apps.deactivate(appId)
-    if (ok) {
-      forgetAppRoute(appId)
-    }
-    // 失败同样已在 showUserError 内提示（ADR 0030），此处不重复
+    return closeCard(key)
   }
+  // 无卡运行（后台运行但未产卡 / 服务型应用不入卡）：直接真停用
+  const apps = useShellApps()
+  const ok = await apps.deactivate(appId)
+  if (ok) {
+    forgetAppRoute(appId)
+  }
+  return ok
 }
 
 /** 卸载应用（含数据清理确认由 ShellDialogLayer uninstall 分支呈现） */
