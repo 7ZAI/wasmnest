@@ -1,0 +1,422 @@
+//! WasmNest Mobile - Library Entry Point
+
+pub mod auth;
+pub mod commands;
+pub mod connection;
+pub mod egress;
+pub mod enums;
+pub mod file_service;
+pub mod handler;
+pub mod mdns;
+pub mod model;
+pub mod peer;
+pub mod plugin;
+pub mod router;
+pub mod state;
+pub mod system;
+
+/// 假插件端点夹具（票 01 基线与夹具）：本地 WS server 模拟桌面插件
+/// `com.wasmnest.bedcode` 的 session-control / terminal 端点。
+/// 单测（`#[cfg(test)]`）经此路径复用 `tests/support/mock_plugin_ws.rs`；
+/// 集成测试在 `tests/` 内经 `#[path = "support/mock_plugin_ws.rs"]` 自行引入。
+/// 仅测试构建生效（生产构建零影响）。
+#[cfg(test)]
+#[path = "../tests/support/mock_plugin_ws.rs"]
+pub(crate) mod mock_plugin_ws;
+
+/// 移动宿主测试夹具构建器（票 08 批次三自能力仓迁入）：宿主编译单元内的
+/// `#[cfg(test)]` 用例（`plugin/loader.rs` / `plugin/manager.rs`）经此引用；
+/// 集成测试在 `tests/` 内经 `#[path = "support/fixtures.rs"]` 自行引入。
+/// 仅测试构建生效（生产构建零影响）。
+#[cfg(test)]
+#[path = "../tests/support/fixtures.rs"]
+pub(crate) mod test_fixtures;
+
+// Re-export core types
+pub use system::config;
+pub use system::error::{AppError, Result};
+
+use log::LevelFilter;
+use std::sync::Arc;
+use tauri::Manager;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    use crate::system::settings::SettingsManager;
+
+    // 尽可能早地初始化日志
+    // tracing 的 "log" feature 将 tracing:: 宏自动转发到 log crate
+    // android_logger 将 log:: 输出发送到 adb logcat
+    //
+    // 级别：dev 构建打满 Debug（开发期 logcat 全量）；release 收敛到 Info——
+    // Android logcat 主缓冲是系统级环形（每 app 默认约 256KB~1MB），release 打
+    // Debug 会占满缓冲导致关键日志被系统丢弃，且泄露内部路径等调试信息
+    //
+    // dev 构建额外做源头噪音抑制（dev 服务代理连接 / wasmtime·cranelift JIT 内部
+    // debug），避免环形缓冲被刷屏冲掉崩溃证据，判定口径见 system/logging.rs
+    #[cfg(debug_assertions)]
+    let log_level = LevelFilter::Debug;
+    #[cfg(not(debug_assertions))]
+    let log_level = LevelFilter::Info;
+    system::logging::init(log_level);
+    tracing::info!("WasmNest Mobile early logging init (tracing → log → logcat, level={log_level})");
+
+    tracing::info!("Building Tauri application...");
+
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_edge_to_edge::init())
+        .plugin(tauri_plugin_machine_uid::init())
+        .plugin(crate::plugin::android_plugins::asset_extractor_plugin())
+        .plugin(crate::plugin::android_plugins::foreground_service_plugin())
+        .plugin(crate::plugin::android_plugins::task_notification_plugin())
+        .plugin(crate::plugin::android_plugins::biometric_key_plugin())
+        .plugin(crate::plugin::android_plugins::downloads_dir_plugin())
+        .plugin(crate::plugin::android_plugins::file_delete_plugin())
+        .plugin(crate::plugin::android_plugins::device_info_plugin())
+        .plugin(crate::plugin::android_plugins::saf_picker_plugin())
+        .plugin(crate::plugin::android_plugins::saf_transfer_plugin())
+        .plugin(crate::plugin::android_plugins::all_files_access_plugin())
+        .plugin(crate::plugin::android_plugins::multicast_lock_plugin())
+        .plugin(crate::plugin::android_plugins::status_bar_style_plugin())
+        .setup(|app| {
+            tracing::info!("WasmNest setup starting...");
+
+            // mDNS 共享守护平台钩子（双端共享 lib spec M3/D3）：Android 多播锁随
+            // 守护常驻获取（幂等，不随浏览句柄增删）。宿主函数可能运行于 tokio
+            // worker，禁止 block_on（运行时内阻塞反模式）——fire-and-forget spawn；
+            // 非 Android 平台 stub 立即返回，同走 spawn 保持单一代码路径（可测）。
+            // 行为与旧 crate::mdns::engine::init_daemon 一致，真源移入共享引擎
+            wasmnest_discovery_engine::engine::set_daemon_init_hook(|| {
+                tauri::async_runtime::spawn(async {
+                    if let Err(e) = crate::plugin::android_plugins::multicast_lock_acquire().await {
+                        tracing::warn!("mdns daemon: multicast lock acquire failed ({e}); receive may be degraded");
+                    }
+                });
+            });
+
+            // 进程级发现端口（ADR 0054 / 票 04）：类型中枢的泵任务经
+            // `DiscoveryPorts::spawn` 派生，而中枢进程级出口取 `ports::ports()`——
+            // 移动端不经桌面的 host-kit 域装配链，必须在此显式装一次（幂等）。
+            // 早于任何 `subscribe_type`（老链路 mdns 命令 / peer-net 节点启动）
+            crate::plugin::host_domains::mdns::register_process_ports();
+
+            tracing::info!("Plugins initialized");
+
+            let app_handle = app.handle();
+
+            // 窗口焦点监听（后台/锁屏判定：批量传输请求系统通知用）
+
+            // 托管 SafIo 主 seam 实现（Android = KotlinSafIo 转发 SafTransferPlugin；
+            // 其他平台 = 明确不可用）。经 state 注入命令层，测试可替换为 fake
+            app.manage(crate::plugin::saf_io::SafIoState(
+                crate::plugin::saf_io::default_saf_io(),
+            ));
+
+            // 初始化移动端设置管理器 (JSON 文件存储)
+            let app_data_dir = app_handle.path().app_data_dir().expect("Failed to get app data dir");
+
+            // 初始化 Egress Policy（授权记忆持久层加载）
+            crate::egress::init(app_data_dir.clone());
+            let settings_manager = Arc::new(SettingsManager::new(&app_data_dir)?);
+            app.manage(settings_manager.clone());
+
+            // 对等网络节点身份：复用上方 app_data_dir 解析点（决策 D3 宿主只注入
+            // 目录），node_identity.json 与 auth 域 device_identity.json 并列存放；
+            // 错误经 ? 上抛走既有启动失败路径——静默换身份会让对端可信列表全部失效
+            crate::peer::net::init_node_identity(&app_data_dir)?;
+
+            // 对等网络节点状态容器（Engine 集中化 2026-10-10：状态类型真源在共享
+            // 能力域 crate，与桌面同形以 `Arc` 托管——适配层持 Arc 句柄跨 await 存活）
+            app.manage(Arc::new(crate::peer::net::PeerNetState::default()));
+            app.manage(Arc::new(crate::peer::transfer::PeerTransferState::default()));
+            app.manage(Arc::new(crate::peer::receive::PeerReceiveState::default()));
+            app.manage(Arc::new(crate::peer::remote::PeerRemoteState::default()));
+            // 节点自启已退役：peer-net 生命周期由应用作用域服务租约驱动
+            // （插件经 host-peer.start-node 按引用记账；宿主不再按产品 id 驱动）
+
+            // 创建插件数据库连接（WASM Host Function 使用；
+            // std Mutex：SQL 为同步操作，host fn 同步取锁，避免 block_on 绕行）
+            let db_path = app_data_dir.join("wasmnest_plugins.db");
+            // 连接所有权交 wasm-core `Database`；**建表与迁移的真源也在 crate 内**
+            // （`init_schema` → `../wasmnest-lib/wasmnest-wasm-core/src/db/schema.sql`，单一
+            // 事实源，AGENTS §9）：宿主不自持 DDL 副本——曾自持的那份与内核
+            // 真源漂移出旧形状 `plugin_auth_records`（缺 id），使 fs 授权记录读写
+            // 全失败（2026-10-14 设备实证 `no such column: id`）。已装设备的旧形状
+            // 库由内核侧对账迁移（`Database::init_schema` 内），宿主不再知表形状。
+            let plugin_db = Arc::new(std::sync::Mutex::new(
+                wasmnest_wasm_core::db::Database::from_connection(
+                    rusqlite::Connection::open(&db_path)
+                        .map_err(|e| anyhow::anyhow!("Failed to open plugin DB: {}", e))?,
+                ),
+            ));
+            // 主库 schema 幂等初始化（settings / plugin_storage / plugin_secrets /
+            // plugin_auth_policies / plugin_auth_records + 版本迁移，全部由内核真源定义）
+            plugin_db
+                .lock()
+                .expect("plugin db lock poisoned")
+                .init_schema()
+                .map_err(|e| anyhow::anyhow!("Failed to init plugin DB schema: {}", e))?;
+
+            // 票 05b：旧文件落盘 KV（plugins/*.json）→ 主库 plugin_storage 表一次性迁移；
+            // 随后旧版对等网络数据迁移（写入 DB-backed 插件存储；幂等，失败均不阻断启动）
+            {
+                let storage = crate::plugin::storage::PluginStorage::new(plugin_db.clone());
+                if let Err(e) = storage.migrate_file_store_to_db(&app_data_dir) {
+                    tracing::warn!(error = %e, "legacy plugin storage file migration failed");
+                }
+                crate::peer::migration::migrate_legacy_peer_data(&storage, &app_data_dir);
+            }
+
+            // 创建插件管理器（WASM 运行时延迟初始化）
+            let plugin_manager = crate::plugin::manager::PluginManager::new(
+                &app_data_dir,
+                settings_manager.clone(),
+                plugin_db,
+                Some(Arc::new(app_handle.clone())),
+            );
+            let plugin_manager = crate::state::init_plugin_manager(Arc::new(plugin_manager));
+            app.manage(plugin_manager.clone());
+
+            // 移动宿主面凭证域（ADR 0058 方案 A：移动半场，issue #21）：管理类命令
+            // （plugin_preauthorize / activate / deactivate / approve / install /
+            // uninstall / download / reload）只认宿主前端 loader 会话凭证。与桌面
+            // lib PluginHost 的 channel 同机制（wasm-core FrontendChannelRegistry），
+            // 但移动命令面（plugin/commands.rs）独立持有自己的实例——移动不经
+            // 桌面的 api_bridge 装配链，registry 随 lib.rs setup 显式装配。
+            app.manage(Arc::new(
+                wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry::new(),
+            ));
+
+            // 应用作用域服务注册表：`net.peer-node` 服务经管理器的注册表注册
+            // （管理器在 init_wasm_runtime 时把同一份注入 wasm 宿主上下文；
+            // 节点状态容器已在上方托管，peer_ctx 可安全装配）
+            wasmnest_server_peer_net::service::PeerNodeService::register(
+                &plugin_manager.service_registry(),
+                crate::peer::net::peer_ctx(&app_handle),
+            )
+            .expect("register net.peer-node service (duplicate key = assembly bug)");
+
+            // 异步：解压内置插件 → 初始化 WASM 运行时 → 扫描加载 → 自动激活
+            // 使用 tauri::async_runtime::spawn 而非 tokio::spawn，
+            // 因为 setup 闭包不在 Tokio 运行时上下文中执行，tokio::spawn 会 panic
+            {
+                let pm = plugin_manager;
+                let ah = app_handle.clone();
+                let app_version = app.package_info().version.to_string();
+                let app_data_dir_for_extract = app_data_dir.clone();
+                tauri::async_runtime::spawn(async move {
+                    // 采集并挂载全局系统信息（OS / 设备名称 / IP），
+                    // 并同步设备名到 AuthManager，配对时上报真实用户设备名
+                    let system_info = crate::system::info::SystemInfo::collect().await;
+                    let device_name = system_info.device_name.clone();
+                    crate::state::init_system_info(system_info);
+                    crate::state::get_auth_manager()
+                        .set_device_name(device_name.clone())
+                        .await;
+                    tracing::info!(
+                        "[BedCode] System info initialized: device_name={}, os={}",
+                        device_name,
+                        std::env::consts::OS
+                    );
+
+                    // 解压内置插件（Android：Kotlin 桥；桌面 dev：源码资源目录复制）
+                    if let Err(e) = crate::plugin::loader::PluginLoader::extract_apk_plugins(
+                        &app_data_dir_for_extract,
+                        &app_version,
+                    )
+                    .await
+                    {
+                        tracing::warn!("Failed to extract bundled plugins: {}", e);
+                    }
+
+                    // 在 Tokio 运行时上下文中初始化 WASM 运行时
+                    if let Err(e) = pm.init_wasm_runtime().await {
+                        tracing::error!("Failed to init WASM runtime: {}", e);
+                        return;
+                    }
+
+                    // 内置插件 fs 授权：统一判定链下没有「插件白名单」层（用户裁决
+                    // 2026-10-11「fs 授权统一到桌面判定链，移动自实现已退役」）——
+                    // 免弹窗走授权记录 / 弹窗记忆（首次访问弹一次，用户可记住），
+                    // 启动不再需要种子步骤。
+
+                    pm.scan_and_load().await;
+                    // 平台资源预热（设备名 / 下载目录）：过去由节点启动顺手完成，
+                    // 节点改由服务租约按需拉起后必须在 boot 显式预热带一次
+                    crate::peer::ports::prewarm_platform(&ah).await;
+                    pm.load_all().await;
+                });
+            }
+
+            // 初始化 mDNS 管理器（内部字段级锁，实例不可变，无需外层 RwLock）
+            let mdns_discovery = Arc::new(crate::mdns::discovery::MdnsDiscovery::new());
+            app.manage(mdns_discovery);
+
+            tracing::info!("WasmNest Mobile started successfully!");
+            Ok(())
+        })
+        // 页面加载钩子（ADR 0058 方案 A；桌面同机制钩子见 wasmnest-desktop lib.rs 的
+        // frontend_channel_session_hook）：重置**该 webview** 的前端通道会话——宿主前端
+        // bootstrap 会在导入任何插件模块之前重新取得密钥，「域内首个调用者生效」恒由
+        // 宿主前端赢得；dev 下页面刷新也能重新取得（否则刷新后宿主面命令全数被拒）。
+        .on_page_load(|webview, payload| {
+            // 只认 Started：本钩子对每次页面加载触发两次（Started / Finished）。移动宿主
+            // bootstrap 在页面加载期间（loader.ts loadAll 首行 ensureHostCredential）就会
+            // 签发密钥并进前端模块缓存，若 Finished 再重置，本页刚签发的密钥即被作废、
+            // 缓存变死值——此后所有宿主面命令 fail-closed（2026-10-25 回归实况：
+            // plugin_preauthorize 全拒，所有应用无法打开）。新页 Started 时该页 JS 尚未
+            // 运行，「刷新后可重新取得」的重置语义只由它承担。
+            if !matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+                return;
+            }
+            let Some(channel) = webview
+                .app_handle()
+                .try_state::<Arc<wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry>>()
+            else {
+                // 页面加载早于 setup 装配（不应发生）：留痕不 panic（与桌面钩子同口径）
+                tracing::warn!("[PluginChannel] page load before FrontendChannelRegistry managed, session not reset");
+                return;
+            };
+            tracing::debug!(
+                webview = %webview.label(),
+                url = %payload.url(),
+                "[PluginChannel] 页面加载，重置该窗口的前端通道会话"
+            );
+            channel.reset(webview.label());
+        })
+        .invoke_handler(tauri::generate_handler![
+            // Token Commands (merged into connection)
+            commands::connection::ws_set_token,
+            commands::connection::ws_get_token,
+            commands::connection::ws_clear_token,
+            // Link Crypto Context（issue 09：事件 WS 链路加密桥）
+            commands::connection::set_link_crypto_context,
+            // Egress Policy（外网授权弹窗回执 + 桌面端目标声明；设置页管理面已随死路由退役）
+            commands::egress::egress_consent_resolve,
+            commands::egress::egress_declare_desktop_target,
+            // HTTP 代理（ticket 03：统一请求出口，request_id 多路复用）
+            commands::http_proxy::http_request,
+            commands::http_proxy::http_cancel,
+            // Connection Commands
+            commands::connection::ws_connect,
+            commands::connection::ws_disconnect,
+            commands::connection::ws_get_status,
+            commands::connection::ws_is_connected,
+            commands::connection::ws_reconnect,
+            commands::connection::set_auto_reconnect,
+            commands::connection::get_ws_token,
+            commands::connection::get_ws_url,
+            // Terminal Link（票 12 协议客户端已迁插件 com.wasmnest.bedcode）：
+            // terminal_subscribe / unsubscribe / unsubscribe_all / remove /
+            // send_input / ack_rendered / get_history / get_state 八命令已随
+            // terminal_link.rs 退役，前端走插件命令面（plugin_invoke）；
+            // 段2 页面 Channel 登记是 Tauri 传输机制，保留在宿主窄转发层
+            // （terminal_stream_gateway——ADR 0022 四类薄壳④）
+            plugin::commands::terminal_page_subscribe,
+            plugin::commands::terminal_page_unsubscribe,
+            // Auth Commands（票 14 阶段 B：配对 / QR / 生物挑战编排已迁
+            // com.wasmnest.bedcode 插件，宿主只余引擎事实面）
+            commands::auth::ws_authenticate,
+            commands::auth::ws_get_auth_credentials,
+            commands::auth::ws_bind_biometric_credential,
+            commands::auth::ws_unbind_biometric_credential,
+            commands::auth::ws_get_biometric_key_status,
+            // Session Commands（票 13：会话控制整体迁插件 com.wasmnest.bedcode——
+            // 三命令零消费者随 session.rs / commands/session.rs 退役；前端走
+            // src/plugin/sessionCommands.ts 的 plugin_invoke 命令面）
+            // Settings (移动端使用 JSON 文件)
+            commands::mobile_commands::get_all_db_settings_mobile,
+            commands::mobile_commands::set_db_setting_mobile,
+            // App Settings
+            system::commands::get_app_settings,
+            system::commands::save_app_settings,
+            // Utility
+            system::commands::ping,
+            // 壳 UI 资产（选图 + 落 $APPDATA；前端零资源访问红线下由宿主代劳）
+            system::shell_ui::shell_import_image,
+            // Android Specific
+            commands::android::set_screen_orientation,
+            commands::android::keep_screen_awake,
+            commands::android::open_url_in_browser,
+            commands::android::set_status_bar_style,
+            // mDNS
+            commands::mdns::mdns_start_discovery,
+            commands::mdns::mdns_stop_discovery,
+            commands::mdns::mdns_get_discovered_services,
+            // 对等网络传输 / 接收 / 远端浏览 —— 票 09 + 票 10 后**前端命令面为零**：
+            // ① 票 09 摘掉发现投影与连接编排面（设备列表 / 缓存解析拨号 / 共享目录
+            //    注册表 CRUD / 节点启停 / 首连应答 / 信任管理）；
+            // ② 票 10 摘掉传输调度面（取消 / 暂停 / 恢复 / 选源 / 接收设置读面 /
+            //    加密开关 / 并发上限 / 浏览 / 拉取）。
+            // 真入口只有两条：① 插件 activate-deactivate 外壳（节点生命周期）
+            // ② WIT host-peer 原语（拨号 / 发送 / 暂停恢复 / 应答 / 策略 / 落点 /
+            //    共享根镜像 / 浏览 / 拉取）与 host-platform 选源原语。
+            // 防回接锁：tests/retired_mobile_peer_transfer_command_face_lock.rs
+            // Plugin Commands
+            // 宿主面凭证签发（ADR 0058 方案 A：前端 bootstrap 首个调用，先于插件模块 import）
+            crate::plugin::commands::plugin_frontend_loader_session,
+            crate::plugin::commands::plugin_list_loaded,
+            crate::plugin::commands::plugin_get_info,
+            crate::plugin::commands::plugin_preauthorize,
+            crate::plugin::commands::plugin_activate,
+            crate::plugin::commands::plugin_deactivate,
+            crate::plugin::commands::plugin_approve,
+            crate::plugin::commands::plugin_is_enabled,
+            crate::plugin::commands::plugin_set_enabled,
+            crate::plugin::commands::plugin_is_autostart,
+            crate::plugin::commands::plugin_set_autostart,
+            crate::plugin::commands::plugin_mark_error,
+            crate::plugin::commands::plugin_report_ready,
+            crate::plugin::commands::plugin_storage_get,
+            crate::plugin::commands::plugin_storage_set,
+            crate::plugin::commands::plugin_storage_delete,
+            crate::plugin::commands::plugin_download,
+            crate::plugin::commands::plugin_install_from_file,
+            crate::plugin::commands::plugin_uninstall,
+            crate::plugin::commands::reload_wasm_plugin,
+            // File System Auth Commands（白名单管理命令随移动自实现退役，只剩弹窗回执）
+            crate::plugin::commands::plugin_fs_auth_respond,
+            crate::plugin::commands::plugin_log,
+            crate::plugin::commands::plugin_invoke,
+            // Dev Console Relay（仅 debug 构建：前端 console 日志转发 → logcat → dev:log 电脑端落盘，见 commands::dev_logs）
+            #[cfg(debug_assertions)]
+            commands::dev_logs::report_frontend_log,
+            // System Open（历史「打开所在文件夹」真机路径，system:open 权限）
+            crate::plugin::commands::plugin_reveal_received_file,
+            // System Open 配套：「所有文件访问」授权引导（system:open 权限）
+            crate::plugin::commands::plugin_open_all_files_access,
+            // System Open 配套：打开公共下载目录（设置页下载目录区「打开」，system:open 权限）
+            crate::plugin::commands::plugin_open_download_dir,
+            // File Service Commands（插件 TS 通道）
+            // v2 批量传输批准（接收策略 / 异步批量批准）
+            // SAF 存储访问（SafIo 主 seam，共享目录/上传页）
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { .. } => {
+            tracing::info!("WasmNest Mobile exit requested, shutting down scoped services...");
+            tauri::async_runtime::block_on(async {
+                if let Some(pm) = crate::state::try_get_plugin_manager() {
+                    for report in pm.service_registry().shutdown_all().await {
+                        if let Err(error) = report.outcome {
+                            tracing::error!(
+                                service_key = %report.key,
+                                error = %error,
+                                "scoped service shutdown failed (host exiting)"
+                            );
+                        }
+                    }
+                }
+            });
+        }
+        tauri::RunEvent::Exit { .. } => tracing::info!("WasmNest Mobile exited"),
+        _ => {}
+    });
+
+    tracing::info!("WasmNest application closed");
+}

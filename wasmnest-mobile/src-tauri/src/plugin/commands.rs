@@ -1,0 +1,479 @@
+//! Mobile Plugin Commands
+//!
+//! 暴露插件操作为 Tauri invoke 命令
+//!
+//! ## 宿主面凭证门（ADR 0058 方案 A，2026-10-24 / issue #21）
+//!
+//! 管理类命令（plugin_preauthorize / plugin_activate / plugin_deactivate /
+//! plugin_approve / plugin_install_from_file / plugin_uninstall / plugin_download /
+//! reload_wasm_plugin）只认宿主前端凭证（loader 会话密钥）：激活 / 停用 / 安装 /
+//! 卸载 / 审批 / 下载 / 热重载是宿主职权，凭证判定委托 wasm-core
+//! `security::frontend_channel::FrontendChannelRegistry::require_host_identity`
+//! （与桌面 lib PluginHost 的 channel 同机制；registry 实例由 lib.rs setup 托管，
+//! 命令面独立持有）。存量身份缺口（plugin_invoke / storage / 偏好命令无身份绑定）
+//! 已另票登记，不在本批。
+
+use crate::plugin::manager::PluginManager;
+use crate::plugin::types::MobilePluginInfo;
+use crate::Result;
+use serde_json::Value;
+use std::sync::Arc;
+use tauri::Manager;
+use wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry;
+
+// ==================== Host Surface Credential（ADR 0058 方案 A） ====================
+
+/// 宿主前端 bootstrap：取得本次页面加载的 loader 会话密钥（域内首个调用者生效）
+/// （ADR 0058 方案 A：移动宿主面凭证签发；桌面同型命令在 wasm-core api_bridge）
+#[tauri::command]
+pub async fn plugin_frontend_loader_session(
+    webview: tauri::Webview,
+    channel: tauri::State<'_, Arc<FrontendChannelRegistry>>,
+) -> Result<String> {
+    let session = channel.issue_loader_session(webview.label())?;
+    tracing::info!(
+        webview = %webview.label(),
+        "[API] plugin_frontend_loader_session: 宿主面凭证已签发"
+    );
+    Ok(session)
+}
+
+/// 宿主面命令门（ADR 0058 方案 A）：管理类命令只认宿主前端凭证
+fn require_host_surface(
+    channel: &FrontendChannelRegistry,
+    webview_label: &str,
+    command: &str,
+    credential: &str,
+    denial: &str,
+) -> Result<()> {
+    channel
+        .require_host_identity(webview_label, credential, command)
+        .map_err(|_| crate::AppError::Plugin(denial.to_string()))
+}
+
+// ==================== Plugin Lifecycle Commands ====================
+
+/// 获取所有已加载插件信息
+#[tauri::command]
+pub async fn plugin_list_loaded(app_handle: tauri::AppHandle) -> Result<Vec<MobilePluginInfo>> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    Ok(manager.list_loaded().await)
+}
+
+/// 获取单个插件信息
+#[tauri::command]
+pub async fn plugin_get_info(app_handle: tauri::AppHandle, plugin_id: String) -> Result<Option<MobilePluginInfo>> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    Ok(manager.get_info(&plugin_id).await)
+}
+
+/// 预授权（启用前置，独立命令供前端先行调用）
+///
+/// 前端 toggle 时序：先调本命令（此阶段**不显示** LoadingDialog，授权弹窗
+/// 可正常交互）→ 通过后再显示 loading 调 `plugin_activate`；拒绝则直接失败，
+/// 不进入激活流程。`activate` 内部的 preauthorize 保留为兜底（启动
+/// auto-activate 无头场景 + 已授权路径短路无二次弹窗）。
+#[tauri::command]
+pub async fn plugin_preauthorize(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_preauthorize",
+        &credential,
+        "plugin preauthorization must be requested by the host frontend",
+    )?;
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.preauthorize_plugin(&plugin_id).await
+}
+
+/// 激活插件
+#[tauri::command]
+pub async fn plugin_activate(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_activate",
+        &credential,
+        "plugin activation must be requested by the host frontend",
+    )?;
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    // 前端 toggle 已先行调 plugin_preauthorize（无遮罩弹窗），此处跳过 step 0.5
+    // 重复预授权弹窗，避免授权弹窗与 loading 遮罩同现（activate_after_preauth）
+    manager.activate_after_preauth(&plugin_id).await
+}
+
+/// 停用插件
+#[tauri::command]
+pub async fn plugin_deactivate(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_deactivate",
+        &credential,
+        "plugin deactivation must be requested by the host frontend",
+    )?;
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.deactivate(&plugin_id).await
+}
+
+// ==================== Plugin State Commands ====================
+
+/// 查询插件启用状态
+#[tauri::command]
+pub async fn plugin_is_enabled(app_handle: tauri::AppHandle, plugin_id: String) -> Result<bool> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    Ok(manager.is_enabled(&plugin_id).await)
+}
+
+/// 设置插件启用状态（应用「已启用 / 可用」偏好，不触发激活）
+#[tauri::command]
+pub async fn plugin_set_enabled(app_handle: tauri::AppHandle, plugin_id: String, enabled: bool) -> Result<()> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.set_enabled(&plugin_id, enabled).await
+}
+
+/// 查询插件「启动时自动激活」偏好（缺省 false = 不自动启动）
+#[tauri::command]
+pub async fn plugin_is_autostart(app_handle: tauri::AppHandle, plugin_id: String) -> Result<bool> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    Ok(manager.is_autostart(&plugin_id).await)
+}
+
+/// 设置插件「启动时自动激活」偏好（只改偏好，下次启动生效）
+#[tauri::command]
+pub async fn plugin_set_autostart(app_handle: tauri::AppHandle, plugin_id: String, autostart: bool) -> Result<()> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.set_autostart(&plugin_id, autostart).await
+}
+
+/// 标记插件错误
+#[tauri::command]
+pub async fn plugin_mark_error(app_handle: tauri::AppHandle, plugin_id: String, error: String) -> Result<()> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.mark_error(&plugin_id, error).await;
+    Ok(())
+}
+
+/// 插件显式上报启动成功（Error → Activated 自愈）
+#[tauri::command]
+pub async fn plugin_report_ready(app_handle: tauri::AppHandle, plugin_id: String) -> Result<()> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.report_ready(&plugin_id).await
+}
+
+/// 批准插件权限（人工审批：记录权限清单 + 目录内容哈希钉扎）
+///
+/// 仅用户安装插件（file-install / remote-download）需要审批；
+/// 内置插件（apk-asset）调用返回错误。批准成功后状态 NeedsApproval → Loaded。
+#[tauri::command]
+pub async fn plugin_approve(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_approve",
+        &credential,
+        "plugin permission approval must be granted by the host frontend",
+    )?;
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.approve(&plugin_id).await
+}
+
+// ==================== Plugin Storage Commands ====================
+
+/// 获取插件存储值
+#[tauri::command]
+pub async fn plugin_storage_get(app_handle: tauri::AppHandle, plugin_id: String, key: String) -> Result<Option<Value>> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.storage().get(&plugin_id, &key).await
+}
+
+/// 设置插件存储值
+#[tauri::command]
+pub async fn plugin_storage_set(
+    app_handle: tauri::AppHandle,
+    plugin_id: String,
+    key: String,
+    value: Value,
+) -> Result<()> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.storage().set(&plugin_id, &key, value).await
+}
+
+/// 删除插件存储值
+#[tauri::command]
+pub async fn plugin_storage_delete(app_handle: tauri::AppHandle, plugin_id: String, key: String) -> Result<()> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.storage().delete(&plugin_id, &key).await
+}
+
+// ==================== Plugin Download & Install Commands ====================
+
+/// 下载并安装远程 zip 插件包
+#[tauri::command]
+pub async fn plugin_download(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    zip_url: String,
+    credential: String,
+) -> Result<String> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_download",
+        &credential,
+        "plugin download must be requested by the host frontend",
+    )?;
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    let plugins_dir = manager.plugins_dir().clone();
+
+    let plugin_id =
+        crate::plugin::downloader::PluginDownloader::download_and_install(&app_handle, &zip_url, &plugins_dir).await?;
+
+    // 重新扫描并加载
+    manager.scan_and_load().await;
+
+    Ok(plugin_id)
+}
+
+/// 从本地 zip 插件包安装
+#[tauri::command]
+pub async fn plugin_install_from_file(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    path: String,
+    credential: String,
+) -> Result<String> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_install_from_file",
+        &credential,
+        "plugin installation must be requested by the host frontend",
+    )?;
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    let plugins_dir = manager.plugins_dir().clone();
+
+    let plugin_id = crate::plugin::downloader::PluginDownloader::install_from_file(&path, &plugins_dir).await?;
+
+    // 重新扫描并加载
+    manager.scan_and_load().await;
+
+    Ok(plugin_id)
+}
+
+/// 卸载插件（仅用户安装的插件；内置插件拒绝）
+#[tauri::command]
+pub async fn plugin_uninstall(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_uninstall",
+        &credential,
+        "plugin uninstallation must be requested by the host frontend",
+    )?;
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.uninstall(&plugin_id).await
+}
+
+/// 重新加载 WASM 插件（热重载）
+#[tauri::command]
+pub async fn reload_wasm_plugin(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+) -> Result<()> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "reload_wasm_plugin",
+        &credential,
+        "plugin reload must be requested by the host frontend",
+    )?;
+    let manager = app_handle.state::<Arc<PluginManager>>();
+
+    // 先停用
+    manager.deactivate(&plugin_id).await?;
+
+    // 重新扫描
+    manager.scan_and_load().await;
+
+    // 重新激活
+    manager.activate(&plugin_id).await
+}
+
+// ==================== File System Auth Commands ====================
+
+/// 回复文件访问授权请求
+///
+/// 前端契约（`FsAuthDialog.vue`）保持 `(requestId, allowed, remember)` 三参不变——
+/// 判定链收敛到 wasm-core `security::fs_auth` 后，宿主在此把「允许 + 是否记住」
+/// 映射成该实现的四种决策（`allow_once` / `allow_remember` / `deny`）。「拒绝并
+/// 永久记住」（`deny_always`）无前端入口，不在此伪造。
+#[tauri::command]
+pub async fn plugin_fs_auth_respond(
+    app_handle: tauri::AppHandle,
+    request_id: String,
+    allowed: bool,
+    remember: bool,
+) -> Result<()> {
+    use wasmnest_wasm_core::security::fs_auth::FsDecision;
+
+    let decision = match (allowed, remember) {
+        (true, true) => FsDecision::AllowRemember,
+        (true, false) => FsDecision::AllowOnce,
+        // allowed=false 时 remember 无意义（前端恒传 false）——一律按一次拒绝
+        (false, _) => FsDecision::Deny,
+    };
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    manager.fs_auth().respond(&request_id, decision).await;
+    Ok(())
+}
+
+// 路径 / 插件白名单管理命令（`plugin_fs_{add,remove,get}_{path,plugin}_whitelist`）
+// 随移动自实现退役（用户裁决 2026-10-11「fs 授权统一到桌面判定链，移动自实现
+// 已退役」）：统一判定链的授权真源 = 授权记录表 + 弹窗记忆，没有「全局路径 /
+// 插件白名单」这一层；前端无调用点（grep 实证），删除即零回归。
+
+// ==================== Plugin Logging Commands ====================
+
+/// 插件日志输出（TS SDK 调用，统一到宿主 tracing）
+#[tauri::command]
+pub fn plugin_log(plugin_id: String, level: String, message: String) {
+    match level.as_str() {
+        "debug" => tracing::debug!("[plugin:{}] {}", plugin_id, message),
+        "warn" => tracing::warn!("[plugin:{}] {}", plugin_id, message),
+        "error" => tracing::error!("[plugin:{}] {}", plugin_id, message),
+        _ => tracing::info!("[plugin:{}] {}", plugin_id, message),
+    }
+}
+
+// ==================== Plugin Command Invoke ====================
+
+/// 调用 WASM 插件命令（前端 context.commands.execute 的回退桥）
+#[tauri::command]
+pub async fn plugin_invoke(
+    app_handle: tauri::AppHandle,
+    plugin_id: String,
+    command: String,
+    args: Value,
+) -> Result<Value> {
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    // WASM 命令接受字符串参数（JSON 序列化），invoke_command 返回的是命令结果字符串
+    let args_str = args.to_string();
+    let result = manager.invoke_command(&plugin_id, &command, &args_str).await?;
+    // 还原为 JSON 对象返回前端（任务数组 / {ok:true} 等）
+    let value: Value = serde_json::from_str(&result).map_err(|e| {
+        crate::AppError::Plugin(format!(
+            "plugin_invoke: invalid result JSON from plugin {}: {}",
+            plugin_id, e
+        ))
+    })?;
+    // 插件 invoke_command 的 Err 经 SDK 宏序列化为 {"error": "..."} 的**成功** JSON，
+    // 此处还原为真正错误（与桌面端同口径，见 host/commands.rs）
+    if let Some(err) = value.get("error").and_then(|v| v.as_str()) {
+        if !err.is_empty() {
+            return Err(crate::AppError::Plugin(err.to_string()));
+        }
+    }
+    Ok(value)
+}
+
+// ==================== System Open（历史「打开所在文件夹」真机路径） ====================
+
+/// 按文件名打开接收文件所在目录（历史记录「打开所在文件夹」真实设备路径）
+///
+/// wire 不携带接收落盘路径，仅凭文件名经 Kotlin DownloadsDirPlugin
+/// openFileLocationByName（MediaStore 公共下载按名命中 → 打开 primary:Download
+/// 目录——查询与写入同源 external_primary、EXTERNAL_CONTENT_URI 兑底；未命中回退
+/// app 私有下载目录按名查找，顶层优先 + 子目录递归兑底）。需 system:open 权限，
+/// 前端 requireSystemOpenPermission 已校验（与 plugin_open_file* 回调链同模式）。
+#[tauri::command]
+pub async fn plugin_reveal_received_file(plugin_id: String, file_name: String) -> Result<()> {
+    if file_name.trim().is_empty() {
+        return Err(crate::AppError::Plugin(
+            "plugin_reveal_received_file: file_name is required".to_string(),
+        ));
+    }
+    tracing::debug!(plugin_id = %plugin_id, file_name = %file_name, "reveal received file location");
+    crate::plugin::android_plugins::open_download_file_location_by_name(&file_name).await
+}
+
+/// 引导开启「所有文件访问」权限（打开系统公共 Download 目录所需）
+///
+/// 经 Kotlin AllFilesAccessPlugin.openAllFilesAccessSettings 查询
+/// isExternalStorageManager，未授权时跳转系统授权页（无该页面的 ROM 兑底
+/// 应用详情页）；返回跳转前的授权状态。授权后用户重新点击「打开所在文件夹」
+/// 即达（MediaStore 命中可重复查询）。需 system:open 权限，前端
+/// requireSystemOpenPermission 已校验（与 plugin_reveal_* 回调链同模式）。
+#[tauri::command]
+pub async fn plugin_open_all_files_access(plugin_id: String) -> Result<bool> {
+    tracing::debug!(plugin_id = %plugin_id, "open all files access settings");
+    crate::plugin::android_plugins::open_all_files_settings_android().await
+}
+
+/// 打开公共下载目录（设置页「下载目录」区打开按钮，核对文件是否落盘）
+///
+/// 经 Kotlin DownloadsDirPlugin.openDownloadDir 打开 primary:Download 文档树
+/// 目录；未授予「所有文件访问」时以 needs_all_files_access 前缀 reject，前端
+/// 据此弹引导跳系统设置。需 system:open 权限，前端 requireSystemOpenPermission
+/// 已校验（与 plugin_reveal_* 回调链同模式）。
+#[tauri::command]
+pub async fn plugin_open_download_dir(plugin_id: String) -> Result<()> {
+    tracing::debug!(plugin_id = %plugin_id, "open system download dir");
+    crate::plugin::android_plugins::open_download_dir().await
+}
+
+// ==================== 终端输出流窄转发登记（票 12 · 批次 2b 命令薄壳） ====================
+//
+// 表本体就在同仓 `plugin/terminal_stream.rs`（[`TerminalStreamGateway`]，纯机制）；
+// Channel 是 Tauri IPC 机制，WASM 插件无法持有——命令薄壳留宿主，转调 crate
+// 全局单例（与 WIT `host-terminal-stream.forward-output` 共用同一张表）。
+
+/// 段2 订阅（进入终端页）：登记页面通道并开启输出推送。幂等
+#[tauri::command]
+pub async fn terminal_page_subscribe(
+    session_id: String,
+    channel: tauri::ipc::Channel<tauri::ipc::InvokeResponseBody>,
+) -> std::result::Result<(), String> {
+    if session_id.is_empty() {
+        return Err("session_id is empty".to_string());
+    }
+    crate::plugin::terminal_stream::terminal_stream_gateway().page_subscribe(&session_id, channel);
+    Ok(())
+}
+
+/// 段2 取消订阅（退出终端页）：清空页面通道并停止推送
+#[tauri::command]
+pub async fn terminal_page_unsubscribe(session_id: String) -> std::result::Result<(), String> {
+    if session_id.is_empty() {
+        return Err("session_id is empty".to_string());
+    }
+    crate::plugin::terminal_stream::terminal_stream_gateway().page_unsubscribe(&session_id);
+    Ok(())
+}

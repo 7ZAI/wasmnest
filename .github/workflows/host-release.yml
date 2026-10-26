@@ -1,0 +1,208 @@
+name: Host Runtime Release
+
+# 宿主运行时发布（CONTRACT §2.1）：tag `host-v<hostVersion>` → 三平台
+# `host-desktop-<version>-<platform>-<arch>.tar.gz` + `.sha256` → GitHub Release，
+# 并把真实 sha256 / sourceCommit 回写到 release-manifest.json（开 PR，不直接 push main）。
+#
+# 触发前（人工，版本只在发布时设置）：
+#   1. node scripts/set-host-version.mjs <x.y.z> 并提交；
+#   2. git tag host-v<x.y.z> && git push origin host-v<x.y.z>。
+#
+# 需要的 secrets —— 只列名字，禁止在此写值：
+#   GITHUB_TOKEN（Actions 内置；release 上传 + 推送回写分支 + 开 PR）
+#
+# 安全约束：
+#   - 本 workflow 不做任何 npm / cargo 发布，只产出宿主运行时资产；
+#   - dry_run=true 时只构建并上传 Actions artifact，不创建 Release、不回写 manifest；
+#   - 永不 force push；回写走独立分支 + PR。
+
+on:
+  push:
+    tags: ['host-v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只构建并上传 Actions artifact（不创建 Release、不回写 manifest）'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: host-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # 平台仓 .cargo/config.toml 强制 rustc-wrapper=sccache（未安装则 cargo 直接失败），
+  # CI 必须装 sccache；CI 磁盘有限，缓存压到 2GiB。
+  SCCACHE_CACHE_SIZE: '2147483648'
+  # 与根 .cargo/config.toml 的兜底一致（CI 4 核 / 16GiB 恰好等于核数）
+  CARGO_BUILD_JOBS: '4'
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 首期发布矩阵（CONTRACT §2.1）；其余目标按需追加
+          - target: linux-x86_64
+            os: ubuntu-latest
+          - target: macos-arm64
+            os: macos-14
+          - target: windows-x86_64
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 校验 tag 与 manifest hostRuntime.version 一致
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          expected="host-v$(node -p "require('./release-manifest.json').hostRuntime.version")"
+          if [ "${GITHUB_REF_NAME}" != "$expected" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} 与 manifest hostRuntime.version 推导值 ${expected} 不一致（先跑 scripts/set-host-version.mjs）"
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装 Linux 宿主系统依赖（WebKitGTK / 构建工具）
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            libappindicator3-dev librsvg2-dev patchelf \
+            libsoup-3.0-dev libssl-dev pkg-config libgtk-3-dev build-essential
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla/sccache-action@v0.0.9
+
+      - name: 安装平台仓依赖
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir wasmnest-desktop install --frozen-lockfile
+
+      - name: 构建桌面 SDK（宿主前端构建需要 SDK dist）
+        run: pnpm --dir wasmnest-desktop/packages/plugin-sdk-desktop run build
+
+      - name: host:pack（debug + --no-bundle；产物 dist-host/ + tar.gz + sha256）
+        run: pnpm --dir wasmnest-desktop run host:pack
+
+      - name: 校验 sha256 边车与产物一致
+        shell: bash
+        run: |
+          node --input-type=module -e "
+          import { createHash } from 'node:crypto'
+          import { readdirSync, readFileSync } from 'node:fs'
+          import { join } from 'node:path'
+          const dir = 'wasmnest-desktop/dist-host'
+          const tarballs = readdirSync(dir).filter((f) => f.endsWith('.tar.gz'))
+          if (tarballs.length !== 1) {
+            console.error('期望恰好 1 个 tar.gz（当前平台），实际:', tarballs)
+            process.exit(1)
+          }
+          for (const file of tarballs) {
+            const sha = createHash('sha256').update(readFileSync(join(dir, file))).digest('hex')
+            const sidecar = readFileSync(join(dir, file + '.sha256'), 'utf8').trim().split(/\s+/)[0]
+            if (sha !== sidecar) {
+              console.error('sha256 不匹配:', file)
+              process.exit(1)
+            }
+            console.log('sha256 ok:', file, sha)
+          }
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: host-${{ matrix.target }}
+          path: wasmnest-desktop/dist-host/*.tar.gz*
+          if-no-files-found: error
+
+  publish:
+    name: 发布 GitHub Release
+    needs: build
+    if: github.event_name == 'push' || inputs.dry_run == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: 解析 release tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="host-v$(node -p "require('./release-manifest.json').hostRuntime.version")"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: 创建 / 更新 Release（tag 已存在则 upload --clobber）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" release-assets/* --clobber
+          else
+            gh release create "$tag" release-assets/* \
+              --title "WasmNest 宿主运行时 ${tag}" \
+              --notes "桌面宿主运行时分发产物（CONTRACT §2.1）。资产：host-desktop-<version>-<platform>-<arch>.tar.gz 与同名 .sha256；应用仓 fetch-host 下载后按 lock 的 sha256 校验。"
+          fi
+
+  manifest:
+    name: 回写 release-manifest（PR）
+    needs: publish
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 写入 hostRuntime.artifacts（三平台真实 sha256）与 sourceCommit
+        run: node scripts/update-host-runtime-artifacts.mjs --dir release-assets --source-commit "${{ github.sha }}"
+
+      - name: 开 PR（不直接 push main）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          branch="host-runtime/${tag}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add release-manifest.json
+          git commit -m "chore(host): 回写 ${tag} 三平台宿主产物 sha256"
+          git push origin "$branch"
+          gh pr create --base dev --head "$branch" \
+            --title "chore(host): 回写 ${tag} 宿主产物 sha256" \
+            --body "host-release 发布成功后自动生成：release-manifest.json 的 hostRuntime.artifacts（三平台真实 sha256）与 sourceCommit。请核对后合并。"

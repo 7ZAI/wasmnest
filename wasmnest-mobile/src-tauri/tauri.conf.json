@@ -1,0 +1,69 @@
+{
+  "productName": "WasmNest",
+  "identifier": "com.wasmnest.mobile",
+  "version": "0.0.1",
+  "build": {
+    "beforeDevCommand": "pnpm run dev",
+    "devUrl": "http://localhost:1423",
+    "beforeBuildCommand": "pnpm run build:all",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "title": "WasmNest",
+        "width": 400,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "visible": true,
+        "decorations": false,
+        "backgroundColor": "#F5F4F0"
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self' asset: http://asset.localhost",
+        "connect-src": "'none'",
+        "img-src": "'self' asset: http://asset.localhost blob: data:",
+        "style-src": "'unsafe-inline' 'self' asset: http://asset.localhost",
+        "font-src": "'self' asset: http://asset.localhost",
+        "script-src": "'self' 'unsafe-eval' 'wasm-unsafe-eval' asset: http://asset.localhost"
+      },
+      "devCsp": {
+        "connect-src": "'self' ipc: http://ipc.localhost ws: wss: http: https:"
+      },
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": [
+            "$RESOURCE/**/*",
+            "$APPCONFIG/**/*",
+            "$APPDATA/**/*"
+          ]
+        }
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": [
+      "resources/config.json",
+      "resources/plugins/**/*"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "android": {
+      "minSdkVersion": 24
+    }
+  }
+}

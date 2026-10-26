@@ -1,0 +1,36 @@
+/**
+ * i18n 实例
+ *
+ * vue-i18n@9 Composition API 模式，支持 zh-CN（默认）和 en
+ */
+import { createI18n } from 'vue-i18n'
+import zhCNCommon from './zh-CN/common'
+import zhCNMobile from './zh-CN/mobile'
+import zhCNSettings from './zh-CN/settings'
+import zhCNShell from './zh-CN/shell'
+import enCommon from './en/common'
+import enMobile from './en/mobile'
+import enSettings from './en/settings'
+import enShell from './en/shell'
+
+const i18n = createI18n({
+  legacy: false,
+  locale: 'zh-CN',
+  fallbackLocale: 'zh-CN',
+  messages: {
+    'zh-CN': {
+      ...zhCNCommon,
+      ...zhCNMobile,
+      ...zhCNSettings,
+      ...zhCNShell,
+    },
+    en: {
+      ...enCommon,
+      ...enMobile,
+      ...enSettings,
+      ...enShell,
+    },
+  },
+})
+
+export default i18n

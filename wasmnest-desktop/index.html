@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <!-- 移动端视口配置：不再设 maximum-scale / user-scalable，桌面 WebKitGTK 需要允许
+         CSS zoom 与 Ctrl+=；移动端若需限制缩放在组件层用 touch-action 处理 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- iOS 状态栏样式 -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>WasmNest</title>
+    <!-- 静态首屏样式走外部文件（public/splash.css，dev/prod 行为一致）。
+         **不可搬回内联 <style>**：Tauri v2 会给它注入 CSP nonce，而 CSP3 下
+         style-src 出现 nonce-source 即令 'unsafe-inline' 失效，导致所有运行时注入的
+         内联 <style>（四个 wasm 应用的前端样式）被 style-src-elem 拒掉——release 专有的
+         样式全失效故障。机制与结构锁见 public/splash.css 头注与
+         src-tauri/tests/capabilities_lock.rs。 -->
+    <link rel="stylesheet" href="/splash.css" />
+  </head>
+  <body class="bg-dark-900 text-dark-100">
+    <div id="app">
+      <!--
+        静态首屏：Vue 挂载前（含 SplashLoading 之前）的过渡帧，随 #app 内容一起被替换掉。
+        样式在 public/splash.css（外链；勿内联，原因见 head 注释）。
+      -->
+      <div class="splash"><div class="spinner"></div></div>
+    </div>
+    <!-- 宿主前端整体下沉 bedcode wasm-app（D2）：入口指向 app 前端 bootstrap；
+         2026-10-17 壳恢复后 bootstrap 挂载壳根（ShellHost：主屏 + 系统页 + 应用面分流） -->
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

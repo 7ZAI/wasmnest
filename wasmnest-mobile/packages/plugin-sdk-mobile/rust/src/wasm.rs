@@ -1,0 +1,368 @@
+//! WASM 插件入口 (Mobile) — Component Model 形态（迁移 ticket 04）
+//!
+//! WasmPlugin trait — 移动端 WASM 插件核心接口
+//! wasm_entry! 宏 — 生成组件世界（WIT `wasmnest:plugin` world）的全部导出实现
+//!
+//! 插件开发者只需实现 WasmPlugin trait，然后调用 wasm_entry!(MyPlugin)。
+//! 宏展开为 wit-bindgen 生成的 5 组 `Guest` trait 实现 + `export!` 导出，
+//! 产物为组件（component）而非旧 ABI 的 core module：
+//! - 内存搬运由绑定层处理，不再有 (ptr,len) 与 alloc/dealloc 配对
+//! - 契约定义在 `wit/wasmnest.wit`（单一事实来源），接口漂移编译期即暴露
+//!
+//! 相比桌面端，移动端额外支持 on_auth_success / on_disconnect /
+//! on_session_created / on_session_stopped（WS 认证/断开/会话生命周期事件）。
+//!
+//! 绑定生成（`wit_bindgen::generate!`）：
+//! - import 接口 → `crate::wasm::wasmnest::plugin::<iface>::<fn>` 自由函数，
+//!   由 [`crate::wasm_host::WasmHost`] 内部调用（0.60 的 string 参数为 `&str`）
+//! - export 接口 → `crate::wasm::exports::wasmnest::plugin::<iface>::Guest` trait，
+//!   由 `wasm_entry!` 宏对插件类型实现
+//! - `pub_export_macro` 使 `export!` 可跨 crate 调用（re-export 在 `wasm` 模块，
+//!   插件 crate 内经 `$crate::wasm::export!` 展开）；`default_bindings_module`
+//!   指向本 SDK 的 `wasm` 模块（`$crate::wasm`），导出函数内的类型引用
+//!   （`exports::wasmnest::plugin::<iface>::Guest`）随宏体解析到 SDK
+
+use crate::types::PluginManifest;
+
+wit_bindgen::generate!({
+    // 票 03：端 `wit/` 是生成物目录（core.wit + cap-mobile.wit + wasmnest.wit 同
+    // package 拼装），path 指目录让 wit-bindgen 以 push_dir 加载合成 package。
+    path: "wit",
+    world: "plugin",
+    pub_export_macro: true,
+    default_bindings_module: "$crate::wasm",
+});
+
+/// WASM 插件核心 trait
+pub trait WasmPlugin: Send + Sync + 'static {
+    const ID: &'static str;
+    fn manifest() -> PluginManifest;
+    fn activate() -> anyhow::Result<()>;
+    fn deactivate() -> anyhow::Result<()>;
+    fn invoke_command(name: &str, args: serde_json::Value) -> anyhow::Result<serde_json::Value>;
+
+    fn on_startup() -> anyhow::Result<()> { Ok(()) }
+    fn on_shutdown() -> anyhow::Result<()> { Ok(()) }
+    fn on_auth_success() -> anyhow::Result<()> { Ok(()) }
+    fn on_disconnect(_reason: &str) -> anyhow::Result<()> { Ok(()) }
+    fn on_session_created(_session_id: &str) -> anyhow::Result<()> { Ok(()) }
+    fn on_session_stopped(_session_id: &str) -> anyhow::Result<()> { Ok(()) }
+
+    /// 收到总线消息回调（可选，默认忽略）
+    fn on_bus_message(_msg: &crate::BusMessage) -> anyhow::Result<()> { Ok(()) }
+
+    /// 收到总线二进制消息回调（v9，可选，默认忽略）
+    ///
+    /// 订阅方须以 `host-bus.subscribe-binary` 声明二进制格式偏好，宿主才把
+    /// `publish-binary` 载荷投递到本回调；否则按格式不匹配拒绝。
+    /// `msg.payload` 为 Null、`msg.payload_binary` 携带原始字节
+    fn on_message_binary(_msg: &crate::BusMessage) -> anyhow::Result<()> { Ok(()) }
+}
+
+#[cfg(all(test, feature = "wasm"))]
+mod tests {
+    use super::*;
+    use crate::types::{PluginContributes, PluginPlatform, PluginType};
+    use crate::BusMessage;
+
+    /// 最小 WASM 测试插件：仅实现必需方法，其余走 trait 默认
+    struct TestWasmPlugin;
+
+    impl WasmPlugin for TestWasmPlugin {
+        const ID: &'static str = "com.wasmnest.test-wasm";
+
+        fn manifest() -> PluginManifest {
+            PluginManifest {
+                id: Self::ID.to_string(),
+                name: "Test Wasm".to_string(),
+                version: "0.1.0".to_string(),
+                platform: PluginPlatform::Both,
+                description: String::new(),
+                author: String::new(),
+                main: String::new(),
+                plugin_type: PluginType::Wasm,
+                permissions: vec![],
+                contributes: PluginContributes::default(),
+                icon: None,
+                wasm_hash: String::new(),
+                rust_library: String::new(),
+                preauth_dirs: vec![],
+                preauth_urls: vec![],
+                ..Default::default()
+            }
+        }
+
+        fn activate() -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn deactivate() -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn invoke_command(_name: &str, _args: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+            Ok(serde_json::Value::Null)
+        }
+    }
+
+    #[test]
+    fn test_default_lifecycle_hooks_succeed() {
+        // 未覆盖的启动/关闭/认证/断开/会话回调默认成功，不干扰宿主流程
+        assert!(TestWasmPlugin::on_startup().is_ok());
+        assert!(TestWasmPlugin::on_shutdown().is_ok());
+        // 移动端特有：WebSocket 认证成功/断开/会话创建/停止
+        assert!(TestWasmPlugin::on_auth_success().is_ok());
+        assert!(TestWasmPlugin::on_disconnect("ws closed").is_ok());
+        assert!(TestWasmPlugin::on_session_created("s1").is_ok());
+        assert!(TestWasmPlugin::on_session_stopped("s1").is_ok());
+    }
+
+    #[test]
+    fn test_default_bus_message_hook_succeeds() {
+        let msg = BusMessage {
+            topic: "t".into(),
+            sender: "s".into(),
+            payload: serde_json::Value::Null,
+            payload_binary: None,
+            timestamp: 0,
+        };
+        assert!(TestWasmPlugin::on_bus_message(&msg).is_ok());
+        assert!(TestWasmPlugin::on_message_binary(&msg).is_ok());
+    }
+}
+
+/// 生成组件 world（`wasmnest:plugin`）的全部导出实现
+///
+/// 展开为 wit-bindgen 生成的 5 组 `Guest` trait 实现（command / lifecycle /
+/// events / manifest / abi）并调用 `export!` 导出。语义与旧 `__wasmnest_*`
+/// 导出 1:1 对应（见各 impl 注释）。
+///
+/// # 用法
+/// ```ignore
+/// struct MyPlugin;
+/// impl WasmPlugin for MyPlugin { ... }
+/// wasm_entry!(MyPlugin);
+/// ```
+/// 参数为 `ident` 而非 `ty`：Rust 宏的片段卫生限制 —— `ty` 片段不能作为
+/// `ident` 传给 `export!` 宏（报 "no rules expected ty metavariable"）。
+#[macro_export]
+macro_rules! wasm_entry {
+    ($plugin_type:ident) => {
+        // ==================== command（原 __wasmnest_invoke_command） ====================
+
+        impl $crate::wasm::exports::wasmnest::plugin::command::Guest for $plugin_type {
+            /// 调用自定义命令：JSON 载荷保留（args-json → 类型化 Value → 结果 JSON）
+            fn invoke(name: String, args: String) -> String {
+                // 组件绑定层保证 UTF-8 合法，解析失败时退化为 Null（由插件自行容错）
+                let args: serde_json::Value =
+                    serde_json::from_str(&args).unwrap_or(serde_json::Value::Null);
+
+                match <$plugin_type as $crate::wasm::WasmPlugin>::invoke_command(&name, args) {
+                    Ok(value) => {
+                        match serde_json::to_string(&value) {
+                            Ok(s) => s,
+                            // 错误信息经 serde_json 转义，避免引号/反斜杠产生非法 JSON
+                            // 导致宿主侧反序列化失败、屏蔽真实错误原因
+                            Err(e) => serde_json::json!({ "error": e.to_string() }).to_string(),
+                        }
+                    }
+                    Err(e) => serde_json::json!({ "error": e.to_string() }).to_string(),
+                }
+            }
+        }
+
+        // ==================== lifecycle（原 __wasmnest_activate/deactivate/on_startup/on_shutdown） ====================
+
+        impl $crate::wasm::exports::wasmnest::plugin::lifecycle::Guest for $plugin_type {
+            fn activate() -> Result<(), String> {
+                // WasmHost 是无状态 unit struct；插件身份由宿主侧 Caller state 维护。
+                // 日志走 UFCS 调用，宏展开处无需导入 HostLog trait
+                let host = $crate::wasm_host::WasmHost;
+                match <$plugin_type as $crate::wasm::WasmPlugin>::activate() {
+                    Ok(()) => {
+                        $crate::host::HostLog::log_info(&host, "Plugin activated (wasm)");
+                        Ok(())
+                    }
+                    Err(e) => {
+                        $crate::host::HostLog::log_error(&host, &format!("activate failed: {}", e));
+                        Err(e.to_string())
+                    }
+                }
+            }
+
+            fn deactivate() -> Result<(), String> {
+                match <$plugin_type as $crate::wasm::WasmPlugin>::deactivate() {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        let host = $crate::wasm_host::WasmHost;
+                        $crate::host::HostLog::log_error(
+                            &host,
+                            &format!("deactivate failed: {}", e),
+                        );
+                        Err(e.to_string())
+                    }
+                }
+            }
+
+            fn on_startup() -> Result<(), String> {
+                let host = $crate::wasm_host::WasmHost;
+                match <$plugin_type as $crate::wasm::WasmPlugin>::on_startup() {
+                    Ok(()) => {
+                        $crate::host::HostLog::log_info(&host, "Plugin startup init completed");
+                        Ok(())
+                    }
+                    Err(e) => {
+                        $crate::host::HostLog::log_error(
+                            &host,
+                            &format!("on_startup failed: {}", e),
+                        );
+                        Err(e.to_string())
+                    }
+                }
+            }
+
+            fn on_shutdown() -> Result<(), String> {
+                let host = $crate::wasm_host::WasmHost;
+                match <$plugin_type as $crate::wasm::WasmPlugin>::on_shutdown() {
+                    Ok(()) => {
+                        $crate::host::HostLog::log_info(&host, "Plugin shutdown cleanup completed");
+                        Ok(())
+                    }
+                    Err(e) => {
+                        $crate::host::HostLog::log_error(
+                            &host,
+                            &format!("on_shutdown failed: {}", e),
+                        );
+                        Err(e.to_string())
+                    }
+                }
+            }
+        }
+
+        // ==================== events（移动端子集：原 __wasmnest_on_bus_message/on_auth_success/on_disconnect/on_session_created/on_session_stopped） ====================
+
+        impl $crate::wasm::exports::wasmnest::plugin::events::Guest for $plugin_type {
+            fn on_bus_message(topic: String, payload: String) -> Result<(), String> {
+                let payload: serde_json::Value =
+                    serde_json::from_str(&payload).unwrap_or(serde_json::Value::Null);
+                // 移动端 WIT events.on-bus-message 无 sender 通道（宿主侧仅传 topic+payload，
+                // 旧 ABI 的 sender 段随组件契约定稿裁剪）—— sender 置空、timestamp 恒 0
+                let msg = $crate::BusMessage {
+                    topic,
+                    sender: String::new(),
+                    payload,
+                    payload_binary: None,
+                    timestamp: 0,
+                };
+                match <$plugin_type as $crate::wasm::WasmPlugin>::on_bus_message(&msg) {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        let host = $crate::wasm_host::WasmHost;
+                        $crate::host::HostLog::log_error(
+                            &host,
+                            &format!("on_bus_message failed: {}", e),
+                        );
+                        Err(e.to_string())
+                    }
+                }
+            }
+
+            fn on_auth_success() -> Result<(), String> {
+                match <$plugin_type as $crate::wasm::WasmPlugin>::on_auth_success() {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        let host = $crate::wasm_host::WasmHost;
+                        $crate::host::HostLog::log_error(
+                            &host,
+                            &format!("on_auth_success failed: {}", e),
+                        );
+                        Err(e.to_string())
+                    }
+                }
+            }
+
+            fn on_disconnect(reason: String) -> Result<(), String> {
+                match <$plugin_type as $crate::wasm::WasmPlugin>::on_disconnect(&reason) {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        let host = $crate::wasm_host::WasmHost;
+                        $crate::host::HostLog::log_error(
+                            &host,
+                            &format!("on_disconnect failed: {}", e),
+                        );
+                        Err(e.to_string())
+                    }
+                }
+            }
+
+            fn on_session_created(session_id: String) -> Result<(), String> {
+                match <$plugin_type as $crate::wasm::WasmPlugin>::on_session_created(&session_id) {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        let host = $crate::wasm_host::WasmHost;
+                        $crate::host::HostLog::log_error(
+                            &host,
+                            &format!("on_session_created failed: {}", e),
+                        );
+                        Err(e.to_string())
+                    }
+                }
+            }
+
+            fn on_session_stopped(session_id: String) -> Result<(), String> {
+                match <$plugin_type as $crate::wasm::WasmPlugin>::on_session_stopped(&session_id) {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        let host = $crate::wasm_host::WasmHost;
+                        $crate::host::HostLog::log_error(
+                            &host,
+                            &format!("on_session_stopped failed: {}", e),
+                        );
+                        Err(e.to_string())
+                    }
+                }
+            }
+        }
+
+        // ==================== manifest（原 __wasmnest_manifest） ====================
+
+        impl $crate::wasm::exports::wasmnest::plugin::manifest::Guest for $plugin_type {
+            fn get() -> String {
+                serde_json::to_string(&<$plugin_type as $crate::wasm::WasmPlugin>::manifest())
+                    .unwrap_or_else(|_| "{}".to_string())
+            }
+        }
+
+        // ==================== events-binary（v9，可选导出，宿主动态探测） ====================
+
+        impl $crate::wasm_binary::exports::wasmnest::plugin::events_binary::Guest for $plugin_type {
+            fn on_message_binary(topic: String, sender: String, payload: Vec<u8>) {
+                // 字节列 → 类型化 BusMessage（payload 为 Null，payload_binary 携带原始字节）；
+                // 无返回值：处理失败经 host-log 记录（观察型回调）
+                let msg = $crate::BusMessage {
+                    topic,
+                    sender,
+                    payload: serde_json::Value::Null,
+                    payload_binary: Some(payload),
+                    timestamp: 0,
+                };
+                if let Err(e) = <$plugin_type as $crate::wasm::WasmPlugin>::on_message_binary(&msg) {
+                    let host = $crate::wasm_host::WasmHost;
+                    $crate::host::HostLog::log_error(
+                        &host,
+                        &format!("on_message_binary failed: {}", e),
+                    );
+                }
+            }
+        }
+
+        // ==================== 组件导出 ====================
+
+        // 生成 #[no_mangle] 导出函数（command/lifecycle/... 全部 5 组接口的 cabi 导出）。
+        // 宏展开处 `$crate` 为插件依赖的 SDK：绑定类型路径经 lib.rs 的
+        // `pub use wasm::wasmnest` re-export 定位（generate! 的 default_bindings_module）
+        $crate::wasm::export!($plugin_type);
+        // v9：events-binary 可选导出的 cabi 导出（宿主动态探测，非 world 必选）
+        $crate::wasm_binary::export!($plugin_type);
+    };
+}

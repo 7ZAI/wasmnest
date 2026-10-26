@@ -1,0 +1,19 @@
+{
+  "package": "wasmnest:plugin",
+  "world": "plugin",
+  "core": "../wasmnest-lib/wasmnest-wasm-core/wit/core.wit",
+  "out": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit",
+  "caps": {
+    "pty": "../wasmnest-lib/wasmnest-pty-engine/wit/pty.wit",
+    "mdns": "../wasmnest-lib/wasmnest-discovery-engine/wit/mdns.wit",
+    "peer": "../wasmnest-lib/wasmnest-server-peer-net/wit/peer.wit",
+    "http": "../wasmnest-lib/wasmnest-server-http/wit/http.wit",
+    "ws": "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit",
+    "notify": "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit",
+    "http-endpoint": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-http.wit",
+    "ws-server": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-ws.wit",
+    "desktop": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-desktop.wit"
+  },
+  "worlds": ["plugin", "plugin-binary", "plugin-ws", "plugin-task", "plugin-auth-policy", "plugin-system", "desktop-compat"],
+  "abi": { "version": 38 }
+}

@@ -1,0 +1,49 @@
+name: Bug 报告
+description: 提交缺陷。必填：现象 / 复现 / 期望 vs 实际 / 平台与契约版本。
+title: "[bug] "
+labels: ["kind:bug"]
+body:
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象
+      description: 实际发生了什么，含报错 / 日志关键行
+      placeholder: "例如：移动端插件启用被拒，弹窗超时即拒绝……"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 最小复现；附可跑命令（含工作目录）
+      value: |
+        1.
+        2.
+        3.
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望 vs 实际
+      value: |
+        - 期望：
+        - 实际：
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 平台与版本
+      description: 桌面 / 移动 / 测试仓；契约版本（@wasmnest:plugin@x.y.z）、WIT tag、宿主版本
+      placeholder: "例如：移动端 Android；wasmnest:plugin@0.0.1"
+    validations:
+      required: true
+  - type: input
+    id: locks
+    attributes:
+      label: 相关锁 / 命令
+      description: 涉及的锁名、可复现命令（改锁 / 注册表 / WIT 时必填）
+  - type: textarea
+    id: context
+    attributes:
+      label: 已知线索
+      description: 排查到哪一步、相关 issue / 提交（owner/repo#n 或 hash）；暂缺写「待补」

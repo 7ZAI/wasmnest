@@ -1,0 +1,352 @@
+//! Heartbeat Module - Ping/Pong Keep-Alive
+//!
+//! 职责：心跳保活机制
+//! 1. 定期发送 Ping（协议层）
+//! 2. 检测 Pong 响应
+//! 3. 超时检测
+
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::{broadcast, RwLock};
+use tracing::debug;
+
+use crate::system::constants::connection::BROADCAST_CHANNEL_CAPACITY;
+use crate::system::constants::heartbeat::{DEFAULT_MAX_HEARTBEAT_TIMEOUTS, HEARTBEAT_TIMEOUT_MULTIPLIER};
+
+/// 心跳配置
+#[derive(Debug, Clone)]
+pub struct HeartbeatConfig {
+    /// 心跳间隔
+    pub interval: Duration,
+    /// 超时时间（未收到 Pong 则认为连接失效）
+    pub timeout: Duration,
+    /// 最大连续超时次数
+    pub max_timeouts: u32,
+}
+
+impl Default for HeartbeatConfig {
+    fn default() -> Self {
+        Self {
+            interval: Duration::from_secs(30),
+            timeout: Duration::from_secs(30 * HEARTBEAT_TIMEOUT_MULTIPLIER),
+            max_timeouts: DEFAULT_MAX_HEARTBEAT_TIMEOUTS,
+        }
+    }
+}
+
+impl HeartbeatConfig {
+    pub fn new(interval_secs: u64, timeout_secs: u64) -> Self {
+        Self {
+            interval: Duration::from_secs(interval_secs),
+            timeout: Duration::from_secs(timeout_secs),
+            max_timeouts: DEFAULT_MAX_HEARTBEAT_TIMEOUTS,
+        }
+    }
+}
+
+/// 心跳事件
+#[derive(Debug, Clone)]
+pub enum HeartbeatEvent {
+    /// 发送了 Ping
+    PingSent,
+    /// 收到 Pong 响应
+    PongReceived { latency_ms: u64 },
+    /// 心跳超时
+    Timeout { consecutive: u32 },
+    /// 心跳停止
+    Stopped,
+}
+
+/// 心跳管理器
+pub struct HeartbeatManager {
+    config: HeartbeatConfig,
+    /// 事件广播器
+    event_tx: broadcast::Sender<HeartbeatEvent>,
+    /// 是否正在运行
+    is_running: Arc<RwLock<bool>>,
+    /// 最后收到 Pong 的时间
+    last_pong: RwLock<Option<std::time::Instant>>,
+    /// 建连时刻（首个 Pong 到达前的超时基准，见 `is_connection_lost`）
+    connected_at: RwLock<Option<std::time::Instant>>,
+    /// 连续超时次数
+    consecutive_timeouts: RwLock<u32>,
+    /// 运行标记（用于原子操作）
+    running_flag: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl HeartbeatManager {
+    /// 创建新的心跳管理器
+    pub fn new(config: HeartbeatConfig) -> Arc<Self> {
+        let (event_tx, _) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
+        Arc::new(Self {
+            config,
+            event_tx,
+            is_running: Arc::new(RwLock::new(false)),
+            last_pong: RwLock::new(None),
+            connected_at: RwLock::new(None),
+            consecutive_timeouts: RwLock::new(0),
+            running_flag: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        })
+    }
+
+    /// 从客户端配置创建（兼容旧 API）
+    pub fn from_client_config(heartbeat_interval_secs: u64) -> Arc<Self> {
+        Self::new(HeartbeatConfig {
+            interval: Duration::from_secs(heartbeat_interval_secs),
+            timeout: Duration::from_secs(heartbeat_interval_secs * HEARTBEAT_TIMEOUT_MULTIPLIER),
+            max_timeouts: DEFAULT_MAX_HEARTBEAT_TIMEOUTS,
+        })
+    }
+
+    /// 获取配置
+    pub fn config(&self) -> &HeartbeatConfig {
+        &self.config
+    }
+
+    /// 订阅事件
+    pub fn subscribe(&self) -> broadcast::Receiver<HeartbeatEvent> {
+        self.event_tx.subscribe()
+    }
+
+    /// 记录收到 Pong（收到服务器 Pong 时调用）
+    ///
+    /// 注意：必须在 async 上下文中调用（tokio RwLock 的 blocking_write 在
+    /// 运行时任务内会 panic，见 ws_client 接收循环调用点）
+    pub async fn on_pong_received(&self) {
+        self.on_activity().await;
+        debug!("[HeartbeatManager] Pong received");
+    }
+
+    /// 记录**任意入站活动**（Pong / Ping / 业务帧 / 控制帧）
+    ///
+    /// 与 `on_pong_received` 的记账完全相同，区别只是语义：**任何**入站帧都
+    /// 证明这条链路还通。调用点：
+    /// - 终端链路（`terminal_link.rs`）：静默 shell 不产生 Pong，若只认 Pong
+    ///   会把「终端空闲」误判成「连接已死」
+    /// - 主 WS receiver（`ws_client.rs`）：Text / Binary / Ping / Pong 全部刷新
+    ///   ——Pong 通路异常时，业务帧与服务端 5s 一发的 Ping 就是兜底判活信号，
+    ///   避免「链路活着但收不到 Pong」的误判死（2026-10-16 每 2.5 分钟断线定位）
+    ///
+    /// 注意：同 `on_pong_received`，必须在 async 上下文中调用。
+    pub async fn on_activity(&self) {
+        *self.last_pong.write().await = Some(std::time::Instant::now());
+
+        // 重置连续超时计数
+        *self.consecutive_timeouts.write().await = 0;
+
+        let _ = self.event_tx.send(HeartbeatEvent::PongReceived { latency_ms: 0 });
+    }
+
+    /// 记录建连时刻：首个 Pong 到达前的半开检测基准
+    ///
+    /// 必须由调用方在 WS **握手成功后**、启动心跳循环前调用一次。缺了它，
+    /// 建连后首个 Pong 到达前（默认整整一个心跳间隔 = 30s）`last_pong` 恒为
+    /// `None`，半开连接（对端进程已死、中间 NAT 仍维持 TCP）既不因
+    /// `send(Ping)` 报错、也不被判超时 → 死连接可以无限期挂着。
+    pub async fn mark_connected(&self) {
+        *self.connected_at.write().await = Some(std::time::Instant::now());
+        *self.last_pong.write().await = None;
+        *self.consecutive_timeouts.write().await = 0;
+    }
+
+    /// 检查是否应该认为连接已断开
+    ///
+    /// 基准二选一：收到过 Pong 用 `last_pong`；尚未收到（首个心跳周期内）用
+    /// 建连时刻 `connected_at`。两者都无 = 心跳循环从未启动，判定交由调用方。
+    pub async fn is_connection_lost(&self) -> bool {
+        if let Some(last) = *self.last_pong.read().await {
+            return last.elapsed() > self.config.timeout;
+        }
+        if let Some(connected) = *self.connected_at.read().await {
+            return connected.elapsed() > self.config.timeout;
+        }
+        false
+    }
+
+    /// 停止心跳
+    pub async fn stop(&self) {
+        self.running_flag.store(false, std::sync::atomic::Ordering::SeqCst);
+        let mut running = self.is_running.write().await;
+        *running = false;
+    }
+
+    /// 检查是否正在运行
+    pub async fn is_running(&self) -> bool {
+        *self.is_running.read().await
+    }
+
+    /// 获取连续超时次数
+    pub async fn get_consecutive_timeouts(&self) -> u32 {
+        *self.consecutive_timeouts.read().await
+    }
+
+    /// 增加超时计数
+    pub async fn increment_timeout(&self) -> u32 {
+        let mut count = self.consecutive_timeouts.write().await;
+        *count += 1;
+        *count
+    }
+}
+
+impl Default for HeartbeatManager {
+    fn default() -> Self {
+        Self {
+            config: HeartbeatConfig::default(),
+            event_tx: broadcast::channel(BROADCAST_CHANNEL_CAPACITY).0,
+            is_running: Arc::new(RwLock::new(false)),
+            last_pong: RwLock::new(None),
+            connected_at: RwLock::new(None),
+            consecutive_timeouts: RwLock::new(0),
+            running_flag: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+}
+
+// ==================== 单元测试 ====================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config_values() {
+        // 默认：间隔 30s，超时 = 间隔 × 3 = 90s，最大连续超时 3 次
+        let cfg = HeartbeatConfig::default();
+        assert_eq!(cfg.interval, Duration::from_secs(30));
+        assert_eq!(cfg.timeout, Duration::from_secs(90));
+        assert_eq!(cfg.max_timeouts, DEFAULT_MAX_HEARTBEAT_TIMEOUTS);
+    }
+
+    #[test]
+    fn test_from_client_config_applies_timeout_multiplier() {
+        // 旧 API 兼容入口：超时时间 = 间隔 × HEARTBEAT_TIMEOUT_MULTIPLIER
+        let mgr = HeartbeatManager::from_client_config(10);
+        let cfg = mgr.config();
+        assert_eq!(cfg.interval, Duration::from_secs(10));
+        assert_eq!(cfg.timeout, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn test_new_config_preserves_custom_values() {
+        // 显式构造：间隔/超时按参数设置，最大超时次数保持默认
+        let mgr = HeartbeatManager::new(HeartbeatConfig::new(5, 20));
+        let cfg = mgr.config();
+        assert_eq!(cfg.interval, Duration::from_secs(5));
+        assert_eq!(cfg.timeout, Duration::from_secs(20));
+        assert_eq!(cfg.max_timeouts, DEFAULT_MAX_HEARTBEAT_TIMEOUTS);
+    }
+
+    #[tokio::test]
+    async fn test_increment_timeout_sequence() {
+        // 连续超时计数从 1 递增，供调用方对照 max_timeouts 判定断连
+        let mgr = HeartbeatManager::new(HeartbeatConfig::default());
+        assert_eq!(mgr.increment_timeout().await, 1);
+        assert_eq!(mgr.increment_timeout().await, 2);
+        assert_eq!(mgr.increment_timeout().await, 3);
+        assert_eq!(mgr.get_consecutive_timeouts().await, 3);
+    }
+
+    #[tokio::test]
+    async fn test_pong_received_resets_timeouts_and_emits_event() {
+        // 收到 Pong：连续超时计数清零，并广播 PongReceived 事件（latency 目前恒为 0）
+        let mgr = HeartbeatManager::new(HeartbeatConfig::default());
+        mgr.increment_timeout().await;
+        mgr.increment_timeout().await;
+
+        let mut rx = mgr.subscribe();
+        mgr.on_pong_received().await;
+        assert_eq!(mgr.get_consecutive_timeouts().await, 0);
+        match rx.recv().await {
+            Ok(HeartbeatEvent::PongReceived { latency_ms }) => assert_eq!(latency_ms, 0),
+            other => panic!("期望 PongReceived 事件，实际: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_multiple_subscribers_all_receive_pong_event() {
+        // broadcast 语义：所有订阅者都能收到同一事件
+        let mgr = HeartbeatManager::new(HeartbeatConfig::default());
+        let mut rx1 = mgr.subscribe();
+        let mut rx2 = mgr.subscribe();
+        mgr.on_pong_received().await;
+        assert!(matches!(rx1.recv().await, Ok(HeartbeatEvent::PongReceived { .. })));
+        assert!(matches!(rx2.recv().await, Ok(HeartbeatEvent::PongReceived { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_connection_lost_false_when_never_marked_connected() {
+        // 心跳循环从未启动（既无 mark_connected 也无 Pong）：判定权交还调用方，
+        // 本管理器不擅自判死。契约：两个基准都缺 → 不算断连
+        let mgr = HeartbeatManager::new(HeartbeatConfig::default());
+        assert!(!mgr.is_connection_lost().await);
+    }
+
+    #[tokio::test]
+    async fn test_connection_lost_becomes_true_after_mark_connected_without_pong() {
+        // 回归锁（2026-10-04 审计 P1-3）：建连后**首个 Pong 到达前**的半开检测。
+        // 旧实现 `last_pong == None => false` 让这段窗口内的检测完全失效——TCP 半开时
+        // send(Ping) 只写本地缓冲区并成功返回，两条判据都不触发，死连接无限期挂着。
+        // 修复后基准回落到建连时刻，超时即判死。
+        //
+        // timeout 取 1ms + 30ms 真实等待（Instant 无注入缝，与既有超时用例同款取法）
+        let mgr = HeartbeatManager::new(HeartbeatConfig {
+            interval: Duration::from_secs(1),
+            timeout: Duration::from_millis(1),
+            max_timeouts: DEFAULT_MAX_HEARTBEAT_TIMEOUTS,
+        });
+        mgr.mark_connected().await;
+        assert!(!mgr.is_connection_lost().await, "刚建连不应立即判死");
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert!(
+            mgr.is_connection_lost().await,
+            "建连后未收到任何 Pong 且已超时应判死（半开检测不得失效）"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_mark_connected_resets_pong_baseline_and_timeout_count() {
+        // mark_connected 是新一轮建连的起点：清掉上一轮的 Pong 基准与超时计数，
+        // 否则重连后会沿用旧连接的 elapsed 而立即误判（或沿用旧计数直接触顶）
+        let mgr = HeartbeatManager::new(HeartbeatConfig::default());
+        mgr.on_pong_received().await;
+        mgr.increment_timeout().await;
+        mgr.increment_timeout().await;
+        mgr.mark_connected().await;
+        assert_eq!(mgr.get_consecutive_timeouts().await, 0);
+        // 旧 Pong 基准已清空 → 判定回落到建连时刻，默认 90s 超时下不判死
+        assert!(!mgr.is_connection_lost().await);
+    }
+
+    #[tokio::test]
+    async fn test_connection_lost_false_right_after_pong() {
+        // 刚收到 Pong：elapsed 远小于 timeout，不算断连
+        let mgr = HeartbeatManager::new(HeartbeatConfig::new(30, 30));
+        mgr.on_pong_received().await;
+        assert!(!mgr.is_connection_lost().await);
+    }
+
+    #[tokio::test]
+    async fn test_connection_lost_true_after_timeout_elapses() {
+        // 超时后判定断连。last_pong 使用 std::time::Instant，无注入缝，
+        // 只能构造极小超时（1ms）做一次最小真实等待
+        let mgr = HeartbeatManager::new(HeartbeatConfig {
+            interval: Duration::from_secs(1),
+            timeout: Duration::from_millis(1),
+            max_timeouts: DEFAULT_MAX_HEARTBEAT_TIMEOUTS,
+        });
+        mgr.on_pong_received().await;
+        assert!(!mgr.is_connection_lost().await);
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert!(mgr.is_connection_lost().await);
+    }
+
+    #[tokio::test]
+    async fn test_stop_is_idempotent() {
+        // 停止可重复调用，不 panic；运行标记恒为 false（管理器为被动组件，
+        // 运行循环在 ws_client 侧，此处仅验证 stop 路径稳定）
+        let mgr = HeartbeatManager::new(HeartbeatConfig::default());
+        mgr.stop().await;
+        mgr.stop().await;
+        assert!(!mgr.is_running().await);
+    }
+}

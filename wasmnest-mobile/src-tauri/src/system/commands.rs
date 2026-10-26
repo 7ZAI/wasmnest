@@ -1,0 +1,49 @@
+//! Shared System Commands
+//!
+//! 桌面端和移动端共享的系统命令
+//!
+//! 本地配对码命令（生成 / 读取 / 校验 / 清除）已于票 14 随
+//! `connection::pairing_service` 一并退役——移动端不再是配对码颁发方，配对码由
+//! 桌面端生成、移动端只做提交（`commands::auth::ws_verify_pairing_code`）。
+
+use tauri::Manager;
+
+// ==================== Settings Commands ====================
+
+/// 获取应用设置
+#[tauri::command]
+pub async fn get_app_settings(app_handle: tauri::AppHandle) -> crate::Result<crate::system::config::AppConfig> {
+    let config_path = app_handle
+        .path()
+        .app_data_dir()
+        .map(|p| p.join("config.json"))
+        .map_err(|e: tauri::Error| crate::AppError::Config(e.to_string()))?;
+
+    crate::system::config::AppConfig::load(&config_path).map_err(|e| crate::AppError::Config(e.to_string()))
+}
+
+/// 保存应用设置
+#[tauri::command]
+pub async fn save_app_settings(
+    app_handle: tauri::AppHandle,
+    settings: crate::system::config::AppConfig,
+) -> crate::Result<()> {
+    let config_path = app_handle
+        .path()
+        .app_data_dir()
+        .map(|p| p.join("config.json"))
+        .map_err(|e: tauri::Error| crate::AppError::Config(e.to_string()))?;
+
+    settings.save(&config_path)?;
+
+    tracing::info!("App settings saved to {:?}", config_path);
+    Ok(())
+}
+
+// ==================== Utility Commands ====================
+
+/// 测试命令
+#[tauri::command]
+pub fn ping() -> String {
+    "pong".to_string()
+}

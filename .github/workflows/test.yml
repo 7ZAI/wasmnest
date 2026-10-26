@@ -1,0 +1,500 @@
+# ==============================================================================
+# 平台仓测试 CI（issue #13 / spec §4.2–§4.4）
+#
+# 分层口径（与应用仓 ci.yml 的 ref 口径一致）：
+#  - PR required（node 层 + Rust 快检）：
+#      check-wit / node-root / node-desktop / node-mobile / rust-check (desktop|mobile)
+#  - main 线推送 + nightly（不进 PR 阻断）：
+#      rust-full = 双端全量 `cargo test`，含需要 `resources/plugins/**` 随包产物的
+#      e2e（pty / ws / http / app-bundle / session / monitor ……，见各测试头注释，
+#      产物缺失时它们按设计 fail-visible 直接红）。跑前先 `plugins:build` 重建产物。
+#
+# 跨仓检出口径（**跟 ref 不钉 tag**）：
+#  - 能力仓 `../wasmnest-lib`（WIT 真源 + Cargo path 依赖 + 根脚本跨仓锁）与应用仓
+#    `../wasmnest-apps`（双端宿主测试的跨仓读取面：桌面 hostAppBoundaryLock /
+#    i18nDriftLock 等读 app 源码；移动 vitest `@apps` 别名；随包产物源码）
+#    按兄弟目录检出，默认 `dev`；
+#  - CI 只做校验——按 `release-manifest.json` 钉住精确 tag 是**发布流水线**的事
+#    （host-release / app-release）；开发期钉 tag 会让依赖未发 tag 的 lib 改动
+#    长期误红 `check:wit`；
+#  - ref 可配：workflow_dispatch input > 仓库变量 `WASMNEST_LIB_REF` /
+#    `WASMNEST_APPS_REF` > `dev`；
+#  - 三仓均公开，匿名克隆即可；若转私有，参照应用仓 `fetch-cross-repo.mjs` 的
+#    `CROSS_REPO_TOKEN` extraheader 方案补鉴权。
+#
+# 刻意不进本 workflow 的门禁：
+#  - `check:manifest`：判据 2/6 要求 `../wasmnest-lib` / `../wasmnest-apps` 的 HEAD
+#    **正好是 manifest 钉住的 tag 且工作树干净**——开发分支必然红。留给发布 /
+#    tag 流水线（或显式按 `repos.*.tag` detached checkout 后再跑）。
+#  - husky pre-commit（WIT 锁 + eslint + check:links）与 CI 重复是 **by design**：
+#    钩子可被跳过，CI 不可。
+#
+# 分支说明：远端当前只有 `dev`（默认分支，即主线）；`main` 出现后 push 触发自然生效。
+#
+# 时长口径（spec §4.3）：node 层目标 ≤ 10 分钟；Rust 首跑不限（wasmtime 48 编译
+# 大头），sccache 命中后目标 ≤ 30 分钟，达不到先拆 job 再谈优化。
+# ==============================================================================
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+  schedule:
+    # nightly 03:30 北京时间（UTC 19:30）：跑 rust-full 全量面
+    - cron: '30 19 * * *'
+  workflow_dispatch:
+    inputs:
+      lib_ref:
+        description: 'wasmnest-lib 检出 ref（默认 dev）'
+        type: string
+        default: 'dev'
+      apps_ref:
+        description: 'wasmnest-apps 检出 ref（默认 dev）'
+        type: string
+        default: 'dev'
+      rust_full:
+        description: '本次手跑是否执行 rust-full（全量 cargo test + 随包产物 e2e）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 跨仓 ref：input（手跑）> 仓库变量 > dev。PR / push / schedule 上 inputs.* 为空。
+  WASMNEST_LIB_REF: ${{ inputs.lib_ref || vars.WASMNEST_LIB_REF || 'dev' }}
+  WASMNEST_APPS_REF: ${{ inputs.apps_ref || vars.WASMNEST_APPS_REF || 'dev' }}
+  # sccache：根 .cargo/config.toml 强制 rustc-wrapper=sccache（未装则 cargo 直接
+  # 失败，显性失败设计）；CI 磁盘有限压 2GiB，CARGO_BUILD_JOBS 与既有 workflow 口径一致
+  SCCACHE_CACHE_SIZE: '2147483648'
+  CARGO_BUILD_JOBS: '4'
+
+defaults:
+  run:
+    # 平台仓检出到 <workspace>/wasmnest，兄弟目录 wasmnest-lib / wasmnest-apps
+    # 由各 job 自行克隆（R1 同场布局，平台脚本的相对路径解析依赖它）
+    working-directory: wasmnest
+
+jobs:
+  # ---------------------------------------------------------------- WIT 漂移锁
+  check-wit:
+    name: check-wit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 检出能力仓（兄弟目录，跟 ref 不钉 tag）
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WASMNEST_LIB_REF" \
+            https://github.com/7ZAI/wasmnest-lib.git ../wasmnest-lib
+          echo "wasmnest-lib @ $WASMNEST_LIB_REF"
+
+      # 纯 node 脚本（compose-wit.mjs 只依赖 node 内建模块），无需 pnpm install
+      - name: WIT 拼装漂移锁（= husky 判据 / pnpm run check:wit）
+        run: node scripts/compose-wit.mjs --all --check
+
+  # ------------------------------------------------- 根：脚本自测 + eslint + 死链
+  node-root:
+    name: node-root
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: wasmnest/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: wasmnest/pnpm-lock.yaml
+
+      # 根脚本自测含跨仓锁（crate-structure-lock / sdk-package-contents 经
+      # lib-paths.mjs 读能力仓），fresh checkout 必须有兄弟目录 ../wasmnest-lib
+      - name: 检出能力仓（兄弟目录，跟 ref 不钉 tag）
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WASMNEST_LIB_REF" \
+            https://github.com/7ZAI/wasmnest-lib.git ../wasmnest-lib
+
+      - name: 根依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 根脚本自测（node --test scripts/*.test.mjs）
+        run: pnpm run test:run
+
+      # 0-error 基准（与 husky pre-commit 的 --quiet 口径一致；根 eslint.config.js
+      # 单根覆盖双端 src / packages）
+      - name: eslint（双端 src，0 error 口径）
+        run: pnpm exec eslint .
+
+      - name: markdown 死链锁（issue #14）
+        run: pnpm run check:links
+
+  # ---------------------------------------------------------------- 桌面 node 层
+  node-desktop:
+    name: node-desktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: wasmnest/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: wasmnest/wasmnest-desktop/pnpm-lock.yaml
+
+      # 桌面宿主测试有跨仓读取面（hostAppBoundaryLock / i18nDriftLock /
+      # appChromeLock / pageTransition / pluginWatchCopy 读应用仓源码），fresh
+      # checkout 必须有兄弟目录 ../wasmnest-apps（与应用仓 ci.yml 的跨仓装配同理）
+      - name: 检出应用仓（兄弟目录，跟 ref 不钉 tag）
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WASMNEST_APPS_REF" \
+            https://github.com/7ZAI/wasmnest-apps.git ../wasmnest-apps
+          echo "wasmnest-apps @ $WASMNEST_APPS_REF"
+
+      - name: 桌面端依赖（独立 workspace）
+        working-directory: wasmnest/wasmnest-desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: vue-tsc --noEmit
+        working-directory: wasmnest/wasmnest-desktop
+        run: pnpm exec vue-tsc --noEmit
+
+      # 宿主 src/__tests__ + 桌面 SDK 契约测试；禁止 watch（一律 test:run）
+      - name: vitest（宿主 + SDK 契约）
+        working-directory: wasmnest/wasmnest-desktop
+        run: pnpm run test:run
+
+      # dev-shell 漂移锁（contractDrift / visualParity / hostStyleParity）只在 SDK 包
+      # 自身 vitest 配置里，宿主根 test:run 不覆盖——补跑（此前仅随 sdk-publish
+      # 发布链执行，PR 门禁看不到）
+      - name: vitest（SDK dev-shell 漂移锁）
+        working-directory: wasmnest/wasmnest-desktop/packages/plugin-sdk-desktop
+        run: pnpm run test:run
+
+  # ---------------------------------------------------------------- 移动 node 层
+  node-mobile:
+    name: node-mobile
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: wasmnest/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: wasmnest/wasmnest-mobile/pnpm-lock.yaml
+
+      # 移动 vitest 的 `@apps` 别名跨仓读应用源码（file-transfer 组合件桥测试、
+      # i18n 副本对账）——fresh checkout 必须有兄弟目录 ../wasmnest-apps
+      - name: 检出应用仓（兄弟目录，跟 ref 不钉 tag）
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WASMNEST_APPS_REF" \
+            https://github.com/7ZAI/wasmnest-apps.git ../wasmnest-apps
+          echo "wasmnest-apps @ $WASMNEST_APPS_REF"
+
+      - name: 移动端依赖（独立工程 workspace）
+        working-directory: wasmnest/wasmnest-mobile
+        run: pnpm install --frozen-lockfile
+
+      # 移动 SDK 是独立 workspace（不属移动端 workspace 成员），但移动 tsconfig 的
+      # include 覆盖 `packages/plugin-sdk-mobile/src/**`（vue-tsc 要解析 SDK 的
+      # devDeps，如 vite-plugin.ts 的 magic-string）；测试侧对包名的解析走
+      # exports → dist。依赖 + dist 都补齐，口径同应用仓 CI 的 prepare-platform.mjs。
+      - name: 移动 SDK 依赖 + dist（vue-tsc / vitest 解析面）
+        working-directory: wasmnest/wasmnest-mobile/packages/plugin-sdk-mobile
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      # 跨仓读取的 app 源码（@apps）会 bare import `@binblink/wasmnest-plugin-sdk-mobile`
+      # 的子路径（如 file-transfer 的 /ui/swipe-tabs）——vite 从**应用工程目录**向上
+      # 解析 node_modules（file: 链到平台 SDK），所以应用工程的依赖也要装（口径同
+      # 应用仓 ci.yml 的逐工程安装）。
+      - name: 安装应用仓 mobile 工程依赖
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for pkg in ../wasmnest-apps/apps/*/mobile/package.json \
+                     ../wasmnest-apps/servers/*/mobile/package.json; do
+            dir="$(dirname "$pkg")"
+            echo "::group::pnpm install $dir"
+            (cd "$dir" && pnpm install --frozen-lockfile)
+            echo "::endgroup::"
+          done
+
+      - name: vue-tsc --noEmit
+        working-directory: wasmnest/wasmnest-mobile
+        run: pnpm exec vue-tsc --noEmit
+
+      - name: vitest（宿主测试树）
+        working-directory: wasmnest/wasmnest-mobile
+        run: pnpm run test:run
+
+      # 移动 SDK 契约测试（cli 白名单回归 / componentize 落点 / dev-shell 漂移锁）：
+      # 此前本仓 CI 永不执行（sdk-publish.yml 写死 --target desktop），PR 门禁补上
+      - name: vitest（SDK 契约 + dev-shell 漂移锁）
+        working-directory: wasmnest/wasmnest-mobile/packages/plugin-sdk-mobile
+        run: pnpm run test:run
+
+  # ----------------------------------------------------- Rust PR 层：check + 快速锁
+  # 全量 cargo test 与随包产物 e2e 在 rust-full（push / nightly / 手跑），不进 PR 阻断
+  rust-check:
+    name: rust-check (${{ matrix.end }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        end: [desktop, mobile]
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 1
+
+      - name: 安装 Linux 宿主系统依赖（WebKitGTK / 构建工具，两端宿主 crate 同一套）
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            libappindicator3-dev librsvg2-dev patchelf \
+            libsoup-3.0-dev libssl-dev pkg-config libgtk-3-dev build-essential
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # 根 .cargo/config.toml 强制 rustc-wrapper=sccache：没装则一切 cargo 命令直接失败
+      - uses: mozilla-actions/sccache-action@v0.0.9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 检出能力仓（Cargo path 依赖 + WIT 真源，兄弟目录）
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WASMNEST_LIB_REF" \
+            https://github.com/7ZAI/wasmnest-lib.git ../wasmnest-lib
+
+      # SDK `rust/wit/` 是生成物：cargo 编译 SDK crate 前必须拼装（node 纯脚本）
+      - name: 拼装双端 WIT 生成物
+        run: node scripts/compose-wit.mjs --all
+
+      - name: cargo fmt --check（块 6 门禁；格式化基线 = 646fe5a，后续格式化改动单独提交）
+        working-directory: wasmnest/wasmnest-${{ matrix.end }}/src-tauri
+        run: cargo fmt -- --check
+
+      - name: cargo check
+        working-directory: wasmnest/wasmnest-${{ matrix.end }}/src-tauri
+        run: cargo check
+
+      # 快速锁测试：结构 / 边界 / 退役面 / 契约一致性等**不需要随包产物**的锁
+      # （随包产物 e2e 一律留在 rust-full）。名单增删时同步本注释与
+      # docs/testing.md §3。
+      - name: 快速锁测试（desktop）
+        if: matrix.end == 'desktop'
+        working-directory: wasmnest/wasmnest-desktop/src-tauri
+        run: |
+          cargo test \
+            --test capability_crates_no_product_ids \
+            --test capabilities_lock \
+            --test wit_package_version_lock \
+            --test domain_contract_structure_locks \
+            --test empty_dir_lock \
+            --test host_module_desc_noun_lock \
+            --test l2_gating_lock \
+            --test lifecycle_command_registration_lock \
+            --test retired_session_command_lock \
+            --test wasm_core_whole_crate_lock \
+            --test error_envelope_ipc
+
+      - name: 快速锁测试（mobile）
+        if: matrix.end == 'mobile'
+        working-directory: wasmnest/wasmnest-mobile/src-tauri
+        run: |
+          cargo test \
+            --test command_registration_completeness_lock \
+            --test egress_tier_mapping_single_point_lock \
+            --test kernel_schema_single_truth_lock \
+            --test mobile_manifest_kind_lock \
+            --test mobile_wit_composition_lock \
+            --test outbound_egress_gate_coverage_lock \
+            --test host_module_desc_noun_lock \
+            --test monitor_plugin_meta_lock \
+            --test peer_engine_consolidation_lock \
+            --test plugin_storage_db_backed_lock \
+            --test service_lease_assembly_lock \
+            --test mobile_host_websocket_client_domain_lock \
+            --test retired_mobile_host_terminal_hooks_lock \
+            --test retired_mobile_mdns_advertise_lock
+
+  # ------------------------------- Rust 全量层：随包产物 e2e + 全量 cargo test（不进 PR 阻断）
+  # 触发：push 到 main/dev、nightly、workflow_dispatch 勾选 rust_full。
+  # 依赖链最重的一条：检三仓 → 拼装 WIT → 构建双端 SDK dist → 装应用工程 →
+  # 重建随包插件产物（desktop 需 pinned wasip3 nightly）→ 双端全量 cargo test。
+  rust-full:
+    name: rust-full (${{ matrix.end }})
+    if: github.event_name == 'push' || github.event_name == 'schedule' || inputs.rust_full == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        end: [desktop, mobile]
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 1
+
+      - name: 安装 Linux 宿主系统依赖（WebKitGTK / 构建工具）
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            libappindicator3-dev librsvg2-dev patchelf \
+            libsoup-3.0-dev libssl-dev pkg-config libgtk-3-dev build-essential
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: wasmnest/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            wasmnest/wasmnest-desktop/pnpm-lock.yaml
+            wasmnest/wasmnest-mobile/pnpm-lock.yaml
+
+      - name: 检出能力仓 + 应用仓（兄弟目录）
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WASMNEST_LIB_REF" \
+            https://github.com/7ZAI/wasmnest-lib.git ../wasmnest-lib
+          git clone --depth 1 --branch "$WASMNEST_APPS_REF" \
+            https://github.com/7ZAI/wasmnest-apps.git ../wasmnest-apps
+
+      - name: 拼装双端 WIT 生成物
+        run: node scripts/compose-wit.mjs --all
+
+      # SDK dist 不入库但被两侧消费：应用前端 / vite 插件（file: 链接进各应用工程）、
+      # 移动插件 CLI（wasmnest-plugin build）。口径同应用仓 CI 的 prepare-platform.mjs
+      - name: 构建桌面 SDK dist（随包产物前置）
+        if: matrix.end == 'desktop'
+        run: |
+          set -euo pipefail
+          pnpm --dir wasmnest-desktop install --frozen-lockfile
+          pnpm --dir wasmnest-desktop --filter '@binblink/wasmnest-plugin-sdk-desktop' run build
+
+      - name: 构建移动 SDK dist（插件 CLI 前置）
+        if: matrix.end == 'mobile'
+        run: |
+          set -euo pipefail
+          pnpm --dir wasmnest-mobile/packages/plugin-sdk-mobile install --frozen-lockfile
+          pnpm --dir wasmnest-mobile/packages/plugin-sdk-mobile run build
+
+      # 每个应用工程是独立 workspace，逐一安装（口径同应用仓 ci.yml）
+      - name: 安装应用工程依赖（desktop）
+        if: matrix.end == 'desktop'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for pkg in ../wasmnest-apps/apps/*/desktop/package.json \
+                     ../wasmnest-apps/servers/*/desktop/package.json; do
+            dir="$(dirname "$pkg")"
+            echo "::group::pnpm install $dir"
+            (cd "$dir" && pnpm install --frozen-lockfile)
+            echo "::endgroup::"
+          done
+
+      - name: 安装应用工程依赖（mobile）
+        if: matrix.end == 'mobile'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for pkg in ../wasmnest-apps/apps/*/mobile/package.json \
+                     ../wasmnest-apps/servers/*/mobile/package.json; do
+            dir="$(dirname "$pkg")"
+            echo "::group::pnpm install $dir"
+            (cd "$dir" && pnpm install --frozen-lockfile)
+            echo "::endgroup::"
+          done
+
+      # 桌面一般应用走 wasm32-wasip3（pinned nightly 单一事实源 =
+      # scripts/wasip3-toolchain.sh；CI 直连官方 rustup 源，不用脚本默认的 USTC 镜像）。
+      # rustup override 只作用于应用仓目录：应用 wasm 构建用 nightly，宿主 cargo test 仍是 stable。
+      - name: wasip3 工具链（desktop 专用）
+        if: matrix.end == 'desktop'
+        run: |
+          set -euo pipefail
+          export RUSTUP_DIST_SERVER=https://static.rust-lang.org
+          export RUSTUP_UPDATE_ROOT=https://static.rust-lang.org/rustup
+          bash scripts/wasip3-toolchain.sh install
+          nightly="$(sed -n 's/^WASIP3_NIGHTLY="${WASIP3_NIGHTLY:-\(nightly-[0-9-]*\)}"$/\1/p' scripts/wasip3-toolchain.sh)"
+          if [ -z "$nightly" ]; then
+            echo "::error::无法从 scripts/wasip3-toolchain.sh 解析 pinned nightly（脚本头注格式变了？）"
+            exit 1
+          fi
+          rustup target add wasm32-unknown-unknown --toolchain "$nightly"
+          rustup override set "$nightly" --path ../wasmnest-apps
+
+      - name: wasm unknown-unknown target（mobile 专用）
+        if: matrix.end == 'mobile'
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: 重建随包插件产物（plugins:build）
+        run: pnpm --dir wasmnest-${{ matrix.end }} run plugins:build
+
+      - name: 全量 cargo test（含随包产物 e2e）
+        working-directory: wasmnest/wasmnest-${{ matrix.end }}/src-tauri
+        run: cargo test

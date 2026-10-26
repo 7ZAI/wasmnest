@@ -1,0 +1,38 @@
+{
+  "id": "com.wasmnest.sdk-test",
+  "name": "SDK Test Plugin",
+  "version": "0.0.1",
+  "platform": "desktop",
+  "description": "SDK component bindings test plugin",
+  "author": "WasmNest",
+  "main": "index.js",
+  "sandbox": "inline",
+  "pluginType": "rust-ts",
+  "rustLibrary": "wasmnest_plugin_sdk_test",
+  "permissions": [
+    "storage",
+    "broadcast",
+    "terminal:input",
+    "terminal:output",
+    "session:read",
+    "auth"
+  ],
+  "api": [
+    "com.wasmnest.sdk-test.echo",
+    "com.wasmnest.sdk-test.fail"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "test.echo",
+        "title": "Echo"
+      }
+    ],
+    "views": [],
+    "lifecycle": {
+      "onStartup": false,
+      "onShutdown": false
+    },
+    "provides": []
+  }
+}

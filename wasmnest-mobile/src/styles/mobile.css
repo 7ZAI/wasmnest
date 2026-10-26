@@ -1,0 +1,917 @@
+/* ============================================
+   移动端主题变量
+   ============================================ */
+
+/* 深色模式（默认） - 与桌面端 warm 色板深色同源
+   （bg-page #15130F / bg-sidebar #191712 / bg-card #1D1A15 / bg-hover #2A261E，墨纸体系） */
+:root {
+  /* 背景色 - 与桌面端同名 token 对齐（tertiary 取 border-strong 色调，作强内嵌面） */
+  --mobile-bg-primary: #15130F;
+  --mobile-bg-secondary: #191712;
+  --mobile-bg-tertiary: #3C372B;
+  --mobile-bg-card: #1D1A15;
+  --mobile-bg-elevated: #2A261E;
+
+  /* 卡片阴影 */
+  --mobile-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --mobile-card-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --mobile-card-shadow-connected: 0 2px 12px rgba(34, 197, 94, 0.15), 0 1px 3px rgba(0, 0, 0, 0.2);
+
+  /* 文字色 - 与桌面端 warm 深色 text token 同源 */
+  --mobile-text-primary: #ECE8DC;
+  --mobile-text-secondary: #9C9482;
+  --mobile-text-muted: #6B6455;
+  --mobile-text-disabled: #55503F;
+
+  /* 强调色上的文字 */
+  --mobile-text-on-accent: #15130F;
+  --mobile-border: rgba(236, 232, 220, 0.1);
+  --mobile-border-hover: rgba(236, 232, 220, 0.2);
+  --mobile-border-active: rgba(236, 232, 220, 0.3);
+
+  /* 强调色 - 与桌面端 warm 色板 primary 同源 */
+  --mobile-accent: #ECE8DC;
+  --mobile-accent-muted: rgba(236, 232, 220, 0.12);
+  --mobile-accent-secondary: rgba(236, 232, 220, 0.2);
+
+  /* 状态色 - 与桌面端语义色同源（success #22C55E / warning #F59E0B / danger #EF4444） */
+  --mobile-success: #22C55E;
+  --mobile-success-muted: rgba(34, 197, 94, 0.14);
+  --mobile-success-connected-bg: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(21, 128, 61, 0.18));
+  --mobile-success-connected-border: rgba(34, 197, 94, 0.2);
+  --mobile-warning: #f59e0b;
+  --mobile-warning-muted: rgba(245, 158, 11, 0.1);
+  --mobile-error: #ef4444;
+  --mobile-error-muted: rgba(239, 68, 68, 0.1);
+
+  /* 弹窗遮罩 */
+  --mobile-overlay: rgba(0, 0, 0, 0.6);
+  --mobile-overlay-heavy: rgba(0, 0, 0, 0.8);
+  --mobile-overlay-light: rgba(0, 0, 0, 0.4);
+
+  /* 终端色 - 终端区保持比页面更深一档的暖黑 */
+  --mobile-terminal-bg: #0F0D0A;
+  --mobile-terminal-header: rgba(29, 26, 21, 0.9);
+
+  /* 导航栏（激活色跟随主色 --mobile-accent：palette 切换时指示条/激活态同步变色，warm 下与主色同值不变） */
+  --mobile-nav-bg: rgba(21, 19, 15, 0.9);
+  --mobile-nav-border: rgba(236, 232, 220, 0.2);
+  --mobile-nav-active: var(--mobile-accent);
+  --mobile-nav-inactive: #6B6455;
+
+  /* 输入框 - 终端输入区专属配色，比终端输出区稍亮 */
+  --mobile-input-bg: #1D1A15;
+  --mobile-input-border: rgba(236, 232, 220, 0.25);
+  --mobile-input-focus: rgba(236, 232, 220, 0.45);
+  --mobile-input-placeholder: #55503F;
+
+  /* 触控目标最小尺寸（恒常值，不随屏幕缩放） */
+  --mobile-input-height: 44px;
+  --mobile-nav-item-height: 44px;
+  --mobile-touch-target-min: 44px;
+
+  /* 代码查看器 */
+  --mobile-code-gutter-bg: rgba(236, 232, 220, 0.04);
+  --mobile-code-gutter-border: rgba(156, 148, 130, 0.15);
+  --mobile-code-gutter-color: rgba(156, 148, 130, 0.5);
+
+  /* 快捷键面板功能色 */
+  /* 快捷键/命令 chip：墨纸主题强调色（与 send 同源），Enter/Del 保留 confirm/danger 语义色 */
+  --mobile-shortcut-color: #ECE8DC;
+  --mobile-shortcut-bg: linear-gradient(135deg, rgba(236, 232, 220, 0.12), rgba(236, 232, 220, 0.06));
+  --mobile-shortcut-border: rgba(236, 232, 220, 0.3);
+  --mobile-shortcut-active-bg: linear-gradient(135deg, rgba(236, 232, 220, 0.28), rgba(236, 232, 220, 0.16));
+
+  --mobile-custom-cmd-color: #ECE8DC;
+  --mobile-custom-cmd-bg: linear-gradient(135deg, rgba(236, 232, 220, 0.12), rgba(236, 232, 220, 0.06));
+  --mobile-custom-cmd-border: rgba(236, 232, 220, 0.3);
+  --mobile-custom-cmd-active-bg: linear-gradient(135deg, rgba(236, 232, 220, 0.28), rgba(236, 232, 220, 0.16));
+  --mobile-arrow-color: #F59E0B;
+  --mobile-arrow-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.06));
+  --mobile-arrow-border: rgba(245, 158, 11, 0.35);
+  --mobile-arrow-active-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(245, 158, 11, 0.16));
+  --mobile-send-color: #ECE8DC;
+  --mobile-send-bg: linear-gradient(135deg, rgba(236, 232, 220, 0.12), rgba(236, 232, 220, 0.06));
+  --mobile-send-border: rgba(236, 232, 220, 0.3);
+  --mobile-send-active-bg: linear-gradient(135deg, rgba(236, 232, 220, 0.28), rgba(236, 232, 220, 0.16));
+  --mobile-execute-color: #F59E0B;
+  --mobile-execute-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.06));
+  --mobile-execute-border: rgba(245, 158, 11, 0.35);
+  --mobile-execute-active-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(245, 158, 11, 0.16));
+  --mobile-add-cmd-color: #ECE8DC;
+  --mobile-add-cmd-bg: linear-gradient(135deg, rgba(236, 232, 220, 0.12), rgba(236, 232, 220, 0.06));
+  --mobile-add-cmd-border: rgba(236, 232, 220, 0.5);
+  --mobile-add-cmd-active-bg: linear-gradient(135deg, rgba(236, 232, 220, 0.28), rgba(236, 232, 220, 0.16));
+  --mobile-edit-cmd-color: #F59E0B;
+  --mobile-edit-cmd-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.06));
+  --mobile-edit-cmd-border: rgba(245, 158, 11, 0.35);
+  --mobile-edit-cmd-active-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(245, 158, 11, 0.16));
+  --mobile-danger-color: #EF4444;
+  --mobile-danger-bg: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.06));
+  --mobile-danger-border: rgba(239, 68, 68, 0.5);
+  --mobile-danger-solid-bg: rgba(239, 68, 68, 0.9);
+  --mobile-confirm-color: #22C55E;
+  --mobile-confirm-bg: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.1));
+  --mobile-confirm-border: rgba(34, 197, 94, 0.5);
+
+  /* 输入助手悬浮球 */
+  --mobile-input-assist-bg: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+
+  /* 分组卡片 */
+  --mobile-group-bg: #1D1A15;
+  --mobile-group-border: rgba(236, 232, 220, 0.08);
+  --mobile-group-divider: rgba(236, 232, 220, 0.06);
+  --mobile-group-row-active: rgba(236, 232, 220, 0.05);
+
+  /* 分组标题 */
+  --mobile-section-title-color: #6B6455;
+
+  /* 图标 chip 色调 (12% 透明底) - 状态色与桌面端语义色同源，violet 为移动端分类装饰色 */
+  --mobile-chip-cyan: #ECE8DC;
+  --mobile-chip-cyan-bg: rgba(236, 232, 220, 0.12);
+  --mobile-chip-emerald: #22C55E;
+  --mobile-chip-emerald-bg: rgba(34, 197, 94, 0.14);
+  --mobile-chip-amber: #F59E0B;
+  --mobile-chip-amber-bg: rgba(245, 158, 11, 0.14);
+  --mobile-chip-violet: #a78bfa;
+  --mobile-chip-violet-bg: rgba(167, 139, 250, 0.12);
+  --mobile-chip-red: #EF4444;
+  --mobile-chip-red-bg: rgba(239, 68, 68, 0.14);
+  --mobile-chip-zinc: #ABA492;
+  --mobile-chip-zinc-bg: rgba(236, 232, 220, 0.08);
+
+  /* badge 状态 */
+  --mobile-badge-zinc-color: #ABA492;
+  --mobile-badge-zinc-bg: rgba(236, 232, 220, 0.08);
+
+  /* 行文字 */
+  --mobile-row-title: #ECE8DC;
+  --mobile-row-sub: #9C9482;
+  --mobile-row-value: #ABA492;
+
+  /* 滚动条 - 与桌面端全局 scrollbar 规则同源（track=bg-hover / thumb=text-tertiary / hover=text-secondary） */
+  --scrollbar-track-bg: #2A261E;
+  --scrollbar-thumb-bg: #6B6455;
+  --scrollbar-thumb-hover-bg: #9C9482;
+}
+
+/* 浅色模式 - html 没有 .dark 类时**全树**生效
+   （与桌面端 warm 色板浅色同源：bg-page #F5F4F0 / bg-sidebar #EFEDE7 / bg-card #FDFCFA / bg-hover #E7E4DC）
+
+   作用域口径（2026-10-14 修正）：浅色 token 必须挂在 html 上，不能挂在 .mobile-ui / .mobile-app 上。
+   旧写法把浅色值限定在带类元素内，于是所有**不带类的渲染面**都掉回 :root 的深色默认值：
+   设置二级页（SettingsSubPage 自带根节点）、Teleport 到 body 的抽屉（ShellSheet 只带 .shell-ui）
+   在浅色主题下整片变深色（实测：设置子页 5 页 + 应用菜单抽屉）。深色默认值留在 :root，
+   浅色在 html:not(.dark) 上整体覆盖——这样「主题」不再依赖某个祖先类是否写对。 */
+html:not(.dark) {
+  /* 背景色 - 与桌面端同名 token 对齐（tertiary 取 border-strong 色调，作强内嵌面） */
+  --mobile-bg-primary: #F5F4F0;
+  --mobile-bg-secondary: #EFEDE7;
+  --mobile-bg-tertiary: #D6D2C4;
+  --mobile-bg-card: #FDFCFA;
+  --mobile-bg-elevated: #E7E4DC;
+
+  /* 卡片阴影 - 浅色模式阴影更明显以增强层次 */
+  --mobile-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --mobile-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.08);
+  --mobile-card-shadow-connected: 0 2px 8px rgba(5, 150, 105, 0.15), 0 1px 3px rgba(0, 0, 0, 0.08);
+
+  /* 文字色 - 与桌面端 warm 浅色 text token 同源（primary 对比度 ~13:1） */
+  --mobile-text-primary: #26231B;
+  --mobile-text-secondary: #7C7565;
+  --mobile-text-muted: #ABA492;
+  --mobile-text-disabled: #C6BFAE;
+
+  /* 强调色上的文字 - 与桌面端 warm 色板 primary-contrast 同源 */
+  --mobile-text-on-accent: #FDFCFA;
+
+  /* 边框色 - 墨色基（#26231B）alpha，与桌面端 border 色相同源 */
+  --mobile-border: rgba(38, 35, 27, 0.12);
+  --mobile-border-hover: rgba(38, 35, 27, 0.2);
+  --mobile-border-active: rgba(38, 35, 27, 0.4);
+
+  /* 强调色 - 与桌面端 warm 色板 primary 同源（墨色） */
+  --mobile-accent: #1D1A14;
+  --mobile-accent-muted: rgba(29, 26, 20, 0.08);
+  --mobile-accent-secondary: rgba(29, 26, 20, 0.16);
+
+  /* 状态色 */
+  --mobile-success: #059669;
+  --mobile-success-muted: rgba(5, 150, 105, 0.1);
+  --mobile-success-connected-bg: linear-gradient(135deg, rgba(5, 150, 105, 0.12), rgba(6, 95, 70, 0.16));
+  --mobile-success-connected-border: rgba(5, 150, 105, 0.25);
+  --mobile-warning: #d97706;
+  --mobile-warning-muted: rgba(217, 119, 6, 0.1);
+  --mobile-error: #dc2626;
+  --mobile-error-muted: rgba(220, 38, 38, 0.1);
+
+  /* 弹窗遮罩 */
+  --mobile-overlay: rgba(0, 0, 0, 0.4);
+  --mobile-overlay-heavy: rgba(0, 0, 0, 0.6);
+  --mobile-overlay-light: rgba(0, 0, 0, 0.2);
+
+  /* 终端色 - 浅色终端区取暖白 */
+  --mobile-terminal-bg: #FAF9F5;
+  --mobile-terminal-header: rgba(245, 244, 240, 0.95);
+
+  /* 导航栏（激活色跟随主色 --mobile-accent：palette 切换时指示条/激活态同步变色） */
+  --mobile-nav-bg: rgba(253, 252, 250, 0.9);
+  --mobile-nav-border: rgba(38, 35, 27, 0.1);
+  --mobile-nav-active: var(--mobile-accent);
+  --mobile-nav-inactive: #ABA492;
+
+  /* 输入框 - 输入面取页面色（桌面端卡片内输入框同规则），聚焦用墨色 accent */
+  --mobile-input-bg: #F5F4F0;
+  --mobile-input-border: rgba(38, 35, 27, 0.2);
+  --mobile-input-focus: rgba(29, 26, 20, 0.45);
+  --mobile-input-placeholder: #ABA492;
+
+  /* 代码查看器 */
+  --mobile-code-gutter-bg: rgba(0, 0, 0, 0.04);
+  --mobile-code-gutter-border: rgba(0, 0, 0, 0.08);
+  --mobile-code-gutter-color: rgba(124, 117, 101, 0.55);
+
+  /* 快捷键面板功能色 - 浅色模式使用饱和度适中的配色 */
+  /* 快捷键/命令 chip：墨纸主题强调色（与 send 同源），Enter/Del 保留 confirm/danger 语义色 */
+  --mobile-shortcut-color: #1D1A14;
+  --mobile-shortcut-bg: linear-gradient(135deg, rgba(29, 26, 20, 0.08), rgba(29, 26, 20, 0.04));
+  --mobile-shortcut-border: rgba(29, 26, 20, 0.3);
+  --mobile-shortcut-active-bg: linear-gradient(135deg, rgba(29, 26, 20, 0.16), rgba(29, 26, 20, 0.1));
+
+  --mobile-custom-cmd-color: #1D1A14;
+  --mobile-custom-cmd-bg: linear-gradient(135deg, rgba(29, 26, 20, 0.08), rgba(29, 26, 20, 0.04));
+  --mobile-custom-cmd-border: rgba(29, 26, 20, 0.3);
+  --mobile-custom-cmd-active-bg: linear-gradient(135deg, rgba(29, 26, 20, 0.16), rgba(29, 26, 20, 0.1));
+  --mobile-arrow-color: #a16207;
+  --mobile-arrow-bg: linear-gradient(135deg, rgba(161, 98, 7, 0.1), rgba(161, 98, 7, 0.05));
+  --mobile-arrow-border: rgba(161, 98, 7, 0.3);
+  --mobile-arrow-active-bg: linear-gradient(135deg, rgba(161, 98, 7, 0.2), rgba(161, 98, 7, 0.12));
+  --mobile-send-color: #1D1A14;
+  --mobile-send-bg: linear-gradient(135deg, rgba(29, 26, 20, 0.08), rgba(29, 26, 20, 0.04));
+  --mobile-send-border: rgba(29, 26, 20, 0.3);
+  --mobile-send-active-bg: linear-gradient(135deg, rgba(29, 26, 20, 0.16), rgba(29, 26, 20, 0.1));
+  --mobile-execute-color: #B45309;
+  --mobile-execute-bg: linear-gradient(135deg, rgba(180, 83, 9, 0.1), rgba(180, 83, 9, 0.05));
+  --mobile-execute-border: rgba(180, 83, 9, 0.3);
+  --mobile-execute-active-bg: linear-gradient(135deg, rgba(180, 83, 9, 0.2), rgba(180, 83, 9, 0.12));
+  --mobile-add-cmd-color: #1D1A14;
+  --mobile-add-cmd-bg: linear-gradient(135deg, rgba(29, 26, 20, 0.08), rgba(29, 26, 20, 0.04));
+  --mobile-add-cmd-border: rgba(29, 26, 20, 0.4);
+  --mobile-add-cmd-active-bg: linear-gradient(135deg, rgba(29, 26, 20, 0.16), rgba(29, 26, 20, 0.1));
+  --mobile-edit-cmd-color: #B45309;
+  --mobile-edit-cmd-bg: linear-gradient(135deg, rgba(180, 83, 9, 0.1), rgba(180, 83, 9, 0.05));
+  --mobile-edit-cmd-border: rgba(180, 83, 9, 0.3);
+  --mobile-edit-cmd-active-bg: linear-gradient(135deg, rgba(180, 83, 9, 0.2), rgba(180, 83, 9, 0.12));
+  --mobile-danger-color: #dc2626;
+  --mobile-danger-bg: linear-gradient(135deg, rgba(220, 38, 38, 0.1), rgba(220, 38, 38, 0.05));
+  --mobile-danger-border: rgba(220, 38, 38, 0.4);
+  --mobile-danger-solid-bg: rgba(220, 38, 38, 0.85);
+  --mobile-confirm-color: #059669;
+  --mobile-confirm-bg: linear-gradient(135deg, rgba(5, 150, 105, 0.15), rgba(5, 150, 105, 0.08));
+  --mobile-confirm-border: rgba(5, 150, 105, 0.4);
+
+  /* 分组卡片 - 浅色模式 */
+  --mobile-group-bg: #FDFCFA;
+  --mobile-group-border: rgba(38, 35, 27, 0.08);
+  --mobile-group-divider: rgba(38, 35, 27, 0.06);
+  --mobile-group-row-active: rgba(38, 35, 27, 0.04);
+
+  /* 分组标题 */
+  --mobile-section-title-color: #ABA492;
+
+  /* 图标 chip 色调 - 浅色模式（状态色用加深变体保证对比度，色相与桌面端语义色同族） */
+  --mobile-chip-cyan: #1D1A14;
+  --mobile-chip-cyan-bg: rgba(29, 26, 20, 0.1);
+  --mobile-chip-emerald: #059669;
+  --mobile-chip-emerald-bg: rgba(5, 150, 105, 0.1);
+  --mobile-chip-amber: #d97706;
+  --mobile-chip-amber-bg: rgba(217, 119, 6, 0.1);
+  --mobile-chip-violet: #7c3aed;
+  --mobile-chip-violet-bg: rgba(124, 58, 237, 0.1);
+  --mobile-chip-red: #dc2626;
+  --mobile-chip-red-bg: rgba(220, 38, 38, 0.1);
+  --mobile-chip-zinc: #7C7565;
+  --mobile-chip-zinc-bg: rgba(38, 35, 27, 0.06);
+
+  /* badge 状态 */
+  --mobile-badge-zinc-color: #7C7565;
+  --mobile-badge-zinc-bg: rgba(38, 35, 27, 0.06);
+
+  /* 行文字 */
+  --mobile-row-title: #26231B;
+  --mobile-row-sub: #ABA492;
+  --mobile-row-value: #7C7565;
+
+  /* 输入助手悬浮球 */
+  --mobile-input-assist-bg: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+
+  /* 滚动条 - 与桌面端全局 scrollbar 规则同源 */
+  --scrollbar-track-bg: #E7E4DC;
+  --scrollbar-thumb-bg: #ABA492;
+  --scrollbar-thumb-hover-bg: #7C7565;
+}
+
+/* 主题切换过渡动画 */
+.mobile-ui,
+.mobile-app {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* ==================== 流式字号（自适应文字大小） ==================== */
+/* 所有移动端文字随视口宽度在 320px(小屏) → 1200px(平板) 之间等比缩放：
+   360px 处等于原有固定字号（xs=10 / sm=12 / base=14 / lg=16 / xl=18 / 2xl=24），
+   更窄窗口继续缩小，平板自动放大。style.css 中 .mobile-ui 下的
+   h1/p/button/text-* 等规则均引用这些变量，因此全端文字一次生效。 */
+
+/* 挂 :root 而非 .mobile-ui/.mobile-app：流式字号只是视口宽度的函数（与主题无关），
+   而 Teleport 到 body 的抽屉（ShellSheet）与旧设置子页并不带那两个类——挂类上会让
+   它们的 text-[var(--font-size-*)] 取不到值（字体尺寸回退为继承值）。 */
+:root {
+  --font-size-xs: calc(clamp(0.5625rem, 0.625rem + (100vw - 360px) / 840 * 2, 0.75rem) * var(--mobile-font-scale, 1));      /* 9 / 10 / 12px */
+  --font-size-sm: calc(clamp(0.6875rem, 0.75rem + (100vw - 360px) / 840 * 2, 0.875rem) * var(--mobile-font-scale, 1));      /* 11 / 12 / 14px */
+  --font-size-base: calc(clamp(0.8125rem, 0.875rem + (100vw - 360px) / 840 * 2, 1rem) * var(--mobile-font-scale, 1));       /* 13 / 14 / 16px */
+  --font-size-lg: calc(clamp(0.9375rem, 1rem + (100vw - 360px) / 840 * 2, 1.125rem) * var(--mobile-font-scale, 1));         /* 15 / 16 / 18px */
+  --font-size-xl: calc(clamp(1.0625rem, 1.125rem + (100vw - 360px) / 840 * 2, 1.25rem) * var(--mobile-font-scale, 1));      /* 17 / 18 / 20px */
+  --font-size-2xl: calc(clamp(1.375rem, 1.5rem + (100vw - 360px) / 840 * 2, 1.625rem) * var(--mobile-font-scale, 1));       /* 22 / 24 / 26px */
+}
+
+/* text-2xl：style.css 未映射，补充一条流式规则（用于 emoji 图标等大字号） */
+.mobile-ui .text-2xl {
+  font-size: var(--font-size-2xl);
+  line-height: 1.3;
+}
+
+/* ============================================
+   xterm 终端滚动 - 全局禁用 viewport 原生滚动
+   移动端使用外层伪滚动容器 + scrollToLine 方案
+   xterm-viewport 的滚动由外层容器接管
+   ============================================ */
+
+.xterm-viewport {
+  overflow-y: hidden !important;
+  touch-action: none !important;
+  pointer-events: none !important;
+  /* 强制隐藏任何残留滚动条 */
+  scrollbar-width: none !important;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+}
+
+/* ============================================
+   Shared Loading Overlay
+   多个视图共享的加载遮罩样式
+   ============================================ */
+
+.mobile-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--mobile-bg-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.mobile-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--mobile-border);
+  border-top-color: var(--mobile-accent);
+  border-radius: 50%;
+  animation: mobile-spin 0.8s linear infinite;
+}
+
+@keyframes mobile-spin {
+  to { transform: rotate(360deg); }
+}
+
+.mobile-loading-text {
+  font-size: clamp(0.75rem, 0.875rem + (100vw - 360px) / 840, 0.9375rem);
+  color: var(--mobile-text-muted);
+  margin: 0;
+}
+
+/* Loading fade transition */
+.mobile-loading-fade-enter-active,
+.mobile-loading-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.mobile-loading-fade-enter-from,
+.mobile-loading-fade-leave-to {
+  opacity: 0;
+}
+
+/* ==================== 分组卡片通用语言 ==================== */
+
+.group-section-title {
+  font-size: clamp(0.625rem, 0.6875rem + (100vw - 360px) / 800, 0.75rem);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mobile-section-title-color);
+  padding-left: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.group-card {
+  background: var(--mobile-group-bg);
+  border: 1px solid var(--mobile-group-border);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.group-card > .group-row + .group-row {
+  border-top: 1px solid var(--mobile-group-divider);
+}
+
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8125rem 1rem;
+  min-height: 3.5rem;
+}
+
+button.group-row,
+.group-row-btn {
+  width: 100%;
+  cursor: pointer;
+  /* button 默认 text-align:center 会被后代标题继承，导致行内文字居中；统一左对齐 */
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+button.group-row:active,
+.group-row-btn:active {
+  background: var(--mobile-group-row-active);
+}
+
+/* 分组卡内文字统一取根级流式字号档位，不再各自写裸 clamp()。
+   这么做的两个原因：① 裸 clamp() 不带 --mobile-font-scale，设置里的
+   「字体大小」对分组卡完全无效（用户调了档位看着没反应）；② 裸 clamp()
+   与 --font-size-* 是两条并行字阶，档位一旦调整就对不齐。
+   档位取值：标题/标签 = lg，副行 = base，右侧取值 = base。 */
+
+.group-row-title {
+  font-size: var(--font-size-lg);
+  font-weight: 500;
+  color: var(--mobile-row-title);
+}
+
+.group-row-label {
+  font-size: var(--font-size-lg);
+  color: var(--mobile-row-title);
+}
+
+.group-row-sub {
+  font-size: var(--font-size-base);
+  color: var(--mobile-row-sub);
+}
+
+.group-row-value {
+  font-size: var(--font-size-base);
+  color: var(--mobile-row-value);
+}
+
+/* ==================== 列表行内联状态文字 ==================== */
+
+/* 任务状态行内文字：语义色弱标记。宽度不可预测的内容一律 nowrap，
+   宁可与相邻的运行时长争空间也不折行（折行会让整行行高突变）。 */
+.task-state {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.task-state--idle { color: var(--mobile-chip-zinc); }
+.task-state--in-progress { color: var(--mobile-chip-amber); }
+.task-state--asking { color: var(--mobile-chip-violet); }
+.task-state--retrying { color: var(--mobile-chip-amber); }
+.task-state--completed { color: var(--mobile-chip-emerald); }
+.task-state--interrupted { color: var(--mobile-chip-red); }
+
+/* ==================== 图标 chip ==================== */
+
+.icon-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(2rem, 2.25rem + (100vw - 360px) / 800 * 4, 2.5rem);
+  height: clamp(2rem, 2.25rem + (100vw - 360px) / 800 * 4, 2.5rem);
+  border-radius: 0.625rem;
+  flex-shrink: 0;
+}
+
+.chip-cyan { color: var(--mobile-chip-cyan); background: var(--mobile-chip-cyan-bg); }
+.chip-emerald { color: var(--mobile-chip-emerald); background: var(--mobile-chip-emerald-bg); }
+.chip-amber { color: var(--mobile-chip-amber); background: var(--mobile-chip-amber-bg); }
+.chip-violet { color: var(--mobile-chip-violet); background: var(--mobile-chip-violet-bg); }
+.chip-red { color: var(--mobile-chip-red); background: var(--mobile-chip-red-bg); }
+.chip-zinc { color: var(--mobile-chip-zinc); background: var(--mobile-chip-zinc-bg); }
+
+/* 卡片内的图标 chip：会话配置卡在用（.config-icon / .config-icon-sm）。
+   这两个类此前只被引用、从未定义，卡片图标实际是以裸 SVG 尺寸贴在色块上，
+   与 .icon-chip 的 36px 圆角 chip 视觉不齐。 */
+.config-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(2.25rem, 2.5rem + (100vw - 360px) / 800 * 4, 2.5rem);
+  height: clamp(2.25rem, 2.5rem + (100vw - 360px) / 800 * 4, 2.5rem);
+  border-radius: 0.75rem;
+  flex-shrink: 0;
+}
+
+.config-icon-sm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* ==================== 状态 badge ==================== */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+
+.badge-emerald { color: var(--mobile-chip-emerald); background: var(--mobile-chip-emerald-bg); }
+.badge-amber { color: var(--mobile-chip-amber); background: var(--mobile-chip-amber-bg); }
+.badge-cyan { color: var(--mobile-chip-cyan); background: var(--mobile-chip-cyan-bg); }
+.badge-zinc { color: var(--mobile-badge-zinc-color); background: var(--mobile-badge-zinc-bg); }
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+}
+
+.dot-emerald {
+  background: var(--mobile-chip-emerald);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--mobile-chip-emerald) 80%, transparent);
+}
+
+/* ==================== 页面标题 ==================== */
+
+.page-title {
+  font-size: clamp(1.25rem, 1.375rem + (100vw - 360px) / 800 * 2, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--mobile-text-primary);
+}
+
+.page-subtitle {
+  font-size: clamp(0.6875rem, 0.75rem + (100vw - 360px) / 800, 0.8125rem);
+  color: var(--mobile-text-muted);
+  margin-top: 0.125rem;
+}
+
+/* ==================== 页面 header ==================== */
+
+.page-header {
+  padding: 1.5rem 1.25rem 1rem;
+}
+
+.page-header-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+/* ==================== 设置二级页面 ==================== */
+
+/* 分组标题
+   取宿主字阶的最小一档（sm），不写 uppercase：壳内分组头（ShellSection）用
+   sentence case，设置页也跟随，不再维护第二套全大写小标签体系。 */
+.settings-section-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--mobile-text-muted);
+  padding-left: 0.25rem;
+  margin: 0;
+}
+
+/* 设置项分组卡片：行与行之间用分隔线 */
+.settings-group {
+  background: var(--mobile-bg-card);
+  border: 1px solid var(--mobile-border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 3.25rem;
+  padding: 0.75rem 1rem;
+}
+
+.settings-row + .settings-row {
+  border-top: 1px solid var(--mobile-border);
+}
+
+button.settings-row {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+button.settings-row:active {
+  background: var(--mobile-bg-elevated);
+}
+
+.settings-label {
+  /* 行标题走宿主字阶 base（14px），与壳内列表行同尺寸；不再用独立 clamp 字阶
+     （那套不接受字号偏好，且与 --font-size-* 是两条并行刻度）。 */
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: var(--mobile-text-primary);
+}
+
+.settings-desc {
+  /* 说明文字：降一档到 sm（12px），保证可读性又不与主标签争重量 */
+  font-size: var(--font-size-sm);
+  color: var(--mobile-text-muted);
+  margin-top: 0.125rem;
+}
+
+.settings-value {
+  font-size: var(--font-size-sm);
+  color: var(--mobile-text-secondary);
+}
+
+/* 下拉选择器：隐藏原生箭头，用统一的 chevron */
+.settings-select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 7.5rem;
+  padding: 0.4375rem 2rem 0.4375rem 0.75rem;
+  font-size: var(--font-size-base);
+  color: var(--mobile-text-primary);
+  background-color: var(--mobile-input-bg);
+  border: 1px solid var(--mobile-input-border);
+  border-radius: 0.625rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 1rem;
+  transition: border-color 0.15s ease;
+}
+
+.settings-select:focus {
+  outline: none;
+  border-color: var(--mobile-accent);
+}
+
+/* 数字输入框 */
+.settings-number-input {
+  width: 4.5rem;
+  padding: 0.4375rem 0.5rem;
+  font-size: var(--font-size-base);
+  text-align: center;
+  color: var(--mobile-text-primary);
+  background: var(--mobile-input-bg);
+  border: 1px solid var(--mobile-input-border);
+  border-radius: 0.625rem;
+  transition: border-color 0.15s ease;
+}
+
+.settings-number-input:focus {
+  outline: none;
+  border-color: var(--mobile-accent);
+}
+
+/* ==================== 数字步进器（−/+ 按钮包夹输入框，settings 视图共用） ==================== */
+
+.settings-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  background: var(--mobile-bg-elevated);
+  border: 1px solid var(--mobile-border);
+  border-radius: 0.625rem;
+  padding: 0.125rem;
+}
+
+.settings-stepper-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.4375rem;
+  border: none;
+  background: transparent;
+  color: var(--mobile-text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-stepper-btn:active {
+  background: var(--mobile-accent-muted);
+  color: var(--mobile-accent);
+}
+
+.settings-stepper-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.settings-stepper .settings-number-input {
+  width: 3.25rem;
+  border: none;
+  background: transparent;
+  padding: 0.25rem 0;
+}
+
+.settings-stepper .settings-number-input:focus {
+  border: none;
+}
+
+/* ==================== Modal Transitions ==================== */
+
+/* Center Modal: scale + fade */
+.center-modal-enter-active,
+.center-modal-leave-active {
+  transition: opacity 280ms ease;
+}
+.center-modal-enter-active .modal-panel,
+.center-modal-leave-active .modal-panel {
+  transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1),
+              opacity 280ms ease;
+}
+.center-modal-enter-from,
+.center-modal-leave-to {
+  opacity: 0;
+}
+.center-modal-enter-from .modal-panel,
+.center-modal-leave-to .modal-panel {
+  transform: scale(0.92);
+  opacity: 0;
+}
+
+/* Bottom Sheet: slide up */
+.bottom-sheet-enter-active,
+.bottom-sheet-leave-active {
+  transition: opacity 280ms ease;
+}
+.bottom-sheet-enter-active .modal-panel,
+.bottom-sheet-leave-active .modal-panel {
+  transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.bottom-sheet-enter-from,
+.bottom-sheet-leave-to {
+  opacity: 0;
+}
+.bottom-sheet-enter-from .modal-panel,
+.bottom-sheet-leave-to .modal-panel {
+  transform: translateY(100%);
+}
+
+/* ==================== 主色色板（与桌面端同名 palette 同源） ====================
+   仅覆盖主色相关 token（--mobile-accent 系 + text-on-accent），色值取自
+   wasmnest-desktop/src/style.css 同名 palette（改色需双端同改）。
+   背景/文字/边框等基础 token 的默认值（warm 色板）已与桌面端对齐；
+   其余 palette 仅切换主色，不覆盖背景（与桌面端「色板只换主色调」策略一致）。
+
+   归属（2026-10-16）：主色是**各 wasm-app 自持的产品外观**，宿主壳不再提供色板
+   选择器（外壳固定用下方 :root 默认主色），故选择器从 `:root[data-palette=…]`
+   放宽为 `[data-palette=…]` —— 属性挂在哪个元素的哪一层子树，那一层子树就用哪套主色。
+   bedcode 应用在运行面根节点挂 `data-palette`（见 app/AppRoot.vue），于是应用内主色
+   自成一派，壳的导航 / 卡片 / 对话框保持默认象牙白，互不串色。
+
+   生效原理是自定义属性的「直接声明压过继承」，不是选择器权重：主色 token 挂在
+   承载 data-palette 的元素上，本级声明必然压过从 html 继承来的同名 token。 */
+
+[data-palette='forest'] {
+  --mobile-accent: #86c49b;
+  --mobile-accent-muted: rgba(134, 196, 155, 0.12);
+  --mobile-accent-secondary: rgba(134, 196, 155, 0.2);
+  --mobile-text-on-accent: #101713;
+}
+[data-palette='ocean'] {
+  --mobile-accent: #5fd0e8;
+  --mobile-accent-muted: rgba(95, 208, 232, 0.12);
+  --mobile-accent-secondary: rgba(95, 208, 232, 0.2);
+  --mobile-text-on-accent: #0b1620;
+}
+[data-palette='sunset'] {
+  --mobile-accent: #f5a383;
+  --mobile-accent-muted: rgba(245, 163, 131, 0.12);
+  --mobile-accent-secondary: rgba(245, 163, 131, 0.2);
+  --mobile-text-on-accent: #1b1210;
+}
+[data-palette='violet'] {
+  --mobile-accent: #b9a6f7;
+  --mobile-accent-muted: rgba(185, 166, 247, 0.12);
+  --mobile-accent-secondary: rgba(185, 166, 247, 0.2);
+  --mobile-text-on-accent: #141020;
+}
+
+/* 浅色模式：同名 palette 的浅色主色（与桌面端 light 变体同源）。
+   选择器带 `html:not(.dark)` 祖先限定，权重高于上面的深色值；`html:not(.dark)[…]`
+   一路保留是为了承载元素正好是 html 时也不失配（宿主壳已不挂该属性）。 */
+html:not(.dark) [data-palette='forest'],
+html:not(.dark)[data-palette='forest'] {
+  --mobile-accent: #3e6b4f;
+  --mobile-accent-muted: rgba(62, 107, 79, 0.12);
+  --mobile-accent-secondary: rgba(62, 107, 79, 0.2);
+  --mobile-text-on-accent: #fdfcf7;
+}
+html:not(.dark) [data-palette='ocean'],
+html:not(.dark)[data-palette='ocean'] {
+  --mobile-accent: #0e7490;
+  --mobile-accent-muted: rgba(14, 116, 144, 0.12);
+  --mobile-accent-secondary: rgba(14, 116, 144, 0.2);
+  --mobile-text-on-accent: #ffffff;
+}
+html:not(.dark) [data-palette='sunset'],
+html:not(.dark)[data-palette='sunset'] {
+  --mobile-accent: #d9532a;
+  --mobile-accent-muted: rgba(217, 83, 42, 0.12);
+  --mobile-accent-secondary: rgba(217, 83, 42, 0.2);
+  --mobile-text-on-accent: #fefaf5;
+}
+html:not(.dark) [data-palette='violet'],
+html:not(.dark)[data-palette='violet'] {
+  --mobile-accent: #6d4fc6;
+  --mobile-accent-muted: rgba(109, 79, 198, 0.12);
+  --mobile-accent-secondary: rgba(109, 79, 198, 0.2);
+  --mobile-text-on-accent: #fcfbfe;
+}
+
+/* ==================== 色板选择器色块（wasm-app 设置页「主色色板」展示用） ====================
+   2026-10-16 起选择器 UI 迁到各 wasm-app 自己的设置页（宿主外观页不再提供）；
+   色值 token 仍是全局的，应用运行面渲染在壳文档内，取值照旧继承 :root。
+   default 跟随当前主题默认主色（深色 = 象牙白 / 浅色 = 近黑），
+   其余与上方同名 palette 主色同源（改色需双端同改）。 */
+:root {
+  --mobile-palette-swatch-default: #ECE8DC;
+  --mobile-palette-swatch-forest: #86c49b;
+  --mobile-palette-swatch-ocean: #5fd0e8;
+  --mobile-palette-swatch-sunset: #f5a383;
+  --mobile-palette-swatch-violet: #b9a6f7;
+}
+/* 浅色模式下色块使用浅色 palette 主色（与上方 light 变体同源） */
+html:not(.dark) {
+  --mobile-palette-swatch-default: #1D1A14;
+  --mobile-palette-swatch-forest: #3e6b4f;
+  --mobile-palette-swatch-ocean: #0e7490;
+  --mobile-palette-swatch-sunset: #d9532a;
+  --mobile-palette-swatch-violet: #6d4fc6;
+}
+
+/* ==================== 移动端隐藏原生滚动条 ==================== */
+/* 移动端以触摸滚动为主（惯性滚动已由 WebView 提供），原生占位式滚动条
+ * （8px 参与布局）既挤窄内容区又无视觉价值：整个移动端统一隐藏。
+ *
+ * 覆盖规则（与隐藏同源冲突时，显式样式的更高特异性优先）：
+ *  - 代码查看器（bedcode fileExplorer 域 FileViewerModal 的 .viewer-body，随
+ *    issue #24 迁应用仓；其 DOM 仍在本宿主文档内，本规则继续覆盖）保留 4px 细条滚动条——
+ *    其规则只覆盖 width/height，故本规则不用 display:none（display 无竞争对手
+ *    会被继承生效、连带把细条也藏掉），只用 width:0/height:0 归零，细条规则
+ *    靠更高特异性覆盖回 4px；
+ *  - 终端（terminal.css）xterm 滚动条已各自显式隐藏；
+ *  - 终端输入栏（TerminalInputBar）各面板已各自 scrollbar-width: none。
+ *
+ * 隐藏后原 scrollbar-gutter: stable 预留的 8px 槽位失去载体，会在
+ * Chromium 变体间产生不可预测的空白（部分实现仍按占位滚动条厚度预留），
+ * 一并复位为 auto——各视图的 scrollbar-gutter-stable 类保留不删，仅作
+ * 「该容器曾需要防宽度抖动」的历史标注。
+ */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.scrollbar-gutter-stable {
+  scrollbar-gutter: auto;
+}
