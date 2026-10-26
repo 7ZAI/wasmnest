@@ -70,8 +70,8 @@ pub(crate) async fn active_transfers_json(app: &AppHandle) -> crate::Result<Stri
 
 /// 多选上传源：逐个解析「`_data` 可读直读 → 否则 SAF 中转复制」，返回全部路径。
 ///
-/// 任一中转失败即显性报错（已复制的缓存残留由激活期 `cleanup_stale_copies`
-/// 清扫）——静默跳过会少传文件且用户无从察觉。用户取消返回空数组。
+/// 任一中转失败即显性报错——静默跳过会少传文件且用户无从察觉；已复制的缓存
+/// 残留可经 `SafIo::cleanup_stale_copies` 清扫。用户取消返回空数组。
 ///
 /// 真入口 = host-platform `pick-files`（票 10 起无前端命令面）
 pub(crate) async fn peer_pick_files(app_handle: AppHandle) -> crate::Result<Vec<String>> {
