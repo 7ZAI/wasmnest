@@ -12,7 +12,7 @@
 //!
 //! ## 扫描面与排除面（排除必须显式、可审计）
 //!
-//! - **扫**：`wasmnest-*` 能力域 / 传输面 crate 的 `src/`（15 个，均在**能力仓 `../wasmnest-lib`
+//! - **扫**：`wasmnest-*` 能力域 / 传输面 crate 的 `src/`（16 个，均在**能力仓 `../wasmnest-lib`
 //!   `packages/`**，2026-10-07 从 `wasmnest-desktop/packages/` 迁根；`wasmnest-ws-client-engine`
 //!   随 ADR 0043 抽根入面；机制内核 `wasmnest-host-kit`、host_api 共享核、无头探针与
 //!   通知契约房于 2026-10-14 入面/补登记）。
@@ -77,6 +77,10 @@ const SCANNED_CRATES: &[&str] = &[
     // 通知域轻量契约房（2026-10-13 domain-owned-contracts 票 04）：只持 WIT 契约
     // （实现按端住宿主），零产品语义；抽根即入扫描面。
     "wasmnest-notify-engine",
+    // libp2p 机制引擎（feat/p2p-engine 批次 P0，2026-10-25 新建）：节点身份桥
+    // （node_id↔PeerId 互验）/ swarm 生命周期 / 入站准入闸门 / 流协议名注册表，
+    // 纯机制零产品语义；为文件传输底层换轨 libp2p 做准备。新建即入面。
+    "wasmnest-p2p-engine",
     // 机制内核（ADR 0035 D1：组件状态 / 能力模块契约 / 自动注册表 / 自报面）
     // ——2026-10-14 自 PENDING_SCAN_CRATES 转正：本锁过去因它“不是能力域 crate”
     // 而暂缓，但机制面同样不得持产品身份：描述符词段锁（词段判据）管词汇归属，
