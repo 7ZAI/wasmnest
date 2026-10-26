@@ -26,10 +26,6 @@ pub async fn ws_connect(
     port: u16,
     name: Option<String>,
 ) -> Result<ConnectionInfo> {
-    eprintln!(
-        "[ws_connect] START - address={}, port={}, name={:?}",
-        address, port, name
-    );
     tracing::info!("WebSocket connecting to {}:{}", address, port);
 
     // 初始化设备身份（首次调用时从文件加载或生成新身份）

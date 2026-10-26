@@ -44,6 +44,8 @@ class PluginLoaderClass {
   private plugins: Map<string, ActivePlugin> = new Map()
   private scanRetryTimer: ReturnType<typeof setTimeout> | null = null
   private scanRetryStartedAt = 0
+  /** 前端装载在途表：同一插件的并发入口合并为一次装载 */
+  private frontendLoads: Map<string, Promise<void>> = new Map()
 
   /**
    * 应用启动时只预载「启动时自动激活」应用的前端模块
@@ -278,8 +280,35 @@ class PluginLoaderClass {
     return this.plugins.get(pluginId)
   }
 
-  /** 加载前端模块（内部方法） */
-  private async loadFrontend(manifest: PluginInfo): Promise<void> {
+  /**
+   * 加载前端模块（内部方法）
+   *
+   * 并发去重：启动扫描（loadManifests）与用户激活（activate）各有多次 await，
+   * `plugins.has` 检查到 `plugins.set` 之间存在窗口。同一插件并发进入时合并为
+   * 一次装载，否则会创建两个 PluginContext（registerSurface / 事件监听 /
+   * disposable 双份），Map 只留后一份且 deactivate 只清一份。
+   */
+  private loadFrontend(manifest: PluginInfo): Promise<void> {
+    if (this.plugins.has(manifest.id)) return Promise.resolve()
+
+    const pending = this.frontendLoads.get(manifest.id)
+    if (pending) {
+      // 并发合并：后到者等待同一次装载（以第一到者的 manifest 快照为准）
+      return pending
+    }
+
+    const task = this.doLoadFrontend(manifest)
+    this.frontendLoads.set(manifest.id, task)
+    const cleanup = () => {
+      if (this.frontendLoads.get(manifest.id) === task) {
+        this.frontendLoads.delete(manifest.id)
+      }
+    }
+    void task.then(cleanup, cleanup)
+    return task
+  }
+
+  private async doLoadFrontend(manifest: PluginInfo): Promise<void> {
     try {
       // 经 Tauri asset protocol 从插件目录直读前端模块
       // Android 上自动变为 http://tauri.localhost/，与桌面端 convertFileSrc 方案一致

@@ -310,8 +310,8 @@ pub struct EgressPolicy {
     desktop_targets: StdRwLock<HashSet<(String, u16)>>,
     /// L2：插件 preauthUrls 声明（plugin_id → 模式列表；插件卸载时移除）
     plugin_patterns: StdRwLock<HashMap<String, Vec<UrlPattern>>>,
-    /// L3：会话级授权（host → 记忆；本次连接有效，连接断开/撤销时清空）
-    session_grants: StdRwLock<HashMap<String, PersistentGrant>>,
+    /// L3：会话级授权（本次连接有效，连接断开/撤销时清空）
+    session_grants: StdRwLock<Vec<PersistentGrant>>,
     /// L3：持久授权（加载自 GRANTS_FILE；「不再询问」落盘）
     persistent_grants: StdRwLock<Vec<PersistentGrant>>,
     /// 三档策略：plugin_id → 档位（缺省 = [`AuthStrategy::Default`]，fail-safe）
@@ -329,7 +329,7 @@ impl EgressPolicy {
         Self {
             desktop_targets: StdRwLock::new(HashSet::new()),
             plugin_patterns: StdRwLock::new(HashMap::new()),
-            session_grants: StdRwLock::new(HashMap::new()),
+            session_grants: StdRwLock::new(Vec::new()),
             persistent_grants: StdRwLock::new(Vec::new()),
             plugin_strategies: StdRwLock::new(HashMap::new()),
             grants_path: StdRwLock::new(None),
@@ -424,7 +424,7 @@ impl EgressPolicy {
         self.session_grants
             .write()
             .unwrap()
-            .retain(|_, g| g.plugin_id != plugin_id);
+            .retain(|g| g.plugin_id != plugin_id);
         self.save_persistent_grants();
         self.unregister_plugin_urls(plugin_id);
         tracing::info!(plugin_id = %plugin_id, "egress: plugin strategy and records purged");
@@ -469,7 +469,7 @@ impl EgressPolicy {
                     None => true,
                 }
         };
-        self.persistent_grants.read().unwrap().iter().any(hit) || self.session_grants.read().unwrap().values().any(hit)
+        self.persistent_grants.read().unwrap().iter().any(hit) || self.session_grants.read().unwrap().iter().any(hit)
     }
 
     /// 记忆授权（L3 命中后调用）：persist=true 落盘（「不再询问」），否则会话级。
@@ -499,7 +499,17 @@ impl EgressPolicy {
             self.persistent_grants.write().unwrap().push(grant.clone());
             self.save_persistent_grants();
         } else {
-            self.session_grants.write().unwrap().insert(host.to_string(), grant);
+            // 会话记录按完整维度保存：同 host 的不同 path 前缀 / effect / 插件
+            // 各自独立，不能以 host 为 key 互相覆盖（deny 与 allow 必须共存才
+            // 能维持「拒绝优先」判定）。
+            let mut grants = self.session_grants.write().unwrap();
+            grants.retain(|g| {
+                !(g.host == grant.host
+                    && g.path_prefix == grant.path_prefix
+                    && g.plugin_id == grant.plugin_id
+                    && g.effect == grant.effect)
+            });
+            grants.push(grant);
         }
         tracing::info!(
             host = %host,
@@ -532,8 +542,8 @@ impl EgressPolicy {
         let mut removed_session = false;
         {
             let mut grants = self.session_grants.write().unwrap();
-            if grants.values().any(|g| g.host == host && g.plugin_id == plugin_id) {
-                grants.retain(|_, g| !(g.host == host && g.plugin_id == plugin_id));
+            if grants.iter().any(|g| g.host == host && g.plugin_id == plugin_id) {
+                grants.retain(|g| !(g.host == host && g.plugin_id == plugin_id));
                 removed_session = true;
             }
         }
@@ -546,7 +556,7 @@ impl EgressPolicy {
 
     /// 列出全部授权（会话 + 持久；设置页展示）
     pub fn list_grants(&self) -> Vec<PersistentGrant> {
-        let mut grants: Vec<PersistentGrant> = self.session_grants.read().unwrap().values().cloned().collect();
+        let mut grants: Vec<PersistentGrant> = self.session_grants.read().unwrap().clone();
         grants.extend(self.persistent_grants.read().unwrap().iter().cloned());
         grants
     }
@@ -557,7 +567,7 @@ impl EgressPolicy {
             .session_grants
             .read()
             .unwrap()
-            .values()
+            .iter()
             .chain(self.persistent_grants.read().unwrap().iter())
             .map(|g| AuthRecord {
                 plugin_id: g.plugin_id.clone(),

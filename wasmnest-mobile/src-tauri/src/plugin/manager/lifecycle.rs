@@ -405,7 +405,8 @@ impl PluginManager {
         // 删除插件目录
         let plugin_dir = self.plugins_dir.join(plugin_id);
         if plugin_dir.exists() {
-            std::fs::remove_dir_all(&plugin_dir)
+            tokio::fs::remove_dir_all(&plugin_dir)
+                .await
                 .map_err(|e| crate::AppError::Plugin(format!("Failed to remove plugin dir: {}", e)))?;
         }
 

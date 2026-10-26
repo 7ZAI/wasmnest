@@ -141,7 +141,11 @@ pub fn sanitize_headers(headers: &HashMap<String, String>) -> HashMap<String, St
 /// - Range 头存在 → `Accept-Encoding: identity`（部分服务器对 Range 分段响应拒绝
 ///   压缩；reqwest 无 gzip feature 本就发 identity，这里显式对齐）
 /// - 不伪造 Origin（桌面端 `allow_any_origin`，实测不校验）
-pub fn align_wire_headers(headers: &mut HashMap<String, String>, method: &str, body: Option<&str>) {
+///
+/// 判空按**字节**而非 UTF-8 文本：链路加密开启后 body 是 AES-GCM 密文，
+/// 按 `from_utf8` 判空会失败并误补 `Content-Length: 0`，与真实密文 body
+/// 冲突（reqwest 不覆盖显式 header）。
+pub fn align_wire_headers(headers: &mut HashMap<String, String>, method: &str, body: Option<&[u8]>) {
     let m = method.to_uppercase();
     if (m == "POST" || m == "PUT") && body.map_or(true, |b| b.is_empty()) {
         headers.insert("Content-Length".to_string(), "0".to_string());
@@ -291,11 +295,7 @@ pub async fn execute_proxy(request: HttpProxyRequest, app: Option<&tauri::AppHan
         request_keys = Some(keys);
     }
 
-    align_wire_headers(
-        &mut headers,
-        method.as_str(),
-        body_bytes.as_deref().map(|b| std::str::from_utf8(b).unwrap_or("")),
-    );
+    align_wire_headers(&mut headers, method.as_str(), body_bytes.as_deref());
 
     // ---------- 发送（select! 取消） ----------
     let mut builder = client().request(method, &request.url).timeout(timeout);
@@ -465,6 +465,14 @@ mod tests {
         let mut h = HashMap::new();
         align_wire_headers(&mut h, "POST", None);
         assert_eq!(h.get("Content-Length").map(String::as_str), Some("0"));
+        // 空字节 body → 同样补 0
+        let mut h = HashMap::new();
+        align_wire_headers(&mut h, "PUT", Some(&[]));
+        assert_eq!(h.get("Content-Length").map(String::as_str), Some("0"));
+        // 非 UTF-8 密文 body 非空 → 不得补 Content-Length: 0（否则截断加密请求体）
+        let mut h = HashMap::new();
+        align_wire_headers(&mut h, "POST", Some(&[0xff, 0xfe, 0x00]));
+        assert!(!h.contains_key("Content-Length"));
         // GET 不补
         let mut h = HashMap::new();
         align_wire_headers(&mut h, "GET", None);

@@ -77,8 +77,10 @@ function invokeCalls(cmd: string): unknown[][] {
 }
 
 /** 默认 invoke 分发：连接流程涉及的命令返回安全值 */
-function installInvokeMock() {
+function installInvokeMock(overrides: Partial<Record<string, () => unknown>> = {}) {
   mockInvoke.mockImplementation((cmd: string) => {
+    const override = overrides[cmd]
+    if (override) return override()
     switch (cmd) {
       case 'ws_connect':
         return Promise.resolve({ address: DEVICE.address, port: DEVICE.port, status: 'connected' })
@@ -383,6 +385,65 @@ describe('连接流：useMobileConnection × useHttpApi × terminalBuffer store'
     await emit('ws_paired')
     await flushAsync()
     expect(conn.isPaired.value).toBe(true)
+  })
+
+  it('重连后前端 re-auth 被拒但 Rust 仍在线：保留连接、回读换新凭据、不误断开', async () => {
+    const creds = makeAuthCredentials({ sessionToken: 'stale-jwt-token' })
+    await freshConnection(() => {
+      localStorage.setItem('auth_pairing_id', creds.pairingId)
+      localStorage.setItem('auth_fingerprint', creds.fingerprint)
+      localStorage.setItem('auth_session_token', creds.sessionToken)
+    })
+    installInvokeMock({
+      ws_authenticate: () => Promise.resolve(false),
+      ws_is_connected: () => Promise.resolve(true),
+    })
+
+    await emit('ws_reconnected')
+    await flushAsync(3)
+
+    expect(invokeCalls('ws_authenticate')).toHaveLength(1)
+    expect(invokeCalls('ws_is_connected').length).toBeGreaterThan(0)
+    // Rust 刚恢复的连接不得被前端反手拆掉
+    expect(invokeCalls('ws_disconnect')).toHaveLength(0)
+    expect(conn.connectionStatus.value).toBe('connected')
+    expect(conn.isConnecting.value).toBe(false)
+    expect(conn.connectionError.value).toBeNull()
+    // Rust 侧已换新 token：失败分支同样必须回读镜像，避免下次启动推回旧 token
+    expect(localStorage.getItem('auth_session_token')).toBe('test-jwt-token')
+  })
+
+  it('重连后 re-auth 异常且 Rust 已离线：断开并进入 reauthError 终态', async () => {
+    const creds = makeAuthCredentials()
+    await freshConnection(() => {
+      localStorage.setItem('auth_pairing_id', creds.pairingId)
+      localStorage.setItem('auth_fingerprint', creds.fingerprint)
+      localStorage.setItem('auth_session_token', creds.sessionToken)
+    })
+    installInvokeMock({
+      ws_authenticate: () => Promise.reject(new Error('network timeout')),
+      ws_is_connected: () => Promise.resolve(false),
+    })
+
+    await emit('ws_reconnected')
+    await flushAsync(3)
+
+    expect(invokeCalls('ws_disconnect')).toHaveLength(1)
+    expect(conn.connectionStatus.value).toBe('disconnected')
+    expect(conn.connectionError.value).toBe('mobile.connection.reauthError')
+  })
+
+  it('无本地凭据但 Rust 已重连成功：保留连接并回读宿主凭据', async () => {
+    await freshConnection()
+    installInvokeMock({ ws_is_connected: () => Promise.resolve(true) })
+
+    await emit('ws_reconnected')
+    await flushAsync(3)
+
+    expect(invokeCalls('ws_authenticate')).toHaveLength(0)
+    expect(invokeCalls('ws_disconnect')).toHaveLength(0)
+    expect(conn.connectionStatus.value).toBe('connected')
+    expect(localStorage.getItem('auth_session_token')).toBe('test-jwt-token')
   })
 
   it('重连失败事件：ws_reconnect_failed → 状态 disconnected，且后续断开不由前端接管', async () => {

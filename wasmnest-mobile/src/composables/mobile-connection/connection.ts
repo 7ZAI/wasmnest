@@ -89,6 +89,31 @@ async function refreshCredentialMirror(): Promise<void> {
 }
 
 /**
+ * re-auth 失败后的保活判定
+ *
+ * `ws_reconnected` 由 Rust 在 HTTP reauth 成功后发出，连接此时已恢复；
+ * 前端这次重复认证失败（拒绝或瞬时网络异常）不代表连接失效。先问 Rust
+ * 侧是否仍在线：在线则保留连接并回读换新后的凭据镜像，避免反手把刚恢复
+ * 的连接拆掉；离线返回 false，由调用方走断开 + 错误态。
+ */
+async function keepAliveAfterReauthFailure(): Promise<boolean> {
+  let connected = false
+  try {
+    connected = await wsIsConnected()
+  } catch (e) {
+    logger.warn('[MobileConnection] wsIsConnected check failed:', e)
+  }
+  if (!connected) return false
+
+  logger.warn('[MobileConnection] Re-auth failed but Rust connection is alive; keeping it')
+  await refreshCredentialMirror()
+  isConnecting.value = false
+  connectionStatus.value = 'connected'
+  connectionError.value = null
+  return true
+}
+
+/**
  * 初始化事件监听和凭据（全局单例，仅执行一次）
  * 模块加载时立即执行，确保事件监听在用户操作前注册完毕
  * Tauri 事件不会缓冲，监听器必须在事件触发前注册
@@ -470,8 +495,12 @@ async function init() {
           toast.success(i18n.global.t('common.notification.reconnected'), 3000)
         } else {
           logger.warn('[MobileConnection] Re-auth failed, need to pair again')
-          // JWT 被拒绝，必须断开 WebSocket 连接，否则 Rust 端 WsClient 仍为 Connected
-          // 后续用户点击历史连接时 conn.connect() 会误判 "Already connected" 拒绝新建
+          // Rust 侧已恢复则保留连接；只有确实离线才断开，避免把瞬时抖动
+          // 放大成「拆掉一条健康连接」。
+          if (await keepAliveAfterReauthFailure()) return
+          // JWT 被拒绝且连接已离线：断开 WebSocket，否则 Rust 端 WsClient 仍为
+          // Connected，后续用户点击历史连接时 conn.connect() 会误判
+          // "Already connected" 拒绝新建
           try { await wsDisconnect() } catch { /* 忽略断开异常 */ }
           isConnecting.value = false
           connectionStatus.value = 'disconnected'
@@ -480,7 +509,9 @@ async function init() {
         }
       } catch (e) {
         logger.error('[MobileConnection] Re-auth error:', e)
-        // 认证异常（超时/网络错误），同样断开 WebSocket 保持前后端状态一致
+        // 同上：认证异常（超时/网络错误）不等于连接失效，Rust 在线则保活
+        if (await keepAliveAfterReauthFailure()) return
+        // 连接确实已断：保持前后端状态一致
         try { await wsDisconnect() } catch { /* 忽略断开异常 */ }
         isConnecting.value = false
         connectionStatus.value = 'disconnected'
@@ -488,7 +519,9 @@ async function init() {
       }
     } else {
       logger.log('[MobileConnection] No credentials stored, need manual pairing')
-      // 无凭据，断开 WebSocket，用户需要手动发起连接
+      // 本地镜像缺失但 Rust 已用自持凭据完成重连：在线则保留并回读镜像
+      if (await keepAliveAfterReauthFailure()) return
+      // 无凭据且连接已断：用户需要手动发起连接
       try { await wsDisconnect() } catch { /* 忽略断开异常 */ }
       isConnecting.value = false
       connectionStatus.value = 'disconnected'

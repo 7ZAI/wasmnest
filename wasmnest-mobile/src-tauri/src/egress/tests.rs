@@ -220,6 +220,71 @@ fn session_grant_memory() {
     ));
 }
 
+/// 会话级记录按完整维度保存：同 host 的 allow / deny 与不同 path 前缀不得互相覆盖
+#[test]
+fn session_grants_keep_distinct_dimensions() {
+    let _guard = POLICY_LOCK.lock().unwrap();
+    let p = policy();
+    p.revoke_all_grants();
+
+    // 同一 host：allow + deny 两条会话记录共存，deny 优先判定
+    p.record_grant(
+        "custom.example.com",
+        None,
+        false,
+        GRANT_PLUGIN_HOST,
+        AUTH_EFFECT_ALLOW,
+        AuthRecordSource::User,
+    );
+    p.record_grant(
+        "custom.example.com",
+        None,
+        false,
+        GRANT_PLUGIN_HOST,
+        AUTH_EFFECT_DENY,
+        AuthRecordSource::UserDeny,
+    );
+    let grants = p.list_grants();
+    assert!(grants
+        .iter()
+        .any(|g| g.host == "custom.example.com" && g.effect == AUTH_EFFECT_ALLOW));
+    assert!(grants
+        .iter()
+        .any(|g| g.host == "custom.example.com" && g.effect == AUTH_EFFECT_DENY));
+    assert!(matches!(
+        p.decide("https://custom.example.com/api", "host"),
+        EgressDecision::Deny(_)
+    ));
+
+    // 不同 path 前缀各自独立：/other 的 deny 不得覆盖 /api 的 allow
+    p.revoke_all_grants();
+    p.record_grant(
+        "custom.example.com",
+        Some("/api".to_string()),
+        false,
+        GRANT_PLUGIN_HOST,
+        AUTH_EFFECT_ALLOW,
+        AuthRecordSource::User,
+    );
+    p.record_grant(
+        "custom.example.com",
+        Some("/other".to_string()),
+        false,
+        GRANT_PLUGIN_HOST,
+        AUTH_EFFECT_DENY,
+        AuthRecordSource::UserDeny,
+    );
+    assert!(matches!(
+        p.decide("https://custom.example.com/api/x", "host"),
+        EgressDecision::Allow(GrantSource::L3Memory)
+    ));
+    assert!(matches!(
+        p.decide("https://custom.example.com/other/x", "host"),
+        EgressDecision::Deny(_)
+    ));
+    p.revoke_all_grants();
+}
+
 /// 非法 URL → fail-closed 拒绝（非弹窗——无法展示的 URL 不应打扰用户）
 #[test]
 fn malformed_url_denied() {
