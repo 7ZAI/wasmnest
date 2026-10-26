@@ -9,9 +9,9 @@ Rust 侧 `wasmnest-plugin-api`（`WasmPlugin` trait + `wasm_entry!` 宏）的 Go
 
 | 路径 | 内容 | 归属 |
 | --- | --- | --- |
-| `sdk/` | 壳包：`Plugin` 接口 + 可选回调接口（可移植，原生可测）／`Entry` 接线 + 宿主能力包装（`//go:build wasip2`，组件目标） | 手写真源 |
+| `sdk/` | 壳包：`Plugin` 接口 + 可选回调接口（可移植，原生可测）／`Entry` 接线 + 宿主能力包装（`//go:build wasip2`，组件目标；core 九接口见 `host_wasip2.go`，能力域首件 http 见 `host_http_wasip2.go`） | 手写真源 |
 | `gen/` | wit-bindgen-go 绑定（world `plugin` 全接口面） | 生成物（提交；改契约后重跑脚本） |
-| `wit/` | 组装用 wit 包（拼装件 + go-plugin world + TinyGo wasi-cli deps） | 派生（gitignore，脚本组装） |
+| `wit/` | 组装用 wit 包（拼装件 + go-plugin world + TinyGo wasi-cli deps） | 派生（gitignore，`tools/assemble-wit.mjs --out` 组装；应用构建复用同一脚本） |
 | `tools/gen-bindings.mjs` | 绑定重生成脚本 | 手写 |
 | `testplugin/` | 验证组件（SDK 自消费：TinyGo 构建 + 真实宿主冒烟） | 手写 |
 
@@ -63,7 +63,8 @@ func main() {}
 
 可选回调（`OnStartup` / `OnMessage` / `OnProcessDone` / 移动词汇 5 回调等）经
 接口升级按需实现，见 `sdk/plugin.go`。宿主能力经 `sdk.Host*` 包装调用
-（core.wit 九个内核机制接口；能力域接口经 `gen/wasmnest/plugin/host-*` 直用）。
+（core.wit 九个内核机制接口 + 能力域首件 `HostHTTPFetch`；其余能力域接口经
+`gen/wasmnest/plugin/host-*` 直用）。
 
 ## 设计要点（踩坑记录）
 

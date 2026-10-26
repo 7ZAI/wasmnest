@@ -1,9 +1,10 @@
 //go:build wasip2
 
 // 宿主能力 Go 惯用包装——core.wit 九个内核机制接口（Rust 侧 `WasmHost` /
-// `HostApi` 的对等物，issue #21 User Story 3）。能力域接口（http / ws / peer /
-// pty / mdns / notify / …）首期经 gen 包直用（`gen/wasmnest/plugin/host-*`），
-// 惯用包装随消费面出现再补——不为没有调用者的面预制 API。
+// `HostApi` 的对等物，issue #21 User Story 3）。能力域接口（ws / peer / pty /
+// mdns / notify / …）首期经 gen 包直用（`gen/wasmnest/plugin/host-*`），惯用
+// 包装随消费面出现再补（http 已落，见 host_http_wasip2.go）——不为没有调用者
+// 的面预制 API。
 //
 // 返回形状约定（WIT result<T, string> 的 Go 落地）：
 //   - result<option<string>, string> → (value string, ok bool, err error)
