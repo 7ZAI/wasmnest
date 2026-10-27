@@ -144,7 +144,7 @@ context.ui.goBack()                  // go back
 ```
 
 > [!NOTE]
-> `context.ui.onBackPressed()` can intercept the Android system back key (Android devices only); on iOS / dev-shell it silently downgrades to never firing.
+> `context.ui.onBackPressed()` can intercept the Android system back key (Android devices only; it fires only while this app's surface is in the foreground — a backgrounded app never consumes the back press); on iOS / dev-shell it silently downgrades to never firing.
 
 ### Dialogs & Notifications
 

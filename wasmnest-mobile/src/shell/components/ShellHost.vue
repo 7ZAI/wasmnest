@@ -66,6 +66,7 @@
 import { computed, onMounted, onUnmounted, watch, type Component } from 'vue'
 import { logger } from '@/utils/frontendLogger'
 import { toFileAssetUrl } from '@/plugin/assets'
+import { setAppBackLayerActive } from '@/plugin/back-button'
 import { useShellPreferences } from '../composables/useShellPreferences'
 import { useShellApps } from '../composables/useShellApps'
 import { useAppSurfaces } from '../composables/useAppSurfaces'
@@ -123,6 +124,11 @@ watch(
 /** 当前是否在应用运行面：其底色层盖住壁纸（含状态栏带），只留默认页面底色 */
 const isAppRun = computed(() => nav.current.value.id === 'app-run')
 
+// 应用层系统返回门控：只有应用运行面在前台时，应用（context.ui.onBackPressed）
+// 处理器才参与分发。后台运行面只 detach 不 dispose，处理器常驻——不门控时会吞掉
+// 本属于壳 / 壳外整页路由的返回，主屏也无法按返回退出（见 @/plugin/back-button 头注）。
+watch(isAppRun, (active) => setAppBackLayerActive(active), { immediate: true })
+
 /** 壁纸档位类（none → 只保留壳根类；值与 shell.css / wallpaper.css 的 --wall-* 同源） */
 const wallClass = computed(() => (wallpaper.value === 'none' ? '' : `wall-${wallpaper.value}`))
 const wallRootClass = computed(() => ['shell-wall', wallClass.value].filter(Boolean).join(' '))
@@ -165,5 +171,7 @@ onUnmounted(() => {
   // 摘掉返回兜底：此时壳没有任何可退的屏，系统返回应交回默认行为 /
   // 由当前整页路由自己的历史承担
   systemBack.dispose()
+  // 应用层不再处于前台：后台运行面的处理器不得吞掉整页路由的返回
+  setAppBackLayerActive(false)
 })
 </script>

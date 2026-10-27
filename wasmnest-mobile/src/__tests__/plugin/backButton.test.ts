@@ -13,6 +13,8 @@
  * | C-B6 | 无消费者 | 所有处理器都不消费 / 无订阅者 | 不抛错；无订阅者时不注册原生监听 |
  * | C-B7 | `ensureNative` 生命周期 | 有订阅者才持有原生监听；全部退订即摘除 | onBackButtonPress 注册一次 → unregister 被调用 |
  * | C-B8 | 原生事件入口 | 系统返回经原生 handler 进入同一分发链 | 应用处理器收到载荷 |
+ * | C-B9 | `setAppBackLayerActive` | 门控关闭（应用不在前台） | 应用处理器零调用；应用是唯一订阅者时摘除原生监听 |
+ * | C-B10 | 同上 | 门控重新开启 | 应用处理器恢复参与；原生监听按需重新注册 |
  *
  * 每个用例 `vi.resetModules()` 后重新 import：被测模块持有原生监听单例状态
  * （`unregisterNative` / `registering`），共享实例会让「上一个用例遗留的异步注册」
@@ -202,5 +204,58 @@ describe('C-B7/C-B8 原生监听生命周期', () => {
     tauri.handlers[0]({ canGoBack: true })
 
     expect(app).toHaveBeenCalledWith({ canGoBack: true })
+  })
+})
+
+describe('C-B9/C-B10 应用层前台门控', () => {
+  it('should_skipAppHandlers_when_appLayerInactive', () => {
+    const app = vi.fn(() => true)
+    const host = vi.fn(() => true)
+    subscribeApp(app)
+    subscribeHost(host)
+    mod.setAppBackLayerActive(false)
+
+    mod.dispatchBackPress({ canGoBack: true })
+
+    // 后台应用（运行面 detach 但处理器常驻）不得吞掉壳 / 整页路由的返回
+    expect(app).not.toHaveBeenCalled()
+    expect(host).toHaveBeenCalledWith({ canGoBack: true })
+  })
+
+  it('should_releaseNativeListener_when_appLayerInactiveAndAppIsOnlySubscriber', async () => {
+    subscribeApp(() => false)
+    await vi.waitFor(() => expect(tauri.onBackButtonPress).toHaveBeenCalledTimes(1))
+
+    mod.setAppBackLayerActive(false)
+
+    // 应用处理器不再参与分发：没有可处理返回的消费者 → 摘除监听，
+    // 恢复系统默认的「主屏返回退出应用」
+    await vi.waitFor(() => expect(tauri.unregister).toHaveBeenCalledTimes(1))
+  })
+
+  it('should_keepNativeListener_when_appLayerInactiveButHostSubscribed', async () => {
+    subscribeApp(() => false)
+    subscribeHost(() => true)
+    await vi.waitFor(() => expect(tauri.onBackButtonPress).toHaveBeenCalledTimes(1))
+
+    mod.setAppBackLayerActive(false)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(tauri.unregister).not.toHaveBeenCalled()
+  })
+
+  it('should_restoreAppDispatchAndListener_when_appLayerActiveAgain', async () => {
+    const app = vi.fn(() => true)
+    subscribeApp(app)
+    await vi.waitFor(() => expect(tauri.onBackButtonPress).toHaveBeenCalledTimes(1))
+    mod.setAppBackLayerActive(false)
+    await vi.waitFor(() => expect(tauri.unregister).toHaveBeenCalledTimes(1))
+
+    mod.setAppBackLayerActive(true)
+    await vi.waitFor(() => expect(tauri.onBackButtonPress).toHaveBeenCalledTimes(2))
+
+    // 原生事件重新进入分发链；应用层恢复优先
+    tauri.handlers[tauri.handlers.length - 1]({ canGoBack: true })
+    expect(app).toHaveBeenCalledTimes(1)
   })
 })

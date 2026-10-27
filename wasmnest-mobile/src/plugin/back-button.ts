@@ -10,16 +10,23 @@
  * 两层消费者与优先级（先应用、后平台）：
  *   ① 应用层：`context.ui.onBackPressed`（SDK 契约，file-transfer 的目录逐级退等）
  *   ② 平台层：宿主壳的兜底（覆盖层 → 屏栈回退 → 回主屏），见
- *      `src/shell/components/ShellHost.vue`
+ *      `src/shell/components/ShellHost.vue`；壳外整页路由（设置二级页 / 插件整页）
+ *      的浏览历史回退见 `src/composables/useStandaloneRouteBack.ts`
  *
  * 「消费」契约：处理器返回 `true` = 本次返回已被处理，后续处理器不再收到；
  * 返回 `undefined` / `false` = 本次不处理，交给下一层（应用不处理的返回会落到
  * 平台兜底，而不是被吞掉——这正是修复「应用内返回后无反应」的关键）。
  *
- * 监听生命周期：只在**存在订阅者**时持有原生 listener；最后一个订阅者取消时摘除，
- * 恢复系统默认返回行为（在平台主屏按返回 = 退出应用）。因此宿主壳的兜底订阅是
- * **按需**的：只有「有东西可回退」时才订阅（见 ShellHost 的 watchEffect），
- * 否则常驻订阅会让「主屏按返回退出应用」永远失效。
+ * 应用层前台门控：应用运行面被切走时只 detach、不 dispose，它的返回处理器会一直
+ * 留在应用层。若不分前台，后台应用会先拿到系统返回——返回 false 时事件被吞掉
+ * （壳外整页路由无人处理，用户看到「返回无反应」），返回 true 时后台状态被静默
+ * 改写。宿主壳按「应用运行面是否在前台」开关门控（`setAppBackLayerActive`），
+ * 门控关闭时应用处理器不参与分发。
+ *
+ * 监听生命周期：只在**存在可参与分发的订阅者**时持有原生 listener（应用订阅要
+ * 同时满足门控开启）；没有订阅者时摘除，恢复系统默认返回行为（在平台主屏按返回
+ * = 退出应用）。因此宿主壳的兜底订阅是**按需**的：只有「有东西可回退」时才订阅
+ * （见 useShellSystemBack），否则常驻订阅会让「主屏按返回退出应用」永远失效。
  *
  * 非 Tauri 环境（dev-shell 浏览器 / 单元测试）静默降级：动态 import 失败即视为
  * 无原生监听，`dispatch` 仍可被测试直接调用。
@@ -40,12 +47,24 @@ const appHandlers = new Set<BackPressHandler>()
 /** 平台层处理器（宿主壳注册，后注册者优先——将来若有嵌套壳层，内层先拿到机会） */
 const hostHandlers: BackPressHandler[] = []
 
+/**
+ * 应用层是否处于前台（由宿主壳维护，见 `setAppBackLayerActive`）。
+ * 默认 true：无宿主壳上下文（dev-shell 浏览器 / 单元测试）维持「应用层先收到」语义。
+ */
+let appLayerActive = true
+
 let unregisterNative: (() => void) | null = null
 /** 原生监听注册中（异步）：期间又出现订阅者时避免重复注册 */
 let registering = false
 
 function hasSubscribers(): boolean {
-  return appHandlers.size > 0 || hostHandlers.length > 0
+  return (appLayerActive && appHandlers.size > 0) || hostHandlers.length > 0
+}
+
+/** 按当前订阅状态同步原生监听：该在场就注册，没有可参与分发的消费者就摘除 */
+function syncNative(): void {
+  if (hasSubscribers()) void ensureNative()
+  else releaseNative()
 }
 
 /** 摘除原生监听（幂等） */
@@ -85,12 +104,14 @@ async function ensureNative(): Promise<void> {
 /**
  * 分发一次系统返回
  *
- * 顺序：应用层（注册顺序）→ 平台层（后注册优先）。任一处返回 true 即终止分发，
- * 使「谁处理谁负责」显式化——不返回 true 的处理器不能吞掉返回。
+ * 顺序：应用层（注册顺序，仅前台时参与）→ 平台层（后注册优先）。任一处返回 true
+ * 即终止分发，使「谁处理谁负责」显式化——不返回 true 的处理器不能吞掉返回。
  */
 export function dispatchBackPress(payload: BackPressPayload): void {
-  for (const handler of appHandlers) {
-    if (invokeHandler(handler, payload, 'app')) return
+  if (appLayerActive) {
+    for (const handler of appHandlers) {
+      if (invokeHandler(handler, payload, 'app')) return
+    }
   }
   for (let i = hostHandlers.length - 1; i >= 0; i -= 1) {
     if (invokeHandler(hostHandlers[i], payload, 'host')) return
@@ -113,11 +134,11 @@ function invokeHandler(
 
 function subscribe(store: Set<BackPressHandler>, handler: BackPressHandler): () => void {
   store.add(handler)
-  void ensureNative()
+  syncNative()
   return () => {
     store.delete(handler)
-    // 没有订阅者了：摘除原生监听，恢复系统默认返回行为
-    if (!hasSubscribers()) releaseNative()
+    // 没有可参与分发的订阅者了：摘除原生监听，恢复系统默认返回行为
+    syncNative()
   }
 }
 
@@ -127,17 +148,29 @@ export function subscribeAppBackPressed(handler: BackPressHandler): () => void {
 }
 
 /**
- * 订阅平台层返回处理（宿主壳兜底）
+ * 设置应用层前台门控（宿主壳调用）
+ *
+ * 关闭时应用处理器不参与分发，且若没有平台层订阅则摘除原生监听——否则后台应用
+ * 的常驻订阅会让「主屏返回退出应用」失效。重新开启时按需恢复原生监听。
+ */
+export function setAppBackLayerActive(active: boolean): void {
+  if (appLayerActive === active) return
+  appLayerActive = active
+  syncNative()
+}
+
+/**
+ * 订阅平台层返回处理（宿主壳兜底 / 壳外整页路由历史回退）
  *
  * 宿主壳只在「覆盖层打开 / 屏栈可回退 / 不在主屏」时订阅——它一旦常驻，系统
  * 默认的「主屏返回即退出应用」就永远不会发生。
  */
 export function subscribeHostBackPressed(handler: BackPressHandler): () => void {
   hostHandlers.push(handler)
-  void ensureNative()
+  syncNative()
   return () => {
     const index = hostHandlers.indexOf(handler)
     if (index >= 0) hostHandlers.splice(index, 1)
-    if (!hasSubscribers()) releaseNative()
+    syncNative()
   }
 }

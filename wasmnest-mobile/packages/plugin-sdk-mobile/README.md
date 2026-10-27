@@ -148,7 +148,7 @@ context.ui.goBack()                  // 返回上一页
 ```
 
 > [!NOTE]
-> `context.ui.onBackPressed()` 可接管 Android 系统返回键（仅 Android 真机触发）；iOS / dev-shell 静默降级为永不触发。
+> `context.ui.onBackPressed()` 可接管 Android 系统返回键（仅 Android 真机触发；只在该应用运行面位于前台时回调，切走后不消费返回）；iOS / dev-shell 静默降级为永不触发。
 
 ### 对话框与通知
 
