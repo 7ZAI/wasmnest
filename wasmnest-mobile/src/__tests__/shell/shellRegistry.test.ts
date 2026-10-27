@@ -5,7 +5,7 @@
  *       组件免响应式代理（markRaw）、清理语义。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { defineComponent, h, isReactive, type Component } from 'vue'
+import { computed, defineComponent, h, isReactive, type Component } from 'vue'
 import { getShellRegistry } from '@/shell/registry'
 import type { ShellApp, ShellAppSource } from '@/shell/types'
 
@@ -91,6 +91,20 @@ describe('ShellRegistry 应用清单', () => {
     expect(patched?.state).toBe('running')
     // 未给字段保持原值（补丁是浅合并，不是替换）
     expect(patched?.name).toBe('origin')
+  })
+
+  // 回归锁（2026-10-27 真机：详情页停止服务后仍显示「运行中」）：getApp 必须从
+  // 响应式清单读取，computed 才能随 patchApp / 清单刷新重算；读内部 Map 不会建立依赖。
+  it('should_rerunComputed_when_manifestChangesBehindGetApp', async () => {
+    registry.upsertApps(sourceId, [app('a1', { state: 'running' })])
+    const state = computed(() => registry.getApp('a1')?.state)
+    expect(state.value).toBe('running')
+
+    registry.patchApp('a1', { state: 'stopped' })
+    expect(state.value, 'patchApp 后 computed 必须拿到新状态').toBe('stopped')
+
+    registry.upsertApps(sourceId, [app('a1', { state: 'disabled' })])
+    expect(state.value, '清单重拉后 computed 必须拿到新状态').toBe('disabled')
   })
 
   it('should_returnSourceOfApp_when_appWrittenByThatSource', async () => {
