@@ -126,8 +126,8 @@ describe('自定义壁纸：命令通道', () => {
 })
 
 describe('自定义壁纸：UI / 壳根接线', () => {
-  it('设置页启用按钮，不再保留 disabled 占位', () => {
-    const src = read('src/shell/sys/SysSettingsView.vue')
+  it('设置页启用按钮，不再保留 disabled 占位（2026-10-28 外观改版：随背景组搬进二级页）', () => {
+    const src = read('src/shell/sys/SysAppearanceView.vue')
     expect(src).toContain('chooseCustomWallpaper')
     expect(src).toContain('removeCustomWallpaper')
     expect(src).toContain('customBusy')

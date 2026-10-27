@@ -26,7 +26,8 @@ function rule(src: string, selector: string): string {
 
 const STYLE = 'src/style.css'
 const SWITCHER = 'src/shell/components/ShellTaskSwitcher.vue'
-const SETTINGS = 'src/shell/sys/SysSettingsView.vue'
+// 2026-10-28 外观改版：壁纸选择（背景组）搬进设置二级页 SysAppearanceView
+const SETTINGS = 'src/shell/sys/SysAppearanceView.vue'
 const QUICK = 'src/shell/components/ShellQuickSettings.vue'
 const SEG = 'src/shell/components/ShellSeg.vue'
 const SHELL_CSS = 'src/shell/styles/shell.css'

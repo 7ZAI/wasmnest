@@ -230,12 +230,12 @@ async function openApp(appId: string): Promise<void> {
   void router.push(lastRouteOf(appId) ?? app.route)
 }
 
-/** 开系统页卡 */
-function openSys(pageId: string): void {
+/** 开系统页卡（sub = 二级页段：同一张系统页卡内切子路由，不另产卡，如外观） */
+function openSys(pageId: string, sub?: string): void {
   const sys = sysPageOf(pageId)
   if (!sys) return
   enterFace(sysCardKey(pageId))
-  void router.push(`/sys/${pageId}`)
+  void router.push(sub ? `/sys/${pageId}/${sub}` : `/sys/${pageId}`)
 }
 
 /**

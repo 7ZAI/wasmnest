@@ -76,7 +76,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 路径 | 职责（头注释为准） |
 | --- | --- |
 | `main.ts` | 宿主入口（壳装配 / 路由 / i18n / 权限配置） |
-| `router/index.ts` | 路由真源之一：`/` 主屏、`/sys/:pageId` 系统页、各 app 路由（指向 `AppMountSlot`）、未匹配显性 not-found |
+| `router/index.ts` | 路由真源之一：`/` 主屏、`/sys/:pageId` 系统页（`:sub` 子路由 = 同卡二级页，如 `/sys/settings/appearance` 外观）、各 app 路由（指向 `AppMountSlot`）、未匹配显性 not-found |
 | `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`appSurfaceRegistry.ts` = 表面实例记账（attach / detach / dispose，表面保活），`AppPreviewTile.vue` = 多任务卡的应用自绘预览面装载 / 3s 超时 / 回退品牌卡）；`sys/`（系统页）；`settings/`；`auth/`；`extensions/`（壳扩展点注册表：状态栏项 / 设置项 / 主题，只注册排序、不解释业务语义） |
 | `shell/composables/useShellApps.ts` | **应用路由真源**：`SURFACE_ROUTES`（新增桌面应用必须同步，见 §6） |
 | `shell/types.ts` · `state.ts` / `useShellState.ts` | 壳状态面（宿主零业务状态：首次打开创建、切走只藏、停用 / 卸载才销毁） |
@@ -179,7 +179,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 任务 | 动手前必读 |
 | --- | --- |
 | 改桌面宿主壳 / 挂载槽 / 系统页 | `wasmnest-desktop/src/main.ts` + `src/shell/**`（`src/shell/composables/useShellApps.ts` = 应用路由真源）+ docs/architecture.md §2；跑桌面 `test:run` + 真实 `tauri:dev` 目验 |
-| 改桌面设置页 / 状态栏 / 主题 | `src/shell/extensions/**`（注册表契约）+ `src/shell/components/ShellStatusBar.vue` + `src/shell/settings/Settings{Theme,Extensions}Section.vue` + `src/shell/sys/SysSettingsView.vue`（**关于固定最后**）+ `src/styles/theme-presets.css`（内置主题 token 与结构规则）；机制口径见 docs/frontend.md §6 与 ADR 0059；跑桌面 `test:run`（含 `settingsOrderLock` / `shellExtensions` / `themePresetCoverage` / `shellStatusBar`） |
+| 改桌面设置页 / 状态栏 / 主题 | `src/shell/extensions/**`（注册表契约）+ `src/shell/components/ShellStatusBar.vue` + `src/shell/settings/Settings{Theme,Extensions}Section.vue` + `src/shell/sys/SysSettingsView.vue`（**关于固定最后**；样式调整项在外观二级页 `SysAppearanceView.vue`）+ `src/styles/theme-presets.css`（内置主题 token 与结构规则）；机制口径见 docs/frontend.md §6 与 ADR 0059；跑桌面 `test:run`（含 `settingsOrderLock` / `shellExtensions` / `themePresetCoverage` / `shellStatusBar`） |
 | 改多任务卡片 / 应用预览面（`mountPreview`） | `wasmnest-desktop/src/shell/components/ShellTaskSwitcher.vue` + `src/shell/mount/{useAppMount.ts,AppPreviewTile.vue}`（`mountAppPreview(root, env)` = 装载入口，`PREVIEW_MOUNT_TIMEOUT_MS` = 3s）+ `src/shell/mount/appSession.ts`（`lastRoute`）；契约 = `AppPreviewEnv` / `AppPreviewHandle` / `MountPreview`（宿主与五个 app `entry.ts` 同形，L5 锁钉住）；应用侧内容裁决在 `../wasmnest-apps`；跑桌面 `test:run` + 应用仓各 app `test:run` / `build:frontend` + 真实 `tauri:dev` 目验 |
 | 改移动宿主壳 / 运行面 / 注册表 | `wasmnest-mobile/src/shell/registry.ts`（职责边界：只注册不决策）+ 移动 SDK `src/types.ts`（`UIRegistry`）+ docs/architecture.md §4；优先移动 SDK dev-shell 预览 |
 | 改插件机制 / 生命周期 / 能力接线（Rust） | 该端 `src-tauri/src/plugin/**`（每域一个文件，端口 adapter + 白名单条目同处，**先读文件头注释**）+ 能力仓对应 crate；跑该端 `cargo test` |
@@ -242,7 +242,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `shell/shellStyleWiring.test.ts`（桌面） | 入口接线 shell.css（含顺序）+ 被消费共享类仍在 | 接线锁 | 保留单条轻量 | 零引用死样式静默失效教训：类名照写而 CSS 没进构建，组件测试测不出 |
 | `shell/recentsWiring.test.ts`（桌面） | 多任务四处装配点（主屏无运行区 / 工具栏入口 / 全屏层 / Host 挂载） | 挂载行为 + 接线锁 | 已改造（#23，2026-10-24） | 原 81 处 `toContain` 逐调用点按 #12 样板收敛为挂载行为（主屏无运行区 / 导航顺序 / 开关状态收敛=工具栏↔全屏层联合挂载共享 useShellState 同一 ref / 动作转发 / 卡片装配 DOM / 图标接线）；接线剩 1 条（ShellHost 模板挂 `<ShellTaskSwitcher />`）+ 退役面存在性扫描（ShellRecentsPanel / ShellCommandPalette）；几何纯函数面归 recentsLayout.test.ts |
 | `shell/recentsLayout.test.ts`（桌面） | 卡片尺寸方向 / 几何（纯函数行为测试在场）+ 组件接线 3 条 | 接线锁（混合） | 收敛：接线 3 条 → 1 条 | 方向 / 几何已行为化；接线断言只证 `ShellTaskSwitcher` 真的用了 `recentsLayout` |
-| `shell/settings/settingsOrderLock.test.ts`（桌面） | 设置分组顺序（关于固定最后） | 挂载行为（DOM 顺序） | 已改造（#23，2026-10-24） | 已按预告改法落地：挂载 SysSettingsView 断言分组标题的 DOM 顺序（分组组件以桩替身渲染），关于固定最后；源码顺序正则已删 |
+| `shell/settings/settingsOrderLock.test.ts`（桌面） | 设置分组顺序（关于固定最后） | 挂载行为（DOM 顺序） | 已改造（#23，2026-10-24） | 已按预告改法落地：挂载 SysSettingsView（主页面序）与 SysAppearanceView（外观二级页序，2026-10-28）断言分组标题的 DOM 顺序（分组组件以桩替身渲染），关于固定最后；源码顺序正则已删 |
 | `shell/selectionStyle.test.ts`（桌面） | 选中态两套语言（勾章 / 黑底白字） | 源码文本（样式裁决） | 保留 | happy-dom 不计算 scoped CSS，选中填充色是样式表事实 |
 | `shell/surfaceLadder.test.ts`（桌面） | 透明度三档阶梯（92% / 96%+blur / 实心） | 源码文本（样式裁决） | 保留 | 同上：透明度 / blur 是 CSS 事实，DOM 断言不可达 |
 | `shell/wallpaperScope.test.ts`（桌面） | 壁纸挂壳根、宿主页面不得自铺底色 | 源码文本（裁决） | 保留 | 挂载层级与背景归属是渲染结构事实；「不得存在」的禁令只能扫描 |

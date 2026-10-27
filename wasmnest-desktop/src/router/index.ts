@@ -40,7 +40,14 @@ const router = createRouter({
       component: () => import('@/shell/views/ShellView.vue'),
     },
     {
-      // 系统页（宿主自有管理面）：设置 / 应用管理 / 权限与授权，与业务应用同构产卡
+      // 系统页（宿主自有管理面）：设置 / 应用管理 / 权限与授权，与业务应用同构产卡；
+      // :sub = 系统页二级页（如 /sys/settings/appearance 外观）——同一张系统页卡内
+      // 切子路由（faceOfRoute 仍按 [2] 段归到父页卡），不另产卡
+      path: '/sys/:pageId/:sub',
+      name: 'shell-sys-sub',
+      component: () => import('@/shell/components/ShellCardScreen.vue'),
+    },
+    {
       path: '/sys/:pageId',
       name: 'shell-sys',
       component: () => import('@/shell/components/ShellCardScreen.vue'),

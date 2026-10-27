@@ -93,7 +93,11 @@ export default {
       },
       settings: {
         name: 'Settings',
-        desc: 'Appearance · background · themes · system · about',
+        desc: 'Appearance · system · logging · permissions · about',
+      },
+      appearance: {
+        name: 'Appearance',
+        desc: 'Colour mode · Language · Font size · Wallpaper · Themes',
       },
     },
     quickSettings: {
@@ -198,6 +202,13 @@ export default {
       },
     },
     settings: {
+      // Appearance entry card (first card on settings): style items live in the
+      // sub-page SysAppearanceView
+      appearanceEntry: {
+        title: 'Appearance',
+        desc: 'Colour mode, language, font size, wallpaper and themes',
+        open: 'Open appearance',
+      },
       ui: {
         title: 'Appearance',
         // Terminology (2026-10-27): "theme" means the preset only; light/dark is
@@ -208,6 +219,15 @@ export default {
         themeSystem: 'System',
         language: 'Language',
         fontSize: 'Font size',
+        // Discrete font-size slider levels (no raw px); key order = level order
+        // (useFontSize FONT_SIZE_LEVELS)
+        fontLevel: {
+          xs: 'Smallest',
+          s: 'Small',
+          normal: 'Normal',
+          l: 'Large',
+          xl: 'Largest',
+        },
         animations: 'Animations',
         animationsDesc: 'Screen transitions and overlay effects (disable to degrade)',
       },

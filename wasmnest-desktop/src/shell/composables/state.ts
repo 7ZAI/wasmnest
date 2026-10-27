@@ -28,6 +28,23 @@ export function sysPageOf(id: string): (typeof SYS_PAGES)[number] | undefined {
   return SYS_PAGES.find((s) => s.id === id)
 }
 
+/**
+ * 系统页二级页（父页卡内的子路由面，键 = `${pageId}/${sub}`）。
+ *
+ * 二级页**不进** SYS_PAGES：SYS_PAGES 是主屏系统网格与多任务的一级面清单，
+ * 二级页只经父页入口卡跳转（如设置页「外观」入口），同一张系统页卡内切子路由，
+ * 不另产卡。
+ */
+export const SYS_SUB_PAGES: Readonly<
+  Record<string, { nameKey: string; descKey: string; icon: string }>
+> = {
+  'settings/appearance': {
+    nameKey: 'shell.sys.appearance.name',
+    descKey: 'shell.sys.appearance.desc',
+    icon: 'theme',
+  },
+}
+
 // ==================== 卡片键 ====================
 
 export function appCardKey(pluginId: string): CardKey {

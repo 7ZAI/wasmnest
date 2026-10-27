@@ -88,7 +88,11 @@ export default {
       },
       settings: {
         name: '设置',
-        desc: '界面 · 背景 · 主题 · 系统 · 关于',
+        desc: '外观 · 系统 · 日志 · 授权 · 关于',
+      },
+      appearance: {
+        name: '外观',
+        desc: '明暗模式 · 语言 · 字号 · 壁纸 · 主题',
       },
     },
     quickSettings: {
@@ -192,6 +196,12 @@ export default {
       },
     },
     settings: {
+      // 外观入口卡（设置页首卡）：样式调整项在二级页 SysAppearanceView
+      appearanceEntry: {
+        title: '外观',
+        desc: '明暗模式、语言、字号、壁纸与主题',
+        open: '打开外观',
+      },
       ui: {
         title: '界面',
         // 术语（2026-10-27）：「主题」只指主题预设；深浅色在壳页叫「明暗模式」。
@@ -202,6 +212,14 @@ export default {
         themeSystem: '跟随系统',
         language: '语言',
         fontSize: '字号',
+        // 字号滑杆五档划分（不再显示 px），键序即档位序（useFontSize FONT_SIZE_LEVELS）
+        fontLevel: {
+          xs: '极小',
+          s: '小',
+          normal: '正常',
+          l: '大',
+          xl: '超大',
+        },
         animations: '动画',
         animationsDesc: '屏幕切换与覆层动效（关闭即降级）',
       },
