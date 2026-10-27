@@ -209,10 +209,7 @@ fn mobile_terminal_plugin_pipe_contracts() {
 
         // ==================== P-001 prewarm 只建连（不发 subscribe） ====================
         world
-            .invoke(
-                "bedcode.prewarm",
-                serde_json::json!({ "sessionId": SESSION_ID }),
-            )
+            .invoke("bedcode.prewarm", serde_json::json!({ "sessionId": SESSION_ID }))
             .await
             .expect("prewarm 可调用");
         mock.wait_for_text(ENDPOINT, |f| f["type"] == "auth", WAIT).await;
@@ -228,10 +225,7 @@ fn mobile_terminal_plugin_pipe_contracts() {
 
         // ==================== P-002 subscribe → 重放到达页面通道 ====================
         world
-            .invoke(
-                "bedcode.subscribe",
-                serde_json::json!({ "sessionId": SESSION_ID }),
-            )
+            .invoke("bedcode.subscribe", serde_json::json!({ "sessionId": SESSION_ID }))
             .await
             .expect("subscribe 可调用");
         mock.wait_for_text(ENDPOINT, |f| f["type"] == "subscribe", WAIT).await;
@@ -324,10 +318,7 @@ fn mobile_terminal_plugin_pipe_contracts() {
         let deadline = Instant::now() + WAIT;
         loop {
             let state = world
-                .invoke(
-                    "bedcode.get-state",
-                    serde_json::json!({ "sessionId": SESSION_ID }),
-                )
+                .invoke("bedcode.get-state", serde_json::json!({ "sessionId": SESSION_ID }))
                 .await
                 .expect("get-state 可调用");
             if state["stopped"] == true {

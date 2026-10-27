@@ -150,9 +150,7 @@ fn session_plugin_db_root() -> &'static PathBuf {
 /// 会话中心插件私有库文件（插件 activate 后存在，schema 见插件
 /// `auth_records::store::SCHEMA`：auth_pairings / auth_connection_history）
 fn session_plugin_db_path() -> PathBuf {
-    session_plugin_db_root()
-        .join("com.wasmnest.bedcode")
-        .join("plugin.db")
+    session_plugin_db_root().join("com.wasmnest.bedcode").join("plugin.db")
 }
 
 /// 白盒种子：直写认证中心私有库 `auth_pairings` 播种配对（id 固定，测试持有；

@@ -36,7 +36,5 @@ mod bench_channel;
 
 // ==================== Re-exports ====================
 
-
-
-pub use bootstrap::{AppStartTime, run, run_with};
+pub use bootstrap::{run, run_with, AppStartTime};
 pub use system::{AppConfig, AppContext, AppError, Result};
