@@ -31,12 +31,12 @@ const SHA_A = 'a'.repeat(64)
 function makeManifest(overrides = {}) {
   return {
     product: '0.0.1',
-    repos: { lib: { tag: 'lib-v0.0.2' }, apps: { tag: 'apps-v0.0.1' } },
+    repos: { lib: { tag: 'lib-v0.0.1' }, apps: { tag: 'apps-v0.0.1' } },
     contract: { package: 'wasmnest:plugin', version: '0.0.1', witSha256: 'b'.repeat(64) },
     hostRuntime: {
       version: '0.0.1',
       sourceCommit: SOURCE_COMMIT,
-      libTag: 'lib-v0.0.2',
+      libTag: 'lib-v0.0.1',
       witVersion: '0.0.1',
       sdkVersion: '0.0.1',
       mountContract: '1',
@@ -97,7 +97,7 @@ describe('validateHostRuntime', () => {
 
   it('C-005 反例：libTag / witVersion 与真源不一致 → 红', () => {
     const m1 = makeManifest()
-    m1.hostRuntime.libTag = 'lib-v0.0.1'
+    m1.hostRuntime.libTag = 'lib-v0.9.9'
     assert.ok(validateHostRuntime(m1, TRUTH).errors.some((e) => e.includes('libTag')))
     const m2 = makeManifest()
     m2.hostRuntime.witVersion = '0.0.2'

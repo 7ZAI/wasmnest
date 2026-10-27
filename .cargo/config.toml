@@ -88,7 +88,7 @@ linker = "rust-lld"
 
 # ==================== L2：本地同场开发的依赖重定向（不进发布包） ====================
 # 通用宿主 runtime crate（wasmnest-desktop/src-tauri）的发布形态：
-#   - 12 条能力仓依赖 = git tag `lib-v0.0.2`（https://github.com/7ZAI/wasmnest-lib）
+#   - 11 条能力仓依赖 = git tag `lib-v0.0.1`（https://github.com/7ZAI/wasmnest-lib）
 #   - 桌面 SDK `wasmnest-plugin-api` = crates.io `=0.0.1`
 # 本仓同场开发（R1 布局：`../wasmnest-lib` 兄弟目录 + 工作树 SDK）必须用本地源码，
 # 否则每改一次内核都要推 tag；故在此统一 patch 回本地 path。**patch 只住 cargo

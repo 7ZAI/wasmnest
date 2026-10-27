@@ -2,7 +2,7 @@
   "$comment": "跨仓版本唯一表达（三仓拆分 spec §6）。谁写：平台仓发布流程；谁读：Seam 1 装配校验、各仓 release workflow、scripts/check-release-manifest.mjs。一致性判据与该脚本头注逐条对应：product == 平台仓 package.json 版本；repos.lib.tag == 能力仓 ../wasmnest-lib HEAD 的精确 tag（工作树干净）；contract.version == ../wasmnest-lib/wasmnest-contract/src/lib.rs 的 PACKAGE_VERSION；contract.witSha256 == 双端组合 WIT 产物指纹（--print-hash 可重算）；hostRuntime 段是宿主运行时的独立版本线（version 独立于 product，sourceCommit / libTag / witVersion / sdkVersion / mountContract 记录构建身份，artifacts 为各平台 tar.gz + sha256，发布时由 host-release workflow 填充，未发布时为空对象）；apps 段为 end 感知结构——同一 plugin id 可双端各一份，ends.<end>.artifact == 该端 plugin.json 的 rustLibrary + '.wasm'，9 份端应用全覆盖；repos.apps.tag == 应用仓 HEAD 的精确 tag。插件清单（原 scripts/plugin-package-list.json）并入 apps 段。整数 ABI 已退役（ADR 0051 D2）：端形态由 AbiPolicy（abi-form）与各端 WIT 组合表达，不写进本清单。",
   "product": "0.0.1",
   "repos": {
-    "lib": { "tag": "lib-v0.0.2" },
+    "lib": { "tag": "lib-v0.0.1" },
     "apps": { "tag": "apps-v0.0.1" }
   },
   "contract": {
@@ -13,7 +13,7 @@
   "hostRuntime": {
     "version": "0.0.1",
     "sourceCommit": "ca295a802edcc53ea9d938bad186e6d17b670e48",
-    "libTag": "lib-v0.0.2",
+    "libTag": "lib-v0.0.1",
     "witVersion": "0.0.1",
     "sdkVersion": "0.0.1",
     "mountContract": "1",
