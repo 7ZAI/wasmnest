@@ -3,7 +3,8 @@
  * （票 2026-10-09 阶段 B 前置：壳必须覆盖旧宿主设置的全部门类，否则退役旧宿主=功能回归；
  *  2026-10-14 二改：连接 / 认证入口删除、危险区迁「关于」、背景支持自定义壁纸
  *  2026-10-15 三改：出站策略入口删除、背景（壁纸）整体迁外观设置页（契约随迁）
- *  2026-10-25 四改：应用设置贡献面整面退役（registerSettingsEntry）——壳设置页只陈列平台项）
+ *  2026-10-25 四改：应用设置贡献面整面退役（registerSettingsEntry）——壳设置页只陈列平台项
+ *  2026-10-27 五改：顶部「本机 · 平台 / 版本」标识卡删除（用户裁决：无信息量））
  *
  * 被测：`src/shell/components/screens/ShellSettingsScreen.vue`
  *
@@ -16,7 +17,6 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { ref } from 'vue'
 import zhShell from '@/locales/zh-CN/shell'
 import enShell from '@/locales/en/shell'
 
@@ -35,9 +35,6 @@ vi.mock('@/shell/composables/useShellNavigation', () => ({
     openPermissions: mockOpenPermissions,
     back: mockNavBack,
   }),
-}))
-vi.mock('@/shell/composables/usePlatform', () => ({
-  usePlatform: () => ({ platformInfo: ref({ platform: 'android', osType: 'android' }) }),
 }))
 import ShellSettingsScreen from '@/shell/components/screens/ShellSettingsScreen.vue'
 
@@ -73,6 +70,9 @@ describe('C-ST1 平台设置门类', () => {
     // 整面退役（registerSettingsEntry）——壳设置页只剩平台项
     expect(text, '出站策略入口不应回接').not.toContain('shell.settings.egress')
     expect(text, '背景区块不应回接').not.toContain('shell.settings.background')
+    // 2026-10-27：顶部「本机 · 平台 / 版本」标识卡删除——本机信息无信息量
+    expect(text, '顶部本机标识卡不应回接').not.toContain('shell.home.localDevice')
+    expect(text, '本机卡的版本行不应回接').not.toContain('shell.settings.runtime')
     wrapper.unmount()
   })
 
@@ -135,7 +135,6 @@ describe('C-ST2 入口跳转口径', () => {
 describe('C-ST7 设置项文案双语在场', () => {
   const KEYS = [
     'about',
-    'runtime',
     'appearance',
     'appearanceHint',
     'permissions',
@@ -167,6 +166,8 @@ describe('C-ST7 设置项文案双语在场', () => {
         'wallNone', 'wallAurora', 'wallDune', 'wallReef',
         'wallCustom', 'wallPick', 'wallReplace', 'wallRemove', 'wallPickFailed', 'wallDim',
         'appSettings',
+        // 2026-10-27：本机标识卡删除，版本行文案随卡退役
+        'runtime',
       ]) {
         expect(locale[key], `退役 key shell.settings.${key} 不应保留`).toBeUndefined()
       }

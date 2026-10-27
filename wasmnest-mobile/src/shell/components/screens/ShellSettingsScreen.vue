@@ -18,24 +18,6 @@
     </header>
 
     <div class="flex-1 min-h-0 overflow-y-auto pb-6 shell-content-cap">
-      <!-- ==================== 本机 ==================== -->
-      <div class="px-4 pb-1">
-        <div
-          class="flex items-center gap-3.5 rounded-[12px] border border-[var(--mobile-group-border)] bg-[var(--mobile-bg-card)] p-4"
-          :style="{ boxShadow: 'var(--mobile-card-shadow)' }"
-        >
-          <ShellBrandTile :size="48" />
-          <div class="flex-1 min-w-0">
-            <b class="block shell-type-title text-[var(--mobile-text-primary)] truncate">
-              {{ deviceLabel }}
-            </b>
-            <div class="shell-type-caption text-[var(--mobile-text-secondary)] truncate">
-              {{ t('shell.settings.runtime', { version: appVersion }) }}
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- ==================== 平台 ==================== -->
       <ShellSection :title="t('shell.settings.platform')" />
       <div class="px-4 pb-1">
@@ -77,13 +59,14 @@
  *      与版本/更新同属「关于本机」，一级设置页不再摆一排红按钮；
  *   ③ 票 2026-10-10 批次 C4：业务设置入口（连接策略 / 通知）随真源下沉 bedcode 应用
  *      从本表删除——壳只留平台机制与安全闸门，避免同一个开关在壳与应用各存一份真值。
+ *
+ * 2026-10-27：顶部「本机 · 平台 / 版本」标识卡删除（用户裁决：本机信息无信息量）；
+ * 版本号只在「关于」入口的 hint 里保留一处。
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { usePlatform } from '../../composables/usePlatform'
 import { useShellNavigation } from '../../composables/useShellNavigation'
-import ShellBrandTile from '../ShellBrandTile.vue'
 import ShellGroupCard from '../ShellGroupCard.vue'
 import ShellSection from '../ShellSection.vue'
 
@@ -99,19 +82,9 @@ interface PlatformEntry {
 const { t } = useI18n()
 const router = useRouter()
 const nav = useShellNavigation()
-const { platformInfo } = usePlatform()
-
-
-
 
 /** 版本号来自构建期注入（与设置页同源，不另立真源） */
 const appVersion = __APP_VERSION__
-
-/** 本机名：平台标识拿不到就只显示「本机」，不编造机型 */
-const deviceLabel = computed(() => {
-  const platform = platformInfo.value.platform
-  return platform ? `${t('shell.home.localDevice')} · ${platform}` : t('shell.home.localDevice')
-})
 
 const platformEntries = computed<PlatformEntry[]>(() => [
   {
