@@ -8,12 +8,31 @@
 
 use std::path::{Path, PathBuf};
 
+/// 移动 `PluginManager` 已按职责拆成 `plugin/manager/` 模块目录（`mod.rs` 装配 /
+/// `lifecycle.rs` 生命周期 / `loading.rs` 装载），锁按**模块树**读取而不是单文件
+/// `plugin/manager.rs`：拆分后旧单文件路径直接 `ENOENT` 让整条锁 panic——路径与拆
+/// 分形态必须一起对账，不得靠「读不到就跳过」静默失效。
+const MANAGER_MODULES: &[&str] = &[
+    "src/plugin/manager/mod.rs",
+    "src/plugin/manager/lifecycle.rs",
+    "src/plugin/manager/loading.rs",
+];
+
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
 }
 
 fn read(rel: &str) -> String {
     std::fs::read_to_string(root().join(rel)).unwrap_or_else(|e| panic!("读取 {rel} 失败：{e}"))
+}
+
+/// 模块树拼接（每段带文件名头，报错时能定位到具体模块）
+fn manager_source() -> String {
+    MANAGER_MODULES
+        .iter()
+        .map(|rel| format!("// ===== {rel} =====\n{}", read(rel)))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[test]
@@ -34,7 +53,7 @@ fn boot_registers_peer_node_service_and_prewarms_platform() {
 
 #[test]
 fn manager_injects_registry_and_releases_on_all_exit_paths() {
-    let manager = read("src/plugin/manager.rs");
+    let manager = manager_source();
     for needle in [
         "set_service_registry",
         "release_services_for",
@@ -43,7 +62,7 @@ fn manager_injects_registry_and_releases_on_all_exit_paths() {
     ] {
         assert!(
             manager.contains(needle),
-            "PluginManager 缺少 `{needle}`（注册表注入或生命周期回收漂移）"
+            "PluginManager 模块树缺少 `{needle}`（注册表注入或生命周期回收漂移）"
         );
     }
 }
@@ -64,7 +83,12 @@ fn peer_ports_expose_service_registry_in_production() {
 #[test]
 fn old_host_driven_peer_owner_model_stays_retired() {
     // 源码级防回接（注释行豁免：解释「为什么删」的记账不算回接）
-    for rel in ["src/plugin/manager.rs", "src/peer/net.rs", "src/plugin/host_ports.rs"] {
+    let scanned: Vec<&str> = MANAGER_MODULES
+        .iter()
+        .copied()
+        .chain(["src/peer/net.rs", "src/plugin/host_ports.rs"])
+        .collect();
+    for rel in scanned {
         let src = read(rel);
         for (idx, raw) in src.lines().enumerate() {
             let line = raw.trim_start();
