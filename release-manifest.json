@@ -12,12 +12,25 @@
   },
   "hostRuntime": {
     "version": "0.0.1",
-    "sourceCommit": "ca295a802edcc53ea9d938bad186e6d17b670e48",
+    "sourceCommit": "21c84dd57fd4900257db9ecb3a2e7ec8968225bb",
     "libTag": "lib-v0.0.1",
     "witVersion": "0.0.1",
     "sdkVersion": "0.0.1",
     "mountContract": "1",
-    "artifacts": {},
+    "artifacts": {
+      "linux-x86_64": {
+        "file": "host-desktop-0.0.1-linux-x86_64.tar.gz",
+        "sha256": "c931ef5197e9a8ece8d0cbd6289584a8db7f2c81f4d33a514b5ebb3c4f389868"
+      },
+      "macos-arm64": {
+        "file": "host-desktop-0.0.1-macos-arm64.tar.gz",
+        "sha256": "9abaa99e2bc83116a58d6fddb6f7eb8443088c7e57ed657cf027c93db73dae83"
+      },
+      "windows-x86_64": {
+        "file": "host-desktop-0.0.1-windows-x86_64.tar.gz",
+        "sha256": "2123fe1a516cfdae1d6b56f4e2347f578ec26d11e404cb9d7019fae0b1322750"
+      }
+    },
     "$comment": "artifacts 由 host-release workflow 发布时填充（真实 tar.gz sha256）；未发布时为空（check:manifest 允许并提示）。sourceCommit 在发布时重写为构建 commit。"
   },
   "apps": {
