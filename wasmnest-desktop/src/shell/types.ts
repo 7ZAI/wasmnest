@@ -53,6 +53,15 @@ export interface ShellCtxMenu {
   y: number
 }
 
+/**
+ * 悬浮导航位置：可移动空间内的归一化比例（0 = 最左 / 最上，1 = 最右 / 最下）。
+ * 存比例不存像素——窗口尺寸变化后按同一比例重算，悬浮条不会被甩出可视区。
+ */
+export interface FloatingNavPosition {
+  x: number
+  y: number
+}
+
 /** 壳的本地 UI 偏好（纯壳属性，不落宿主 AppConfig——引擎面不加壳词汇） */
 export interface ShellUiPrefs {
   /** 壁纸 id（宿主所有面共用）：none / aurora / dune / reef / custom */
@@ -78,4 +87,11 @@ export interface ShellUiPrefs {
    * `Record<string, string>`：本文件是壳类型基座，不反向依赖 composable。
    */
   shortcuts?: Partial<Record<string, string>>
+  /**
+   * 悬浮导航开关（回主屏 / 多任务的 Liquid Glass 胶囊，挂 ShellHost 常驻任意面；
+   * 与移动端同名字段同语义，默认关闭——需要在设置里显式开启）。
+   */
+  floatingNav?: boolean
+  /** 悬浮导航位置（归一化比例，见 FloatingNavPosition；缺省 = 底部居中） */
+  floatingNavPos?: FloatingNavPosition
 }

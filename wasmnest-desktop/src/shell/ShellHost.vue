@@ -55,6 +55,13 @@
     <FsAuthDialog />
     <NetworkAuthDialog />
 
+    <!-- ============ 悬浮导航（设置开启后常驻；主屏 / 系统页 / 应用面都可见） ============
+         Liquid Glass 胶囊（回主屏 / 多任务），与移动端 ShellFloatingNav 同构。挂在
+         壳根 = 唯一与所有面同层的装配点；bareWindow 独立窗口不渲染（窗口 chrome
+         归应用，与工具栏 / 状态栏同口径）。z-40 在工具栏 / 状态栏之上、宿主弹层
+         之下；状态栏可见时让出其条带，默认落位在其正上方。 -->
+    <ShellFloatingNav v-if="!isBareWindow" :bottom-reserve="floatNavBottomReserve" />
+
     <!-- 全局 Toast（vue-sonner，richColors 区分等级） -->
     <Toaster
       :theme="toasterTheme"
@@ -134,6 +141,7 @@ import ShellContextMenu from './components/ShellContextMenu.vue'
 import ShellDialogLayer from './components/ShellDialogLayer.vue'
 import FsAuthDialog from '@/shell/auth/FsAuthDialog.vue'
 import NetworkAuthDialog from '@/shell/auth/NetworkAuthDialog.vue'
+import ShellFloatingNav from '@/shell/components/ShellFloatingNav.vue'
 import { useHomeSearch } from './composables/useHomeSearch'
 import { useShellShortcuts } from './composables/useShellShortcuts'
 
@@ -225,6 +233,14 @@ const isBareWindow = computed(() => route.meta.bareWindow === true)
 const currentAppId = computed(() => pluginIdOfAppRoute(path.value) ?? '')
 /** 是否处在应用面（常驻挂载槽的显隐判据） */
 const isAppRoute = computed(() => currentAppId.value !== '')
+
+/**
+ * 悬浮导航的底部让位：状态栏可见（主屏 / 系统页）时让出状态栏条带，应用面
+ * （状态栏隐藏）为 0。26 与 ShellStatusBar 的 .shell-statusbar height 同口径。
+ */
+const floatNavBottomReserve = computed(() =>
+  !isBareWindow.value && !isAppRoute.value ? 26 : 0,
+)
 
 /**
  * 表面实例回收：应用离开运行态（停用 / 卸载 / 错误终态）→ dispose。

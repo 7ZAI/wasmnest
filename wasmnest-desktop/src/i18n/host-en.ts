@@ -63,6 +63,12 @@ export default {
       home: 'Home',
       homeTitle: 'Home: apps keep running in the background',
     },
+    /** Floating navigation (stays above any face once enabled; same keys and copy as mobile) */
+    floatingNav: {
+      home: 'Back home',
+      recents: 'Switch apps',
+      move: 'Floating navigation, draggable; focus it and use arrow keys to move',
+    },
     toolbar: {
       notifs: 'Notifications, {count}',
       notifsTitle: 'Notification center ({count})',
@@ -245,6 +251,11 @@ export default {
         title: 'Shortcuts',
         desc: 'View and rebind shell keyboard shortcuts',
         open: 'Open shortcuts',
+      },
+      nav: {
+        title: 'Navigation',
+        label: 'Floating navigation',
+        hint: 'A persistent capsule for Home and app switcher, draggable',
       },
       ui: {
         title: 'Appearance',

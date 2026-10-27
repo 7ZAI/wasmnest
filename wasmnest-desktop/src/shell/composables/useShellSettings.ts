@@ -1,5 +1,5 @@
 /**
- * 设备壳本地 UI 偏好（wallpaper / wallDim / wallpaperImage / theme / shortcuts）
+ * 设备壳本地 UI 偏好（wallpaper / wallDim / wallpaperImage / theme / shortcuts / floatingNav）
  *
  * 壁纸铺在壳根（ShellHost 的 .shell-wall），主屏 / 系统页 / 兜底面共用；
  * 这些是**壳的 UI 偏好**（纯机制词汇），不是宿主 AppConfig 字段——
@@ -17,12 +17,30 @@ import { ref, watch } from 'vue'
 import { SHELL_THEME_DEFAULT, WALL_DIM_DEFAULT, WALLPAPER_DEFAULT } from './state'
 import { isCustomWallpaperFile } from './wallpaperFile'
 import { SHORTCUT_ACTION_IDS, comboIsBindable } from './shortcutsModel'
-import type { ShellUiPrefs } from '../types'
+import type { FloatingNavPosition, ShellUiPrefs } from '../types'
 
 const STORAGE_KEY = 'wasmnest.shell-ui-prefs.v1'
 
 /** 旧版本偏好形状：主题当时叫 `skin`（只有内置 default 一个值），读到时折算后丢弃 */
 type LegacyPrefs = Partial<ShellUiPrefs> & { skin?: unknown }
+
+/** 悬浮导航默认落位：底部居中（桌面默认停在状态栏正上方，见 ShellFloatingNav 的 bottomReserve） */
+export const FLOATING_NAV_POS_DEFAULT: FloatingNavPosition = { x: 0.5, y: 1 }
+
+/** 比例值单字段校验：非有限数 / 越界各自回落，不因一个坏值否定另一个轴 */
+function clampRatio(value: unknown, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.min(1, Math.max(0, value))
+}
+
+/** 悬浮导航位置归一（加载与写入共用同一口径） */
+export function normalizeFloatingNavPos(value: unknown): FloatingNavPosition {
+  const pos = (value ?? {}) as Partial<FloatingNavPosition>
+  return {
+    x: clampRatio(pos.x, FLOATING_NAV_POS_DEFAULT.x),
+    y: clampRatio(pos.y, FLOATING_NAV_POS_DEFAULT.y),
+  }
+}
 
 const prefs = ref<ShellUiPrefs>(load())
 
@@ -32,6 +50,8 @@ function load(): ShellUiPrefs {
     wallDim: WALL_DIM_DEFAULT,
     wallpaperImage: '',
     theme: SHELL_THEME_DEFAULT,
+    floatingNav: false,
+    floatingNavPos: { ...FLOATING_NAV_POS_DEFAULT },
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -54,6 +74,8 @@ function load(): ShellUiPrefs {
       wallpaperImage,
       theme: readThemeId(parsed) ?? fallback.theme,
       shortcuts: readShortcuts(parsed.shortcuts),
+      floatingNav: typeof parsed.floatingNav === 'boolean' ? parsed.floatingNav : false,
+      floatingNavPos: normalizeFloatingNavPos(parsed.floatingNavPos),
     }
   } catch {
     return fallback

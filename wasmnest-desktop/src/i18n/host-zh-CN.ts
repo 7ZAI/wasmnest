@@ -58,6 +58,12 @@ export default {
       home: '主屏',
       homeTitle: '回到主屏（应用继续在后台运行）',
     },
+    /** 悬浮导航（开关开启后常驻在任意面之上；与移动端同键名同文案） */
+    floatingNav: {
+      home: '回主屏',
+      recents: '切换应用',
+      move: '悬浮导航，可拖动；聚焦后可用方向键移动',
+    },
     toolbar: {
       notifs: '通知中心，{count} 条',
       notifsTitle: '通知中心（{count} 条）',
@@ -236,6 +242,11 @@ export default {
         title: '快捷键',
         desc: '查看与修改壳层键盘快捷键',
         open: '打开快捷键',
+      },
+      nav: {
+        title: '导航',
+        label: '悬浮导航',
+        hint: '回主屏与切换应用的常驻胶囊，可拖动',
       },
       ui: {
         title: '界面',

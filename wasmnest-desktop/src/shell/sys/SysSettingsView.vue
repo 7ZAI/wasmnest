@@ -30,6 +30,27 @@
     </div>
   </ShellCard>
 
+  <!-- ==================== 导航（悬浮导航开关，与移动端「导航」分组同构） ====================
+       液体玻璃的回主屏 / 多任务胶囊，默认关闭；开关直写壳偏好（floatingNav），
+       落地渲染由 ShellHost 的 ShellFloatingNav 承担。 -->
+  <ShellCard :title="t('shell.settings.nav.title')" icon="recents">
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('shell.settings.nav.label') }}</b>
+      </div>
+      <label class="shell-sw">
+        <input
+          type="checkbox"
+          :checked="prefs.floatingNav === true"
+          :aria-label="t('shell.settings.nav.label')"
+          @change="prefs.floatingNav = ($event.target as HTMLInputElement).checked"
+        />
+        <span class="track"></span><span class="knob"></span>
+      </label>
+    </div>
+    <span class="hint">{{ t('shell.settings.nav.hint') }}</span>
+  </ShellCard>
+
   <!-- ==================== 系统 / 日志（复用既有设置分组组件，零重写） ====================
        链路加密属终端的业务设置（加密哪些通道取决于终端数据面），已随设置归属回归
        bedcode wasm-app，宿主系统页不再承载。
@@ -73,14 +94,21 @@ import SettingsLoggingSection from '@/shell/settings/SettingsLoggingSection.vue'
 import SettingsAboutSection from '@/shell/settings/SettingsAboutSection.vue'
 import SettingsResetSection from '@/shell/settings/SettingsResetSection.vue'
 import { useShellState } from '../composables/useShellState'
+import { useShellSettings } from '../composables/useShellSettings'
 import ShellIcon from '../components/ShellIcon.vue'
 import ShellCard from '../components/ShellCard.vue'
 
 const { t } = useI18n()
 const state = useShellState()
+const { prefs } = useShellSettings()
 </script>
 
 <style scoped>
 /* 行控件行样式已上提 shell.css（.row-sw，2026-10-28 达 3+ 组件门槛：
    SysSettingsView / SysAppearanceView / SysShortcutsView 三处消费） */
+.hint {
+  display: block;
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--text-tertiary);
+}
 </style>
