@@ -2,6 +2,12 @@ import { ref, watch, computed } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useSettingsStore } from '@/stores/settings'
 import { logger } from '@/utils/frontendLogger'
+import { useShellPreferences } from '@/shell/composables/useShellPreferences'
+import {
+  SHELL_THEME_DEFAULT,
+  applyThemePresetDom,
+  builtinThemeOf,
+} from '@/shell/composables/themePresets'
 
 const isSystemDark = ref(false)
 let systemThemeQuery: MediaQueryList | null = null
@@ -28,6 +34,24 @@ const systemThemeHandler = (e: MediaQueryListEvent) => {
   void syncSystemBarAppearance(e.matches)
 }
 
+/**
+ * 把壳主题预设挂到 `<html data-theme>`（与深浅色是两个轴，互不覆盖）
+ *
+ * 首帧也要走这里：`presetThemeBeforeMount` → `applyTheme`，所以主题预设在
+ * Vue 挂载前就位，移动端不会出现「默认配色渲染一帧再换成玻璃」的闪变。
+ * 扩展主题此刻可能还没注册，先回落默认，由 `useShellTheme` 的 watcher 纠正。
+ */
+function syncShellThemePreset() {
+  const { theme } = useShellPreferences()
+  const builtin = builtinThemeOf(theme.value)
+  applyThemePresetDom(
+    builtin ? builtin.id : SHELL_THEME_DEFAULT,
+    {},
+    builtin?.glyphStyle ?? null,
+    null,
+  )
+}
+
 function applyTheme(theme: string) {
   const root = document.documentElement
   const isDark = theme === 'system' ? isSystemDark.value : theme === 'dark'
@@ -37,6 +61,8 @@ function applyTheme(theme: string) {
   } else {
     root.classList.remove('dark')
   }
+
+  syncShellThemePreset()
 
   // 系统栏图标外观跟随 App 主题（而非设备主题）
   void syncSystemBarAppearance(isDark)

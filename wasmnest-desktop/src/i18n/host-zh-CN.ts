@@ -88,7 +88,7 @@ export default {
       },
       settings: {
         name: '设置',
-        desc: '界面 · 背景 · 皮肤 · 系统 · 关于',
+        desc: '界面 · 背景 · 主题 · 系统 · 关于',
       },
     },
     quickSettings: {
@@ -194,6 +194,9 @@ export default {
     settings: {
       ui: {
         title: '界面',
+        // 术语（2026-10-27）：「主题」只指主题预设；深浅色在壳页叫「明暗模式」。
+        // 不复用 settings.appearance.theme（那是与应用副本共享的旧标签）。
+        colorMode: '明暗模式',
         themeLight: '浅色',
         themeDark: '深色',
         themeSystem: '跟随系统',
@@ -225,12 +228,19 @@ export default {
         hint: '安全闸门的管理入口，完整记录见「权限与授权」页',
         open: '打开权限与授权',
       },
-      skins: {
-        title: '主题皮肤',
-        desc: '平台外壳的配色方案；应用仍可自持配色。',
+      themes: {
+        title: '主题',
+        desc: '平台外壳的整体外观；应用仍可自持配色。',
         default: '默认',
-        defaultDesc: '跟随平台默认色板',
-        hint: '皮肤只覆盖平台外壳的 CSS 变量；应用根容器自己声明的配色优先。',
+        defaultDesc: '暖调工作台，实心卡面',
+        diffuse: '弥散玻璃',
+        diffuseDesc: '柔光雾面，大圆角',
+        liquid: '液态玻璃',
+        liquidDesc: '高饱和折射，镜面高光',
+        hyper: '超色彩主义',
+        hyperDesc: '高饱和色块，硬边投影',
+        dynamic: '动态',
+        hint: '主题覆盖平台外壳与图标语汇；应用根容器自己声明的配色优先。',
       },
     },
     apps: {

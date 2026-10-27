@@ -93,7 +93,7 @@ export default {
       },
       settings: {
         name: 'Settings',
-        desc: 'Appearance · background · skins · system · about',
+        desc: 'Appearance · background · themes · system · about',
       },
     },
     quickSettings: {
@@ -200,6 +200,9 @@ export default {
     settings: {
       ui: {
         title: 'Appearance',
+        // Terminology (2026-10-27): "theme" means the preset only; light/dark is
+        // called "colour mode" here so one screen never has two things named Theme.
+        colorMode: 'Colour mode',
         themeLight: 'Light',
         themeDark: 'Dark',
         themeSystem: 'System',
@@ -231,12 +234,19 @@ export default {
         hint: 'Security-gate entry; full records live in Permissions & Authorization',
         open: 'Open permissions',
       },
-      skins: {
-        title: 'Theme skins',
-        desc: 'Color schemes for the platform shell; apps keep their own palettes.',
+      themes: {
+        title: 'Themes',
+        desc: 'Overall look of the platform shell; apps keep their own palettes.',
         default: 'Default',
-        defaultDesc: 'Follow the platform default palette',
-        hint: 'Skins only override shell CSS variables; palettes declared by an app root take precedence.',
+        defaultDesc: 'Warm workbench, solid surfaces',
+        diffuse: 'Diffuse glass',
+        diffuseDesc: 'Soft haze, large radii',
+        liquid: 'Liquid glass',
+        liquidDesc: 'High-saturation refraction, specular edge',
+        hyper: 'Hyper colour',
+        hyperDesc: 'Saturated blocks, hard shadows',
+        dynamic: 'Animated',
+        hint: 'Themes cover the platform shell and icon language; palettes declared by an app root take precedence.',
       },
     },
     apps: {

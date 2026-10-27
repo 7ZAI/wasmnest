@@ -154,5 +154,11 @@ export const WALLPAPER_DEFAULT = 'aurora'
 export const WALL_DIM_DEFAULT = 30
 export const WALL_DIM_MAX = 70
 
-/** 主题皮肤缺省 id（内置默认皮肤；扩展皮肤走 registerThemeSkin，覆盖同一 token 表） */
-export const SHELL_SKIN_DEFAULT = 'default'
+/**
+ * 主题缺省 id（内置默认主题）。
+ *
+ * 只放这一条常量、不放主题目录：`themePresets.ts` 依赖 `useShellSettings`（读偏好），
+ * 而 `useShellSettings` 需要默认 id——常量留在本文件（零依赖）才能断开这个环，
+ * 否则模块初始化期就会踩 TDZ（`load()` 在模块顶层执行）。
+ */
+export const SHELL_THEME_DEFAULT = 'default'

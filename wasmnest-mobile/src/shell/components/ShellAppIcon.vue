@@ -1,6 +1,6 @@
 <template>
   <span
-    class="inline-flex items-center justify-center flex-shrink-0 overflow-hidden"
+    class="inline-flex items-center justify-center flex-shrink-0 overflow-hidden shell-app-icon"
     :class="toneClass"
     :style="boxStyle"
     role="img"
@@ -104,10 +104,17 @@ const artworkShown = computed(
   () => kind.value === 'image' && !!props.app.iconUrl && !imageFailed.value,
 )
 
-/** 圆角随尺寸线性放大并钳制：小盒（列表行）接近方形角，大可盒（预览位）过渡到拟 Windows/Android 大圆角，避免同一图标在 12/16 两档间跳变 */
+/**
+ * 圆角随尺寸线性放大并钳制：小盒（列表行）接近方形角，大可盒（预览位）过渡到
+ * 拟 Windows/Android 大圆角，避免同一图标在 12/16 两档间跳变。
+ *
+ * 主题优先：写成 `var(--theme-icon-radius, <算出来的 px>)` 而不是在 JS 里判断主题——
+ * 默认主题不定义该变量，浏览器自动回落到算出的 px；主题定义了就用主题的形状。
+ * 这样组件不需要认识主题，也不需要与 CSS 各存一份圆角值（不会漂移）。
+ */
 const borderRadius = computed(() => {
   const r = Math.round(props.size * 0.25)
-  return `${Math.min(18, Math.max(10, r))}px`
+  return `var(--theme-icon-radius, ${Math.min(18, Math.max(10, r))}px)`
 })
 
 const boxStyle = computed(() => ({

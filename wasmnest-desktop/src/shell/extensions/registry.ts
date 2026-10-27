@@ -8,17 +8,17 @@
  * 同 id 重复注册覆盖旧项（旧句柄的 dispose 不会误删新项）。
  */
 import { computed, markRaw, shallowRef } from 'vue'
-import { SHELL_SKIN_DEFAULT } from '../composables/state'
+import { BUILTIN_THEME_IDS, SHELL_THEME_DEFAULT } from '../composables/themePresets'
 import type {
   ShellExtensionHandle,
   ShellSettingsEntry,
   ShellStatusBarItem,
-  ShellThemeSkin,
+  ShellTheme,
 } from './types'
 
 const statusBarItems = shallowRef<ShellStatusBarItem[]>([])
 const settingsEntries = shallowRef<ShellSettingsEntry[]>([])
-const themeSkins = shallowRef<ShellThemeSkin[]>([])
+const themes = shallowRef<ShellTheme[]>([])
 
 function byOrder<T extends { order?: number }>(a: T, b: T): number {
   return (a.order ?? 100) - (b.order ?? 100)
@@ -26,7 +26,7 @@ function byOrder<T extends { order?: number }>(a: T, b: T): number {
 
 const orderedStatusBarItems = computed(() => [...statusBarItems.value].sort(byOrder))
 const orderedSettingsEntries = computed(() => [...settingsEntries.value].sort(byOrder))
-const orderedThemeSkins = computed(() => [...themeSkins.value].sort(byOrder))
+const orderedThemes = computed(() => [...themes.value].sort(byOrder))
 
 /** 注册 / 替换一个状态栏项 */
 export function registerStatusBarItem(item: ShellStatusBarItem): ShellExtensionHandle {
@@ -63,18 +63,21 @@ export function registerSettingsEntry(entry: ShellSettingsEntry): ShellExtension
   }
 }
 
-/** 注册 / 替换一套主题皮肤 */
-export function registerThemeSkin(skin: ShellThemeSkin): ShellExtensionHandle {
-  if (skin.id === SHELL_SKIN_DEFAULT) {
-    throw new Error(`[shell-extensions] theme skin id "${SHELL_SKIN_DEFAULT}" is reserved`)
+/** 注册 / 替换一套主题 */
+export function registerTheme(theme: ShellTheme): ShellExtensionHandle {
+  if (BUILTIN_THEME_IDS.has(theme.id)) {
+    throw new Error(
+      `[shell-extensions] theme id "${theme.id}" is reserved（内置主题 id 不可被扩展占用）`,
+    )
   }
-  assertTokens(skin.id, skin.tokens)
-  assertTokens(skin.id, skin.darkTokens)
-  const next: ShellThemeSkin = { ...skin }
-  themeSkins.value = [...themeSkins.value.filter((current) => current.id !== next.id), next]
+  assertTokens(theme.id, theme.tokens)
+  assertTokens(theme.id, theme.darkTokens)
+  assertGlyphs(theme.id, theme.glyphs)
+  const next: ShellTheme = { ...theme }
+  themes.value = [...themes.value.filter((current) => current.id !== next.id), next]
   return {
     dispose: () => {
-      themeSkins.value = themeSkins.value.filter((current) => current !== next)
+      themes.value = themes.value.filter((current) => current !== next)
     },
   }
 }
@@ -83,14 +86,34 @@ export function registerThemeSkin(skin: ShellThemeSkin): ShellExtensionHandle {
 export function clearShellExtensions(): void {
   statusBarItems.value = []
   settingsEntries.value = []
-  themeSkins.value = []
+  themes.value = []
 }
 
-function assertTokens(skinId: string, tokens: Record<string, string> | undefined): void {
+function assertTokens(themeId: string, tokens: Record<string, string> | undefined): void {
   if (!tokens) return
   for (const key of Object.keys(tokens)) {
     if (!key.startsWith('--')) {
-      throw new Error(`[shell-extensions] theme skin "${skinId}" token must start with --: ${key}`)
+      throw new Error(`[shell-extensions] theme "${themeId}" token must start with --: ${key}`)
+    }
+  }
+}
+
+/**
+ * glyph 覆盖校验：只接受「图标名 → 非空 path d 字符串数组」。
+ *
+ * 不允许空数组——空数组等于「把这个图标抹掉」，是作者笔误而不是设计意图；
+ * 真要隐藏图标应当不注册该名字（回落内置表）。
+ */
+function assertGlyphs(themeId: string, glyphs: Record<string, string[]> | undefined): void {
+  if (!glyphs) return
+  for (const [name, paths] of Object.entries(glyphs)) {
+    if (!Array.isArray(paths) || paths.length === 0) {
+      throw new Error(`[shell-extensions] theme "${themeId}" glyph "${name}" needs path list`)
+    }
+    for (const d of paths) {
+      if (typeof d !== 'string' || d.trim() === '') {
+        throw new Error(`[shell-extensions] theme "${themeId}" glyph "${name}" has empty path`)
+      }
     }
   }
 }
@@ -100,6 +123,9 @@ export function useShellExtensions() {
   return {
     statusBarItems: orderedStatusBarItems,
     settingsEntries: orderedSettingsEntries,
-    themeSkins: orderedThemeSkins,
+    themes: orderedThemes,
   }
 }
+
+/** 默认主题 id 的再导出（壳内组件只需要「默认」这一个字面量） */
+export { SHELL_THEME_DEFAULT }

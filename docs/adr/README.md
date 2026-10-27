@@ -14,6 +14,7 @@
 | 0056 | 插件 id 家族改名 `com.bedcode.*` → `com.wasmnest.*` | 已实施（现行 id 家族）；**正文未成文** | 出处见下节 |
 | 0057 | 桌面挂载形态「机制 B」：同窗口全屏挂载独立构建的应用包 | 已实施（现行形态）；**正文未成文** | 出处见下节 |
 | 0058 | 前端信任边界与命令面威胁模型（后端按应用沙箱，前端同可信域） | 已裁决（2026-10-24，按 spec §13 Q1 推荐项） | [0058-frontend-trust-boundary-and-command-surface-threat-model.md](0058-frontend-trust-boundary-and-command-surface-threat-model.md) |
+| 0059 | 主题预设吸收「皮肤」，并把透明边界收成跨主题不变量 | 已实施（2026-10-27，用户确认推荐方案） | [0059-theme-presets-absorb-skins-and-glass-boundary.md](0059-theme-presets-absorb-skins-and-glass-boundary.md) |
 
 ## 0055–0057 出处登记（正文未成文，编号仅被引用）
 

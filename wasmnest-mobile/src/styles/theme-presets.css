@@ -1,0 +1,311 @@
+/**
+ * 主题预设（内置主题的 token 表 + 结构性规则）—— 移动端
+ *
+ * 与桌面 `wasmnest-desktop/src/styles/theme-presets.css` 同一套主题 id 与语义；
+ * 差异只在深浅色口径：移动端 `:root` 是**深色默认**、浅色整块挂在
+ * `html:not(.dark)` 上（mobile.css 头注），因此每个主题都要写两个落点：
+ *   · `[data-theme='x']`            → 深色档（:root 与嵌套预览块都命中）
+ *   · `html:not(.dark)[data-theme='x']` / `html:not(.dark) [data-theme='x']`
+ *                                   → 浅色档
+ *
+ * 两条硬边界（与桌面同）：
+ * 1. 决策面不变量：授权 / 确认弹窗在任何主题下保持实心，`--mobile-bg-card`
+ *    不得被改成半透明（它是弹窗与列表的实心底）。
+ * 2. 零新增 hex：除既有 token 值外一律 color-mix 自语义 token 派生。
+ *
+ * 动效纪律：`.anim-disabled`（App 根）与 `prefers-reduced-motion` 必须能关掉漂移。
+ */
+
+@keyframes theme-drift {
+  from {
+    background-position:
+      0% 0%,
+      100% 0%,
+      0% 0%;
+  }
+  to {
+    background-position:
+      100% 100%,
+      0% 100%,
+      100% 100%;
+  }
+}
+
+/* ==================== diffuse · 弥散玻璃 ==================== */
+
+[data-theme='diffuse'] {
+  --mobile-bg-primary: color-mix(in srgb, var(--mobile-accent) 6%, #15130f);
+  --mobile-bg-secondary: color-mix(in srgb, var(--mobile-accent) 8%, #191712);
+  --mobile-bg-tertiary: color-mix(in srgb, var(--mobile-accent) 14%, #3c372b);
+  --mobile-bg-elevated: color-mix(in srgb, var(--mobile-text-primary) 8%, #1d1a15);
+
+  --mobile-border: color-mix(in srgb, var(--mobile-text-primary) 12%, transparent);
+  --mobile-border-hover: color-mix(in srgb, var(--mobile-text-primary) 22%, transparent);
+
+  --mobile-group-bg: color-mix(in srgb, var(--mobile-text-primary) 7%, #1d1a15);
+  --mobile-group-border: color-mix(in srgb, var(--mobile-text-primary) 10%, transparent);
+
+  --mobile-nav-bg: color-mix(in srgb, var(--mobile-text-primary) 10%, rgb(21 19 15 / 72%));
+  --mobile-nav-border: color-mix(in srgb, var(--mobile-text-primary) 12%, transparent);
+
+  --mobile-input-bg: color-mix(in srgb, var(--mobile-text-primary) 6%, #1d1a15);
+  --mobile-overlay: rgb(21 19 15 / 72%);
+
+  --mobile-card-shadow: 0 10px 30px rgb(0 0 0 / 42%);
+  --mobile-card-shadow-hover: 0 16px 44px rgb(0 0 0 / 52%);
+
+  /* 玻璃表面（分组卡 / 面板共用）：比 bg-card 薄，但不参与决策面 */
+  --theme-surface-glass: color-mix(in srgb, var(--mobile-text-primary) 9%, transparent);
+  --theme-glass-blur: 24px;
+
+  --theme-ambient: radial-gradient(
+      90% 70% at 10% -8%,
+      color-mix(in srgb, var(--mobile-accent) 22%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      85% 65% at 94% 4%,
+      color-mix(in srgb, var(--mobile-success) 14%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(160deg, #191712 0%, #15130f 100%);
+
+  --theme-icon-radius: 32%;
+  --theme-icon-shadow: 0 6px 18px rgb(0 0 0 / 42%);
+}
+
+html:not(.dark)[data-theme='diffuse'],
+html:not(.dark) [data-theme='diffuse'] {
+  --mobile-bg-primary: color-mix(in srgb, var(--mobile-accent) 5%, #f5f4f0);
+  --mobile-bg-secondary: color-mix(in srgb, var(--mobile-accent) 7%, #efede7);
+  --mobile-bg-tertiary: color-mix(in srgb, var(--mobile-accent) 12%, #d6d2c4);
+  --mobile-bg-elevated: color-mix(in srgb, var(--mobile-accent) 8%, #e7e4dc);
+
+  --mobile-border: color-mix(in srgb, var(--mobile-text-primary) 10%, transparent);
+  --mobile-border-hover: color-mix(in srgb, var(--mobile-text-primary) 18%, transparent);
+
+  --mobile-group-bg: color-mix(in srgb, var(--mobile-bg-primary) 40%, #fdfcfa);
+  --mobile-group-border: color-mix(in srgb, var(--mobile-text-primary) 8%, transparent);
+
+  --mobile-nav-bg: color-mix(in srgb, var(--mobile-bg-primary) 30%, rgb(253 252 250 / 82%));
+  --mobile-nav-border: color-mix(in srgb, var(--mobile-text-primary) 9%, transparent);
+
+  --mobile-input-bg: color-mix(in srgb, var(--mobile-bg-primary) 25%, #fdfcfa);
+  --mobile-overlay: rgb(38 35 27 / 42%);
+
+  --mobile-card-shadow: 0 8px 24px color-mix(in srgb, var(--mobile-text-primary) 9%, transparent);
+  --mobile-card-shadow-hover: 0 14px 36px
+    color-mix(in srgb, var(--mobile-text-primary) 14%, transparent);
+
+  --theme-surface-glass: color-mix(in srgb, var(--mobile-bg-primary) 26%, rgb(253 252 250 / 78%));
+
+  --theme-ambient: radial-gradient(
+      90% 70% at 10% -10%,
+      color-mix(in srgb, var(--mobile-accent) 10%, transparent) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      85% 65% at 94% 2%,
+      color-mix(in srgb, var(--mobile-success) 10%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(160deg, #f5f4f0 0%, color-mix(in srgb, var(--mobile-accent) 5%, #f5f4f0) 100%);
+
+  --theme-icon-shadow: 0 6px 18px color-mix(in srgb, var(--mobile-text-primary) 12%, transparent);
+}
+
+/* ==================== liquid · 液态玻璃 ==================== */
+
+[data-theme='liquid'] {
+  --mobile-bg-primary: color-mix(in srgb, var(--mobile-accent) 9%, #15130f);
+  --mobile-bg-secondary: color-mix(in srgb, var(--mobile-accent) 11%, #191712);
+  --mobile-bg-tertiary: color-mix(in srgb, var(--mobile-accent) 18%, #3c372b);
+  --mobile-bg-elevated: color-mix(in srgb, var(--mobile-text-primary) 10%, #1d1a15);
+
+  --mobile-border: color-mix(in srgb, var(--mobile-text-primary) 14%, transparent);
+  --mobile-border-hover: color-mix(in srgb, var(--mobile-text-primary) 26%, transparent);
+
+  --mobile-group-bg: color-mix(in srgb, var(--mobile-text-primary) 8%, #1d1a15);
+  --mobile-group-border: color-mix(in srgb, var(--mobile-text-primary) 12%, transparent);
+
+  --mobile-nav-bg: color-mix(in srgb, var(--mobile-text-primary) 12%, rgb(21 19 15 / 68%));
+  --mobile-nav-border: color-mix(in srgb, var(--mobile-text-primary) 16%, transparent);
+
+  --mobile-input-bg: color-mix(in srgb, var(--mobile-text-primary) 7%, #1d1a15);
+  --mobile-overlay: rgb(21 19 15 / 68%);
+
+  --mobile-card-shadow: 0 14px 36px rgb(0 0 0 / 46%);
+  --mobile-card-shadow-hover: 0 20px 52px rgb(0 0 0 / 56%);
+
+  --theme-surface-glass: color-mix(in srgb, var(--mobile-text-primary) 11%, transparent);
+  --theme-glass-blur: 30px;
+  --theme-specular: color-mix(in srgb, var(--mobile-text-primary) 60%, transparent);
+
+  --theme-ambient: radial-gradient(
+      110% 85% at 6% -12%,
+      color-mix(in srgb, var(--mobile-accent) 26%, transparent) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      95% 78% at 98% 2%,
+      color-mix(in srgb, var(--mobile-error) 14%, transparent) 0%,
+      transparent 56%
+    ),
+    linear-gradient(150deg, #191712 0%, #15130f 100%);
+
+  --theme-icon-radius: 34%;
+  --theme-icon-shadow: 0 8px 22px rgb(0 0 0 / 50%);
+}
+
+html:not(.dark)[data-theme='liquid'],
+html:not(.dark) [data-theme='liquid'] {
+  --mobile-bg-primary: color-mix(in srgb, var(--mobile-accent) 7%, #f5f4f0);
+  --mobile-bg-secondary: color-mix(in srgb, var(--mobile-accent) 9%, #efede7);
+  --mobile-bg-tertiary: color-mix(in srgb, var(--mobile-accent) 16%, #d6d2c4);
+  --mobile-bg-elevated: color-mix(in srgb, var(--mobile-accent) 10%, #e7e4dc);
+
+  --mobile-border: color-mix(in srgb, var(--mobile-text-primary) 8%, transparent);
+  --mobile-border-hover: color-mix(in srgb, var(--mobile-text-primary) 16%, transparent);
+
+  --mobile-group-bg: color-mix(in srgb, var(--mobile-bg-primary) 32%, #fdfcfa);
+  --mobile-group-border: color-mix(in srgb, var(--mobile-text-primary) 7%, transparent);
+
+  --mobile-nav-bg: color-mix(in srgb, var(--mobile-bg-primary) 24%, rgb(253 252 250 / 78%));
+  --mobile-nav-border: color-mix(in srgb, var(--mobile-text-primary) 8%, transparent);
+
+  --mobile-input-bg: color-mix(in srgb, var(--mobile-bg-primary) 20%, #fdfcfa);
+  --mobile-overlay: rgb(38 35 27 / 38%);
+
+  --mobile-card-shadow: 0 12px 32px color-mix(in srgb, var(--mobile-text-primary) 11%, transparent);
+  --mobile-card-shadow-hover: 0 18px 44px
+    color-mix(in srgb, var(--mobile-text-primary) 16%, transparent);
+
+  --theme-surface-glass: color-mix(in srgb, var(--mobile-bg-primary) 20%, rgb(253 252 250 / 76%));
+  --theme-specular: color-mix(in srgb, #fdfcfa 78%, transparent);
+
+  --theme-ambient: radial-gradient(
+      110% 85% at 8% -14%,
+      color-mix(in srgb, var(--mobile-accent) 12%, transparent) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      95% 78% at 98% 2%,
+      color-mix(in srgb, var(--mobile-error) 8%, transparent) 0%,
+      transparent 56%
+    ),
+    linear-gradient(150deg, #f5f4f0 0%, color-mix(in srgb, var(--mobile-accent) 6%, #f5f4f0) 100%);
+
+  --theme-icon-shadow: 0 8px 22px color-mix(in srgb, var(--mobile-text-primary) 14%, transparent);
+}
+
+/* ==================== hyper · 超色彩主义 ==================== */
+
+[data-theme='hyper'] {
+  --mobile-bg-primary: color-mix(in srgb, var(--mobile-accent) 14%, #15130f);
+  --mobile-bg-secondary: color-mix(in srgb, var(--mobile-error) 12%, #191712);
+  --mobile-bg-tertiary: color-mix(in srgb, var(--mobile-warning) 18%, #3c372b);
+  --mobile-bg-elevated: color-mix(in srgb, var(--mobile-accent) 16%, #1d1a15);
+
+  --mobile-border: var(--mobile-text-primary);
+  --mobile-border-hover: var(--mobile-text-primary);
+
+  --mobile-group-bg: #1d1a15;
+  --mobile-group-border: var(--mobile-text-primary);
+
+  --mobile-nav-bg: #1d1a15;
+  --mobile-nav-border: var(--mobile-text-primary);
+
+  --mobile-input-bg: #1d1a15;
+  --mobile-overlay: rgb(21 19 15 / 82%);
+
+  --mobile-card-shadow: 3px 3px 0 color-mix(in srgb, var(--mobile-text-primary) 70%, transparent);
+  --mobile-card-shadow-hover: 5px 5px 0
+    color-mix(in srgb, var(--mobile-text-primary) 78%, transparent);
+
+  --theme-surface-glass: #1d1a15;
+  --theme-glass-blur: 0px;
+
+  --theme-icon-radius: 16%;
+  --theme-icon-shadow: 3px 3px 0 color-mix(in srgb, var(--mobile-text-primary) 70%, transparent);
+}
+
+html:not(.dark)[data-theme='hyper'],
+html:not(.dark) [data-theme='hyper'] {
+  --mobile-bg-primary: color-mix(in srgb, var(--mobile-accent) 10%, #f5f4f0);
+  --mobile-bg-secondary: color-mix(in srgb, var(--mobile-error) 8%, #efede7);
+  --mobile-bg-tertiary: color-mix(in srgb, var(--mobile-warning) 22%, #d6d2c4);
+  --mobile-bg-elevated: color-mix(in srgb, var(--mobile-accent) 12%, #e7e4dc);
+
+  --mobile-border: var(--mobile-text-primary);
+  --mobile-border-hover: var(--mobile-text-primary);
+
+  --mobile-group-bg: #fdfcfa;
+  --mobile-group-border: var(--mobile-text-primary);
+
+  --mobile-nav-bg: #fdfcfa;
+  --mobile-nav-border: var(--mobile-text-primary);
+
+  --mobile-input-bg: #fdfcfa;
+  --mobile-overlay: rgb(38 35 27 / 46%);
+
+  --mobile-card-shadow: 3px 3px 0 var(--mobile-text-primary);
+  --mobile-card-shadow-hover: 5px 5px 0 var(--mobile-text-primary);
+
+  --theme-surface-glass: #fdfcfa;
+  --theme-icon-shadow: 3px 3px 0 var(--mobile-text-primary);
+}
+
+/* ==================== 结构性规则 ==================== */
+
+/* 玻璃主题：分组卡与面板改用更薄的一层 + 背景模糊（决策面不在命中范围） */
+[data-theme='diffuse'] .settings-group,
+[data-theme='liquid'] .settings-group,
+[data-theme='diffuse'] .shell-group-card,
+[data-theme='liquid'] .shell-group-card {
+  background: var(--theme-surface-glass);
+  -webkit-backdrop-filter: blur(var(--theme-glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--theme-glass-blur)) saturate(150%);
+}
+
+/* 液态玻璃：顶部 1px 镜面棱线（与桌面同一支语汇） */
+[data-theme='liquid'] .settings-group,
+[data-theme='liquid'] .shell-group-card {
+  box-shadow: inset 0 1px 0 var(--theme-specular, transparent), var(--mobile-card-shadow);
+}
+
+/* 超色彩主义：硬边 + 无模糊投影（层级靠位移） */
+[data-theme='hyper'] .settings-group,
+[data-theme='hyper'] .shell-group-card {
+  border: 2px solid var(--mobile-border);
+  box-shadow: var(--mobile-card-shadow);
+}
+
+/* 应用图标外框随主题（形状 + 光环）；Default 主题不挂 data-theme，因此不匹配 */
+[data-theme] .shell-app-icon {
+  border-radius: var(--theme-icon-radius, 24%);
+  box-shadow: var(--theme-icon-shadow, none);
+}
+
+/* 无壁纸时铺主题自带环境光（用户显式选了壁纸就以壁纸为准） */
+[data-theme='diffuse'] .shell-ui,
+[data-theme='liquid'] .shell-ui {
+  background-image: var(--theme-ambient);
+}
+
+/* 动态主题：背景缓慢漂移（自定义壁纸除外——cover 会被 background-size 覆盖） */
+[data-theme='diffuse'] .shell-ui:not(.wall-custom),
+[data-theme='liquid'] .shell-ui:not(.wall-custom) {
+  background-size: 150% 150%;
+  animation: theme-drift 44s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme] .shell-ui:not(.wall-custom) {
+    animation: none !important;
+    background-size: auto;
+  }
+  [data-theme='diffuse'] .shell-ui,
+  [data-theme='liquid'] .shell-ui {
+    background-size: cover;
+  }
+}

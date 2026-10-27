@@ -1,0 +1,409 @@
+/**
+ * 主题预设（内置主题的 token 表 + 结构性规则）
+ *
+ * 为什么主题落在这里而不是 JS 里：
+ * - 主题要表达的不只是颜色，还有结构性规则（卡片磨砂、图标外框、硬阴影、背景漂移）；
+ *   选择器只有 CSS 能表达，而 CSP 禁止内联 `<style>`（Tauri 会注入 nonce，令
+ *   `'unsafe-inline'` 失效，运行时注入的插件样式全挂——见 index.html 头注）。
+ * - `<html data-theme="x">` 在 app.mount 之前就能生效（main.ts 的 presetThemeBeforeMount），
+ *   内置主题首帧零闪变。
+ *
+ * 生效层级（低 → 高）：
+ *   style.css `:root` → 本文件 `[data-theme='x']` → 扩展主题内联变量（registerTheme）
+ *   → 组件 scoped 样式。同一时刻只有一个主题激活，后两层互斥。
+ *
+ * 两条硬边界：
+ * 1. **决策面不变量**：授权列表 / 授权弹窗 / 通用弹窗 / 壳弹窗层在任何主题下保持
+ *    实心且不接玻璃 token——那里优先逐字可读，不做氛围（2026-10-20 裁决升级为
+ *    跨主题不变量，2026-10-27 用户确认）。因此本文件**不得**给 `--bg-card` 做半透明
+ *    改造，也不得给上述组件的选择器加 backdrop-filter。
+ * 2. **零新增 hex**：除既有 token 值（#f5f4f0 / #fdfcfa / #15130f / #1d1a15）外，
+ *    颜色一律 `color-mix` 自语义 token 派生，深浅两档各自定义，不靠滤镜翻转。
+ *
+ * 动效纪律：主题自带的漂移必须能被用户关掉——`html.anim-disabled *` 已覆盖壳根
+ * 及其后代（style.css），本文件再补 `prefers-reduced-motion` 的显式守卫。
+ */
+
+/* ==================== 动效：背景缓慢漂移 ==================== */
+
+@keyframes theme-drift {
+  from {
+    background-position:
+      0% 0%,
+      100% 0%,
+      50% 100%,
+      0% 0%;
+  }
+  to {
+    background-position:
+      100% 100%,
+      0% 100%,
+      50% 0%,
+      100% 100%;
+  }
+}
+
+/* ==================== diffuse · 弥散玻璃 ====================
+ * 2026 主流的「弥散玻璃」：大范围柔和色雾 + 磨砂面 + 大圆角。
+ * 与 liquid 的分界在于**没有镜面高光**——光被打散成雾，边缘是柔的。 */
+
+/* 选择器不写 `:root`：设置页的主题预览块挂同一个 `data-theme` 属性就能渲染出
+   真实配色（预览是活的，不是手画的假色块）。html 自身当然也匹配。 */
+[data-theme='diffuse'] {
+  /* 页面底色只留 3% 染色：主题色主要由 --theme-ambient 承担。这里不能再浓——
+     底色一偏冷，暖灰的 --text-secondary 在页头（实测 4.13:1）就掉出 AA 4.5，
+     而主题换色换来的只是一层几乎看不出的蓝味。 */
+  --bg-page: color-mix(in srgb, var(--color-info) 3%, #f5f4f0);
+  --bg-sidebar: color-mix(in srgb, var(--color-info) 6%, #efede7);
+  --bg-hover: color-mix(in srgb, var(--color-info) 11%, #e7e4dc);
+  --bg-input: color-mix(in srgb, var(--bg-card) 90%, transparent);
+
+  /* 内容面：磨砂档比默认低（壁纸只透色相时是 92%，这里要透出雾光） */
+  --bg-veil: color-mix(in srgb, var(--bg-card) 72%, transparent);
+  --bg-glass: color-mix(in srgb, var(--bg-card) 82%, transparent);
+  --ui-glass-blur: 26px;
+  --ui-glass-saturate: 160%;
+
+  /* 磨砂面透出壁纸后边界会发虚，边框比默认实一档才认得出卡片在哪 */
+  --border: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  --border-strong: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  --border-input: color-mix(in srgb, var(--text-primary) 14%, transparent);
+
+  --radius-card: 16px;
+  --radius-button: 12px;
+  --radius-input: 12px;
+  --radius-tag: 8px;
+  --radius-nav: 10px;
+  --radius-sheet: 20px;
+
+  --shadow-card: 0 8px 24px color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --shadow-card-hover: 0 14px 40px color-mix(in srgb, var(--text-primary) 14%, transparent);
+
+  /* 环境光：三处雾状光源压在画布上；无壁纸时由壳根直接铺 */
+  --theme-ambient: radial-gradient(
+      90% 72% at 12% -10%,
+      color-mix(in srgb, var(--color-info) 32%, transparent) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      82% 66% at 92% 6%,
+      color-mix(in srgb, var(--color-success) 24%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      72% 60% at 58% 106%,
+      color-mix(in srgb, var(--color-warning) 18%, transparent) 0%,
+      transparent 58%
+    ),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--color-info) 10%, #f5f4f0) 0%,
+      color-mix(in srgb, var(--color-success) 8%, #f5f4f0) 55%,
+      #f5f4f0 100%
+    );
+
+  /* 图标外框语汇：更圆的软方块 + 外发光 */
+  --theme-icon-radius: 32%;
+  --theme-icon-shadow: 0 6px 18px color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+
+/* 深色档要同时覆盖两个落点：html 自身（`:root.dark[data-theme]`），以及深色下
+   嵌在页面里的主题预览块（`:root.dark [data-theme]`）——html 不是自己的后代，
+   两条缺一不可。 */
+:root.dark[data-theme='diffuse'],
+:root.dark [data-theme='diffuse'] {
+  --bg-page: color-mix(in srgb, var(--color-info) 4%, #15130f);
+  --bg-sidebar: color-mix(in srgb, var(--color-info) 6%, #191712);
+  --bg-hover: color-mix(in srgb, var(--color-info) 14%, #2a261e);
+  --bg-input: color-mix(in srgb, var(--bg-card) 92%, transparent);
+
+  --bg-veil: color-mix(in srgb, var(--bg-card) 66%, transparent);
+  --bg-glass: color-mix(in srgb, var(--bg-card) 76%, transparent);
+
+  --border: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  --border-strong: color-mix(in srgb, var(--text-primary) 20%, transparent);
+  --border-input: color-mix(in srgb, var(--text-primary) 18%, transparent);
+
+  --shadow-card: 0 10px 30px rgb(0 0 0 / 42%);
+  --shadow-card-hover: 0 16px 44px rgb(0 0 0 / 52%);
+
+  --theme-ambient: radial-gradient(
+      90% 72% at 10% -8%,
+      color-mix(in srgb, var(--color-info) 24%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      82% 66% at 94% 4%,
+      color-mix(in srgb, var(--color-success) 14%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--color-info) 10%, #15130f) 0%,
+      #15130f 100%
+    );
+
+  --theme-icon-shadow: 0 6px 18px rgb(0 0 0 / 45%);
+}
+
+/* 弥散玻璃的卡片：磨砂 + 柔边（决策面不在此列——它们不用 .shell-card）
+   预览卡同样命中：预览里的卡片要跟真卡片一样是磨砂面。
+
+   预览卡的选择器锚在 .theme-preview **自身**（而不是任意后代）：主题的结构规则只该作用于
+   「代表这套主题的那张预览」。写成 [data-theme='x'] .pv-card 时，当前主题的规则会顺着
+   <html data-theme> 漏进「默认主题」那张预览（默认档不挂 data-theme）——默认预览就长成
+   当前主题的样子。锚定写法顺带把特异性抬到组件 scoped 样式之上（组件样式后注入，
+   同特异性会赢），棱线才不会被盖掉。 */
+:root[data-theme='diffuse'] .shell-root .shell-card,
+.theme-preview[data-theme='diffuse'] .pv-card {
+  background: var(--bg-veil);
+  -webkit-backdrop-filter: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate));
+  backdrop-filter: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate));
+  border-color: var(--border);
+}
+
+/* ==================== liquid · 液态玻璃 ====================
+ * 更强的折射（大模糊 + 高饱和）+ 一道镜面高光边，表面更薄、圆角更大。
+ * 与 diffuse 的分界：这里的光是**收束的**（1px 高光棱线），像一块真的玻璃砖。 */
+
+[data-theme='liquid'] {
+  --bg-page: color-mix(in srgb, var(--color-info) 4%, #f5f4f0);
+  --bg-sidebar: color-mix(in srgb, var(--color-info) 7%, #efede7);
+  --bg-hover: color-mix(in srgb, var(--color-info) 13%, #e7e4dc);
+  --bg-input: color-mix(in srgb, var(--bg-card) 86%, transparent);
+
+  /* 玻璃面比 diffuse 再薄一档：墙纸的折射要透上来 */
+  --bg-veil: color-mix(in srgb, var(--bg-card) 66%, transparent);
+  --bg-glass: color-mix(in srgb, var(--bg-card) 74%, transparent);
+  --ui-glass-blur: 32px;
+  --ui-glass-saturate: 205%;
+
+  --border: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --border-strong: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  --border-input: color-mix(in srgb, var(--text-primary) 12%, transparent);
+
+  --radius-card: 20px;
+  --radius-button: 16px;
+  --radius-input: 14px;
+  --radius-tag: 10px;
+  --radius-nav: 14px;
+  --radius-sheet: 28px;
+
+  --shadow-card: 0 12px 32px color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --shadow-card-hover: 0 18px 48px color-mix(in srgb, var(--text-primary) 16%, transparent);
+
+  --theme-ambient: radial-gradient(
+      110% 85% at 8% -14%,
+      color-mix(in srgb, var(--color-info) 38%, transparent) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      95% 78% at 98% 2%,
+      color-mix(in srgb, var(--color-danger) 20%, transparent) 0%,
+      transparent 56%
+    ),
+    linear-gradient(
+      150deg,
+      color-mix(in srgb, var(--color-info) 14%, #f5f4f0) 0%,
+      color-mix(in srgb, var(--color-success) 10%, #f5f4f0) 50%,
+      color-mix(in srgb, var(--color-warning) 8%, #f5f4f0) 100%
+    );
+
+  --theme-icon-radius: 34%;
+  --theme-icon-shadow: 0 8px 22px color-mix(in srgb, var(--text-primary) 14%, transparent);
+}
+
+:root.dark[data-theme='liquid'],
+:root.dark [data-theme='liquid'] {
+  --bg-page: color-mix(in srgb, var(--color-info) 5%, #15130f);
+  --bg-sidebar: color-mix(in srgb, var(--color-info) 8%, #191712);
+  --bg-hover: color-mix(in srgb, var(--color-info) 18%, #2a261e);
+  --bg-input: color-mix(in srgb, var(--bg-card) 88%, transparent);
+
+  --bg-veil: color-mix(in srgb, var(--bg-card) 60%, transparent);
+  --bg-glass: color-mix(in srgb, var(--bg-card) 72%, transparent);
+
+  --border: color-mix(in srgb, var(--text-primary) 17%, transparent);
+  --border-strong: color-mix(in srgb, var(--text-primary) 22%, transparent);
+  --border-input: color-mix(in srgb, var(--text-primary) 20%, transparent);
+
+  --shadow-card: 0 14px 36px rgb(0 0 0 / 46%);
+  --shadow-card-hover: 0 20px 52px rgb(0 0 0 / 56%);
+
+  --theme-ambient: radial-gradient(
+      110% 85% at 6% -12%,
+      color-mix(in srgb, var(--color-info) 28%, transparent) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      95% 78% at 98% 2%,
+      color-mix(in srgb, var(--color-danger) 16%, transparent) 0%,
+      transparent 56%
+    ),
+    linear-gradient(
+      150deg,
+      color-mix(in srgb, var(--color-info) 12%, #15130f) 0%,
+      #15130f 100%
+    );
+
+  --theme-icon-shadow: 0 8px 22px rgb(0 0 0 / 50%);
+}
+
+/* 液态玻璃的卡片：折射 + 两段式镜面棱线
+   棱线分两道：顶部一道亮（深色档才看得见）、底部一道暗（浅色档才看得见）——
+   只用一道的话，另一半明暗下这条高光等于不存在（实测：浅色下白线压在白卡上、
+   深色下暗线压在暗卡上，liquid 与 diffuse 在截图里几乎无从分辨）。
+   选择器同时命中设置页的主题预览卡：预览要显示真材质，不能只在真卡片上才出现。
+   预览卡锚在 .theme-preview 自身（理由同 diffuse 那条）：否则当前主题的规则会顺着
+   <html data-theme> 漏进「默认主题」的预览。 */
+:root[data-theme='liquid'] .shell-root .shell-card,
+.theme-preview[data-theme='liquid'] .pv-card {
+  background: var(--bg-veil);
+  -webkit-backdrop-filter: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate));
+  backdrop-filter: blur(var(--ui-glass-blur)) saturate(var(--ui-glass-saturate));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--selection-solid-ink) 88%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--text-primary) 18%, transparent),
+    var(--shadow-card);
+}
+
+/* ==================== hyper · 超色彩主义 ====================
+ * 高饱和色块 + 硬边 + 偏移硬阴影 + 小圆角：玻璃的对立面。
+ * 不用半透明，也不叠模糊——层级靠色块与投影的**位移**表达。 */
+
+[data-theme='hyper'] {
+  /* 页面底色染色压到 4%：超色彩主义的个性由色块与硬边投影承担，不靠给整页
+     刷一层蓝（刷浓了，页头副标题的暖灰就掉出 AA）。 */
+  --bg-page: color-mix(in srgb, var(--color-info) 4%, #f5f4f0);
+  --bg-sidebar: color-mix(in srgb, var(--color-danger) 6%, #efede7);
+  --bg-hover: color-mix(in srgb, var(--color-warning) 18%, #e7e4dc);
+  --bg-input: #fdfcfa;
+
+  /* 实心：超色彩主义不做玻璃（决策面与内容面同一条语言） */
+  --bg-veil: #fdfcfa;
+  --bg-glass: #fdfcfa;
+  --ui-glass-blur: 0px;
+  --ui-glass-saturate: 100%;
+
+  --border: var(--text-primary);
+  --border-strong: var(--text-primary);
+  --border-input: var(--text-primary);
+
+  --radius-card: 8px;
+  --radius-button: 6px;
+  --radius-input: 6px;
+  --radius-tag: 4px;
+  --radius-nav: 6px;
+  --radius-sheet: 12px;
+
+  /* 硬阴影：位移即层级（0 模糊的实色投影）。3px 而非 4px：卡片本身已有 2px
+     硬边，4px 叠上去是 6px 黑框，1440 下糊成一片，收一档才利落。 */
+  --shadow-card: 3px 3px 0 var(--text-primary);
+  --shadow-card-hover: 5px 5px 0 var(--text-primary);
+  --shadow-input-focus: 0 0 0 3px color-mix(in srgb, var(--text-primary) 18%, transparent);
+
+  --theme-icon-radius: 16%;
+  --theme-icon-shadow: 3px 3px 0 var(--text-primary);
+}
+
+:root.dark[data-theme='hyper'],
+:root.dark [data-theme='hyper'] {
+  --bg-page: color-mix(in srgb, var(--color-info) 10%, #15130f);
+  --bg-sidebar: color-mix(in srgb, var(--color-danger) 10%, #191712);
+  --bg-hover: color-mix(in srgb, var(--color-warning) 14%, #2a261e);
+  --bg-input: #1d1a15;
+
+  --bg-veil: #1d1a15;
+  --bg-glass: #1d1a15;
+
+  --shadow-card: 3px 3px 0 color-mix(in srgb, var(--text-primary) 70%, transparent);
+  --shadow-card-hover: 5px 5px 0 color-mix(in srgb, var(--text-primary) 78%, transparent);
+  --theme-icon-shadow: 3px 3px 0 color-mix(in srgb, var(--text-primary) 70%, transparent);
+}
+
+/* 超色彩主义的卡片：2px 硬边 + 无模糊投影（border 宽度不受 token 控制，用规则补齐）
+   同时命中设置页的主题预览卡，预览里的卡片要跟真卡片一样是 2px 硬边。 */
+:root[data-theme='hyper'] .shell-root .shell-card,
+.theme-preview[data-theme='hyper'] .pv-card {
+  border-width: 2px;
+  border-color: var(--border);
+  box-shadow: var(--shadow-card);
+}
+
+/* 超色彩主义的壁纸预览卡：并入同一套硬边语汇。设置页的壁纸小卡默认是圆角软边，
+   放在超色彩主义下与内容卡（2px 硬边 + 硬投影）像两套语言。 */
+:root[data-theme='hyper'] .shell-root .pal-card {
+  border-width: 2px;
+  border-color: var(--border);
+  border-radius: var(--radius-button);
+  box-shadow: var(--shadow-card);
+}
+
+/* 超色彩主义的图标井：饱和实底（由语义 token 混出，深浅各自动跟随） */
+:root[data-theme='hyper'] .tone-primary {
+  background: color-mix(in srgb, var(--color-primary) 82%, var(--bg-card));
+  color: var(--color-primary-contrast);
+  border: 2px solid var(--border);
+}
+:root[data-theme='hyper'] .tone-info {
+  background: color-mix(in srgb, var(--color-info) 82%, var(--bg-card));
+  color: var(--text-primary);
+  border: 2px solid var(--border);
+}
+:root[data-theme='hyper'] .tone-success {
+  background: color-mix(in srgb, var(--color-success) 82%, var(--bg-card));
+  color: var(--text-primary);
+  border: 2px solid var(--border);
+}
+:root[data-theme='hyper'] .tone-warning {
+  background: color-mix(in srgb, var(--color-warning) 82%, var(--bg-card));
+  color: var(--text-primary);
+  border: 2px solid var(--border);
+}
+:root[data-theme='hyper'] .tone-mix {
+  background: color-mix(in srgb, var(--color-info) 40%, var(--color-success) 60%);
+  color: var(--text-primary);
+  border: 2px solid var(--border);
+}
+:root[data-theme='hyper'] .tone-system {
+  border-width: 2px;
+}
+
+/* ==================== 非默认主题的公共语汇 ====================
+ * 一条规则覆盖全部非 default 主题（default 不挂 data-theme，因此不匹配）。 */
+
+:root[data-theme] .glyph-box {
+  border-radius: var(--theme-icon-radius, var(--radius-app-icon));
+  box-shadow: var(--theme-icon-shadow, none);
+}
+
+/* ==================== 环境光铺设 ====================
+ * 只在没有壁纸时铺主题自带色雾：用户选了壁纸就以壁纸为准（壁纸是显式选择，
+ * 主题不该顶掉它）。铺在壳根而不是新增一层 DOM —— 层序与 pointer 事件都不动。 */
+
+:root[data-theme='diffuse'] .shell-root:not(.shell-wall),
+:root[data-theme='liquid'] .shell-root:not(.shell-wall) {
+  background-image: var(--theme-ambient);
+}
+
+/* ==================== 动态主题：背景缓慢漂移 ====================
+ * 自定义壁纸除外：cover 会被 background-size 覆盖，图会变形。
+ * `html.anim-disabled *`（style.css）已能关掉它（壳根是 html 的后代）。 */
+
+:root[data-theme='diffuse'] .shell-root:not(.wall-custom),
+:root[data-theme='liquid'] .shell-root:not(.wall-custom) {
+  background-size: 150% 150%;
+  animation: theme-drift 44s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] .shell-root,
+  :root[data-theme] .shell-root:not(.wall-custom) {
+    animation: none !important;
+    background-size: auto;
+  }
+  :root[data-theme='diffuse'] .shell-root:not(.shell-wall),
+  :root[data-theme='liquid'] .shell-root:not(.shell-wall) {
+    background-size: cover;
+  }
+}

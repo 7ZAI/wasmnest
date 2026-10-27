@@ -7,7 +7,7 @@ import type { Ref } from 'vue'
  * 设置页分组顺序锁（用户 2026-10-20 裁决）——挂载行为断言
  *
  * 口径：「关于」只承载版本 / 更新等只读信息，必须排在所有可操作分组之后；
- * 皮肤跟在背景之后、系统与日志之后，破坏性复位与关于收尾。
+ * 主题跟在背景之后、系统与日志之后，破坏性复位与关于收尾。
  * （应用贡献的动态扩展设置项渲染在「系统设置」卡内，无独立分组。）
  *
  * 改造说明（issue #23 / codemap §8.1 首批，#12 样板）：原锁是源码顺序正则
@@ -20,7 +20,7 @@ import type { Ref } from 'vue'
 
 const mocks = vi.hoisted(() => ({
   settingsStore: null as unknown as Record<string, unknown>,
-  prefs: null as unknown as Ref<{ wallpaper: string; wallDim: number; wallpaperImage: string; skin: string }>,
+  prefs: null as unknown as Ref<{ wallpaper: string; wallDim: number; wallpaperImage: string; theme: string }>,
 }))
 
 vi.mock('vue-i18n', async (importOriginal) => {
@@ -75,7 +75,7 @@ const sectionStub = (label: string) => ({
 const EXPECTED_ORDER = [
   'shell.settings.ui.title', // 界面（壳内实现）
   'shell.settings.background.title', // 背景（壳专属）
-  'SKIN', // SettingsThemeSkinSection（主题皮肤）
+  'THEME', // SettingsThemeSection（主题）
   'SYSTEM', // SettingsSystemSection（系统设置，动态扩展项也渲染在此卡内）
   'LOGGING', // SettingsLoggingSection（日志）
   'shell.settings.permsEntry.title', // 授权管理入口
@@ -88,14 +88,14 @@ beforeEach(() => {
     settings: { ui: { theme: 'system', font_size: 13, animations_enabled: true } },
     saveSettings: vi.fn(),
   }
-  mocks.prefs = ref({ wallpaper: 'aurora', wallDim: 30, wallpaperImage: '', skin: 'default' })
+  mocks.prefs = ref({ wallpaper: 'aurora', wallDim: 30, wallpaperImage: '', theme: 'default' })
 })
 
 function mountSettings() {
   return mount(SysSettingsView, {
     global: {
       stubs: {
-        SettingsThemeSkinSection: sectionStub('SKIN'),
+        SettingsThemeSection: sectionStub('THEME'),
         SettingsSystemSection: sectionStub('SYSTEM'),
         SettingsLoggingSection: sectionStub('LOGGING'),
         SettingsResetSection: sectionStub('RESET'),
@@ -123,7 +123,7 @@ function groupTitles(wrapper: VueWrapper): string[] {
 }
 
 describe('设置页分组顺序（DOM 顺序断言）', () => {
-  it('按「界面 → 背景 → 皮肤 → 系统 → 日志 → 授权入口 → 复位 → 关于」排列', () => {
+  it('按「界面 → 背景 → 主题 → 系统 → 日志 → 授权入口 → 复位 → 关于」排列', () => {
     const wrapper = mountSettings()
 
     expect(groupTitles(wrapper), '分组缺项或顺序不符').toEqual(EXPECTED_ORDER)

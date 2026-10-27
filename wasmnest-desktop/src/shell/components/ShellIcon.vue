@@ -3,9 +3,9 @@
     :width="size"
     :height="size"
     viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    :stroke-width="strokeWidth"
+    :fill="filled ? 'currentColor' : 'none'"
+    :stroke="filled ? 'none' : 'currentColor'"
+    :stroke-width="width"
     stroke-linecap="round"
     stroke-linejoin="round"
     aria-hidden="true"
@@ -23,6 +23,7 @@
  * 新增图标只在此表加一条（path d 字符串），不改渲染分支。
  */
 import { computed } from 'vue'
+import { activeGlyphStyle, activeGlyphs } from '../composables/themePresets'
 
 const props = withDefaults(
   defineProps<{
@@ -140,5 +141,14 @@ const PATHS: Record<string, string[]> = {
   reset: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
 }
 
-const paths = computed(() => PATHS[props.name] ?? [])
+/**
+ * 绘制语汇与 glyph 都由主题决定（内置主题给语汇，扩展主题还能逐名换路径）。
+ *
+ * 只读 `themePresets` 的模块级 ref，不调用 useI18n / useSettingsStore：
+ * 图标在几十个组件里出现，任何应用级依赖都会让「只想测一个图标」变成要搭全套
+ * 上下文；主题未装配时两个 ref 恒为 null，行为与改造前完全一致。
+ */
+const paths = computed(() => activeGlyphs.value?.[props.name] ?? PATHS[props.name] ?? [])
+const filled = computed(() => activeGlyphStyle.value?.fill === true)
+const width = computed(() => activeGlyphStyle.value?.strokeWidth ?? props.strokeWidth)
 </script>

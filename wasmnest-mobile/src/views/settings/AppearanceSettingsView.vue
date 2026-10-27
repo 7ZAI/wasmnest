@@ -6,8 +6,14 @@
         <h2 class="settings-section-title">{{ t('settings.appearance.generalSection') }}</h2>
         <div class="settings-group">
           <div class="settings-row">
-            <span class="settings-label settings-row-label">{{ t('settings.appearance.theme') }}</span>
-            <div class="settings-segment" role="group" :aria-label="t('settings.appearance.theme')">
+            <span class="settings-label settings-row-label">{{
+              t('settings.appearance.colorMode')
+            }}</span>
+            <div
+              class="settings-segment"
+              role="group"
+              :aria-label="t('settings.appearance.colorMode')"
+            >
               <button
                 v-for="opt in themeOptions"
                 :key="opt.value"
@@ -39,6 +45,47 @@
               </button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- 主题（全局外观预设）：与上面的明暗模式是两个轴——主题换的是整套语汇
+           （表面材质 / 圆角 / 图标外框 / 动效），明暗只换对比方向。
+           预览块挂与主题相同的 data-theme，因此预览里的玻璃与硬阴影都是真实效果。 -->
+      <section class="space-y-2">
+        <h2 class="settings-section-title">{{ t('settings.appearance.themePresetSection') }}</h2>
+        <div class="settings-group">
+          <div
+            class="theme-picker"
+            role="group"
+            :aria-label="t('settings.appearance.themePresetSection')"
+          >
+            <button
+              v-for="item in themePresets"
+              :key="item.id"
+              type="button"
+              class="theme-picker-btn"
+              :class="{ active: item.id === activeTheme.id }"
+              :data-theme-id="item.id"
+              :aria-pressed="item.id === activeTheme.id"
+              @click="setTheme(item.id)"
+            >
+              <span
+                class="theme-swatch"
+                :class="{ 'theme-base': item.id === defaultThemeId }"
+                :data-theme="item.id === defaultThemeId ? undefined : item.id"
+                :style="resolvedTokens(item)"
+                aria-hidden="true"
+              >
+                <span class="theme-swatch-icon"></span>
+                <span class="theme-swatch-bar"></span>
+              </span>
+              <span class="min-w-0 truncate">{{ item.label }}</span>
+              <span v-if="item.dynamic" class="theme-swatch-badge">
+                {{ t('settings.appearance.themeDynamic') }}
+              </span>
+            </button>
+          </div>
+          <p class="theme-note">{{ t('settings.appearance.themeHint') }}</p>
         </div>
       </section>
 
@@ -171,9 +218,11 @@
 
 <script setup lang="ts">
 /**
- * 外观设置二级页面 - 主题深浅、语言、字号缩放、宿主背景
+ * 外观设置二级页面 - 明暗模式、主题预设、语言、字号缩放、宿主背景
  *
  * 本页只留**平台机制**项（§6 壳自持三类之②：外观 / 语言 / 字号缩放 / 宿主壁纸）。
+ * 「明暗模式」与「主题」是两个轴：前者是对比方向（AppConfig），后者是整套外观
+ * 语汇（壳偏好，`<html data-theme>`，见 ADR 0059）。
  * 主色色板不在此列：主色是各 wasm-app 自持的产品外观，2026-10-16 已连同选择器与
  * 真源下沉到应用自己的设置页（bedcode 见 wasm-apps/bedcode/src/settings），
  * 宿主外壳固定用 `:root` 默认主色。
@@ -189,6 +238,7 @@ import { useMobileSettings } from '@/composables/useMobileSettings'
 import { importShellWallpaper, toFileAssetUrl } from '@/plugin/assets'
 import { logger } from '@/utils/frontendLogger'
 import { WALL_DIM_MAX, WALLPAPER_CUSTOM, useShellPreferences, type ShellWallpaper } from '@/shell/composables/useShellPreferences'
+import { useShellTheme } from '@/shell/composables/useShellTheme'
 
 const { t } = useI18n()
 
@@ -262,6 +312,13 @@ onMounted(loadSettings)
 // 同一份真源（styles/wallpaper.css + useShellPreferences）。
 const { wallpaper, wallpaperImage, wallDim, setWallpaper, setWallpaperImage, setWallDim } =
   useShellPreferences()
+
+// ==================== 主题（全局外观预设） ====================
+// 与上面「明暗模式」是两个轴：深浅色归 AppConfig（settings.ui.theme），主题是
+// 纯外观偏好（useShellPreferences.theme），与壁纸同层。主题真源 = theme-presets.css
+// + registerTheme；本页只负责选择与预览。
+const { themes: themePresets, activeTheme, resolvedTokens, setTheme, defaultThemeId } =
+  useShellTheme()
 
 /** 壁纸档位（id + 预览类 + 本地化名），预览色块复用主屏同一份 --wall-* 渐变 */
 const wallpaperOptions = computed<
@@ -447,5 +504,90 @@ function onDimInput(event: Event): void {
   margin-top: 0.25rem;
   font-size: clamp(0.5625rem, 0.625rem + (100vw - 360px) / 840, 0.6875rem);
   color: var(--mobile-text-disabled);
+}
+
+/* ==================== 主题选择器 ====================
+   与壁纸选择器同一套「预览块 + 名称」的视觉语言：同一个页面上选择器长一样，
+   用户才不用为第二套控件重新学习。 */
+
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.theme-picker-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.375rem;
+  border-radius: 12px;
+  border: 1px solid var(--mobile-border);
+  background: var(--mobile-bg-secondary);
+  color: var(--mobile-text-primary);
+  font-size: 0.75rem;
+  text-align: left;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.theme-picker-btn:active {
+  background: var(--mobile-bg-tertiary);
+}
+
+.theme-picker-btn.active {
+  border-color: var(--mobile-accent);
+  background: var(--mobile-bg-elevated);
+}
+
+/* 预览块：挂上主题属性即吃到 theme-presets.css 的真实配色 */
+.theme-swatch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--mobile-border);
+  background: var(--theme-ambient, none), var(--mobile-bg-primary);
+  background-size: cover;
+  overflow: hidden;
+}
+
+.theme-swatch-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: var(--theme-icon-radius, 24%);
+  background: var(--mobile-bg-elevated);
+  box-shadow: var(--theme-icon-shadow, none);
+}
+
+.theme-swatch-bar {
+  flex: 1;
+  height: 100%;
+  border-radius: 6px;
+  background: var(--mobile-group-bg);
+  box-shadow: var(--mobile-card-shadow);
+}
+
+.theme-swatch-badge {
+  align-self: flex-start;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--mobile-accent-muted);
+  color: var(--mobile-text-secondary);
+  font-size: 0.625rem;
+  line-height: 1.5;
+}
+
+.theme-note {
+  margin: 0;
+  padding: 0 0.75rem 0.75rem;
+  color: var(--mobile-text-muted);
+  font-size: 0.6875rem;
+  line-height: 1.45;
 }
 </style>

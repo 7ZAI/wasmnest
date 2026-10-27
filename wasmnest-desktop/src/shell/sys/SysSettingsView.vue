@@ -6,7 +6,7 @@
     <!-- 深浅色：三档分段控件（宿主壳唯一掌握的主题项） -->
     <div class="row-sw">
       <div class="lb">
-        <b>{{ t('settings.appearance.theme') }}</b>
+        <b>{{ t('shell.settings.ui.colorMode') }}</b>
       </div>
       <ShellSeg
         :options="themeOptions"
@@ -137,8 +137,8 @@
     </div>
   </ShellCard>
 
-  <!-- ==================== 主题皮肤（壳 chrome 的 token 覆盖，内置默认 + 扩展注册） ==================== -->
-  <SettingsThemeSkinSection />
+  <!-- ==================== 主题（全局外观预设：内置 4 套 + 扩展注册） ==================== -->
+  <SettingsThemeSection />
 
   <!-- ==================== 系统 / 日志（复用既有设置分组组件，零重写） ====================
        链路加密属终端的业务设置（加密哪些通道取决于终端数据面），已随设置归属回归
@@ -175,7 +175,7 @@
  * 界面 / 背景两组是壳专属（含导航按钮显隐、壁纸，纯壳偏好落 useShellSettings）。
  * 界面组只保留壳自身的**深浅色**；主题色板归各 wasm-app（应用自己的设置页持有，
  * 宿主不下发也不覆盖）。链路加密属 bedcode 业务设置，随设置归属回归应用。
- * 系统 / 日志 / 皮肤直接复用分组组件（真实命令面，零重写）；应用贡献的动态扩展
+ * 系统 / 日志 / 主题直接复用分组组件（真实命令面，零重写）；应用贡献的动态扩展
  * 设置项在「系统设置」卡内渲染（无独立「扩展设置」分组）；关于固定最后。
  * 授权管理入口互切到「权限与授权」系统页卡（spec-c §3 同构卡片）。
  */
@@ -188,7 +188,7 @@ import { useToast } from '@/composables/useToast'
 import { showUserError } from '@/utils/userError'
 import SettingsSystemSection from '@/shell/settings/SettingsSystemSection.vue'
 import SettingsLoggingSection from '@/shell/settings/SettingsLoggingSection.vue'
-import SettingsThemeSkinSection from '@/shell/settings/SettingsThemeSkinSection.vue'
+import SettingsThemeSection from '@/shell/settings/SettingsThemeSection.vue'
 import SettingsAboutSection from '@/shell/settings/SettingsAboutSection.vue'
 import SettingsResetSection from '@/shell/settings/SettingsResetSection.vue'
 import { useShellState } from '../composables/useShellState'

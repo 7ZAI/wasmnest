@@ -21,6 +21,9 @@ import './style.css'
 // 样式表；漏掉这行 import 时类名全部无样式（图标无底色、状态点塌成 0×0、壁纸失效），
 // 而组件侧看不出任何异常——2026-10-17 实机验证 P0-2 即如此。
 import './shell/styles/shell.css'
+// 主题预设（内置主题 token 表 + 结构性规则）。必须排在 style.css / shell.css 之后：
+// 同特异度时后写者胜；主题选择器本身也带 `[data-theme]` 前缀，多数规则不依赖顺序。
+import './styles/theme-presets.css'
 
 import ShellHost from './shell/ShellHost.vue'
 import router from './router'
@@ -31,6 +34,7 @@ import { useSettingsStore } from './stores/settings'
 import { useI18nStore } from './stores/i18n'
 import { useToast } from './composables/useToast'
 import { applyPageTransitionEffect, DEFAULT_PAGE_TRANSITION_EFFECT } from './utils/pageTransition'
+import { presetThemeBeforeMount } from './shell/composables/themePresets'
 
 const app = createApp(ShellHost)
 
@@ -79,6 +83,11 @@ Promise.all([initPlatform(), settingsStore.loadSettings()]).then(([platformInfo]
   i18nStore.initLanguage()
   logger.log('[Init] Platform and settings pre-loaded')
 })
+
+// 主题预设写到 <html data-theme>：同样必须在 app.mount 之前。主题偏好存在
+// localStorage（同步可读），所以内置主题首帧零闪变；扩展主题此刻尚未注册，
+// 持久化的扩展 id 先回落默认，ShellHost 的 watcher 在注册完成后纠正。
+presetThemeBeforeMount()
 
 // 页面过渡效果写到根元素：必须在 app.mount 之前，否则首屏先按 CSS 缺省效果渲染一帧。
 // 拼错 → 记一条 error 并回落默认效果（测试路径仍保留 throw 做精确断言）。

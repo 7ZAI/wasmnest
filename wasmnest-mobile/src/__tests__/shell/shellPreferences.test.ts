@@ -129,6 +129,8 @@ describe('C-P5..C-P7 偏好写入', () => {
       wallDim: 42,
       floatingNav: false,
       floatingNavPos: { x: 0.5, y: 1 },
+      // 主题偏好（ADR 0059）：与深浅色（settings.ui.theme）不是同一个轴
+      theme: 'default',
     })
   })
 

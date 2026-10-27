@@ -11,10 +11,25 @@ export default {
     appearance: {
       title: 'Appearance',
       subtitle: 'Theme, language, font and home background',
+      // Terminology (2026-10-27): "theme" means the preset only; light/dark is
+      // called "colour mode" so one screen never has two things named Theme.
       theme: 'Theme',
+      colorMode: 'Colour mode',
       lightMode: 'Light Mode',
       darkMode: 'Dark Mode',
       followSystem: 'Follow System',
+      themePresetSection: 'Theme',
+      themeDefault: 'Default',
+      themeDefaultDesc: 'Warm workbench, solid surfaces',
+      themeDiffuse: 'Diffuse glass',
+      themeDiffuseDesc: 'Soft haze, large radii',
+      themeLiquid: 'Liquid glass',
+      themeLiquidDesc: 'High-saturation refraction, specular edge',
+      themeHyper: 'Hyper colour',
+      themeHyperDesc: 'Saturated blocks, hard shadows',
+      themeDynamic: 'Animated',
+      themeHint:
+        'Themes cover the platform shell and icon language; palettes declared by an app root take precedence.',
       language: 'Language',
       languageChinese: '中文',
       languageEnglish: 'English',

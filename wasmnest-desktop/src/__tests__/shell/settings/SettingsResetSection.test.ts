@@ -37,7 +37,7 @@ const prefsMocks = vi.hoisted(() => ({
       wallpaper: 'dune',
       wallDim: 60,
       wallpaperImage: 'custom-1.png',
-      skin: 'dusk',
+      theme: 'dusk',
     },
   },
 }))
@@ -74,7 +74,7 @@ beforeEach(() => {
   prefsMocks.prefs.value.wallpaper = 'dune'
   prefsMocks.prefs.value.wallDim = 60
   prefsMocks.prefs.value.wallpaperImage = 'custom-1.png'
-  prefsMocks.prefs.value.skin = 'dusk'
+  prefsMocks.prefs.value.theme = 'dusk'
   authMocks.overview.mockResolvedValue([
     {
       pluginId: 'com.wasmnest.bedcode',
@@ -147,8 +147,8 @@ describe('设置页「恢复初始设置」', () => {
     expect(prefsMocks.prefs.value.wallpaper).toBe('aurora')
     expect(prefsMocks.prefs.value.wallDim).toBe(30)
     expect(prefsMocks.prefs.value.wallpaperImage).toBe('')
-    // 主题皮肤也属于壳偏好：复位必须回到内置 default，而不是留着已注册/已卸载的皮肤 id
-    expect(prefsMocks.prefs.value.skin).toBe('default')
+    // 主题也属于壳偏好：复位必须回到内置 default，而不是留着已注册/已卸载的主题 id
+    expect(prefsMocks.prefs.value.theme).toBe('default')
   })
 
   it('撤销 allow 后新落的 deny 一并移除（否则恢复初始设置会把应用永久挡在门外）', async () => {

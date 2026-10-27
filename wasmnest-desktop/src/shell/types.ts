@@ -66,8 +66,9 @@ export interface ShellUiPrefs {
    */
   wallpaperImage: string
   /**
-   * 主题皮肤 id（壳根 token 覆盖；缺省 = 内置默认皮肤）。
-   * 皮肤只作用于平台外壳，应用仍可自持配色；未知 id 在渲染时回落默认皮肤。
+   * 主题 id（`<html data-theme>`；缺省 = 内置默认主题）。
+   * 主题只作用于平台外壳，应用仍可自持配色；未知 id 在渲染时回落默认主题
+   * （扩展可能尚未注册，因此不在这里抹掉用户选择）。
    */
-  skin: string
+  theme: string
 }
