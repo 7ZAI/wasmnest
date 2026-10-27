@@ -11,6 +11,11 @@
          壳自行承担布局框与安全区（见 src/shell/views/ShellView.vue） -->
     <router-view />
 
+    <!-- 悬浮导航（回主屏 / 多任务）：挂在应用根而非壳根——开关开启后要在任意
+         页面可见，含旧设置二级页与 wasmnest 应用运行面；壳根只覆盖壳内屏。
+         默认关闭，开关在「设置 → 导航」。层次固定在宿主弹层之下（见 shell.css）。 -->
+    <ShellFloatingNav />
+
     <!-- Global Toast Container（vue-sonner，richColors 区分等级） -->
     <Toaster
       :theme="toasterTheme"
@@ -38,6 +43,7 @@ import { provide, computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { logger } from '@/utils/frontendLogger'
 import { Toaster } from 'vue-sonner'
 import SplashLoading from '@/shell/components/SplashLoading.vue'
+import ShellFloatingNav from '@/shell/components/ShellFloatingNav.vue'
 import { SPLASH_DRAW_TOTAL_MS, SPLASH_HOLD_AFTER_DRAW_MS } from '@/shell/components/splashTiming'
 import { usePlatform } from '@/composables/usePlatform'
 import { useOrientation } from '@/composables/useOrientation'

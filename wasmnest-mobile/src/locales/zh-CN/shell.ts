@@ -3,7 +3,7 @@
  *
  * 与 en/shell.ts 一一对应（i18n 双语纪律：新增/修改 key 必须两侧同步）。
  * 分组口径：home=主屏、switcher=多任务、notify=通知栏、run=应用运行页、
- * settings=设置、permissions=权限管理。
+ * floatingNav=悬浮导航、settings=设置、permissions=权限管理。
  *
  * 文案纪律（2026-10-14 修订）：只写用户能感知的事实与后果，不写平台实现说明
  * 或原型/方案期解释（如「平台叠加的控制项」「运行面预留位」）。
@@ -99,6 +99,12 @@ export default {
       noSurfaceHint: '该应用尚未提供运行界面',
       notFound: '应用不存在或已卸载',
     },
+    /** 悬浮导航（开关开启后常驻在任意页面之上） */
+    floatingNav: {
+      home: '回主屏',
+      recents: '切换应用',
+      move: '悬浮导航，可拖动；聚焦后可用方向键移动',
+    },
     switcher: {
       title: '切换应用',
       back: '返回',
@@ -182,6 +188,9 @@ export default {
     },
     settings: {
       title: '设置',
+      navigation: '导航',
+      floatingNavLabel: '悬浮导航',
+      floatingNavHint: '回主屏与切换应用，可拖动',
       platform: '平台',
       appearance: '外观',
       appearanceHint: '主题与色板',

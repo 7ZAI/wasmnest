@@ -6,6 +6,7 @@
         :checked="modelValue"
         :disabled="disabled"
         class="sr-only"
+        :aria-label="ariaLabel || undefined"
         @change="$emit('update:modelValue', !modelValue)"
       />
       <!-- 开关样式与桌面端 SettingsView 对齐：方形墨色轨道 + 方形滑块 -->
@@ -37,16 +38,21 @@
  *
  * 迁移自旧公共组件 `src/components/Toggle.vue`（壳内自足化），契约与旧实现
  * 逐字一致；壳内消费方（应用详情权限开关）与将来迁移的旧页面共用同一形状。
+ *
+ * `ariaLabel`：不传 `label` 时开关没有可见文字，必须给输入框一个可读名
+ * （设置行把标题放在开关左侧、由行自己排版，不能塞进 label 的尾随文案）。
  */
 interface Props {
   modelValue: boolean
   label?: string
   disabled?: boolean
+  ariaLabel?: string
 }
 
 withDefaults(defineProps<Props>(), {
   label: '',
   disabled: false,
+  ariaLabel: '',
 })
 
 defineEmits(['update:modelValue'])

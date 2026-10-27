@@ -15,6 +15,9 @@
  * | C-P8 | setWallpaperImage(路径) | 记路径并切到 custom 档 | 档位=custom + 路径持久化 |
  * | C-P9 | setWallpaperImage(null) | 移除图片；正停在 custom 档时回落默认 | 档位回落 + 路径清空 |
  * | C-P10 | load 一致性 | custom 档但没有图 = 没选过 | 回落默认档，不渲染空背景 |
+ * | C-P11 | floatingNav 默认 | 无存储 / 非法值 | 默认关闭 |
+ * | C-P12 | floatingNavPos 校验 | 越界 / 非数值逐轴回落 | 各轴独立收敛到 [0,1] |
+ * | C-P13 | 悬浮导航写入 | 开关与位置 | 持久化到同一份壳 UI 偏好 |
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
@@ -38,12 +41,19 @@ afterEach(() => {
 
 describe('C-P1..C-P4 偏好加载', () => {
   it('should_useDefaults_when_noStoredPrefs', async () => {
-    const { useShellPreferences, WALLPAPER_DEFAULT, WALL_DIM_DEFAULT } = await loadPrefsWith()
+    const {
+      useShellPreferences,
+      WALLPAPER_DEFAULT,
+      WALL_DIM_DEFAULT,
+      FLOATING_NAV_POS_DEFAULT,
+    } = await loadPrefsWith()
     const prefs = useShellPreferences()
 
     expect(prefs.wallpaper.value).toBe(WALLPAPER_DEFAULT)
     expect(prefs.wallDim.value).toBe(WALL_DIM_DEFAULT)
     expect(prefs.wallpaperImage.value, '未选过自定义图时为 null').toBeNull()
+    expect(prefs.floatingNav.value, '悬浮导航默认关闭').toBe(false)
+    expect(prefs.floatingNavPos.value).toEqual(FLOATING_NAV_POS_DEFAULT)
   })
 
   it('should_readStoredPrefs_when_valid', async () => {
@@ -117,6 +127,8 @@ describe('C-P5..C-P7 偏好写入', () => {
       wallpaper: 'dune',
       wallpaperImage: null,
       wallDim: 42,
+      floatingNav: false,
+      floatingNavPos: { x: 0.5, y: 1 },
     })
   })
 
@@ -193,5 +205,51 @@ describe('C-P8..C-P10 自定义壁纸', () => {
 
     expect(prefs.wallpaper.value).toBe(WALLPAPER_DEFAULT)
     expect(prefs.wallpaperImage.value).toBeNull()
+  })
+})
+
+describe('C-P11..C-P13 悬浮导航偏好', () => {
+  it('should_keepFloatingNavOff_when_storedValueIsNotBoolean', async () => {
+    const { useShellPreferences } = await loadPrefsWith(JSON.stringify({ floatingNav: 'yes' }))
+    const prefs = useShellPreferences()
+
+    expect(prefs.floatingNav.value, '非布尔脏值回落为关闭').toBe(false)
+  })
+
+  it('should_clampEachAxis_when_positionOutOfRangeOrNotNumber', async () => {
+    const { useShellPreferences, FLOATING_NAV_POS_DEFAULT } = await loadPrefsWith(
+      JSON.stringify({ floatingNavPos: { x: 2, y: 'bottom' } }),
+    )
+    const prefs = useShellPreferences()
+
+    // 逐轴判定：x 越界收敛到 1，y 非数值回落默认，不整表重置
+    expect(prefs.floatingNavPos.value).toEqual({ x: 1, y: FLOATING_NAV_POS_DEFAULT.y })
+  })
+
+  it('should_persistToggleAndPosition_when_floatingNavChanges', async () => {
+    const { useShellPreferences, FLOATING_NAV_POS_DEFAULT } = await loadPrefsWith()
+    const prefs = useShellPreferences()
+
+    expect(prefs.floatingNav.value).toBe(false)
+    prefs.setFloatingNav(true)
+    prefs.setFloatingNavPos({ x: 0.25, y: 0.75 })
+    await Promise.resolve()
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    expect(stored.floatingNav).toBe(true)
+    expect(stored.floatingNavPos).toEqual({ x: 0.25, y: 0.75 })
+    expect(prefs.floatingNavPos.value).not.toEqual(FLOATING_NAV_POS_DEFAULT)
+  })
+
+  it('should_clampPosition_when_setterGetsOutOfRange', async () => {
+    const { useShellPreferences } = await loadPrefsWith()
+    const prefs = useShellPreferences()
+
+    prefs.setFloatingNavPos({ x: -0.4, y: 9 })
+    expect(prefs.floatingNavPos.value).toEqual({ x: 0, y: 1 })
+
+    // 部分字段缺失 / 非数值：只对坏轴回落，不把整个位置置零
+    prefs.setFloatingNavPos({ x: 0.3, y: Number.NaN })
+    expect(prefs.floatingNavPos.value).toEqual({ x: 0.3, y: 1 })
   })
 })

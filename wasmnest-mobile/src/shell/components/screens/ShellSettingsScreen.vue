@@ -36,6 +36,34 @@
         </div>
       </div>
 
+      <!-- ==================== 导航 ==================== -->
+      <ShellSection :title="t('shell.settings.navigation')" />
+      <div class="px-4 pb-1">
+        <ShellGroupCard>
+          <div class="flex items-center gap-3 px-3 py-3 min-h-[var(--mobile-touch-target-min)]">
+            <svg class="flex-shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" :style="{ color: 'var(--mobile-text-secondary)' }" aria-hidden="true">
+              <path d="M6 8.5h12a3 3 0 0 1 0 6H6a3 3 0 0 1 0-6z" />
+              <path d="M9.5 11.5h.01M12 11.5h.01M14.5 11.5h.01" />
+            </svg>
+            <div class="flex-1 min-w-0">
+              <div class="shell-type-label text-[var(--mobile-text-primary)]">
+                {{ t('shell.settings.floatingNavLabel') }}
+              </div>
+              <div class="shell-type-caption text-[var(--mobile-text-secondary)]">
+                {{ t('shell.settings.floatingNavHint') }}
+              </div>
+            </div>
+            <!-- 开关只作用于悬浮条；行文字不做点击面（避免与 label 嵌套产生双触发） -->
+            <Toggle
+              class="-m-3 p-3"
+              :model-value="floatingNav"
+              :aria-label="t('shell.settings.floatingNavLabel')"
+              @update:model-value="setFloatingNav"
+            />
+          </div>
+        </ShellGroupCard>
+      </div>
+
       <!-- ==================== 平台 ==================== -->
       <ShellSection :title="t('shell.settings.platform')" />
       <div class="px-4 pb-1">
@@ -77,15 +105,19 @@
  *      与版本/更新同属「关于本机」，一级设置页不再摆一排红按钮；
  *   ③ 票 2026-10-10 批次 C4：业务设置入口（连接策略 / 通知）随真源下沉 bedcode 应用
  *      从本表删除——壳只留平台机制与安全闸门，避免同一个开关在壳与应用各存一份真值。
+ *   ④ 2026-10-27：「导航」分组新增悬浮导航开关（默认关闭；开启后在任意页面常驻，
+ *      位置可拖动并持久化），见 App.vue 的挂载说明。
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { usePlatform } from '../../composables/usePlatform'
 import { useShellNavigation } from '../../composables/useShellNavigation'
+import { useShellPreferences } from '../../composables/useShellPreferences'
 import ShellBrandTile from '../ShellBrandTile.vue'
 import ShellGroupCard from '../ShellGroupCard.vue'
 import ShellSection from '../ShellSection.vue'
+import Toggle from '../ui/Toggle.vue'
 
 /** 平台设置项（壳自带） */
 interface PlatformEntry {
@@ -100,6 +132,8 @@ const { t } = useI18n()
 const router = useRouter()
 const nav = useShellNavigation()
 const { platformInfo } = usePlatform()
+// 悬浮导航是壳的视觉偏好（localStorage），不写宿主 AppConfig（与壁纸同口径）
+const { floatingNav, setFloatingNav } = useShellPreferences()
 
 
 
