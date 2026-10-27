@@ -16,7 +16,7 @@
  * | C-007 | `[patch]` 写回 manifest → 报错 |
  *
  * 为什么由根测试守：`check-runtime-crate.mjs` 是人工门禁（不在 CI job 里），判据 4 的
- * 硬编码（12 条 / `lib-v0.0.2` / SDK 精确版本）曾在 `peer-net-dissolve` 与 SDK 摘除后
+ * 硬编码（12 条 / `lib-v0.0.1` / SDK 精确版本）曾在 `peer-net-dissolve` 与 SDK 摘除后
  * 静默过期。这里把「真实 manifest 必须与版本真源一致」接进 node-root 测试，漂移即红。
  */
 import { describe, it } from 'node:test'
