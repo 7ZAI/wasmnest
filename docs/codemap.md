@@ -286,6 +286,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 架构硬约束（宿主薄壳六判据 / 桌面挂载形态 / 双端差异 / 权限闸门 / 数据库 / 跨端协议） | `docs/architecture.md` |
 | 插件与 SDK 契约（plugin.json / 权限 / WIT 链 / 生成物 / 变更流程） | `docs/contracts.md` |
 | 前端规范（零资源访问三层封锁 / 挂载包形态 / 移动壳优先 / i18n） | `docs/frontend.md` |
+| 对外品牌文案（主标 / 副标句 / 技术意象句 / 备选池 / 落地位置） | `docs/brand.md` |
 | Rust 规范与注释命名 | `docs/backend.md` |
 | 安全与日志红线 | `docs/security.md` |
 | 决策记录（ADR 索引；0055–0057 出处登记 / 0058 前端信任边界威胁模型） | `docs/adr/README.md` |
