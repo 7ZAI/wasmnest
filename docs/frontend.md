@@ -65,7 +65,7 @@
 
 - **注释规则（解释为什么 / 中文 / 禁票号引用 / 同步修正）与命名规则（组件 PascalCase / composable `use` 前缀）的通用部分真源 = `docs/public/commenting.md`**——本端只补充平台特有增量：Vue 组件 / 目录结构跟随既有双端的同构惯例。
 - i18n：桌面 `src/i18n/host-{zh-CN,en}.ts`（+ `index.ts`）、移动 `src/locales/{zh-CN,en}/`；**新增 / 修改 key 必须双语同步**；用户可见文案禁止硬编码。
-- **宿主消息集与 bedcode 应用副本逐字一致**（`i18nDriftLock`）：改任一边必须同批改另一边（锁详情见 `docs/codemap.md` §8）。
+- **宿主消息集只装宿主壳文案**：应用可见文案（含 bedcode 桌面自带机制副本 `errors.*` 与业务文案）归各应用仓自持，宿主不提供 app 文案副本（2026-10-27 迁移；原 `i18nDriftLock` 随之退役）。
 
 ## 6. 桌面壳扩展点（状态栏 / 设置项 / 主题皮肤）
 

@@ -14,7 +14,6 @@
 | 锁 | 位置（本仓） | 钉住什么 |
 | --- | --- | --- |
 | `hostAppBoundaryLock.test.ts` | `wasmnest-desktop/src/__tests__/` | 宿主零 app 源码 import、零 `__WASMNEST_SHARED__`、零旧贡献面；逐字校验五个桌面 app `src/entry.ts` 的 `mountApp` 契约（**新增 / 改名桌面应用必须同步该清单**） |
-| `i18nDriftLock.test.ts` | 同上 | 宿主 `src/i18n/host-{zh-CN,en}.ts` ↔ `apps/bedcode/desktop/src/i18n/host-{zh-CN,en}.ts` **逐字一致**（改任一边必须同改另一边） |
 | `tailwindContentCoverage.test.ts` | 同上 | 宿主 Tailwind content 不得残留 app 路径（app 类各自编译） |
 | `appBundlePathLock.test.ts` / `appChromeLock.test.ts` | 同上 | 挂载包路径单一来源（`resources/plugins/desktop` 层级）；壳标题栏常驻、应用不得自绘标题栏/窗口控制/拖拽区 |
 | 移动壳系列锁（`shellConstraintLocks` / `retiredHostUIRetirementLocks` 等） | `wasmnest-mobile/src/__tests__/shell/` | 壳内自足（不依赖旧界面目录）、退役路由 / 符号不回接、壳迁移面不得缩水 |
