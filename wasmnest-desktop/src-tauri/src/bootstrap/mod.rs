@@ -16,7 +16,7 @@ mod run_with_test;
 use crate::bench_channel;
 use crate::wasm_core;
 use crate::Result;
-use crate::{commands, plugin, server, system};
+use crate::{commands, plugin, plugin_updates, server, system};
 // 原生右键菜单抑制是 **Linux 专用**（Windows WebView2 / macOS WKWebView 由前端
 // capture 阶段 preventDefault 覆盖）：这三个项在 context_menu.rs 里都带
 // `#[cfg(target_os = "linux")]`，装配侧的注册与窗口销毁钩子也在同一 cfg 里。
@@ -854,6 +854,11 @@ pub fn run() {
             commands::plugin_channel_token,
             commands::plugin_install_from_file,
             commands::plugin_uninstall,
+            // 应用更新链路（plugin_updates.rs：GitHub Release 检查 + 校验下载；
+            // 安装复用 plugin_install_from_file 升级模式，兼容判断在壳前端）
+            plugin_updates::plugin_check_app_update,
+            plugin_updates::plugin_download_update,
+            plugin_updates::plugin_pick_app_zip,
             commands::plugin_mark_error,
             commands::plugin_frontend_load_report,
             // 生命周期偏好/状态（D3：桌面补移动端同款缺失臂，语义逐字一致；编排层在

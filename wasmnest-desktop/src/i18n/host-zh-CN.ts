@@ -238,8 +238,26 @@ export default {
         '按授权风险排序（「始终允许」最宽松置顶）。运行中的应用不可卸载；启用方向先过审批门。',
       listAria: '已安装应用列表',
       install: '安装应用',
-      installDesc: '本地 zip（plugin_install_from_file）',
-      installToast: '安装应用：请选择本地 zip 包（正式链路待接入）',
+      installDesc: '选择本地 zip 插件包，安装后出现在应用列表（本地安装来源）',
+      installToast: '安装应用：请选择本地 zip 包',
+      // 应用更新面（应用版本更新全链路）：兼容判断在壳（useAppUpdates），不兼容
+      // 只给原因不出更新按钮；版本号参数只承载显示值
+      update: {
+        check: '检查更新',
+        apply: '更新到 v{version}',
+        checking: '正在检查更新…',
+        upToDate: '已是最新（v{version}）',
+        available: '可更新到 v{version}',
+        incompatible: '发现新版本 v{version}，但与当前平台不兼容',
+        updating: '正在下载并更新…',
+        failed: '更新检查失败，请稍后重试',
+        reason: {
+          noCompat: '该发布物缺少兼容声明（旧版发布格式），无法确认与当前平台兼容',
+          mountContract: '要求挂载契约 {required}，当前平台为 {current}',
+          hostRuntime: '要求宿主运行时 {required}，当前为 {current}；请先升级平台',
+          hostRuntimeInvalid: '兼容声明版本形态异常（{required}），已拒绝',
+        },
+      },
       kvSource: '来源',
       kvSize: '体积',
       kvViews: '视图',

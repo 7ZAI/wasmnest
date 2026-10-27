@@ -244,8 +244,26 @@ export default {
         'Sorted by auth risk ("always allow" loosest first). Running apps cannot be uninstalled; enabling goes through the approval gate first.',
       listAria: 'Installed apps',
       install: 'Install app',
-      installDesc: 'Local zip (plugin_install_from_file)',
-      installToast: 'Install app: pick a local zip (full flow pending)',
+      installDesc: 'Pick a local zip plugin package; installed apps appear in the list (user-installed source)',
+      installToast: 'Install app: pick a local zip package',
+      // App update surface: compatibility is judged by the shell (useAppUpdates);
+      // incompatible releases show a reason and never get an update button
+      update: {
+        check: 'Check for updates',
+        apply: 'Update to v{version}',
+        checking: 'Checking for updates…',
+        upToDate: 'Up to date (v{version})',
+        available: 'v{version} available',
+        incompatible: 'New version v{version} found, but it is incompatible with this platform',
+        updating: 'Downloading and updating…',
+        failed: 'Update check failed, try again later',
+        reason: {
+          noCompat: 'The release lacks a compatibility declaration (legacy release format); compatibility cannot be confirmed',
+          mountContract: 'Requires mount contract {required}; this platform is {current}',
+          hostRuntime: 'Requires host runtime {required}; this platform is {current}. Upgrade the platform first',
+          hostRuntimeInvalid: 'Malformed compatibility version ({required}); refused',
+        },
+      },
       kvSource: 'Source',
       kvSize: 'Size',
       kvViews: 'Views',
