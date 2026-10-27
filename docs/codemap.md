@@ -81,7 +81,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `shell/composables/useShellApps.ts` | **应用路由真源**：`SURFACE_ROUTES`（新增桌面应用必须同步，见 §6） |
 | `shell/types.ts` · `state.ts` / `useShellState.ts` | 壳状态面（宿主零业务状态：首次打开创建、切走只藏、停用 / 卸载才销毁） |
 | `components/` · `composables/` · `stores/` | 宿主公共组件 / 逻辑 / 存储 |
-| `i18n/host-{zh-CN,en}.ts` | 宿主消息集（**与 bedcode 应用副本逐字一致**，`i18nDriftLock` 钉住） |
+| `i18n/host-{zh-CN,en}.ts` | 宿主消息集（只装宿主壳文案；app 文案归各应用仓，2026-10-27 起无逐字副本锁） |
 | `utils/` | `frontendLogger.ts`（落盘差异见头注释）、`invoke.ts`（带超时 IPC，错误信封）、`appCommands.ts`、`userError.ts` 等 |
 | `__tests__/` | vitest 测试树（含各锁，见 §7） |
 
@@ -208,7 +208,6 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 锁 | 位置（本仓） | 钉住什么 |
 | --- | --- | --- |
 | `hostAppBoundaryLock.test.ts` | `wasmnest-desktop/src/__tests__/` | 宿主零 app 源码 import、零 `__WASMNEST_SHARED__`、零旧贡献面；逐字校验五个桌面 app `src/entry.ts` 的 `mountApp` 契约；**L5 预览契约锁**：五个 entry 必须导出 `mountPreview` 且带 `appId` / `lastRoute` / `appInvoke` / `appStorageGet` / `locale` / `theme` 关键字段、宿主声明 `AppPreviewEnv` / `AppPreviewHandle` 且 `mountPreview?` 可选、预览路径禁用 `refreshChannelToken` / 写存储（**新增 / 改名桌面应用必须同步其 `APP_ENTRIES`**） |
-| `i18nDriftLock.test.ts` | 同上 | 宿主 `src/i18n/host-{zh-CN,en}.ts` ↔ `apps/bedcode/desktop/src/i18n/host-{zh-CN,en}.ts` **逐字一致** |
 | `tailwindContentCoverage.test.ts` | 同上 | 宿主 Tailwind content 不得残留 app 路径 |
 | `appBundlePathLock.test.ts` · `appChromeLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 挂载包路径单一来源（`resources/plugins/desktop` 层级）；壳标题栏常驻、应用不得自绘标题栏/窗口控制/拖拽区 |
 | `appSurfaceKeepAlive.test.ts` · `useAppMountKeepAlive.test.ts` | `wasmnest-desktop/src/__tests__/shell/mount/` | **表面保活**：挂载槽常驻（`v-show`，不得回 `v-if` 分支）、销毁点唯一在 `ShellHost` 运行态 disposer、挂载槽切走只 `detach`、界面租约跟实例生命周期（首次创建 acquire / dispose release）、`setActive?` 是可选契约；装载层行为（复用不重建、detach 不销毁、并发首次 mount 合并为一次） |
@@ -231,11 +230,10 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 锁文件（端） | 锁对象 | 性质 | 处置方向 | 为何不能用行为测试表达 |
 | --- | --- | --- | --- | --- |
 | `hostAppBoundaryLock.test.ts`（桌面） | 宿主零 app 源码 import / 零 `__WASMNEST_SHARED__`；`mountApp` / `mountPreview` 契约逐字同形 | 边界契约 | 保留 | 宿主与独立挂载包是运行时装载关系，无编译期约束；契约漂移只在文本可比对时可见 |
-| `i18nDriftLock.test.ts`（桌面） | 宿主 ↔ bedcode 两份 host 消息集逐字一致 | 边界契约 | 保留 | 两份独立构建的消息集副本无共享真源，漂移即用户可见断裂，只能逐字比对 |
 | `tailwindContentCoverage.test.ts`（桌面） | Tailwind content 只扫宿主源码 + SDK 组件 | 边界契约 | 保留 | 被测对象就是 `tailwind.config.js` 的扫描范围文本本身 |
 | `appBundlePathLock.test.ts`（桌面） | 挂载包路径单一来源；禁 `plugins/desktop` 落点字面量 | 边界契约 | 保留 | 同一路径约定前后端各写一遍的事故只能靠禁字面量防复发 |
 | `i18nTemplateKeys.test.ts`（桌面） | 全壳 `t('字面量')` key 必须在 zh-CN 与 en 消息集存在 | 边界契约 | 保留（含防空转断言） | 跨全部模板与两套消息集的交叉一致性，无单点行为可测 |
-| `style/pageTransition.test.ts`（桌面） | 过渡统一：退役过渡名零残留、命名唯一、无 out-in、token 单一来源 | 边界契约（行为面已提纯函数） | 保留 | 跨 6 文件的统一性契约（同 i18nDriftLock）；效果切换已行为化（`applyPageTransitionEffect`） |
+| `style/pageTransition.test.ts`（桌面） | 过渡统一：退役过渡名零残留、命名唯一、无 out-in、token 单一来源 | 边界契约（行为面已提纯函数） | 保留 | 跨 6 文件的统一性契约；效果切换已行为化（`applyPageTransitionEffect`） |
 | `shell/mount/appSurfaceKeepAlive.test.ts`（桌面） | 销毁点唯一、挂载槽常驻 `v-show`、租约跟实例生命周期 | 源码文本（结构事实） | 保留（头注释已述理由） | 覆盖停用 / 全部关闭 / 卸载 / 错误终态全路径的组件测试不现实；结构性事实是跨组件装配不变量 |
 | `shell/shellExtensionWiring.test.ts`（桌面） | ShellHost 真的挂状态栏 / 皮肤 token 接壳根 | 接线锁 | 保留单条轻量 | 组件测试全绿而装配缺失的场景无运行时覆盖；接线点唯一 |
 | `shell/shellStyleWiring.test.ts`（桌面） | 入口接线 shell.css（含顺序）+ 被消费共享类仍在 | 接线锁 | 保留单条轻量 | 零引用死样式静默失效教训：类名照写而 CSS 没进构建，组件测试测不出 |
@@ -288,6 +286,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 架构硬约束（宿主薄壳六判据 / 桌面挂载形态 / 双端差异 / 权限闸门 / 数据库 / 跨端协议） | `docs/architecture.md` |
 | 插件与 SDK 契约（plugin.json / 权限 / WIT 链 / 生成物 / 变更流程） | `docs/contracts.md` |
 | 前端规范（零资源访问三层封锁 / 挂载包形态 / 移动壳优先 / i18n） | `docs/frontend.md` |
+| 对外品牌文案（主标 / 副标句 / 技术意象句 / 备选池 / 落地位置） | `docs/brand.md` |
 | Rust 规范与注释命名 | `docs/backend.md` |
 | 安全与日志红线 | `docs/security.md` |
 | 决策记录（ADR 索引；0055–0057 出处登记 / 0058 前端信任边界威胁模型） | `docs/adr/README.md` |

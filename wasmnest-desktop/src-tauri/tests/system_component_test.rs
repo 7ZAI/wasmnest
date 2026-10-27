@@ -460,11 +460,7 @@ fn test_auth_center_deny_kinds_are_distinguishable() {
     // deny_kind=no_center：desk 空 → center()=None → 裁决面转统一文案
     let mut state: Option<AuthCenterEntry> = None;
     assert!(state.is_none(), "无中心（fail-closed 可判）");
-    let _ = register_inner(
-        &mut state,
-        "com.wasmnest.bedcode",
-        vec!["pairing_code".to_string()],
-    );
+    let _ = register_inner(&mut state, "com.wasmnest.bedcode", vec!["pairing_code".to_string()]);
 
     let no_center = "no auth center registered".to_string();
     // deny_kind=unavailable

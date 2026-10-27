@@ -320,6 +320,16 @@ jobs:
           git clone --depth 1 --branch "$WASMNEST_LIB_REF" \
             https://github.com/7ZAI/wasmnest-lib.git ../wasmnest-lib
 
+      # 快速锁里也有跨仓读取面：桌面 `empty_dir_lock` 扫双端 + 应用源码目录树，
+      # 缺兄弟目录时按设计 fail-visible 直接红（此前只在 node-desktop 的 vitest
+      # 侧检了应用仓，rust-check 漏了这一处）
+      - name: 检出应用仓（兄弟目录：empty_dir_lock 等读应用源码树）
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WASMNEST_APPS_REF" \
+            https://github.com/7ZAI/wasmnest-apps.git ../wasmnest-apps
+          echo "wasmnest-apps @ $WASMNEST_APPS_REF"
+
       # SDK `rust/wit/` 是生成物：cargo 编译 SDK crate 前必须拼装（node 纯脚本）
       - name: 拼装双端 WIT 生成物
         run: node scripts/compose-wit.mjs --all

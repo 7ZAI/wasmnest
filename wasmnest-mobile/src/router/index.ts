@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { pluginLoader } from '@/plugin/loader'
+import { SHELL_ROUTE_NAME } from './routeNames'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -29,9 +30,10 @@ const router = createRouter({
       // 宿主壳（WASM 应用运行平台）：应用默认入口，
       // 内部流转由壳自己的屏幕栈管理（src/shell/），不占用路由表
       path: '/mobile/shell',
-      name: 'mobile-shell',
+      name: SHELL_ROUTE_NAME,
       component: () => import('@/shell/views/ShellView.vue'),
-      meta: { standAlone: true },
+      // shellRoot：系统返回由壳内兜底（useShellSystemBack），不走整页历史回退
+      meta: { standAlone: true, shellRoot: true },
     },
   ],
 })

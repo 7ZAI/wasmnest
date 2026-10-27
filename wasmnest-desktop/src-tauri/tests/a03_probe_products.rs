@@ -67,13 +67,7 @@ fn a03_p1b_wasip3_artifact_full_closed_loop() {
         ],
     );
     let mut plugin = wasm_runtime
-        .load_plugin_from_file(
-            &wasm_path,
-            "com.wasmnest.bedcode",
-            Arc::clone(&host_ctx),
-            &[],
-            None,
-        )
+        .load_plugin_from_file(&wasm_path, "com.wasmnest.bedcode", Arc::clone(&host_ctx), &[], None)
         .expect("load wasip3 session: all imports must resolve");
 
     // guest `activate` 会 `auth-center-register` / `deactivate` 会 `auth-center-unregister`

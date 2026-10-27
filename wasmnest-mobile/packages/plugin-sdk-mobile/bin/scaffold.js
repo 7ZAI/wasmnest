@@ -118,7 +118,6 @@ function cmdManifest(flags) {
 const VALID_PERMISSIONS = new Set([
   'terminal:output',
   'session:read',
-  'session:write',
   'ui:settings',
   'ui:route',
   'ui:dialog',

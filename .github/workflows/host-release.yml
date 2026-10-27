@@ -5,8 +5,14 @@ name: Host Runtime Release
 # 并把真实 sha256 / sourceCommit 回写到 release-manifest.json（开 PR，不直接 push main）。
 #
 # 触发前（人工，版本只在发布时设置）：
-#   1. node scripts/set-host-version.mjs <x.y.z> 并提交；
-#   2. git tag host-v<x.y.z> && git push origin host-v<x.y.z>。
+#   1. node scripts/set-host-version.mjs <x.y.z> 并提交（version 不变时跳过此步）；
+#   2. 先 `workflow_dispatch` 勾 dry_run 跑一遍三平台构建（只上 Actions artifact，
+#      不建 Release、不回写 manifest）——本 workflow 跨平台重且历史上跑得少；
+#   3. git tag host-v<x.y.z> && git push origin host-v<x.y.z>（真正发布）。
+#
+# 跨仓依赖：build 步骤自己按 `release-manifest.json` 的 `repos.lib.tag` 检出兄弟目录
+# `../wasmnest-lib`（根 `.cargo/config.toml` 的 [patch] 指回那里的能力 crate，缺目录
+# 时 cargo 直接报 `failed to load source`）——不需要人预先摆好 R1 布局。
 #
 # 需要的 secrets —— 只列名字，禁止在此写值：
 #   GITHUB_TOKEN（Actions 内置；release 上传 + 推送回写分支 + 开 PR）
@@ -87,7 +93,20 @@ jobs:
             libsoup-3.0-dev libssl-dev pkg-config libgtk-3-dev build-essential
 
       - uses: dtolnay/rust-toolchain@stable
-      - uses: mozilla/sccache-action@v0.0.9
+      - uses: mozilla-actions/sccache-action@v0.0.9
+
+      # 根 `.cargo/config.toml` 的 `[patch."https://github.com/7ZAI/wasmnest-lib"]` 按
+      # R1 同场布局把能力 crate 指回 `../wasmnest-lib/<crate>`；CI 只检本仓时那些 path
+      # 不存在，cargo 会直接 `failed to load source`（不是 warning）。按 manifest 钉住的
+      # 精确 tag 检出兄弟目录，patch 就能落到「与发布声明同一份源码」上。
+      - name: 检出能力仓（兄弟目录，按 manifest 的 repos.lib.tag 精确 tag）
+        shell: bash
+        run: |
+          set -euo pipefail
+          lib_tag="$(node -p "require('./release-manifest.json').repos.lib.tag")"
+          git clone --depth 1 --branch "$lib_tag" \
+            https://github.com/7ZAI/wasmnest-lib.git ../wasmnest-lib
+          echo "wasmnest-lib @ $lib_tag"
 
       - name: 安装平台仓依赖
         run: |
@@ -203,6 +222,6 @@ jobs:
           git add release-manifest.json
           git commit -m "chore(host): 回写 ${tag} 三平台宿主产物 sha256"
           git push origin "$branch"
-          gh pr create --base dev --head "$branch" \
+          gh pr create --base main --head "$branch" \
             --title "chore(host): 回写 ${tag} 宿主产物 sha256" \
             --body "host-release 发布成功后自动生成：release-manifest.json 的 hostRuntime.artifacts（三平台真实 sha256）与 sourceCommit。请核对后合并。"

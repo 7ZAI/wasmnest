@@ -236,7 +236,40 @@ describe('系统服务详情：不可卸载 + 自启可关', () => {
   })
 })
 
+describe('停止按钮可用性：只在可能持有运行时实例时可点', () => {
+  it('未运行态（已停用 / 未启动 / 待审批）→ 停止按钮禁用', async () => {
+    for (const state of ['disabled', 'stopped', 'approval'] as const) {
+      mocks.app = { ...serviceApp(), state }
+      const wrapper = await mountDetail()
+      const btn = stopButton(wrapper)
+      expect(btn, `state=${state} 时仍应渲染停止按钮（禁用而不是消失）`).toBeDefined()
+      expect(
+        (btn!.element as HTMLButtonElement).disabled,
+        `state=${state} 时没有可停止的对象，按钮必须禁用`,
+      ).toBe(true)
+      wrapper.unmount()
+    }
+  })
+
+  it('运行中 → 停止按钮可点', async () => {
+    mocks.app = { ...serviceApp(), state: 'running' }
+    const wrapper = await mountDetail()
+    expect((stopButton(wrapper)!.element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('失败态 → 保留停止入口（清理残留 / 重试停止）', async () => {
+    mocks.app = { ...serviceApp(), state: 'error' }
+    const wrapper = await mountDetail()
+    expect((stopButton(wrapper)!.element as HTMLButtonElement).disabled).toBe(false)
+  })
+})
+
 describe('系统服务停止：先弹确认，确认后才停（业务应用直停）', () => {
+  beforeEach(() => {
+    // 停止动作只对运行中的应用开放：动作类用例的前置状态
+    mocks.app = { ...serviceApp(), state: 'running' }
+  })
+
   it('服务点「停止服务」→ 弹确认，不直接停止', async () => {
     const { wrapper } = await mountDetailWithDialogStub()
     const btn = stopButton(wrapper)
@@ -274,7 +307,7 @@ describe('系统服务停止：先弹确认，确认后才停（业务应用直�
 
   it('业务应用点「停用应用」→ 直接停止，不弹确认', async () => {
     mocks.params.value = { appId: 'com.wasmnest.file-transfer' }
-    mocks.app = businessApp()
+    mocks.app = { ...businessApp(), state: 'running' }
 
     const { wrapper } = await mountDetailWithDialogStub()
     await stopButton(wrapper)!.trigger('click')

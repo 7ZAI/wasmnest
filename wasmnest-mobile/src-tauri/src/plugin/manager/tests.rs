@@ -10,8 +10,8 @@
 //
 // 锁约束：tests.rs 即 manager::tests 模块本体（manager 子模块），父模块私有项对其可见
 
-use super::*;
 use super::events::PluginManagerDispatcher;
+use super::*;
 use crate::plugin::wasm_runtime::LoadedWasmPlugin;
 use crate::test_fixtures::build_test_component;
 use std::sync::Arc as StdArc;

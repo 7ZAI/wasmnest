@@ -1,4 +1,4 @@
-# SDK 发布（桌面端：npm 包 + 两个 Rust crate）
+# SDK 发布（双端：npm 包 × 2 + Rust crate × 3）
 #
 # 触发：
 #   - push tag `sdk-v*`（如 `sdk-v0.0.1`）→ 构建 + 发布；
@@ -10,11 +10,13 @@
 #
 # 生效前置（缺一即失败；本 workflow 不做任何自动补齐）：
 #   1. 仓库 secrets：`NPM_TOKEN`（npm 自动化 token）、`CARGO_REGISTRY_TOKEN`（crates.io token）；
-#   2. npm 包名 `@binblink/wasmnest-plugin-sdk-desktop` 归 binblink 组织所有且 token 有发布权；
-#   3. crates.io 上 `wasmnest-plugin-api` / `wasmnest-plugin-api-macros` 名字未被占用；
+#   2. npm 包名 `@binblink/wasmnest-plugin-sdk-{desktop,mobile}` 归 binblink 组织所有且 token 有发布权；
+#   3. crates.io 上 `wasmnest-plugin-api` / `wasmnest-plugin-api-macros` /
+#      `wasmnest-plugin-api-mobile` 名字未被占用；
 #   4. 版本未被发布过：npm / crates.io 均不可覆盖同版本，发布前按发布流程 bump
-#      `wasmnest-desktop/packages/plugin-sdk-desktop/package.json` 与两个 `Cargo.toml` 的
-#      version（发布时才 bump，dev 日常不改，见 docs/public/versioning.md）。
+#      **两端**的 `package.json` 与三个 `Cargo.toml` 的 version（发布时才 bump，dev 日常不改，
+#      见 docs/public/versioning.md）。注意 0.0.1 这套版本已全部发布（双端 npm + 三个 crate），
+#      再跑本 workflow 的发布步骤必须先 bump，否则在 npm/crates.io 处按「版本已存在」失败。
 #   5. 根 `.cargo/config.toml` 强制 `rustc-wrapper = "sccache"`：rust job 必须装 sccache
 #      （本文件用 mozilla/sccache-action），否则所有 cargo 命令直接失败——这是显性设计。
 name: sdk-publish
@@ -69,51 +71,65 @@ jobs:
       - name: 安装平台仓依赖（pnpm 一律 frozen-lockfile）
         run: pnpm install --frozen-lockfile
 
-      - name: 构建 + 单测 + 打包 + 发布内容断言
+      - name: 构建 + 单测 + 打包 + 发布内容断言（双端）
+        # --target all：双端一起打，避免「只发桌面」的历史缺口（移动 Rust crate 曾因此长期
+        #   没有发布物，apps 只能 path 依赖平台工作树）。
         # --no-zip：发布 workflow 只消费原始 .tgz / .crate（聚合 zip 是 release 附件形态）
-        run: node scripts/package-sdks.mjs --target desktop --no-zip
+        run: node scripts/package-sdks.mjs --target all --no-zip
 
       - name: 列出发布产物（dry_run 时供人工核对）
         run: |
           set -euo pipefail
-          ls -l dist/sdk-packages/desktop/
-          cat dist/sdk-packages/desktop/SHA256SUMS
+          for end in desktop mobile; do
+            echo "== $end"
+            ls -l "dist/sdk-packages/$end/"
+            cat "dist/sdk-packages/$end/SHA256SUMS"
+          done
 
       - name: 保留产物（dry_run 可下载核对）
         uses: actions/upload-artifact@v4
         with:
-          name: sdk-desktop-${{ github.ref_name }}
-          path: dist/sdk-packages/desktop/
+          name: sdk-packages-${{ github.ref_name }}
+          path: dist/sdk-packages/
           if-no-files-found: error
 
-      - name: 发布 npm 包
+      - name: 发布 npm 包（双端）
         if: env.DRY_RUN != 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           # 发布脚本产出的 tarball 本体（package-sdks 已做内容断言）
-          npm publish dist/sdk-packages/desktop/*.tgz --access public
+          for end in desktop mobile; do
+            npm publish "dist/sdk-packages/$end/"*.tgz --access public
+          done
 
-      - name: 发布 Rust crate（macros 先于 api）
+      - name: 发布 Rust crate（macros → api → mobile）
         if: env.DRY_RUN != 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           set -euo pipefail
-          PKG=wasmnest-desktop/packages/plugin-sdk-desktop
-          # proc-macro crate 无依赖，先发
-          cargo publish --manifest-path "$PKG/rust-macros/Cargo.toml"
-          # api crate 的 path 依赖带 version：crates.io 索引需要时间可见新 macros，
-          # 校验构建失败即重试（最多 6 次 / 约 5 分钟），仍失败则整个 job 红
-          for attempt in 1 2 3 4 5 6; do
-            if cargo publish --manifest-path "$PKG/rust/Cargo.toml"; then
-              break
-            fi
-            if [ "$attempt" = "6" ]; then
-              echo "cargo publish wasmnest-plugin-api 连续失败 6 次（检查 macros 是否已上 crates.io 索引）" >&2
-              exit 1
-            fi
-            echo "第 ${attempt} 次发布失败，等待 crates.io 索引同步后重试..." >&2
-            sleep 45
-          done
+          DESKTOP=wasmnest-desktop/packages/plugin-sdk-desktop
+          MOBILE=wasmnest-mobile/packages/plugin-sdk-mobile
+
+          # crates.io 索引对新 crate / 新版本有可见延迟（同一次发布里 api 要读到刚发的
+          # macros），校验构建失败即重试（最多 6 次 / 约 5 分钟），仍失败则整个 job 红。
+          publish_with_retry() {
+            local manifest="$1" name="$2"
+            for attempt in 1 2 3 4 5 6; do
+              if cargo publish --manifest-path "$manifest"; then
+                return 0
+              fi
+              echo "第 ${attempt} 次发布 $name 失败，等待 crates.io 索引同步后重试..." >&2
+              sleep 45
+            done
+            echo "cargo publish $name 连续失败 6 次（检查 crates.io 索引 / token 权限）" >&2
+            return 1
+          }
+
+          # proc-macro crate 无依赖，先发；api 依赖带 version 的宏 crate，需其索引可见
+          publish_with_retry "$DESKTOP/rust-macros/Cargo.toml" wasmnest-plugin-api-macros
+          publish_with_retry "$DESKTOP/rust/Cargo.toml" wasmnest-plugin-api
+          # 移动 crate 不依赖上面两个，放最后（缺这条 = 移动插件只能 path 依赖平台源码）
+          publish_with_retry "$MOBILE/rust/Cargo.toml" wasmnest-plugin-api-mobile
