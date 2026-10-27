@@ -1,5 +1,5 @@
 /**
- * 设备壳本地 UI 偏好（wallpaper / wallDim / wallpaperImage / theme）
+ * 设备壳本地 UI 偏好（wallpaper / wallDim / wallpaperImage / theme / shortcuts）
  *
  * 壁纸铺在壳根（ShellHost 的 .shell-wall），主屏 / 系统页 / 兜底面共用；
  * 这些是**壳的 UI 偏好**（纯机制词汇），不是宿主 AppConfig 字段——
@@ -16,6 +16,7 @@
 import { ref, watch } from 'vue'
 import { SHELL_THEME_DEFAULT, WALL_DIM_DEFAULT, WALLPAPER_DEFAULT } from './state'
 import { isCustomWallpaperFile } from './wallpaperFile'
+import { SHORTCUT_ACTION_IDS, comboIsBindable } from './shortcutsModel'
 import type { ShellUiPrefs } from '../types'
 
 const STORAGE_KEY = 'wasmnest.shell-ui-prefs.v1'
@@ -52,6 +53,7 @@ function load(): ShellUiPrefs {
           : fallback.wallDim,
       wallpaperImage,
       theme: readThemeId(parsed) ?? fallback.theme,
+      shortcuts: readShortcuts(parsed.shortcuts),
     }
   } catch {
     return fallback
@@ -67,6 +69,25 @@ function load(): ShellUiPrefs {
 function readThemeId(parsed: LegacyPrefs): string | null {
   const candidate = typeof parsed.theme === 'string' ? parsed.theme : parsed.skin
   return typeof candidate === 'string' && candidate.trim() !== '' ? candidate : null
+}
+
+/**
+ * 快捷键覆盖读取：未知动作 id / 不合规值（含裸主键——打字误触风险）逐条丢弃，
+ * 缺省即 undefined（全出厂键位）。fail-visible 由设置页录入侧承担（标准策略三查），
+ * 读档侧只做 fail-safe：脏值回落默认，绝不让「裸主键绑定」有机会触发。
+ */
+function readShortcuts(raw: unknown): ShellUiPrefs['shortcuts'] {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const out: Record<string, string> = {}
+  for (const [id, combo] of Object.entries(raw as Record<string, unknown>)) {
+    if (!SHORTCUT_ACTION_IDS.has(id)) continue
+    if (combo === '') {
+      out[id] = ''
+    } else if (typeof combo === 'string' && comboIsBindable(combo)) {
+      out[id] = combo
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 // 持久化（写穿）：值变化即存盘，异常静默回落（UI 偏好丢失可接受，不打断主流程）

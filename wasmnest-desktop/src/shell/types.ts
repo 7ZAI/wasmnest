@@ -71,4 +71,11 @@ export interface ShellUiPrefs {
    * （扩展可能尚未注册，因此不在这里抹掉用户选择）。
    */
   theme: string
+  /**
+   * 快捷键绑定覆盖（sparse：只存用户改过的动作 id；`''` = 显式清除该动作的
+   * 绑定，缺省 = 用出厂键位）。值是组合键规范化串（shortcutsModel，含 Ctrl 或
+   * Alt）；未知动作 id / 不合规范的值在 load 时丢弃回落默认。类型放宽为
+   * `Record<string, string>`：本文件是壳类型基座，不反向依赖 composable。
+   */
+  shortcuts?: Partial<Record<string, string>>
 }

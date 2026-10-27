@@ -100,7 +100,8 @@
  *   除外——它由宿主另开窗口，窗口 chrome 归应用自持。
  * - 全局机制：启动画面 / 主题（`<html data-theme>`）与壁纸 / 字号 / Toaster / 热区 /
  *   平台状态栏 / 覆层
- *   （多任务·通知·右键·弹窗·启动屏·**授权询问**）/ type-to-search / 键盘（Esc 逐层收 → 返回主屏）。
+ *   （多任务·通知·右键·弹窗·启动屏·**授权询问**）/ type-to-search / 键盘（快捷键
+ *   capture 抢占层 ADR 0060 → Esc 逐层收 → 返回主屏）。
  *
  * 路由是唯一事实源：route.path 变化 → useShellState.syncFromRoute 同步面态
  * （主屏 / 系统页卡 / 应用卡 MRU）。
@@ -134,6 +135,7 @@ import ShellDialogLayer from './components/ShellDialogLayer.vue'
 import FsAuthDialog from '@/shell/auth/FsAuthDialog.vue'
 import NetworkAuthDialog from '@/shell/auth/NetworkAuthDialog.vue'
 import { useHomeSearch } from './composables/useHomeSearch'
+import { useShellShortcuts } from './composables/useShellShortcuts'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -282,28 +284,27 @@ function openFirstMatch() {
 
 // ==================== 全局键盘 ====================
 
-function onKeydown(e: KeyboardEvent) {
-  const mod = e.ctrlKey || e.metaKey
+// 壳快捷键（capture 抢占层，ADR 0060）：在 window capture 阶段先于本组件的
+// 冒泡 onKeydown 与任何应用内元素监听；只有「已注册组合」被它消费，其余按键
+// 完全放行（应用照常收到）。Ctrl+,（打开设置）自 2026-10-28 起迁入快捷键注册表
+// （默认绑定，可在 /sys/settings/shortcuts 改绑），不再作为本函数的硬编码分支。
 
+/** 快捷键监听 teardown（onMounted 装配，onUnmounted 拆除） */
+let teardownShortcuts: (() => void) | null = null
+
+function onKeydown(e: KeyboardEvent) {
   // 启动画面期间：键盘不动作（无跳过语义，绘画动画短暂自动收起；
   // 原来 BootScreen 的「任意键跳过」随组件一起退役）
   if (showSplash.value) return
 
-  // 应用态：键盘归应用界面（终端 Esc / 应用内快捷键都由 app 自己处理），壳不抢。
-  // 唯一例外是壳覆层开着时的 Esc：通知中心 / 多任务 / 弹窗是壳 chrome，没有别的
-  // 退出入口（面板盖住工具栏按钮时也必须收得掉）；无覆层时 Esc 完全让给应用。
+  // 应用态：键盘归应用界面（终端 Esc / 应用内快捷键都由 app 自己处理），壳不抢——
+  // 已注册的快捷键组合是唯一例外，它们在上面 capture 层就被壳收走（ADR 0060）。
+  // 本层保留的壳态例外：壳覆层开着时的 Esc（覆层属壳 chrome，没有别的退出入口）。
   if (!isHome.value && !isSysPage.value) {
     if (e.key === 'Escape' && hasOverlay.value) {
       e.preventDefault()
       state.goBack()
     }
-    return
-  }
-
-  // Ctrl+,：设置卡（壳态）
-  if (mod && e.key === ',') {
-    e.preventDefault()
-    state.openSys('settings')
     return
   }
 
@@ -363,6 +364,9 @@ onMounted(async () => {
   setupFontSize()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('click', onWindowClick)
+  // capture 层装配在冒泡 onKeydown 之后注册（同 capture 相位只此一个，先后无碍；
+  // teardown 必须与 onKeydown 的移除彼此独立，避免卸载期悬挂）
+  teardownShortcuts = useShellShortcuts().setupShellShortcuts({ enabled: () => !showSplash.value })
 
   // 应用清单就绪后，等到绘画动画画完（SPLASH_MIN_MS）再收起启动面——
   // 画完即加载完成。清单加载更慢时（remain = 0）按就绪时刻收起，
@@ -388,6 +392,8 @@ onUnmounted(() => {
   cleanupTheme()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('click', onWindowClick)
+  teardownShortcuts?.()
+  teardownShortcuts = null
 })
 </script>
 

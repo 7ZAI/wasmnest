@@ -94,6 +94,10 @@ export default {
         name: '外观',
         desc: '明暗模式 · 语言 · 字号 · 壁纸 · 主题',
       },
+      shortcuts: {
+        name: '快捷键',
+        desc: '壳层键盘快捷键 · 可改可清空',
+      },
     },
     quickSettings: {
       title: '快捷设置',
@@ -161,6 +165,31 @@ export default {
       uninstall: '卸载',
       uninstallDisabled: '请先停用应用后再卸载',
     },
+    // 壳快捷键（ADR 0060）：动作名 / 录制交互 / 行内校验文案。
+    // 动作 id 集合见 shortcutsModel SHORTCUT_ACTIONS，key 段与动作一一对应。
+    shortcuts: {
+      cardTitle: '按键绑定',
+      hint: '录制时按下新组合键 · Esc 取消 · Backspace 清除（组合归还应用）。组合必须包含 Ctrl 或 Alt。',
+      unbound: '未绑定',
+      recording: '按下组合键…',
+      changeBinding: '更改「{action}」的快捷键',
+      resetRow: '恢复默认',
+      resetAll: '全部恢复默认',
+      conflict: '与「{action}」冲突，换个组合再试。',
+      reserved: '该组合可能被系统或内置浏览器截获，不保证生效。',
+      missingModifier: '组合必须包含 Ctrl 或 Alt。',
+      action: {
+        appNext: { name: '下一个应用', desc: '切到下一个运行中的应用' },
+        appPrev: { name: '上一个应用', desc: '切到上一个运行中的应用' },
+        multitask: { name: '多任务视图', desc: '开合多任务切换面板' },
+        home: { name: '回主屏', desc: '收起当前面回到主屏' },
+        settings: { name: '打开设置', desc: '打开「设置」系统页' },
+        appsManage: { name: '打开应用管理', desc: '打开「应用管理」系统页' },
+        theme: { name: '切换明暗模式', desc: '在浅色与深色之间切换' },
+        fontUp: { name: '增大界面字号', desc: '字号档位上调一档' },
+        fontDown: { name: '减小界面字号', desc: '字号档位下调一档' },
+      },
+    },
     dialog: {
       close: '关闭弹窗',
       cancel: '取消',
@@ -201,6 +230,12 @@ export default {
         title: '外观',
         desc: '明暗模式、语言、字号、壁纸与主题',
         open: '打开外观',
+      },
+      // 快捷键入口卡（设置页第二卡，2026-10-28）：录制 / 恢复在二级页 SysShortcutsView
+      shortcutsEntry: {
+        title: '快捷键',
+        desc: '查看与修改壳层键盘快捷键',
+        open: '打开快捷键',
       },
       ui: {
         title: '界面',

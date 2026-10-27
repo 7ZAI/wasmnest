@@ -43,6 +43,11 @@ export const SYS_SUB_PAGES: Readonly<
     descKey: 'shell.sys.appearance.desc',
     icon: 'theme',
   },
+  'settings/shortcuts': {
+    nameKey: 'shell.sys.shortcuts.name',
+    descKey: 'shell.sys.shortcuts.desc',
+    icon: 'bolt',
+  },
 }
 
 // ==================== 卡片键 ====================

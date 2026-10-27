@@ -29,6 +29,7 @@
         <div class="sys-wrap">
           <SysAppsView v-if="sysPageId === 'apps'" />
           <SysPermsView v-else-if="sysPageId === 'perms'" />
+          <SysShortcutsView v-else-if="subId === 'shortcuts'" />
           <SysAppearanceView v-else-if="sub" />
           <SysSettingsView v-else />
         </div>
@@ -58,6 +59,7 @@ import ShellIcon from './ShellIcon.vue'
 import SysAppsView from '../sys/SysAppsView.vue'
 import SysPermsView from '../sys/SysPermsView.vue'
 import SysAppearanceView from '../sys/SysAppearanceView.vue'
+import SysShortcutsView from '../sys/SysShortcutsView.vue'
 import SysSettingsView from '../sys/SysSettingsView.vue'
 
 const { t } = useI18n()
@@ -65,9 +67,11 @@ const route = useRoute()
 const router = useRouter()
 
 const sysPageId = computed(() => route.params.pageId as string)
+/** 二级页子段原文（settings/appearance | settings/shortcuts），分发与元数据都用它 */
+const subId = computed(() => route.params.sub as string | undefined)
 /** 二级页元数据（settings/appearance → 外观）；无子段或不认识的子段都回落父页 */
 const sub = computed(() => {
-  const s = route.params.sub as string | undefined
+  const s = subId.value
   return (s && SYS_SUB_PAGES[`${sysPageId.value}/${s}`]) || null
 })
 const parentMeta = computed(

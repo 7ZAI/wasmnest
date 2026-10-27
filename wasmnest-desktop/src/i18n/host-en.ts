@@ -99,6 +99,10 @@ export default {
         name: 'Appearance',
         desc: 'Colour mode · Language · Font size · Wallpaper · Themes',
       },
+      shortcuts: {
+        name: 'Shortcuts',
+        desc: 'Shell keyboard shortcuts · rebindable',
+      },
     },
     quickSettings: {
       title: 'Quick settings',
@@ -166,6 +170,32 @@ export default {
       uninstall: 'Uninstall',
       uninstallDisabled: 'Stop the app before uninstalling',
     },
+    // Shell shortcuts (ADR 0060): action names / recording interaction / inline
+    // validation copy. Action id set lives in shortcutsModel SHORTCUT_ACTIONS;
+    // key segments map one-to-one to actions.
+    shortcuts: {
+      cardTitle: 'Key bindings',
+      hint: 'Press a new combo while recording · Esc cancels · Backspace clears (frees the combo for apps). A combo must include Ctrl or Alt.',
+      unbound: 'Unbound',
+      recording: 'Press a combo…',
+      changeBinding: 'Change shortcut for {action}',
+      resetRow: 'Reset',
+      resetAll: 'Reset all to defaults',
+      conflict: 'Already used by "{action}". Pick another combo.',
+      reserved: 'May be intercepted by the system or the webview; not guaranteed to fire.',
+      missingModifier: 'A combo must include Ctrl or Alt.',
+      action: {
+        appNext: { name: 'Next app', desc: 'Switch to the next running app' },
+        appPrev: { name: 'Previous app', desc: 'Switch to the previous running app' },
+        multitask: { name: 'Multitask view', desc: 'Toggle the task switcher' },
+        home: { name: 'Go home', desc: 'Return to the home screen' },
+        settings: { name: 'Open settings', desc: 'Open the Settings system page' },
+        appsManage: { name: 'Open app management', desc: 'Open the Apps system page' },
+        theme: { name: 'Toggle colour mode', desc: 'Switch between light and dark' },
+        fontUp: { name: 'Increase interface font', desc: 'One font-size level up' },
+        fontDown: { name: 'Decrease interface font', desc: 'One font-size level down' },
+      },
+    },
     dialog: {
       close: 'Close dialog',
       cancel: 'Cancel',
@@ -208,6 +238,13 @@ export default {
         title: 'Appearance',
         desc: 'Colour mode, language, font size, wallpaper and themes',
         open: 'Open appearance',
+      },
+      // Shortcuts entry card (second card, 2026-10-28): recording / reset live in
+      // the sub-page SysShortcutsView
+      shortcutsEntry: {
+        title: 'Shortcuts',
+        desc: 'View and rebind shell keyboard shortcuts',
+        open: 'Open shortcuts',
       },
       ui: {
         title: 'Appearance',

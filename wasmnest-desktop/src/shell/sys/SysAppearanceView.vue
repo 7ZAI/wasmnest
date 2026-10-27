@@ -288,28 +288,7 @@ function toggleAnimations() {
 </script>
 
 <style scoped>
-/* 行控件行（label 左 / 控件右）：与 SysSettingsView 的授权入口卡同构（两处消费，
-   未到 shell.css 的 3+ 组件门槛，按其规则各自 scoped 持有） */
-.row-sw {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 2px;
-}
-.row-sw + .row-sw {
-  border-top: 1px solid var(--border);
-}
-.row-sw .lb {
-  flex: 1;
-  min-width: 0;
-}
-.row-sw .lb b {
-  display: block;
-  font-size: calc(12.5px * var(--ui-scale));
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  color: var(--text-primary);
-}
+/* 行控件行（.row-sw）已上提 shell.css（2026-10-28 达 3+ 组件门槛，三处消费） */
 .fld {
   display: flex;
   flex-direction: column;

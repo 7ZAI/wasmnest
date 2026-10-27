@@ -86,6 +86,7 @@ const sectionStub = (label: string) => ({
 /** 主设置页分组标题的期望 DOM 顺序（t 返回 key 原文，锚点与语言无关） */
 const EXPECTED_ORDER = [
   'shell.settings.appearanceEntry.title', // 外观入口（样式调整项在二级页）
+  'shell.settings.shortcutsEntry.title', // 快捷键入口（录制 / 恢复在二级页，2026-10-28）
   'SYSTEM', // SettingsSystemSection（系统设置，动态扩展项也渲染在此卡内）
   'LOGGING', // SettingsLoggingSection（日志）
   'shell.settings.permsEntry.title', // 授权管理入口

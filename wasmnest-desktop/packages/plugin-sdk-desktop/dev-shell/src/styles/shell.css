@@ -361,6 +361,30 @@
     border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
   }
 
+  /* ==================== 行控件行（label 左 / 控件右） ====================
+     设置卡内「一行一设置项」的骨架（SysSettingsView / SysAppearanceView /
+     SysShortcutsView 三处消费，达 3+ 门槛上提；2026-10-28）。 */
+  .row-sw {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 2px;
+  }
+  .row-sw + .row-sw {
+    border-top: 1px solid var(--border);
+  }
+  .row-sw .lb {
+    flex: 1;
+    min-width: 0;
+  }
+  .row-sw .lb b {
+    display: block;
+    font-size: calc(12.5px * var(--ui-scale));
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    color: var(--text-primary);
+  }
+
   /* ==================== kv / 记录行 ==================== */
   .shell-kv {
     display: flex;

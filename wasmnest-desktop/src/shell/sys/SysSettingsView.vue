@@ -15,6 +15,21 @@
     </div>
   </ShellCard>
 
+  <!-- ==================== 快捷键入口（2026-10-28） ====================
+       壳层键盘快捷键的查看 / 录制 / 恢复默认在二级页（/sys/settings/shortcuts，
+       同一张系统页卡内切子路由），与外观入口同构。 -->
+  <ShellCard :title="t('shell.settings.shortcutsEntry.title')" icon="bolt">
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('shell.settings.shortcutsEntry.desc') }}</b>
+      </div>
+      <button class="shell-mini" @click="state.openSys('settings', 'shortcuts')">
+        <ShellIcon name="bolt" :size="12" />
+        {{ t('shell.settings.shortcutsEntry.open') }}
+      </button>
+    </div>
+  </ShellCard>
+
   <!-- ==================== 系统 / 日志（复用既有设置分组组件，零重写） ====================
        链路加密属终端的业务设置（加密哪些通道取决于终端数据面），已随设置归属回归
        bedcode wasm-app，宿主系统页不再承载。
@@ -66,23 +81,6 @@ const state = useShellState()
 </script>
 
 <style scoped>
-/* 行控件行（label 左 / 控件右）：外观二级页（SysAppearanceView）与本页授权入口卡
-   同构（两处消费，未到 shell.css 的 3+ 组件门槛，按其规则各自 scoped 持有） */
-.row-sw {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 2px;
-}
-.row-sw .lb {
-  flex: 1;
-  min-width: 0;
-}
-.row-sw .lb b {
-  display: block;
-  font-size: calc(12.5px * var(--ui-scale));
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  color: var(--text-primary);
-}
+/* 行控件行样式已上提 shell.css（.row-sw，2026-10-28 达 3+ 组件门槛：
+   SysSettingsView / SysAppearanceView / SysShortcutsView 三处消费） */
 </style>
