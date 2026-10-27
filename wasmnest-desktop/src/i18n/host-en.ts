@@ -301,9 +301,6 @@ export default {
       cancel: 'Cancel',
       stop: 'Stop',
     },
-    misc: {
-      terminalTitle: 'Terminal - {name}',
-    },
   },
   // ==================== Error Envelope (ADR 0030) ====================
   // Top-level namespace: errors.<code> ↔ envelope code, zero mapping layer;
@@ -343,15 +340,6 @@ export default {
       status: 'Starting up…',
       tagline: 'Multi-WASM app runtime',
     },
-    sidebar: {
-      settings: 'Settings',
-      navigation: 'Navigation',
-      serviceRunning: 'Service Running',
-      serviceStopped: 'Service Stopped',
-      serviceStarting: 'Service Starting',
-      collapse: 'Collapse Sidebar',
-      expand: 'Expand Sidebar',
-    },
     // Fallback copy for globally uncaught exceptions (renderer errorHandler /
     // unhandledrejection)
     runtimeUnexpected: 'An unexpected error occurred. See logs for details',
@@ -364,72 +352,6 @@ export default {
       confirmExitMsg:
         '{count} session(s) are still running. All running processes will be terminated if you exit.',
       confirmExitForce: 'Force Exit',
-    },
-    server: {
-      title: 'Server Management',
-      sectionStatus: 'Status',
-      sectionNetwork: 'Network',
-      port: 'Port',
-      portHint: 'Takes effect on the next service start',
-      surfaceHint: 'Service follows app surfaces; stops when the last app surface closes',
-      portSave: 'Save',
-      portRestartConfirmTitle: 'Save Port',
-      portRestartConfirmBody:
-        'The port change takes effect after the server restarts. Restart now?',
-      portRestartNow: 'Restart Now',
-      portRestartLater: 'Later',
-      portSavedDelayed: 'Port saved. It will take effect the next time the server starts.',
-      portRestartApplied: 'Port updated and server restarted.',
-      localIp: 'Local IP',
-      autoStart: 'Auto-start',
-      start: 'Start',
-      stop: 'Stop',
-      restart: 'Restart',
-      status: {
-        running: 'Running',
-        stopped: 'Stopped',
-        starting: 'Starting',
-      },
-      monitoring: 'Performance Monitoring',
-      uptime: 'Uptime',
-      connections: 'Connections',
-      totalRequests: 'Total Requests',
-      cpuUsage: 'CPU Usage',
-      memoryUsage: 'Memory Usage',
-      requestRate: 'Request Rate',
-      wsThroughput: 'WS Throughput',
-      wsSentRate: 'Sent Rate',
-      wsRecvRate: 'Received Rate',
-      startSuccess: 'Server started',
-      stopSuccess: 'Server stopped',
-      restartSuccess: 'Server restarted',
-      // Error-enveloped: {error} interpolation removed (technical details must
-      // never reach the user-facing surface, ADR 0030); concrete failures surface
-      // uniformly via showUserError → errors.host.*; these keys stay as static
-      // fallback copy
-      startFailed: 'Start failed, please try again',
-      stopFailed: 'Stop failed, please try again',
-      restartFailed: 'Restart failed, please try again',
-      advancedConfig: 'Advanced Configuration',
-      workers: 'Worker Threads',
-      workersHint: '0 = auto (CPU cores)',
-      keepAlive: 'Keep-Alive Timeout',
-      keepAliveHint: 'seconds, 0 = disabled',
-      clientRequestTimeout: 'Request Header Timeout',
-      clientDisconnectTimeout: 'Disconnect Timeout',
-      maxConnections: 'Max Connections',
-      maxConnectionsHint: 'per worker',
-      backlog: 'TCP Backlog',
-      tcpNodelay: 'TCP_NODELAY',
-      shutdownTimeout: 'Shutdown Timeout',
-      wsMaxFrameSize: 'WS Frame Size',
-      wsMaxFrameSizeHint: 'KB',
-      wsMaxMessageSize: 'WS Message Size',
-      wsMaxMessageSizeHint: 'MB',
-      resetDefaults: 'Reset Defaults',
-      resetSuccess: 'Reset to defaults, restart to apply',
-      collapse: 'Collapse',
-      expand: 'Expand',
     },
     // Unmatched-route fallback page (D3 fail-visible: explicit not-found when a
     // retired surface is visited directly)
@@ -482,25 +404,6 @@ export default {
     },
   },
   settings: {
-    linkCrypto: {
-      title: 'Link Encryption',
-      master: 'Enable Link Encryption',
-      masterDesc:
-        'End-to-end encryption for LAN traffic; off by default — pair with the mobile end first',
-      encryptHttp: 'Encrypt HTTP Payload',
-      encryptHttpDesc: 'REST request/response body envelope encryption (terminal input echo etc.)',
-      encryptWsTerminal: 'Encrypt Terminal Channel',
-      encryptWsTerminalDesc: 'WS terminal frame encryption (PTY output stream)',
-      encryptWsEvent: 'Encrypt Event Channel',
-      encryptWsEventDesc: 'WS event frame encryption (sync event broadcast)',
-      plaintextFallback: 'Allow Plaintext Fallback',
-      plaintextFallbackDesc:
-        'Let unnegotiated legacy clients through in plaintext; when off, unnegotiated remote requests are rejected',
-      fingerprint: 'Local Fingerprint',
-      fingerprintDesc:
-        'Local identity key fingerprint (first 16 hex of SHA-256); compare manually with the mobile end',
-      saveFailed: 'Failed to save link encryption config',
-    },
     system: {
       title: 'System Settings',
       preventSleep: 'Prevent System Sleep',
@@ -624,14 +527,6 @@ export default {
     },
     appearance: {
       theme: 'Theme',
-      palette: 'Palette',
-      paletteWarm: 'Warm Workbench',
-      paletteCool: 'Cool Gray',
-      paletteForest: 'Forest Green',
-      paletteOcean: 'Ocean Teal',
-      paletteSunset: 'Sunset Glow',
-      paletteViolet: 'Starry Violet',
-      paletteDesc: 'Global color style; applies immediately',
       lightMode: 'Light Mode',
       darkMode: 'Dark Mode',
       followSystem: 'Follow System',
