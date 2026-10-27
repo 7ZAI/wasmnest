@@ -218,6 +218,15 @@ export default {
         confirm: '确认卸载',
         success: '{name} 已卸载',
       },
+      install: {
+        success: '「{name}」已安装',
+        upgradeSuccess: '「{name}」已升级',
+      },
+      installUpgrade: {
+        title: '升级「{name}」？',
+        body: '已安装同 id 应用。就地升级保留其数据（插件存储与授权记录）；包内容变更后，下次启动需重新审批。',
+        confirm: '升级',
+      },
       stopService: {
         title: '停止服务「{name}」？',
         body: '将停止服务「{name}」。服务停止后将不再对外提供能力，可在应用管理中重新启动。',
@@ -312,8 +321,7 @@ export default {
         '按授权风险排序（「始终允许」最宽松置顶）。运行中的应用不可卸载；启用方向先过审批门。',
       listAria: '已安装应用列表',
       install: '安装应用',
-      installDesc: '本地 zip（plugin_install_from_file）',
-      installToast: '安装应用：请选择本地 zip 包（正式链路待接入）',
+      installDesc: '从本地 zip 应用包安装外部应用；同 id 已装时可在确认后就地升级（保留应用数据）',
       kvSource: '来源',
       kvSize: '体积',
       kvViews: '视图',
@@ -398,6 +406,10 @@ export default {
     shell: {
       wallpaper: {
         invalid: '无法使用这张图片：请选择 PNG / JPG / WebP，且不超过 20 MB',
+      },
+      install: {
+        builtinConflict: '「{name}」是随宿主分发的内置应用，不能覆盖安装',
+        runningConflict: '「{name}」正在运行，请先停用再升级',
       },
     },
   },

@@ -225,6 +225,15 @@ export default {
         confirm: 'Confirm uninstall',
         success: '{name} uninstalled',
       },
+      install: {
+        success: '"{name}" installed',
+        upgradeSuccess: '"{name}" upgraded',
+      },
+      installUpgrade: {
+        title: 'Upgrade "{name}"?',
+        body: 'An app with the same id is already installed. Upgrading in place keeps its data (plugin storage and auth records); changed content requires re-approval on next launch.',
+        confirm: 'Upgrade',
+      },
       stopService: {
         title: 'Stop service "{name}"?',
         body: 'Stop service "{name}"? It will stop providing its capability; restart it from App management.',
@@ -322,8 +331,8 @@ export default {
         'Sorted by auth risk ("always allow" loosest first). Running apps cannot be uninstalled; enabling goes through the approval gate first.',
       listAria: 'Installed apps',
       install: 'Install app',
-      installDesc: 'Local zip (plugin_install_from_file)',
-      installToast: 'Install app: pick a local zip (full flow pending)',
+      installDesc:
+        'Install an external app from a local zip package; if the same id is already installed, confirm to upgrade in place (app data is kept)',
       kvSource: 'Source',
       kvSize: 'Size',
       kvViews: 'Views',
@@ -413,6 +422,10 @@ export default {
     shell: {
       wallpaper: {
         invalid: 'This image cannot be used: choose a PNG / JPG / WebP up to 20 MB',
+      },
+      install: {
+        builtinConflict: '"{name}" ships with the host and cannot be overwritten',
+        runningConflict: '"{name}" is running — stop it before upgrading',
       },
     },
   },

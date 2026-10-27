@@ -93,7 +93,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `lib.rs` | crate 入口：模块声明、整核抽出垫片、bench_channel（`#[cfg(debug_assertions)]`）、PluginDevWatcher（emit `plugin:dev-reload`） |
 | `commands.rs` · `system.rs` · `server.rs` | 宿主命令面 / 系统面（配置 / 日志）/ 服务器（peer 网络命令） |
 | `plugin.rs` | 宿主侧插件能力面总入口（各域实现汇入 Linker，AbiPolicy 注入） |
-| `plugin/*.rs` | ★ **插件域接线解密入口**：每域一个文件（api_call / app / assets / auth / bindings / connection / crypto / fs / guest_events / host_facts / http / lifecycle / mdns / notify / peer / platform / platform_picker / process / pty / task / timer / ws）。**端口 adapter + 白名单条目同处，先读文件头注释** |
+| `plugin/*.rs` | ★ **插件域接线解密入口**：每域一个文件（api_call / app / assets / auth / bindings / connection / crypto / fs / guest_events / host_facts / http / install_picker / lifecycle / mdns / notify / peer / platform / platform_picker / process / pty / task / timer / ws）。**端口 adapter + 白名单条目同处，先读文件头注释** |
 | `assets.rs` | `plugin_get_asset_dir`（启动装配解析的唯一 plugins_dir，含 dev 回退） |
 | `crypto.rs` | 宿主加密引擎（无业务语义的中性原语） |
 | `first_party_dirs.rs` | 第一方免弹窗归属清单 |

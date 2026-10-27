@@ -1,5 +1,21 @@
 <template>
   <div class="flex flex-col gap-2.5">
+    <!-- 外部应用包安装（宿主装配面）：选包（原生对话框 + Rust 侧识别应用 id）→
+         新 id 直接安装；命中已装同 id 经 install-upgrade 弹窗确认后就地升级（保数据）。
+         内置应用覆盖安装 / 运行中升级在 useShellState.installApp 先行拦截。 -->
+    <ShellCard :title="t('shell.apps.install')" icon="plus">
+      <p class="note">{{ t('shell.apps.installDesc') }}</p>
+      <div class="flex gap-2">
+        <button
+          class="shell-btn"
+          :disabled="appsStore.installing.value"
+          @click="void state.installApp()"
+        >
+          <ShellIcon name="plus" :size="13" /> {{ t('shell.apps.install') }}
+        </button>
+      </div>
+    </ShellCard>
+
     <!-- 已安装应用清单（注册表投影：真实运行态 / 来源 / 启用 / 自启；动作走真实命令面）。
          按 manifest kind 分组：业务应用在前、L1/L2 系统服务在后（2026-10-23 用户裁决）；
          没有服务时不渲染空标题。 -->
@@ -125,6 +141,8 @@
  * 投影 + 生命周期动作**——清单 / 运行态 / 待审批经宿主命令面（useShellApps
  * 收口），启停 / 审批 / 卸载 / 启用 / 自启开关全部走真实命令面（D2）。
  * 卸载带数据清理确认（ShellDialogLayer uninstall 分支）。
+ * 2026-10-28 起承接外部应用包安装入口（installApp：选包 → 新装 / 就地升级裁决，
+ * 升级确认走 ShellDialogLayer install-upgrade 分支）。
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'

@@ -838,6 +838,9 @@ pub fn run() {
             commands::plugin_get_info,
             // 应用整包目录（ADR 0057 机制 B：壳装载独立构建的 app 前端，路径真源在宿主）
             plugin::assets::plugin_get_asset_dir,
+            // 外部应用包选取与识别（安装前半程：原生对话框 + peek plugin.json id；
+            // 安装本体 = plugin_install_from_file，宿主面凭证门在 api_bridge）
+            plugin::install_picker::plugin_pick_app_package,
             // app 前端 env.invoke 白名单查询（ADR 0058 方案 A；真源 = commands.rs
             // APP_FRONTEND_INVOKE_WHITELIST，前端白名单代理启动时取用）
             commands::plugin_frontend_invoke_whitelist,

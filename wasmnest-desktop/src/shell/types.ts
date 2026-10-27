@@ -18,8 +18,15 @@ export type SysPageId = 'apps' | 'perms' | 'settings'
 /** 应用运行态 → 壳展示态（把 PluginState 归并成壳可展示的五个档） */
 export type AppDisplayState = 'running' | 'degraded' | 'dormant' | 'approval' | 'error'
 
-/** 全局弹窗种类（授权三形态 / 二次确认 / 卸载 / 退出 / 弹窗目录 / 服务停止确认） */
-export type ShellDialogKind = 'approval' | 'strategy-confirm' | 'uninstall' | 'exit' | 'dir' | 'stop-service'
+/** 全局弹窗种类（授权三形态 / 二次确认 / 卸载 / 退出 / 弹窗目录 / 服务停止确认 / 安装升级确认） */
+export type ShellDialogKind =
+  | 'approval'
+  | 'strategy-confirm'
+  | 'uninstall'
+  | 'exit'
+  | 'dir'
+  | 'stop-service'
+  | 'install-upgrade'
 
 /**
  * 宿主通知（机制面）：宿主只承载来源 / 驻留 / 动作 / 时间，文案由来源方给出。

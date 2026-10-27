@@ -108,6 +108,27 @@
             </div>
           </template>
 
+          <!-- ==================== 安装升级确认（就地升级保数据；新装不走此分支） ==================== -->
+          <template v-else-if="dialog === 'install-upgrade'">
+            <div class="dlg-h">
+              <span class="dlg-ic"><ShellIcon name="plus" :size="15" /></span>
+              <span class="t">{{ t('shell.dialog.installUpgrade.title', { name: app?.name ?? '' }) }}</span>
+              <button class="dlg-x" :aria-label="t('shell.dialog.close')" @click="close">
+                <ShellIcon name="x" :size="13" />
+              </button>
+            </div>
+            <div class="dlg-b">
+              <p class="note">{{ t('shell.dialog.installUpgrade.body') }}</p>
+              <div class="perm-line mono">{{ app?.pluginId }}</div>
+            </div>
+            <div class="dlg-f">
+              <button class="shell-btn ghost" @click="close">{{ t('shell.dialog.cancel') }}</button>
+              <button class="shell-btn" :disabled="installing" @click="confirmInstallUpgrade">
+                <ShellIcon name="plus" :size="13" /> {{ t('shell.dialog.installUpgrade.confirm') }}
+              </button>
+            </div>
+          </template>
+
           <!-- 策略二次确认（授权策略切换弹窗；预留扩展点） -->
           <template v-else-if="dialog === 'strategy-confirm'">
             <div class="dlg-h">
@@ -133,7 +154,7 @@
 
 <script setup lang="ts">
 /**
- * ShellDialogLayer — 壳内全局弹窗层（退出确认 / 审批 / 卸载 / 服务停止确认 / 策略二次确认）
+ * ShellDialogLayer — 壳内全局弹窗层（退出确认 / 审批 / 卸载 / 服务停止确认 / 安装升级确认 / 策略二次确认）
  *
  * 2026-10-17 lifecycle-sync 改造后：审批与卸载弹窗**复活为真实动作**（D2/D5）——
  * - 审批：应用激活被审批门禁拒（NeedsApproval）时打开，确认 = approveAndStart
@@ -142,6 +163,8 @@
  *   → 清存储，不可恢复）；
  * - 服务停止确认（2026-10-25）：应用管理页系统服务的「停止服务」先经此弹窗确认，
  *   确认 = stopApp（服务是常驻能力，误停影响面广；业务应用停用保持即时生效）。
+ * - 安装升级确认（2026-10-28）：安装外部应用包命中已装同 id（user-installed、
+ *   未运行）时先确认，确认 = confirmInstallUpgrade（就地升级保数据；新装不经弹窗）。
  * 窗口关闭按钮与 requestClose 统一走退出确认，避免绕过会话关窗守卫。
  */
 import { computed } from 'vue'
@@ -170,6 +193,8 @@ const risksCount = computed(() => app.value?.permissions.filter((p) => isHighRis
 const busy = computed(() =>
   state.dialogAppId.value ? appsStore.busyId.value === state.dialogAppId.value : false,
 )
+/** 安装/升级进行中（installFromZip 不占 busyId；升级确认按钮据此禁用） */
+const installing = computed(() => appsStore.installing.value)
 
 const dlgTitle = computed(() => {
   switch (dialog.value) {
@@ -181,6 +206,8 @@ const dlgTitle = computed(() => {
       return t('shell.dialog.uninstall.title', { name: app.value?.name ?? '' })
     case 'stop-service':
       return t('shell.dialog.stopService.title', { name: app.value?.name ?? '' })
+    case 'install-upgrade':
+      return t('shell.dialog.installUpgrade.title', { name: app.value?.name ?? '' })
     case 'strategy-confirm':
       return t('shell.dialog.strategy.title')
     default:
@@ -191,6 +218,8 @@ const dlgTitle = computed(() => {
 function close() {
   state.dialog.value = null
   state.dialogAppId.value = null
+  // 升级确认的选包目标随弹窗关闭作废（其余弹窗本就不消费它，清空无害）
+  state.installTarget.value = null
 }
 
 async function confirmExit() {
@@ -222,6 +251,11 @@ async function confirmStopService() {
   if (!appId) return
   const ok = await state.stopApp(appId)
   if (ok) close()
+}
+
+/** 安装升级确认：确认后就地升级（confirmInstallUpgrade 收口，成功才收起弹窗） */
+function confirmInstallUpgrade() {
+  void state.confirmInstallUpgrade()
 }
 </script>
 

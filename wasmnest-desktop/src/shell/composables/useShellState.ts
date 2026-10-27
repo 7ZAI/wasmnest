@@ -14,6 +14,8 @@
  */
 import { computed, ref } from 'vue'
 import { useToast } from '@/composables/useToast'
+import { invoke } from '@/utils/invoke'
+import { showUserError } from '@/utils/userError'
 import i18n from '@/i18n'
 import router from '@/router'
 import { forgetAppRoute, lastRouteOf } from '../mount/appSession'
@@ -47,6 +49,8 @@ const dialogAppId = ref<string | null>(null)
 const dialogResource = ref<string | null>(null)
 /** 主屏 type-to-search 查询串 */
 const homeQ = ref('')
+/** 待升级确认的外部应用包（选包识别结果；install-upgrade 弹窗的目标，确认 / 取消即清） */
+const installTarget = ref<{ path: string; pluginId: string } | null>(null)
 
 // ==================== 通知（机制面） ====================
 
@@ -448,6 +452,75 @@ async function uninstallApp(appId: string): Promise<void> {
   // 失败提示由 showUserError 统一发出（ADR 0030）；此处只负责关闭弹窗与摘卡
 }
 
+// ==================== 外部应用包安装（宿主装配面） ====================
+
+/**
+ * 安装外部 wasm 应用：选包（原生对话框，Rust 侧顺带 peek 应用 id）→ 按注册表
+ * 现状裁决——新 id 直接安装；同 id 已装且可升级（user-installed、未运行）进
+ * 就地升级确认（升级保数据，安装清数据，两条语义不混用）；内置应用 / 运行中
+ * fail-visible 先行拦截（后端同判据兜底，前端拦截只为给出准确文案）。
+ * 用户取消选包 = 无事发生；安装/识别失败由 showUserError 统一提示。
+ */
+async function installApp(): Promise<void> {
+  const apps = useShellApps()
+  let picked: { path: string; pluginId: string } | null
+  try {
+    picked = (await invoke('plugin_pick_app_package')) as {
+      path: string
+      pluginId: string
+    } | null
+  } catch (e) {
+    showUserError(e)
+    return
+  }
+  if (!picked) return
+  const existing = apps.appOf(picked.pluginId)
+  if (!existing) {
+    const ok = await apps.installFromZip(picked.path, false)
+    if (ok) {
+      toast.success(
+        t('shell.dialog.install.success', {
+          name: apps.appOf(picked.pluginId)?.name ?? picked.pluginId,
+        }),
+      )
+    }
+    return
+  }
+  if (existing.source !== 'user-installed') {
+    toast.error(t('errors.shell.install.builtinConflict', { name: existing.name }))
+    return
+  }
+  if (existing.state === 'running' || existing.state === 'degraded') {
+    toast.error(t('errors.shell.install.runningConflict', { name: existing.name }))
+    return
+  }
+  installTarget.value = picked
+  dialog.value = 'install-upgrade'
+  dialogAppId.value = picked.pluginId
+}
+
+/**
+ * 就地升级确认（ShellDialogLayer install-upgrade 分支）：升级保数据（插件存储 /
+ * 授权记录保留，仅换代码）。失败保留确认面供重试（同 stop-service 口径），
+ * 错误提示由 showUserError 统一发出。
+ */
+async function confirmInstallUpgrade(): Promise<void> {
+  const target = installTarget.value
+  if (!target) return
+  const apps = useShellApps()
+  const ok = await apps.installFromZip(target.path, true)
+  if (ok) {
+    dialog.value = null
+    dialogAppId.value = null
+    installTarget.value = null
+    toast.success(
+      t('shell.dialog.install.upgradeSuccess', {
+        name: apps.appOf(target.pluginId)?.name ?? target.pluginId,
+      }),
+    )
+  }
+}
+
 export function useShellState() {
   return {
     screen,
@@ -481,6 +554,9 @@ export function useShellState() {
     approveAndStart,
     stopApp,
     uninstallApp,
+    installTarget,
+    installApp,
+    confirmInstallUpgrade,
     cardTitleOf,
     syncFromRoute,
     routeOf,
