@@ -5,7 +5,7 @@ import { copyFileSync, existsSync, mkdirSync, watch } from "node:fs"
 import { join, resolve } from "node:path"
 import { spawn } from "node:child_process"
 import { generateManifest } from "./manifest-gen.js"
-import { resolveComponentizeManifest, resolveCargoTargetDir, resolveWasmPath, resolveDevShellDir, copyDirContents, readJson, run, toPosix } from "./lib.js"
+import { resolveComponentizeManifest, resolveCargoTargetDir, resolveWasmPath, resolveDevShellDir, copyDirContents, readJson, run, toPosix, DEV_SHELL_VITE, findViteBin } from "./lib.js"
 
 // ==================== 命令：dev（浏览器开发环境） ====================
 
