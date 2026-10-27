@@ -16,6 +16,7 @@
  * | C-005 | update-host-runtime-artifacts | artifacts 与 sourceCommit 写入；其余 hostRuntime 字段不变 |
  * | C-006 | update-host-runtime-artifacts | 产物目录收集：边车解析 + 未发布态（空目录）报错 |
  * | C-007 | update-host-runtime-artifacts | 缺 hostRuntime 段 → 抛错 |
+ * | C-008 | update-host-runtime-artifacts | 写回后的对象缩进跟住原位置（不得比同级字段浅一级） |
  */
 import { describe, it, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -169,6 +170,19 @@ describe('applyHostRuntimeArtifacts', () => {
       () => applyHostRuntimeArtifacts('{ "product": "0.0.1" }', { artifacts, sourceCommit: 'f'.repeat(40) }),
       /hostRuntime/,
     )
+  })
+
+  it('C-008 缩进：写回的 hostRuntime 内部字段与同级字段同基准缩进', () => {
+    const out = applyHostRuntimeArtifacts(MANIFEST_TEXT, { artifacts, sourceCommit: 'f'.repeat(40) })
+    // 同级字段用 2 空格基准（`"hostRuntime": {` 那行），其内部字段必须是 4 空格；
+    // 首次发布时这里被写成了 2 空格，与 `apps` 段整块错位（仅影响可读性，JSON 仍合法）。
+    assert.match(out, /^ {2}"hostRuntime": \{$/m)
+    for (const key of ['"version"', '"sourceCommit"', '"artifacts"', '"$comment"']) {
+      assert.match(out, new RegExp(`^ {4}${key.replace(/[$"]/g, '\\$&')}`, 'm'), `${key} 应为 4 空格缩进`)
+    }
+    assert.match(out, /^ {2}\},$/m)
+    // 且写回后仍是合法 JSON，字段值未漂移
+    assert.deepEqual(JSON.parse(out).hostRuntime.artifacts, artifacts)
   })
 })
 
