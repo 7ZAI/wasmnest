@@ -191,6 +191,18 @@ function close() {
 .tile.on .tt span {
   color: var(--selection-solid-ink);
 }
+/* 深色模式开 / 关区分（2026-10-26 用户裁决）：不用边框 / 描边当选中线索
+   （近黑暗带上 1px 边框读不清，2026-10-26 先行方案已按用户要求撤掉），
+   改用与背景不同的填充色 + 图标色表达——深色档「开」= 信息蓝淡染底 + 蓝图标，
+   「关」= 凹陷暗块。浅色档基线不变（固定黑底白字，2026-10-20 裁决），
+   深色档同样不反转成白底、不取 --color-primary（深色下会翻浅）。 */
+:root.dark .tile.on {
+  background: color-mix(in srgb, var(--color-info) 16%, var(--bg-card));
+  border-color: transparent;
+}
+:root.dark .tile.on svg {
+  color: var(--color-info);
+}
 .tile .tt {
   min-width: 0;
 }
