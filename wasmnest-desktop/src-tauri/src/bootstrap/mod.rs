@@ -17,6 +17,11 @@ use crate::bench_channel;
 use crate::wasm_core;
 use crate::Result;
 use crate::{commands, plugin, server, system};
+// 原生右键菜单抑制是 **Linux 专用**（Windows WebView2 / macOS WKWebView 由前端
+// capture 阶段 preventDefault 覆盖）：这三个项在 context_menu.rs 里都带
+// `#[cfg(target_os = "linux")]`，装配侧的注册与窗口销毁钩子也在同一 cfg 里。
+// 少了这一行 cfg，非 Linux 目标会 E0432 unresolved import（首次三平台发布实测）。
+#[cfg(target_os = "linux")]
 use context_menu::{context_menu_ledger, forget_context_menu_label, native_context_menu_guard};
 
 // ==================== Application Setup ====================
