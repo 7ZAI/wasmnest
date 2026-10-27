@@ -221,7 +221,11 @@ jobs:
           git checkout -b "$branch"
           git add release-manifest.json
           git commit -m "chore(host): 回写 ${tag} 三平台宿主产物 sha256"
-          git push origin "$branch"
+          # `--force-with-lease`：本分支是 bot 专用回写分支（同名可重用）。重跑同一个 tag
+          # 的 job 时旧分支头是同一个 patch 的早一次提交，裸 push 会被判 non-fast-forward
+          # 而失败（首次发布重跑实测）；-with-lease 只在远端仍是我们上次看到的位置时才覆盖，
+          # 不碰 main / dev。
+          git push --force-with-lease origin "$branch"
           gh pr create --base main --head "$branch" \
             --title "chore(host): 回写 ${tag} 宿主产物 sha256" \
             --body "host-release 发布成功后自动生成：release-manifest.json 的 hostRuntime.artifacts（三平台真实 sha256）与 sourceCommit。请核对后合并。"

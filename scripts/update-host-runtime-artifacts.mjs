@@ -106,8 +106,16 @@ export function applyHostRuntimeArtifacts(manifestText, { artifacts, sourceCommi
   const block = JSON.parse(manifestText.slice(start, end + 1))
   block.artifacts = artifacts
   block.sourceCommit = sourceCommit
-  const nextText =
-    manifestText.slice(0, start) + JSON.stringify(block, null, 2) + manifestText.slice(end + 1)
+  // 缩进跟住原位置：`{` 所在行的前导空白就是本对象的基准缩进。JSON.stringify 只给
+  // 两空格级差，不整体平移到基准就会把对象写得比同级字段浅一级（首次发布实测：
+  // `hostRuntime` 内部字段被写到 2 空格，与 `apps` 段错位）。
+  const lineStart = manifestText.lastIndexOf('\n', start) + 1
+  const baseIndent = /^[ \t]*/.exec(manifestText.slice(lineStart, start))[0]
+  const serialized = JSON.stringify(block, null, 2)
+    .split('\n')
+    .map((line, i) => (i === 0 ? line : baseIndent + line))
+    .join('\n')
+  const nextText = manifestText.slice(0, start) + serialized + manifestText.slice(end + 1)
 
   const after = JSON.parse(nextText)
   const expected = structuredClone(before)
