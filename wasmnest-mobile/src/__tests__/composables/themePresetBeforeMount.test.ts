@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useSettingsStore } from '@/stores/settings'
 import { presetThemeBeforeMount } from '@/composables/useTheme'
+import { useShellPreferences } from '@/shell/composables/useShellPreferences'
 
 // invoke 由全局 setup.ts 替身（@tauri-apps/api/core）兜底，set_status_bar_style
 // 静默成功，不阻塞 applyTheme
@@ -45,6 +46,7 @@ function setTheme(theme: string) {
 function cleanupDom() {
   document.documentElement.classList.remove('dark')
   document.documentElement.removeAttribute('data-palette')
+  document.documentElement.removeAttribute('data-theme')
 }
 
 // ==================== 行为契约 ====================
@@ -100,5 +102,24 @@ describe('presetThemeBeforeMount 首帧主题预应用', () => {
     presetThemeBeforeMount()
     expect(document.documentElement.classList.contains('dark')).toBe(true)
     expect(document.documentElement.getAttribute('data-palette')).toBeNull()
+  })
+
+  /*
+   * 主题预设（2026-10-27）：首帧也要到位，否则深色用户会先看到默认主题一帧
+   * 再换成玻璃。主题与深浅色是两个轴，同一次预应用里一起落。
+   */
+  it('主题预设在首帧应用：默认主题不挂 data-theme', () => {
+    setTheme('dark')
+    presetThemeBeforeMount()
+    expect(document.documentElement.getAttribute('data-theme')).toBeNull()
+  })
+
+  it('主题预设在首帧应用：选了内置主题即挂到 html', () => {
+    const prefs = useShellPreferences()
+    prefs.setTheme('liquid')
+    setTheme('dark')
+    presetThemeBeforeMount()
+    expect(document.documentElement.getAttribute('data-theme')).toBe('liquid')
+    prefs.setTheme('default')
   })
 })

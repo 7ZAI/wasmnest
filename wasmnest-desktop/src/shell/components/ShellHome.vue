@@ -33,8 +33,12 @@
             role="listitem"
             tabindex="0"
             :aria-label="`${app.name}，${chipMeta(appsStore.displayStates.value[app.id]).text}`"
-            @click="state.openApp(app.id)"
+            @click="onTileClick(app.id)"
             @keydown.enter="state.openApp(app.id)"
+            @pointerdown="lp.down($event, app.id)"
+            @pointermove="lp.move"
+            @pointerup="lp.up"
+            @pointercancel="lp.cancel"
             @contextmenu.prevent="onCtx(app, $event)"
           >
             <span class="glyph-wrap">
@@ -133,10 +137,13 @@
  * 用户裁决（2026-10-17）把「正在运行」区从主屏撤掉，改由工具栏多任务全屏层承载。
  * 停用的应用也从这里缺席（启用 = 主屏入口可见性，2026-10-21 裁决；恢复入口
  * 在应用管理页，语义真源 = 宿主 lifecycle.rs `ENABLED_KEY_PREFIX` 文档）。
+ * 应用图标支持长按（鼠标 / 触屏同径，2026-10-28）弹操作菜单——与右键菜单
+ * 同一覆层，用户安装应用的「卸载」随之在主屏可达。
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SYS_PAGES, appDotState, chipMetaOf } from '../composables/state'
+import { useLongPress } from '../composables/useLongPress'
 import { useShellState } from '../composables/useShellState'
 import { isServiceKind, useShellApps, type ShellAppEntry } from '../composables/useShellApps'
 import ShellIcon from './ShellIcon.vue'
@@ -248,7 +255,22 @@ function dotStateOf(app: ShellAppEntry): 'running' | 'degraded' | null {
 
 /** 右键菜单 */
 function onCtx(app: ShellAppEntry, e: MouseEvent) {
+  lp.cancel() // 右键先行：撤销可能按压中的长按计时，避免菜单打开后计时又触发
   state.ctxMenu.value = { appId: app.id, x: e.clientX, y: e.clientY }
+}
+
+/**
+ * 长按手势（鼠标 / 触屏同径）：按住图标弹操作菜单（与右键菜单同一覆层，
+ * 卸载入口随之可达）。触发后吞掉紧随的一次 click——长按不是打开。
+ */
+const lp = useLongPress<string>((appId, x, y) => {
+  state.ctxMenu.value = { appId, x, y }
+})
+
+/** 图标点击：长按触发后的那次 click 不打开应用 */
+function onTileClick(appId: string) {
+  if (lp.consumeClick()) return
+  void state.openApp(appId)
 }
 </script>
 

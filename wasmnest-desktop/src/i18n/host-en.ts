@@ -63,6 +63,12 @@ export default {
       home: 'Home',
       homeTitle: 'Home: apps keep running in the background',
     },
+    /** Floating navigation (stays above any face once enabled; same keys and copy as mobile) */
+    floatingNav: {
+      home: 'Back home',
+      recents: 'Switch apps',
+      move: 'Floating navigation, draggable; focus it and use arrow keys to move',
+    },
     toolbar: {
       notifs: 'Notifications, {count}',
       notifsTitle: 'Notification center ({count})',
@@ -93,7 +99,15 @@ export default {
       },
       settings: {
         name: 'Settings',
-        desc: 'Appearance · background · skins · system · about',
+        desc: 'Appearance · system · logging · permissions · about',
+      },
+      appearance: {
+        name: 'Appearance',
+        desc: 'Colour mode · Language · Font size · Wallpaper · Themes',
+      },
+      shortcuts: {
+        name: 'Shortcuts',
+        desc: 'Shell keyboard shortcuts · rebindable',
       },
     },
     quickSettings: {
@@ -162,6 +176,32 @@ export default {
       uninstall: 'Uninstall',
       uninstallDisabled: 'Stop the app before uninstalling',
     },
+    // Shell shortcuts (ADR 0060): action names / recording interaction / inline
+    // validation copy. Action id set lives in shortcutsModel SHORTCUT_ACTIONS;
+    // key segments map one-to-one to actions.
+    shortcuts: {
+      cardTitle: 'Key bindings',
+      hint: 'Press a new combo while recording · Esc cancels · Backspace clears (frees the combo for apps). A combo must include Ctrl or Alt.',
+      unbound: 'Unbound',
+      recording: 'Press a combo…',
+      changeBinding: 'Change shortcut for {action}',
+      resetRow: 'Reset',
+      resetAll: 'Reset all to defaults',
+      conflict: 'Already used by "{action}". Pick another combo.',
+      reserved: 'May be intercepted by the system or the webview; not guaranteed to fire.',
+      missingModifier: 'A combo must include Ctrl or Alt.',
+      action: {
+        appNext: { name: 'Next app', desc: 'Switch to the next running app' },
+        appPrev: { name: 'Previous app', desc: 'Switch to the previous running app' },
+        multitask: { name: 'Multitask view', desc: 'Toggle the task switcher' },
+        home: { name: 'Go home', desc: 'Return to the home screen' },
+        settings: { name: 'Open settings', desc: 'Open the Settings system page' },
+        appsManage: { name: 'Open app management', desc: 'Open the Apps system page' },
+        theme: { name: 'Toggle colour mode', desc: 'Switch between light and dark' },
+        fontUp: { name: 'Increase interface font', desc: 'One font-size level up' },
+        fontDown: { name: 'Decrease interface font', desc: 'One font-size level down' },
+      },
+    },
     dialog: {
       close: 'Close dialog',
       cancel: 'Cancel',
@@ -185,6 +225,15 @@ export default {
         confirm: 'Confirm uninstall',
         success: '{name} uninstalled',
       },
+      install: {
+        success: '"{name}" installed',
+        upgradeSuccess: '"{name}" upgraded',
+      },
+      installUpgrade: {
+        title: 'Upgrade "{name}"?',
+        body: 'An app with the same id is already installed. Upgrading in place keeps its data (plugin storage and auth records); changed content requires re-approval on next launch.',
+        confirm: 'Upgrade',
+      },
       stopService: {
         title: 'Stop service "{name}"?',
         body: 'Stop service "{name}"? It will stop providing its capability; restart it from App management.',
@@ -198,13 +247,44 @@ export default {
       },
     },
     settings: {
+      // Appearance entry card (first card on settings): style items live in the
+      // sub-page SysAppearanceView
+      appearanceEntry: {
+        title: 'Appearance',
+        desc: 'Colour mode, language, font size, wallpaper and themes',
+        open: 'Open appearance',
+      },
+      // Shortcuts entry card (second card, 2026-10-28): recording / reset live in
+      // the sub-page SysShortcutsView
+      shortcutsEntry: {
+        title: 'Shortcuts',
+        desc: 'View and rebind shell keyboard shortcuts',
+        open: 'Open shortcuts',
+      },
+      nav: {
+        title: 'Navigation',
+        label: 'Floating navigation',
+        hint: 'A persistent capsule for Home and app switcher, draggable',
+      },
       ui: {
         title: 'Appearance',
+        // Terminology (2026-10-27): "theme" means the preset only; light/dark is
+        // called "colour mode" here so one screen never has two things named Theme.
+        colorMode: 'Colour mode',
         themeLight: 'Light',
         themeDark: 'Dark',
         themeSystem: 'System',
         language: 'Language',
         fontSize: 'Font size',
+        // Discrete font-size slider levels (no raw px); key order = level order
+        // (useFontSize FONT_SIZE_LEVELS)
+        fontLevel: {
+          xs: 'Smallest',
+          s: 'Small',
+          normal: 'Normal',
+          l: 'Large',
+          xl: 'Largest',
+        },
         animations: 'Animations',
         animationsDesc: 'Screen transitions and overlay effects (disable to degrade)',
       },
@@ -231,12 +311,19 @@ export default {
         hint: 'Security-gate entry; full records live in Permissions & Authorization',
         open: 'Open permissions',
       },
-      skins: {
-        title: 'Theme skins',
-        desc: 'Color schemes for the platform shell; apps keep their own palettes.',
+      themes: {
+        title: 'Themes',
+        desc: 'Overall look of the platform shell; apps keep their own palettes.',
         default: 'Default',
-        defaultDesc: 'Follow the platform default palette',
-        hint: 'Skins only override shell CSS variables; palettes declared by an app root take precedence.',
+        defaultDesc: 'Warm workbench, solid surfaces',
+        diffuse: 'Diffuse glass',
+        diffuseDesc: 'Soft haze, large radii',
+        liquid: 'Liquid glass',
+        liquidDesc: 'High-saturation refraction, specular edge',
+        hyper: 'Hyper colour',
+        hyperDesc: 'Saturated blocks, hard shadows',
+        dynamic: 'Animated',
+        hint: 'Themes cover the platform shell and icon language; palettes declared by an app root take precedence.',
       },
     },
     apps: {
@@ -244,8 +331,8 @@ export default {
         'Sorted by auth risk ("always allow" loosest first). Running apps cannot be uninstalled; enabling goes through the approval gate first.',
       listAria: 'Installed apps',
       install: 'Install app',
-      installDesc: 'Local zip (plugin_install_from_file)',
-      installToast: 'Install app: pick a local zip (full flow pending)',
+      installDesc:
+        'Install an external app from a local zip package; if the same id is already installed, confirm to upgrade in place (app data is kept)',
       kvSource: 'Source',
       kvSize: 'Size',
       kvViews: 'Views',
@@ -335,6 +422,10 @@ export default {
     shell: {
       wallpaper: {
         invalid: 'This image cannot be used: choose a PNG / JPG / WebP up to 20 MB',
+      },
+      install: {
+        builtinConflict: '"{name}" ships with the host and cannot be overwritten',
+        runningConflict: '"{name}" is running — stop it before upgrading',
       },
     },
   },

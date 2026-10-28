@@ -23,6 +23,8 @@ import {
   PLATFORM_UI_SCALE,
   MIN_FONT_SIZE,
   MAX_FONT_SIZE,
+  FONT_SIZE_LEVELS,
+  fontSizeLevelIndex,
 } from '@/composables/useFontSize'
 
 describe('computeUiScale Linux 门控（--ui-scale 只针对 Linux 叠加基线）', () => {
@@ -65,5 +67,37 @@ describe('computeUiScale Linux 门控（--ui-scale 只针对 Linux 叠加基线�
     for (const size of [10, 12, 14, 16]) {
       expect(computeUiScale(size, true)).toBeCloseTo(computeUiScale(size, false) * PLATFORM_UI_SCALE, 5)
     }
+  })
+})
+
+describe('字号五档划分（FONT_SIZE_LEVELS / fontSizeLevelIndex）', () => {
+  it('档位表不变量：五档、px 递增、覆盖 [MIN, MAX]、正常档 = 12 在列', () => {
+    expect(FONT_SIZE_LEVELS).toHaveLength(5)
+    const pxs = FONT_SIZE_LEVELS.map((l) => l.px)
+    expect([...pxs].sort((a, b) => a - b)).toEqual(pxs)
+    expect(pxs[0]).toBe(MIN_FONT_SIZE)
+    expect(pxs.at(-1)).toBe(MAX_FONT_SIZE)
+    expect(pxs).toContain(NORMAL_FONT_SIZE)
+    for (const l of FONT_SIZE_LEVELS) expect(l.labelKey).toMatch(/^shell\.settings\.ui\.fontLevel\./)
+  })
+
+  it('档位 px 精确命中时返回该档', () => {
+    expect(fontSizeLevelIndex(10)).toBe(0)
+    expect(fontSizeLevelIndex(11)).toBe(1)
+    expect(fontSizeLevelIndex(12)).toBe(2)
+    expect(fontSizeLevelIndex(14)).toBe(3)
+    expect(fontSizeLevelIndex(16)).toBe(4)
+  })
+
+  it('旧连续滑杆存量值就近吸附：平局归大档（13→大，15→超大）', () => {
+    // 选 13/15 的用户要的是「比正常大」：吸附向下档会把他们的界面调小
+    expect(fontSizeLevelIndex(13)).toBe(3)
+    expect(fontSizeLevelIndex(15)).toBe(4)
+  })
+
+  it('范围外值收敛到两端档位（与 computeUiScale 钳制同口径）', () => {
+    expect(fontSizeLevelIndex(0)).toBe(0)
+    expect(fontSizeLevelIndex(99)).toBe(4)
+    expect(fontSizeLevelIndex(-3)).toBe(0)
   })
 })

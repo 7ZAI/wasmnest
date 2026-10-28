@@ -228,6 +228,8 @@ const loading = ref(false)
 const listReady = ref(false)
 /** 正在切换的应用 id（动作进行中禁用重复点击） */
 const busyId = ref<string | null>(null)
+/** 外部应用包安装/升级进行中（安装无属主应用，不占 busyId；安装入口据此禁用） */
+const installing = ref(false)
 /**
  * 最近一次动作的错误**码**（ADR 0030 信封 `code`，成功清空）。
  *
@@ -381,6 +383,33 @@ async function uninstall(appId: string): Promise<boolean> {
   })
 }
 
+/**
+ * 安装 / 升级外部应用包（zip；无属主应用，不占 busyId，走 installing 置位）。
+ *
+ * `upgrade = false` 新装（同 id 已装由后端回滚并拒绝，壳层在安装前按注册表现状
+ * 裁决分流）；`upgrade = true` 就地升级（宿主 install.rs：保留插件存储 / 授权
+ * 记录 / 审批记录，仅换代码；内容哈希失配 → 下次激活落 NeedsApproval 重新批准）。
+ */
+async function installFromZip(path: string, upgrade: boolean): Promise<boolean> {
+  installing.value = true
+  try {
+    const credential = await ensureHostCredential()
+    await invoke('plugin_install_from_file', { path, credential, upgrade })
+    lastError.value = null
+    await refresh()
+    return true
+  } catch (e) {
+    // 错误消费口径与 runAction 一致（ADR 0030）：toast 只出 errors.<code>，详情落日志
+    const userError = showUserError(e)
+    logger.warn(`[Shell] installFromZip failed: upgrade=${upgrade} code=${userError.code}`)
+    lastError.value = userError.code
+    await refresh()
+    return false
+  } finally {
+    installing.value = false
+  }
+}
+
 /** 设置启用偏好（只改持久化偏好，不触发当前进程启停） */
 async function setEnabled(appId: string, enabled: boolean): Promise<boolean> {
   return runAction(appId, 'setEnabled', true, async () => {
@@ -416,6 +445,7 @@ export function useShellApps() {
     loading,
     listReady,
     busyId,
+    installing,
     lastError,
     appOf,
     load,
@@ -427,6 +457,7 @@ export function useShellApps() {
     deactivate,
     approve,
     uninstall,
+    installFromZip,
     setEnabled,
     setAutostart,
     isRunning,

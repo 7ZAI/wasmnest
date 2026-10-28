@@ -58,6 +58,12 @@ export default {
       home: '主屏',
       homeTitle: '回到主屏（应用继续在后台运行）',
     },
+    /** 悬浮导航（开关开启后常驻在任意面之上；与移动端同键名同文案） */
+    floatingNav: {
+      home: '回主屏',
+      recents: '切换应用',
+      move: '悬浮导航，可拖动；聚焦后可用方向键移动',
+    },
     toolbar: {
       notifs: '通知中心，{count} 条',
       notifsTitle: '通知中心（{count} 条）',
@@ -88,7 +94,15 @@ export default {
       },
       settings: {
         name: '设置',
-        desc: '界面 · 背景 · 皮肤 · 系统 · 关于',
+        desc: '外观 · 系统 · 日志 · 授权 · 关于',
+      },
+      appearance: {
+        name: '外观',
+        desc: '明暗模式 · 语言 · 字号 · 壁纸 · 主题',
+      },
+      shortcuts: {
+        name: '快捷键',
+        desc: '壳层键盘快捷键 · 可改可清空',
       },
     },
     quickSettings: {
@@ -157,6 +171,31 @@ export default {
       uninstall: '卸载',
       uninstallDisabled: '请先停用应用后再卸载',
     },
+    // 壳快捷键（ADR 0060）：动作名 / 录制交互 / 行内校验文案。
+    // 动作 id 集合见 shortcutsModel SHORTCUT_ACTIONS，key 段与动作一一对应。
+    shortcuts: {
+      cardTitle: '按键绑定',
+      hint: '录制时按下新组合键 · Esc 取消 · Backspace 清除（组合归还应用）。组合必须包含 Ctrl 或 Alt。',
+      unbound: '未绑定',
+      recording: '按下组合键…',
+      changeBinding: '更改「{action}」的快捷键',
+      resetRow: '恢复默认',
+      resetAll: '全部恢复默认',
+      conflict: '与「{action}」冲突，换个组合再试。',
+      reserved: '该组合可能被系统或内置浏览器截获，不保证生效。',
+      missingModifier: '组合必须包含 Ctrl 或 Alt。',
+      action: {
+        appNext: { name: '下一个应用', desc: '切到下一个运行中的应用' },
+        appPrev: { name: '上一个应用', desc: '切到上一个运行中的应用' },
+        multitask: { name: '多任务视图', desc: '开合多任务切换面板' },
+        home: { name: '回主屏', desc: '收起当前面回到主屏' },
+        settings: { name: '打开设置', desc: '打开「设置」系统页' },
+        appsManage: { name: '打开应用管理', desc: '打开「应用管理」系统页' },
+        theme: { name: '切换明暗模式', desc: '在浅色与深色之间切换' },
+        fontUp: { name: '增大界面字号', desc: '字号档位上调一档' },
+        fontDown: { name: '减小界面字号', desc: '字号档位下调一档' },
+      },
+    },
     dialog: {
       close: '关闭弹窗',
       cancel: '取消',
@@ -179,6 +218,15 @@ export default {
         confirm: '确认卸载',
         success: '{name} 已卸载',
       },
+      install: {
+        success: '「{name}」已安装',
+        upgradeSuccess: '「{name}」已升级',
+      },
+      installUpgrade: {
+        title: '升级「{name}」？',
+        body: '已安装同 id 应用。就地升级保留其数据（插件存储与授权记录）；包内容变更后，下次启动需重新审批。',
+        confirm: '升级',
+      },
       stopService: {
         title: '停止服务「{name}」？',
         body: '将停止服务「{name}」。服务停止后将不再对外提供能力，可在应用管理中重新启动。',
@@ -192,13 +240,41 @@ export default {
       },
     },
     settings: {
+      // 外观入口卡（设置页首卡）：样式调整项在二级页 SysAppearanceView
+      appearanceEntry: {
+        title: '外观',
+        desc: '明暗模式、语言、字号、壁纸与主题',
+        open: '打开外观',
+      },
+      // 快捷键入口卡（设置页第二卡，2026-10-28）：录制 / 恢复在二级页 SysShortcutsView
+      shortcutsEntry: {
+        title: '快捷键',
+        desc: '查看与修改壳层键盘快捷键',
+        open: '打开快捷键',
+      },
+      nav: {
+        title: '导航',
+        label: '悬浮导航',
+        hint: '回主屏与切换应用的常驻胶囊，可拖动',
+      },
       ui: {
         title: '界面',
+        // 术语（2026-10-27）：「主题」只指主题预设；深浅色在壳页叫「明暗模式」。
+        // 不复用 settings.appearance.theme（那是与应用副本共享的旧标签）。
+        colorMode: '明暗模式',
         themeLight: '浅色',
         themeDark: '深色',
         themeSystem: '跟随系统',
         language: '语言',
         fontSize: '字号',
+        // 字号滑杆五档划分（不再显示 px），键序即档位序（useFontSize FONT_SIZE_LEVELS）
+        fontLevel: {
+          xs: '极小',
+          s: '小',
+          normal: '正常',
+          l: '大',
+          xl: '超大',
+        },
         animations: '动画',
         animationsDesc: '屏幕切换与覆层动效（关闭即降级）',
       },
@@ -225,12 +301,19 @@ export default {
         hint: '安全闸门的管理入口，完整记录见「权限与授权」页',
         open: '打开权限与授权',
       },
-      skins: {
-        title: '主题皮肤',
-        desc: '平台外壳的配色方案；应用仍可自持配色。',
+      themes: {
+        title: '主题',
+        desc: '平台外壳的整体外观；应用仍可自持配色。',
         default: '默认',
-        defaultDesc: '跟随平台默认色板',
-        hint: '皮肤只覆盖平台外壳的 CSS 变量；应用根容器自己声明的配色优先。',
+        defaultDesc: '暖调工作台，实心卡面',
+        diffuse: '弥散玻璃',
+        diffuseDesc: '柔光雾面，大圆角',
+        liquid: '液态玻璃',
+        liquidDesc: '高饱和折射，镜面高光',
+        hyper: '超色彩主义',
+        hyperDesc: '高饱和色块，硬边投影',
+        dynamic: '动态',
+        hint: '主题覆盖平台外壳与图标语汇；应用根容器自己声明的配色优先。',
       },
     },
     apps: {
@@ -238,8 +321,7 @@ export default {
         '按授权风险排序（「始终允许」最宽松置顶）。运行中的应用不可卸载；启用方向先过审批门。',
       listAria: '已安装应用列表',
       install: '安装应用',
-      installDesc: '本地 zip（plugin_install_from_file）',
-      installToast: '安装应用：请选择本地 zip 包（正式链路待接入）',
+      installDesc: '从本地 zip 应用包安装外部应用；同 id 已装时可在确认后就地升级（保留应用数据）',
       kvSource: '来源',
       kvSize: '体积',
       kvViews: '视图',
@@ -324,6 +406,10 @@ export default {
     shell: {
       wallpaper: {
         invalid: '无法使用这张图片：请选择 PNG / JPG / WebP，且不超过 20 MB',
+      },
+      install: {
+        builtinConflict: '「{name}」是随宿主分发的内置应用，不能覆盖安装',
+        runningConflict: '「{name}」正在运行，请先停用再升级',
       },
     },
   },

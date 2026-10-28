@@ -59,7 +59,7 @@ export function useTheme() {
     },
   )
 
-  /** 当前生效的暗色状态（system 时跟随系统偏好；主题皮肤据此合并 darkTokens） */
+  /** 当前生效的暗色状态（system 时跟随系统偏好；主题据此合并 darkTokens） */
   const isDark = computed(() => {
     const theme = settingsStore.settings.ui.theme
     return theme === 'dark' || (theme === 'system' && isSystemDark.value)

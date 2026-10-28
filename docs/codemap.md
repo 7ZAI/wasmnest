@@ -76,9 +76,10 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 路径 | 职责（头注释为准） |
 | --- | --- |
 | `main.ts` | 宿主入口（壳装配 / 路由 / i18n / 权限配置） |
-| `router/index.ts` | 路由真源之一：`/` 主屏、`/sys/:pageId` 系统页、各 app 路由（指向 `AppMountSlot`）、未匹配显性 not-found |
-| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`appSurfaceRegistry.ts` = 表面实例记账（attach / detach / dispose，表面保活），`AppPreviewTile.vue` = 多任务卡的应用自绘预览面装载 / 3s 超时 / 回退品牌卡）；`sys/`（系统页）；`settings/`；`auth/`；`extensions/`（壳扩展点注册表：状态栏项 / 设置项 / 主题皮肤，只注册排序、不解释业务语义） |
+| `router/index.ts` | 路由真源之一：`/` 主屏、`/sys/:pageId` 系统页（`:sub` 子路由 = 同卡二级页，如 `/sys/settings/appearance` 外观）、各 app 路由（指向 `AppMountSlot`）、未匹配显性 not-found |
+| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`appSurfaceRegistry.ts` = 表面实例记账（attach / detach / dispose，表面保活），`AppPreviewTile.vue` = 多任务卡的应用自绘预览面装载 / 3s 超时 / 回退品牌卡）；`sys/`（系统页）；`settings/`；`auth/`；`extensions/`（壳扩展点注册表：状态栏项 / 设置项 / 主题，只注册排序、不解释业务语义） |
 | `shell/composables/useShellApps.ts` | **应用路由真源**：`SURFACE_ROUTES`（新增桌面应用必须同步，见 §6） |
+| `shell/composables/shortcutsModel.ts` · `useShellShortcuts.ts` | 壳快捷键（ADR 0060）：纯模型（动作表 / `e.code` 组合键规范化 / 标准策略校验 / 应用卡轮换）+ capture 抢占装配与动作执行；配置页 `sys/SysShortcutsView.vue`（`/sys/settings/shortcuts`，存储 = `ShellUiPrefs.shortcuts` 壳偏好轨） |
 | `shell/types.ts` · `state.ts` / `useShellState.ts` | 壳状态面（宿主零业务状态：首次打开创建、切走只藏、停用 / 卸载才销毁） |
 | `components/` · `composables/` · `stores/` | 宿主公共组件 / 逻辑 / 存储 |
 | `i18n/host-{zh-CN,en}.ts` | 宿主消息集（**与 bedcode 应用副本逐字一致**，`i18nDriftLock` 钉住） |
@@ -92,7 +93,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `lib.rs` | crate 入口：模块声明、整核抽出垫片、bench_channel（`#[cfg(debug_assertions)]`）、PluginDevWatcher（emit `plugin:dev-reload`） |
 | `commands.rs` · `system.rs` · `server.rs` | 宿主命令面 / 系统面（配置 / 日志）/ 服务器（peer 网络命令） |
 | `plugin.rs` | 宿主侧插件能力面总入口（各域实现汇入 Linker，AbiPolicy 注入） |
-| `plugin/*.rs` | ★ **插件域接线解密入口**：每域一个文件（api_call / app / assets / auth / bindings / connection / crypto / fs / guest_events / host_facts / http / lifecycle / mdns / notify / peer / platform / platform_picker / process / pty / task / timer / ws）。**端口 adapter + 白名单条目同处，先读文件头注释** |
+| `plugin/*.rs` | ★ **插件域接线解密入口**：每域一个文件（api_call / app / assets / auth / bindings / connection / crypto / fs / guest_events / host_facts / http / install_picker / lifecycle / mdns / notify / peer / platform / platform_picker / process / pty / task / timer / ws）。**端口 adapter + 白名单条目同处，先读文件头注释** |
 | `assets.rs` | `plugin_get_asset_dir`（启动装配解析的唯一 plugins_dir，含 dev 回退） |
 | `crypto.rs` | 宿主加密引擎（无业务语义的中性原语） |
 | `first_party_dirs.rs` | 第一方免弹窗归属清单 |
@@ -179,7 +180,9 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 任务 | 动手前必读 |
 | --- | --- |
 | 改桌面宿主壳 / 挂载槽 / 系统页 | `wasmnest-desktop/src/main.ts` + `src/shell/**`（`src/shell/composables/useShellApps.ts` = 应用路由真源）+ docs/architecture.md §2；跑桌面 `test:run` + 真实 `tauri:dev` 目验 |
-| 改桌面设置页 / 状态栏 / 壳皮肤 | `src/shell/extensions/**`（注册表契约）+ `src/shell/components/ShellStatusBar.vue` + `src/shell/settings/Settings{ThemeSkin,Extensions}Section.vue` + `src/shell/sys/SysSettingsView.vue`（**关于固定最后**）；机制口径见 docs/frontend.md §6；跑桌面 `test:run`（含 `settingsOrderLock` / `shellExtensions` / `shellStatusBar`） |
+| 改桌面快捷键 | `src/shell/composables/shortcutsModel.ts`（动作表 / 规范化 / 校验，纯函数）+ `useShellShortcuts.ts`（capture 抢占装配，ADR 0060）+ `sys/SysShortcutsView.vue`（配置页）+ `shell/ShellHost.vue`（装配点）；动键盘让位语义先读 ADR 0060 与 `useHomeSearch` 让位判据；跑桌面 `test:run`（含 `shortcutsModel` / `useShellShortcuts` / `i18nDriftLock`） |
+| 改桌面悬浮导航 | `src/shell/components/ShellFloatingNav.vue`（回主屏 / 多任务胶囊，与移动端 ShellFloatingNav 同构）+ `ShellHost.vue`（装配点：bareWindow 不渲染、`floatNavBottomReserve` 让位状态栏）+ `src/shell/styles/shell.css` 的 `.shell-floatnav` 段（Liquid Glass 材质与三层降级）+ `useShellSettings` 的 `floatingNav` / `floatingNavPos` 偏好；改动后必须同步 dev-shell 的 `src/styles/shell.css` 副本（visualParity 锁）；跑桌面 `test:run`（含 `shellFloatingNav` / `useShellSettingsFloatingNav`） |
+| 改桌面设置页 / 状态栏 / 主题 | `src/shell/extensions/**`（注册表契约）+ `src/shell/components/ShellStatusBar.vue` + `src/shell/settings/Settings{Theme,Extensions}Section.vue` + `src/shell/sys/SysSettingsView.vue`（**关于固定最后**；样式调整项在外观二级页 `SysAppearanceView.vue`）+ `src/styles/theme-presets.css`（内置主题 token 与结构规则）；机制口径见 docs/frontend.md §6 与 ADR 0059；跑桌面 `test:run`（含 `settingsOrderLock` / `shellExtensions` / `themePresetCoverage` / `shellStatusBar`） |
 | 改多任务卡片 / 应用预览面（`mountPreview`） | `wasmnest-desktop/src/shell/components/ShellTaskSwitcher.vue` + `src/shell/mount/{useAppMount.ts,AppPreviewTile.vue}`（`mountAppPreview(root, env)` = 装载入口，`PREVIEW_MOUNT_TIMEOUT_MS` = 3s）+ `src/shell/mount/appSession.ts`（`lastRoute`）；契约 = `AppPreviewEnv` / `AppPreviewHandle` / `MountPreview`（宿主与五个 app `entry.ts` 同形，L5 锁钉住）；应用侧内容裁决在 `../wasmnest-apps`；跑桌面 `test:run` + 应用仓各 app `test:run` / `build:frontend` + 真实 `tauri:dev` 目验 |
 | 改移动宿主壳 / 运行面 / 注册表 | `wasmnest-mobile/src/shell/registry.ts`（职责边界：只注册不决策）+ 移动 SDK `src/types.ts`（`UIRegistry`）+ docs/architecture.md §4；优先移动 SDK dev-shell 预览 |
 | 改插件机制 / 生命周期 / 能力接线（Rust） | 该端 `src-tauri/src/plugin/**`（每域一个文件，端口 adapter + 白名单条目同处，**先读文件头注释**）+ 能力仓对应 crate；跑该端 `cargo test` |
@@ -212,7 +215,10 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `tailwindContentCoverage.test.ts` | 同上 | 宿主 Tailwind content 不得残留 app 路径 |
 | `appBundlePathLock.test.ts` · `appChromeLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 挂载包路径单一来源（`resources/plugins/desktop` 层级）；壳标题栏常驻、应用不得自绘标题栏/窗口控制/拖拽区 |
 | `appSurfaceKeepAlive.test.ts` · `useAppMountKeepAlive.test.ts` | `wasmnest-desktop/src/__tests__/shell/mount/` | **表面保活**：挂载槽常驻（`v-show`，不得回 `v-if` 分支）、销毁点唯一在 `ShellHost` 运行态 disposer、挂载槽切走只 `detach`、界面租约跟实例生命周期（首次创建 acquire / dispose release）、`setActive?` 是可选契约；装载层行为（复用不重建、detach 不销毁、并发首次 mount 合并为一次） |
-| `shellExtensions.test.ts` · `shellStatusBar.test.ts` · `shellExtensionWiring.test.ts` · `settings/settingsOrderLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 壳扩展点注册语义（排序 / 覆盖 / Disposable / 皮肤 token 校验）、状态栏分区与动作失败隔离、ShellHost 装配接线、设置页顺序（**关于固定最后**） |
+| `shellExtensions.test.ts` · `shellStatusBar.test.ts` · `shellExtensionWiring.test.ts` · `settings/settingsOrderLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 壳扩展点注册语义（排序 / 覆盖 / Disposable / 主题 token 与 glyph 校验）、状态栏分区与动作失败隔离、ShellHost 装配接线、设置页顺序（**关于固定最后**） |
+| `shell/composables/shortcutsModel.test.ts` · `useShellShortcuts.test.ts` | `wasmnest-desktop/src/__tests__/shell/composables/` | 快捷键（ADR 0060）：**出厂键位自洽**（九动作默认绑定必须全部通过标准策略——含 Ctrl/Alt、互不冲突、不踩保留键，改默认表即红）、`e.code` 组合键规范化 / sparse 合并 / 应用卡轮换；capture 抢占边界（命中才拦截、未注册组合放行、总闸与 IME 让位、teardown、覆盖生效与清空归还应用） |
+| `shell/shellFloatingNav.test.ts` · `shell/composables/useShellSettingsFloatingNav.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 悬浮导航：开关默认关不渲染、回主屏 / 多任务动作接线、拖拽阈值与归一化位置落盘、拖拽余波 click 吞没（断言 preventDefault——happy-dom 13.10.1 捕获期 stopPropagation 失效，升级后可恢复 spy 口径）、键盘替代路径（WCAG 2.2）、bottomReserve 状态栏让位、ShellHost 装配与 bareWindow 豁免、双语 key 在场；偏好读取默认值 / 单轴 clamp / 写穿 |
+| `style/themePresetCoverage.test.ts`（双端各一）· `shell/composables/useShellTheme.test.ts` | `wasmnest-{desktop,mobile}/src/__tests__/` | 主题目录 ↔ 主题样式表一一对应、决策面不变量（授权/弹窗永不用玻璃、`--bg-card` 不变半透明）、动效主题真有 keyframes 且 reduced-motion 守卫在位；主题落到 `<html data-theme>`、切回默认移除属性、扩展主题内联变量被摘除 |
 | `pluginWatchCopy.test.ts` · `pluginPrecheck.test.ts` | `wasmnest-desktop/src/__tests__/scripts/` | 插件 watch 复制闭环（`copyIfChanged` / `copyManifestIfChanged` / `copyWatchArtifacts` 三组临时目录行为锁，#23 将复制链提为可注入依赖的导出）；**dev 预检四步行为锁**（`scripts/plugin-precheck.mjs` 陈旧判定 / `--out` 直写 resources / `--rust-only` 快路径 / fail-fast / WASM→前端→清单→退役清理四步顺序，可注入依赖不触发真实构建）+ 接线锁 2 条轻量：`startPluginWatch` 调用共享复制链、`dev-run.js` 的 `runPluginPrecheck()` 先于宿主启动点（issue #12 / #23，内部函数名不再逐个点名）；bedcode `--frontend-only` 由沙箱 fixture 驱动真实 build.js |
 | 移动壳系列锁：`shellConstraintLocks`（含 **L7 壳内自足**）、`retiredHostUIRetirementLocks`、`shellRegistry` / `shellPermissions` / `shellMechanisms` / `shellHostEvents` / `shellAppSurface` / `shellAppRunScreen` / `appSurfaceKeepAlive` / `useAppSurfaces` / `shellHomeScreen` 等 20+ | `wasmnest-mobile/src/__tests__/shell/` | 壳内自足（不依赖旧界面目录）、退役路由 / 符号不回接、壳迁移面不得缩水、注册表 / 权限 / 机制行为；**运行面保活**（每应用独立 Vue 应用：注册表按「打开过 ∩ 运行中 ∩ 有运行面」对账建实例、停用即 dispose、切走只 detach） |
 | `crate-structure-lock.test.mjs` | 根 `scripts/`（`pnpm run test:run`） | 契约 crate 常量保持 node 正则可解析的字面量形状；能力仓（`../wasmnest-lib`）无逃出 crate 目录的 `include!` / `include_str!` / `bindgen!` 路径；双端 `compose.json` 声明的 WIT 路径存在 |
@@ -237,11 +243,11 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `i18nTemplateKeys.test.ts`（桌面） | 全壳 `t('字面量')` key 必须在 zh-CN 与 en 消息集存在 | 边界契约 | 保留（含防空转断言） | 跨全部模板与两套消息集的交叉一致性，无单点行为可测 |
 | `style/pageTransition.test.ts`（桌面） | 过渡统一：退役过渡名零残留、命名唯一、无 out-in、token 单一来源 | 边界契约（行为面已提纯函数） | 保留 | 跨 6 文件的统一性契约（同 i18nDriftLock）；效果切换已行为化（`applyPageTransitionEffect`） |
 | `shell/mount/appSurfaceKeepAlive.test.ts`（桌面） | 销毁点唯一、挂载槽常驻 `v-show`、租约跟实例生命周期 | 源码文本（结构事实） | 保留（头注释已述理由） | 覆盖停用 / 全部关闭 / 卸载 / 错误终态全路径的组件测试不现实；结构性事实是跨组件装配不变量 |
-| `shell/shellExtensionWiring.test.ts`（桌面） | ShellHost 真的挂状态栏 / 皮肤 token 接壳根 | 接线锁 | 保留单条轻量 | 组件测试全绿而装配缺失的场景无运行时覆盖；接线点唯一 |
+| `shell/shellExtensionWiring.test.ts`（桌面） | ShellHost 真的挂状态栏 / 主题接文档根 | 接线锁 | 保留单条轻量 | 组件测试全绿而装配缺失的场景无运行时覆盖；接线点唯一 |
 | `shell/shellStyleWiring.test.ts`（桌面） | 入口接线 shell.css（含顺序）+ 被消费共享类仍在 | 接线锁 | 保留单条轻量 | 零引用死样式静默失效教训：类名照写而 CSS 没进构建，组件测试测不出 |
 | `shell/recentsWiring.test.ts`（桌面） | 多任务四处装配点（主屏无运行区 / 工具栏入口 / 全屏层 / Host 挂载） | 挂载行为 + 接线锁 | 已改造（#23，2026-10-24） | 原 81 处 `toContain` 逐调用点按 #12 样板收敛为挂载行为（主屏无运行区 / 导航顺序 / 开关状态收敛=工具栏↔全屏层联合挂载共享 useShellState 同一 ref / 动作转发 / 卡片装配 DOM / 图标接线）；接线剩 1 条（ShellHost 模板挂 `<ShellTaskSwitcher />`）+ 退役面存在性扫描（ShellRecentsPanel / ShellCommandPalette）；几何纯函数面归 recentsLayout.test.ts |
 | `shell/recentsLayout.test.ts`（桌面） | 卡片尺寸方向 / 几何（纯函数行为测试在场）+ 组件接线 3 条 | 接线锁（混合） | 收敛：接线 3 条 → 1 条 | 方向 / 几何已行为化；接线断言只证 `ShellTaskSwitcher` 真的用了 `recentsLayout` |
-| `shell/settings/settingsOrderLock.test.ts`（桌面） | 设置分组顺序（关于固定最后） | 挂载行为（DOM 顺序） | 已改造（#23，2026-10-24） | 已按预告改法落地：挂载 SysSettingsView 断言分组标题的 DOM 顺序（分组组件以桩替身渲染），关于固定最后；源码顺序正则已删 |
+| `shell/settings/settingsOrderLock.test.ts`（桌面） | 设置分组顺序（关于固定最后） | 挂载行为（DOM 顺序） | 已改造（#23，2026-10-24） | 已按预告改法落地：挂载 SysSettingsView（主页面序）与 SysAppearanceView（外观二级页序，2026-10-28）断言分组标题的 DOM 顺序（分组组件以桩替身渲染），关于固定最后；源码顺序正则已删 |
 | `shell/selectionStyle.test.ts`（桌面） | 选中态两套语言（勾章 / 黑底白字） | 源码文本（样式裁决） | 保留 | happy-dom 不计算 scoped CSS，选中填充色是样式表事实 |
 | `shell/surfaceLadder.test.ts`（桌面） | 透明度三档阶梯（92% / 96%+blur / 实心） | 源码文本（样式裁决） | 保留 | 同上：透明度 / blur 是 CSS 事实，DOM 断言不可达 |
 | `shell/wallpaperScope.test.ts`（桌面） | 壁纸挂壳根、宿主页面不得自铺底色 | 源码文本（裁决） | 保留 | 挂载层级与背景归属是渲染结构事实；「不得存在」的禁令只能扫描 |

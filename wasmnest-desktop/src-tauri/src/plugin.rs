@@ -42,6 +42,8 @@ pub mod guest_events;
 /// 端差异实现（内核只持 `HostFactsPort` 端口词汇）
 pub mod host_facts;
 pub mod http;
+/// 外部应用包安装的选取与识别（原生对话框 + peek 应用 id；安装本体在 api_bridge 凭证门内）
+pub mod install_picker;
 /// 宿主侧插件生命周期编排层（与移动端 PluginManager 同构；2026-10-17 lifecycle-sync）
 pub mod lifecycle;
 pub mod mdns;

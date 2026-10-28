@@ -72,7 +72,8 @@ impl PlatformPickerPort for DesktopPlatformPicker {
 }
 
 /// Dialog FilePath → UTF-8 绝对路径串（非 UTF-8 路径显式报错而非静默丢弃）
-fn path_to_string(file_path: tauri_plugin_dialog::FilePath) -> wasmnest_wasm_core::Result<String> {
+/// （crate 内共用：install_picker 的应用包选取走同一转换）
+pub(crate) fn path_to_string(file_path: tauri_plugin_dialog::FilePath) -> wasmnest_wasm_core::Result<String> {
     let path = file_path.into_path().map_err(|e| {
         wasmnest_wasm_core::AppError::InvalidInput(format!("platform pick: failed to convert selected path: {e}"))
     })?;

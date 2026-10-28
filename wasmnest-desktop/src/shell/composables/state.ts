@@ -28,6 +28,28 @@ export function sysPageOf(id: string): (typeof SYS_PAGES)[number] | undefined {
   return SYS_PAGES.find((s) => s.id === id)
 }
 
+/**
+ * 系统页二级页（父页卡内的子路由面，键 = `${pageId}/${sub}`）。
+ *
+ * 二级页**不进** SYS_PAGES：SYS_PAGES 是主屏系统网格与多任务的一级面清单，
+ * 二级页只经父页入口卡跳转（如设置页「外观」入口），同一张系统页卡内切子路由，
+ * 不另产卡。
+ */
+export const SYS_SUB_PAGES: Readonly<
+  Record<string, { nameKey: string; descKey: string; icon: string }>
+> = {
+  'settings/appearance': {
+    nameKey: 'shell.sys.appearance.name',
+    descKey: 'shell.sys.appearance.desc',
+    icon: 'theme',
+  },
+  'settings/shortcuts': {
+    nameKey: 'shell.sys.shortcuts.name',
+    descKey: 'shell.sys.shortcuts.desc',
+    icon: 'bolt',
+  },
+}
+
 // ==================== 卡片键 ====================
 
 export function appCardKey(pluginId: string): CardKey {
@@ -154,5 +176,11 @@ export const WALLPAPER_DEFAULT = 'aurora'
 export const WALL_DIM_DEFAULT = 30
 export const WALL_DIM_MAX = 70
 
-/** 主题皮肤缺省 id（内置默认皮肤；扩展皮肤走 registerThemeSkin，覆盖同一 token 表） */
-export const SHELL_SKIN_DEFAULT = 'default'
+/**
+ * 主题缺省 id（内置默认主题）。
+ *
+ * 只放这一条常量、不放主题目录：`themePresets.ts` 依赖 `useShellSettings`（读偏好），
+ * 而 `useShellSettings` 需要默认 id——常量留在本文件（零依赖）才能断开这个环，
+ * 否则模块初始化期就会踩 TDZ（`load()` 在模块顶层执行）。
+ */
+export const SHELL_THEME_DEFAULT = 'default'

@@ -26,9 +26,12 @@ describe('Router Configuration（静态表）', () => {
       expect(root?.redirect).toBeUndefined()
     })
 
-    it('壳系统页路由：/sys/:pageId（设置 / 应用管理 / 权限）', () => {
+    it('壳系统页路由：/sys/:pageId（设置 / 应用管理 / 权限）+ 二级页子路由', () => {
       const sys = router.getRoutes().find((r) => r.path === '/sys/:pageId')
       expect(sys?.name).toBe('shell-sys')
+      // 二级页（如 /sys/settings/appearance 外观）：同一张系统页卡内切子路由，不另产卡
+      const sub = router.getRoutes().find((r) => r.path === '/sys/:pageId/:sub')
+      expect(sub?.name).toBe('shell-sys-sub')
     })
 
     it('菜单四项：配对 / 会话 / 任务 / 设置', () => {

@@ -16,6 +16,7 @@
 
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { logger } from '@/utils/frontendLogger'
+import { SHELL_THEME_DEFAULT } from './themePresets'
 
 /** 壁纸档位（前四档与 shell.css 的 --wall-* 一一对应；custom = 用户选的自定义图） */
 export const SHELL_WALLPAPERS = ['none', 'aurora', 'dune', 'reef', 'custom'] as const
@@ -34,12 +35,37 @@ export const WALL_DIM_MAX = 70
  */
 export const WALL_DIM_DEFAULT = 16
 
+/**
+ * 悬浮导航位置
+ *
+ * 存的是「可移动空间」的归一化比例而不是像素：0 = 最左 / 最上，1 = 最右 / 最下。
+ * 视口变化（旋转、分屏、键盘）时按同一比例重算像素，悬浮条不会被甩到屏外，
+ * 也不同步改写用户偏好。
+ */
+export interface FloatingNavPosition {
+  x: number
+  y: number
+}
+
+/** 默认停在底部居中（拇指可达，且不挡标题与顶部胶囊） */
+export const FLOATING_NAV_POS_DEFAULT: FloatingNavPosition = { x: 0.5, y: 1 }
+
 interface ShellUiPrefs {
   wallpaper: ShellWallpaper
   /** 自定义壁纸的本地绝对路径；未选过 / 已移除为 null */
   wallpaperImage: string | null
   /** 壁纸之上的页面色遮罩强度（%，护文字对比度） */
   wallDim: number
+  /**
+   * 主题 id（`<html data-theme>`；缺省 = 内置默认主题）。
+   * 与深浅色（`settings.ui.theme`）不是同一个轴：深浅色归 AppConfig，主题是纯
+   * 外观偏好，与壁纸同层走 localStorage（同步可读，首帧可预应用）。
+   */
+  theme: string
+  /** 悬浮导航开关（默认关闭：需要用户在设置里显式开启） */
+  floatingNav: boolean
+  /** 悬浮导航位置（归一化比例，见 FloatingNavPosition） */
+  floatingNavPos: FloatingNavPosition
 }
 
 const STORAGE_KEY = 'wasmnest.shell-ui-prefs.v1'
@@ -48,11 +74,29 @@ function isWallpaper(value: unknown): value is ShellWallpaper {
   return typeof value === 'string' && (SHELL_WALLPAPERS as readonly string[]).includes(value)
 }
 
+/** 比例值单字段校验：非有限数 / 越界各自回落，不因一个坏值否定另一个轴 */
+function clampRatio(value: unknown, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.min(1, Math.max(0, value))
+}
+
+/** 悬浮导航位置归一（加载与写入共用同一口径） */
+function normalizeFloatingNavPos(value: unknown): FloatingNavPosition {
+  const pos = (value ?? {}) as Partial<FloatingNavPosition>
+  return {
+    x: clampRatio(pos.x, FLOATING_NAV_POS_DEFAULT.x),
+    y: clampRatio(pos.y, FLOATING_NAV_POS_DEFAULT.y),
+  }
+}
+
 function load(): ShellUiPrefs {
   const fallback: ShellUiPrefs = {
     wallpaper: WALLPAPER_DEFAULT,
     wallpaperImage: null,
     wallDim: WALL_DIM_DEFAULT,
+    theme: SHELL_THEME_DEFAULT,
+    floatingNav: false,
+    floatingNavPos: { ...FLOATING_NAV_POS_DEFAULT },
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -72,6 +116,14 @@ function load(): ShellUiPrefs {
         typeof parsed.wallDim === 'number' && parsed.wallDim >= 0 && parsed.wallDim <= WALL_DIM_MAX
           ? Math.round(parsed.wallDim)
           : fallback.wallDim,
+      // 未知 id 原样保留：主题可能来自尚未注册的扩展，渲染侧负责回落默认
+      theme:
+        typeof parsed.theme === 'string' && parsed.theme.trim() !== ''
+          ? parsed.theme
+          : fallback.theme,
+      floatingNav:
+        typeof parsed.floatingNav === 'boolean' ? parsed.floatingNav : fallback.floatingNav,
+      floatingNavPos: normalizeFloatingNavPos(parsed.floatingNavPos),
     }
   } catch (e) {
     logger.warn('[Shell] shell ui prefs unreadable; falling back to defaults', e)
@@ -100,6 +152,12 @@ const wallpaper: ComputedRef<ShellWallpaper> = computed(() => prefs.value.wallpa
 const wallpaperImage: ComputedRef<string | null> = computed(() => prefs.value.wallpaperImage)
 /** 当前遮罩强度（0–70） */
 const wallDim: ComputedRef<number> = computed(() => prefs.value.wallDim)
+/** 当前主题 id */
+const theme: ComputedRef<string> = computed(() => prefs.value.theme)
+/** 悬浮导航开关（默认关闭） */
+const floatingNav: ComputedRef<boolean> = computed(() => prefs.value.floatingNav)
+/** 悬浮导航位置（归一化比例） */
+const floatingNavPos: ComputedRef<FloatingNavPosition> = computed(() => prefs.value.floatingNavPos)
 
 function setWallpaper(next: ShellWallpaper): void {
   prefs.value = { ...prefs.value, wallpaper: next }
@@ -132,6 +190,28 @@ function setWallDim(next: number): void {
   prefs.value = { ...prefs.value, wallDim: clamped }
 }
 
+/**
+ * 切换主题
+ *
+ * 只写偏好，不在这里碰 DOM：落地由 `useShellTheme` 的 watcher 与
+ * `useTheme` 的首帧预应用负责（同一时刻只有一个写入口，避免两处时序打架）。
+ */
+function setTheme(next: string): void {
+  const id = next.trim()
+  if (id === '') return
+  prefs.value = { ...prefs.value, theme: id }
+}
+
+/** 开关悬浮导航（默认关闭；开启后由 App 根常驻渲染） */
+function setFloatingNav(enabled: boolean): void {
+  prefs.value = { ...prefs.value, floatingNav: enabled }
+}
+
+/** 记录悬浮导航位置；越界 / 非有限值按轴归一，不抛错（拖拽可能给出小数） */
+function setFloatingNavPos(next: Partial<FloatingNavPosition>): void {
+  prefs.value = { ...prefs.value, floatingNavPos: normalizeFloatingNavPos(next) }
+}
+
 /** 壁纸选择器直接消费的档位清单（id + i18n key 由调用方拼） */
 export const SHELL_WALLPAPER_IDS: readonly ShellWallpaper[] = SHELL_WALLPAPERS
 
@@ -139,12 +219,31 @@ export interface ShellPreferences {
   wallpaper: ComputedRef<ShellWallpaper>
   wallpaperImage: ComputedRef<string | null>
   wallDim: ComputedRef<number>
+  theme: ComputedRef<string>
+  floatingNav: ComputedRef<boolean>
+  floatingNavPos: ComputedRef<FloatingNavPosition>
   setWallpaper: typeof setWallpaper
   setWallpaperImage: typeof setWallpaperImage
   setWallDim: typeof setWallDim
+  setTheme: typeof setTheme
+  setFloatingNav: typeof setFloatingNav
+  setFloatingNavPos: typeof setFloatingNavPos
 }
 
 /** 获取壳 UI 偏好句柄（模块级单例，与壳内其它机制一致） */
 export function useShellPreferences(): ShellPreferences {
-  return { wallpaper, wallpaperImage, wallDim, setWallpaper, setWallpaperImage, setWallDim }
+  return {
+    wallpaper,
+    wallpaperImage,
+    wallDim,
+    theme,
+    floatingNav,
+    floatingNavPos,
+    setWallpaper,
+    setWallpaperImage,
+    setWallDim,
+    setTheme,
+    setFloatingNav,
+    setFloatingNavPos,
+  }
 }

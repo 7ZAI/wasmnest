@@ -20,10 +20,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 vi.mock('@/shell/composables/useShellApps', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/shell/composables/useShellApps')>()
   const st = {
-    plugins: { value: [] as Array<{ id: string; name: string; route?: string; state?: string; permissions?: string[]; kind?: string }> },
+    plugins: { value: [] as Array<{ id: string; name: string; route?: string; state?: string; permissions?: string[]; kind?: string; source?: string }> },
     loading: { value: false },
     listReady: { value: false },
     busyId: { value: null as string | null },
+    installing: { value: false },
     lastError: { value: null as string | null },
     displayStates: { value: {} as Record<string, string> },
     tones: { value: {} as Record<string, string> },
@@ -35,6 +36,7 @@ vi.mock('@/shell/composables/useShellApps', async (importOriginal) => {
     deactivate: vi.fn(() => Promise.resolve(true)),
     approve: vi.fn(() => Promise.resolve(true)),
     uninstall: vi.fn(() => Promise.resolve(true)),
+    installFromZip: vi.fn(() => Promise.resolve(true)),
     setEnabled: vi.fn(() => Promise.resolve(true)),
     setAutostart: vi.fn(() => Promise.resolve(true)),
     isRunning: () => Promise.resolve(false),
@@ -43,19 +45,24 @@ vi.mock('@/shell/composables/useShellApps', async (importOriginal) => {
 })
 
 const toastSuccess = vi.hoisted(() => vi.fn())
+const toastError = vi.hoisted(() => vi.fn())
+const invokeMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/composables/useToast', () => ({
   useToast: () => ({
     show: () => '',
     success: toastSuccess,
-    error: () => '',
+    error: toastError,
     warning: () => '',
     info: () => '',
   }),
 }))
 
+// 安装编排经 invoke 选包（plugin_pick_app_package）；返回值按用例注入
+vi.mock('@/utils/invoke', () => ({ invoke: invokeMock }))
+
 vi.mock('@/i18n', () => ({
-  default: { global: { t: (key: string) => key } },
+  default: { global: { t: (key: string) => key, te: () => false } },
 }))
 
 vi.mock('@/router', () => ({ default: { push: vi.fn() } }))
@@ -81,6 +88,7 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
     s.ctxMenu.value = null
     s.dialog.value = null
     s.dialogAppId.value = null
+    s.installTarget.value = null
     s.homeQ.value = ''
     s.notifs.value = []
     s.notifPulse.value = 0
@@ -89,11 +97,16 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
     apps.tones.value = {}
     apps.approvalApps.value = []
     apps.busyId.value = null
+    apps.installing.value = false
     apps.lastError.value = null
     vi.mocked(apps.activate).mockReset()
     vi.mocked(apps.deactivate).mockReset()
     vi.mocked(apps.approve).mockReset()
     vi.mocked(apps.uninstall).mockReset()
+    vi.mocked(apps.installFromZip).mockReset()
+    vi.mocked(apps.installFromZip).mockResolvedValue(true)
+    invokeMock.mockReset()
+    toastError.mockClear()
     vi.mocked(router.push).mockClear()
     toastSuccess.mockClear()
     // 页面记忆是模块级单例：用例间必须清，否则「有没有记忆」会被前一个用例污染
@@ -607,6 +620,92 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       expect(apps.uninstall).toHaveBeenCalledWith(TERMINAL_PLUGIN_ID)
       expect(s.cards.value).toEqual([])
       expect(s.dialog.value).toBeNull()
+    })
+  })
+
+  describe('外部应用包安装（宿主装配面，2026-10-28）', () => {
+    const THIRD_PARTY_ID = 'com.wasmnest.third-party'
+    const PICKED = { path: '/tmp/third-party.zip', pluginId: THIRD_PARTY_ID }
+
+    it('取消选包（返回 null）→ 无事发生', async () => {
+      const s = useShellState()
+      invokeMock.mockResolvedValueOnce(null)
+      await s.installApp()
+      expect(apps.installFromZip).not.toHaveBeenCalled()
+      expect(s.dialog.value).toBeNull()
+    })
+
+    it('新 id（未注册）→ 直接安装并落成功 toast；不弹确认', async () => {
+      const s = useShellState()
+      invokeMock.mockResolvedValueOnce(PICKED)
+      await s.installApp()
+      expect(apps.installFromZip).toHaveBeenCalledWith('/tmp/third-party.zip', false)
+      expect(s.dialog.value, '新装不经确认弹窗').toBeNull()
+      expect(toastSuccess).toHaveBeenCalledWith('shell.dialog.install.success')
+    })
+
+    it('已装同 id 但是内置来源 → fail-visible 拒绝（不安装不弹确认）', async () => {
+      const s = useShellState()
+      apps.plugins.value = [{ id: THIRD_PARTY_ID, name: 'Third Party', source: 'builtin' }]
+      invokeMock.mockResolvedValueOnce(PICKED)
+      await s.installApp()
+      expect(apps.installFromZip).not.toHaveBeenCalled()
+      expect(s.dialog.value).toBeNull()
+      expect(toastError).toHaveBeenCalledWith('errors.shell.install.builtinConflict')
+    })
+
+    it('已装同 id 且运行中 → 拒绝就地升级', async () => {
+      const s = useShellState()
+      apps.plugins.value = [
+        { id: THIRD_PARTY_ID, name: 'Third Party', source: 'user-installed', state: 'running' },
+      ]
+      apps.displayStates.value = { [THIRD_PARTY_ID]: 'running' }
+      invokeMock.mockResolvedValueOnce(PICKED)
+      await s.installApp()
+      expect(apps.installFromZip).not.toHaveBeenCalled()
+      expect(toastError).toHaveBeenCalledWith('errors.shell.install.runningConflict')
+    })
+
+    it('已装同 id（user-installed、未运行）→ 进就地升级确认（弹窗 + 选包目标）', async () => {
+      const s = useShellState()
+      apps.plugins.value = [
+        { id: THIRD_PARTY_ID, name: 'Third Party', source: 'user-installed', state: 'dormant' },
+      ]
+      invokeMock.mockResolvedValueOnce(PICKED)
+      await s.installApp()
+      expect(apps.installFromZip).not.toHaveBeenCalled()
+      expect(s.dialog.value).toBe('install-upgrade')
+      expect(s.dialogAppId.value).toBe(THIRD_PARTY_ID)
+      expect(s.installTarget.value).toEqual(PICKED)
+    })
+
+    it('确认升级成功 → 收弹窗 + 清选包目标 + toast', async () => {
+      const s = useShellState()
+      s.installTarget.value = PICKED
+      s.dialog.value = 'install-upgrade'
+      s.dialogAppId.value = THIRD_PARTY_ID
+      await s.confirmInstallUpgrade()
+      expect(apps.installFromZip).toHaveBeenCalledWith('/tmp/third-party.zip', true)
+      expect(s.dialog.value).toBeNull()
+      expect(s.installTarget.value).toBeNull()
+      expect(toastSuccess).toHaveBeenCalledWith('shell.dialog.install.upgradeSuccess')
+    })
+
+    it('确认升级失败 → 保留确认面（不静默吞失败）', async () => {
+      const s = useShellState()
+      s.installTarget.value = PICKED
+      s.dialog.value = 'install-upgrade'
+      s.dialogAppId.value = THIRD_PARTY_ID
+      vi.mocked(apps.installFromZip).mockResolvedValueOnce(false)
+      await s.confirmInstallUpgrade()
+      expect(s.dialog.value).toBe('install-upgrade')
+      expect(s.installTarget.value).toEqual(PICKED)
+    })
+
+    it('无选包目标确认 → 不发升级（防无目标动作）', async () => {
+      const s = useShellState()
+      await s.confirmInstallUpgrade()
+      expect(apps.installFromZip).not.toHaveBeenCalled()
     })
   })
 

@@ -12,6 +12,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 const mocks = vi.hoisted(() => ({
   dialog: { value: null as string | null },
   dialogAppId: { value: null as string | null },
+  installTarget: { value: null as { path: string; pluginId: string } | null },
   busyId: { value: null as string | null },
   stopApp: vi.fn(() => Promise.resolve(true)),
   appOf: vi.fn((id: string) => ({
@@ -26,6 +27,7 @@ vi.mock('@/shell/composables/useShellState', () => ({
   useShellState: () => ({
     dialog: mocks.dialog,
     dialogAppId: mocks.dialogAppId,
+    installTarget: mocks.installTarget,
     stopApp: mocks.stopApp,
   }),
 }))
@@ -36,6 +38,7 @@ vi.mock('@/shell/composables/useShellApps', async (importOriginal) => {
     ...actual,
     useShellApps: () => ({
       busyId: mocks.busyId,
+      installing: { value: false },
       appOf: mocks.appOf,
       plugins: { value: [] },
     }),

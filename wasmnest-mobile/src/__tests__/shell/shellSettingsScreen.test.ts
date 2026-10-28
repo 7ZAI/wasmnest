@@ -12,6 +12,7 @@
  * | C-ST1 | platformEntries | 平台项 = 外观 / 权限 / 关于；出站·背景·连接·认证不在宿主 | 文案键在场 + 缺席键不出现 |
  * | C-ST2 | 入口跳转 | 三项走既有设置页路由，权限走壳内屏，返回走 nav.back | push / openPermissions / back |
  * | C-ST3 | 危险区归属 | 擦除入口已迁「关于 WasmNest」，一级页不得再有 | 文案键缺席 |
+ * | C-ST4 | 悬浮导航开关 | 「导航」分组行内开关，默认关闭 | 开关在场 + 变更写回壳偏好 |
  * | C-ST7 | 双语 | 平台项与背景档文案键在 zh-CN / en 都在场 | 两棵树都能解析 |
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -23,6 +24,9 @@ import enShell from '@/locales/en/shell'
 const mockPush = vi.fn()
 const mockOpenPermissions = vi.fn()
 const mockNavBack = vi.fn()
+const mockSetFloatingNav = vi.fn()
+/** 悬浮导航开关的当前值（默认关闭，与壳偏好默认一致） */
+const floatingNav = ref(false)
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -38,6 +42,12 @@ vi.mock('@/shell/composables/useShellNavigation', () => ({
 }))
 vi.mock('@/shell/composables/usePlatform', () => ({
   usePlatform: () => ({ platformInfo: ref({ platform: 'android', osType: 'android' }) }),
+}))
+vi.mock('@/shell/composables/useShellPreferences', () => ({
+  useShellPreferences: () => ({
+    floatingNav,
+    setFloatingNav: (...args: unknown[]) => mockSetFloatingNav(...args),
+  }),
 }))
 import ShellSettingsScreen from '@/shell/components/screens/ShellSettingsScreen.vue'
 
@@ -55,6 +65,8 @@ beforeEach(async () => {
   mockPush.mockClear()
   mockOpenPermissions.mockClear()
   mockNavBack.mockClear()
+  mockSetFloatingNav.mockClear()
+  floatingNav.value = false
 })
 
 describe('C-ST1 平台设置门类', () => {
@@ -92,6 +104,32 @@ describe('C-ST1 平台设置门类', () => {
 
     expect(wrapper.text()).not.toContain('shell.settings.dangerZone')
     expect(wrapper.text()).not.toContain('shell.settings.clearAllData')
+    wrapper.unmount()
+  })
+})
+
+describe('C-ST4 悬浮导航开关', () => {
+  it('should_renderOffSwitch_when_floatingNavDisabled', () => {
+    const wrapper = mount(ShellSettingsScreen)
+
+    expect(wrapper.text(), '「导航」分组标题应在场').toContain('shell.settings.navigation')
+    expect(wrapper.text(), '悬浮导航行标题应在场').toContain('shell.settings.floatingNavLabel')
+    const input = wrapper.find('input[type="checkbox"]')
+    expect(input.exists(), '应有悬浮导航开关').toBe(true)
+    expect((input.element as HTMLInputElement).checked, '默认关闭').toBe(false)
+    expect(input.attributes('aria-label'), '开关必须有可读名').toBe(
+      'shell.settings.floatingNavLabel',
+    )
+    wrapper.unmount()
+  })
+
+  it('should_writePreference_when_switchChanged', async () => {
+    const wrapper = mount(ShellSettingsScreen)
+
+    await wrapper.find('input[type="checkbox"]').trigger('change')
+
+    expect(mockSetFloatingNav).toHaveBeenCalledTimes(1)
+    expect(mockSetFloatingNav).toHaveBeenCalledWith(true)
     wrapper.unmount()
   })
 })
@@ -141,6 +179,9 @@ describe('C-ST7 设置项文案双语在场', () => {
     'permissions',
     'permissionsHint',
     'platform',
+    'navigation',
+    'floatingNavLabel',
+    'floatingNavHint',
   ]
 
   it('should_resolveSettingsKeysInBothLocales_when_localesLoaded', () => {

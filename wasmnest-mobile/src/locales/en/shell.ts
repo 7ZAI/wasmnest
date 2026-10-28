@@ -3,7 +3,8 @@
  *
  * Keys mirror zh-CN/shell.ts one-to-one (i18n bilingual discipline).
  * Grouping: home=home screen, switcher=recents, notify=notification shade,
- * run=app run screen, settings=platform settings, permissions=permission manager.
+ * run=app run screen, floatingNav=floating navigation, settings=platform settings,
+ * permissions=permission manager.
  *
  * Copy discipline (2026-10-14 revision): state only facts and consequences a user can
  * perceive — no platform implementation notes or prototype-stage explanations.
@@ -100,6 +101,12 @@ export default {
       noSurfaceHint: 'This app does not provide a run surface yet',
       notFound: 'App not found or uninstalled',
     },
+    /** Floating navigation (stays above any page once enabled) */
+    floatingNav: {
+      home: 'Back home',
+      recents: 'Switch apps',
+      move: 'Floating navigation, draggable; use arrow keys to move',
+    },
     switcher: {
       title: 'Switch apps',
       back: 'Back',
@@ -183,6 +190,9 @@ export default {
     },
     settings: {
       title: 'Settings',
+      navigation: 'Navigation',
+      floatingNavLabel: 'Floating navigation',
+      floatingNavHint: 'Home and app switcher, draggable',
       platform: 'Platform',
       appearance: 'Appearance',
       appearanceHint: 'Theme and palette',

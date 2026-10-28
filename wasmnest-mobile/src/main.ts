@@ -20,6 +20,9 @@ import './shell/styles/shell.css'
 // 声明全局引入，使任意页面都能经 ensureTerminalFontLoaded 预热（会话页的网格预算、
 // 终端页的首次测量）；woff2 本体仍只在终端首次渲染时按需下载
 import './styles/terminal-font.css'
+// 主题预设（内置主题 token 表 + 结构性规则）：必须排在 mobile.css / shell.css 之后，
+// 同特异度时后写者胜；主题选择器本身也带 `[data-theme]` 前缀，多数规则不依赖顺序。
+import './styles/theme-presets.css'
 import 'vue-sonner/style.css'
 
 const app = createApp(App)
