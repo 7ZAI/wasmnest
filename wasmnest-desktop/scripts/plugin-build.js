@@ -27,6 +27,8 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const ROOT = resolve(__dirname, '..')
 const IS_WIN = platform() === 'win32'
+// 宿主随包产物目录（apps 仓 build.js 默认只写应用仓 .build/plugins，必须 --out 直写这里）
+const RESOURCES_BASE = resolve(ROOT, 'src-tauri/resources/plugins/desktop')
 
 // 插件配置 — `group` + `slug` 经 app-paths 解析到应用仓工程目录
 // （`<appsRoot>/<group>/<slug>/desktop`；group = apps 产品应用 / servers 服务型 wasm）
@@ -93,7 +95,7 @@ pruneStalePluginDirs()
 
 /** 删除 `src-tauri/resources/plugins/desktop` 下不在 PLUGINS 注册表中的目录 */
 function pruneStalePluginDirs() {
-  const base = resolve(ROOT, 'src-tauri/resources/plugins/desktop')
+  const base = RESOURCES_BASE
   if (!existsSync(base)) return
   const known = new Set(Object.keys(PLUGINS))
   for (const entry of readdirSync(base, { withFileTypes: true })) {
@@ -166,7 +168,7 @@ function buildPlugin(targetPlugin) {
 
   try {
     const pkgMgrCmd = IS_WIN ? 'pnpm.cmd' : 'pnpm'
-    execSync(`${pkgMgrCmd} run build`, {
+    execSync(`${pkgMgrCmd} run build -- --out "${RESOURCES_BASE}"`, {
       cwd: pluginDir,
       stdio: 'inherit',
       env: { ...process.env },

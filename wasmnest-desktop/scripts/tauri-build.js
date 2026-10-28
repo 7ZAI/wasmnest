@@ -93,100 +93,78 @@ if (signingEnv) {
 /**
  * 转义正则特殊字符，用于以字面量匹配 productName/version
  */
-function escapeRegExp(text) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/**
+ * 定位 bundle 子目录。
+ *
+ * 不带 `--target` 时产物在 `target/release/bundle/<kind>`；带 `--target <triple>` 时在
+ * `target/<triple>/release/bundle/<kind>`（CI 发布固定带 --target，2026-10-28 实测：
+ * 只认无 target 的路径会让重命名静默空转，Release 上的文件名与本地产出不一致）。
+ */
+function resolveBundleDir(kind) {
+  const base = join(projectRoot, 'src-tauri', 'target')
+  const direct = join(base, 'release', 'bundle', kind)
+  if (existsSync(direct)) return direct
+  if (!existsSync(base)) return null
+  for (const entry of readdirSync(base, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const candidate = join(base, entry.name, 'release', 'bundle', kind)
+    if (existsSync(candidate)) return candidate
+  }
+  return null
 }
 
 /**
- * NSIS 安装包重命名为带 release 标记的格式
+ * 把 Tauri 的 `{productName}_{version}_{arch}…` 改成 `{name}-{version}-release-{arch}…`，
+ * 与移动端 APK 的 `{name}-{version}-release.apk` 风格一致；`.sig` 同步改名
+ * （签名覆盖文件内容、与文件名无关）。
  *
- * Tauri 2 打包器固定用 {productName}_{version}_{arch}-setup.exe 命名（BundleConfig
- * 无 fileName 字段），与移动端 APK 的 {name}-{version}-release.apk 风格不一致。
- * 本步骤在构建成功后重命名安装包及其 .sig（签名覆盖文件内容、与文件名无关，同步改名即可）。
- * CI（GitHub Actions）走 tauri-action 发布链路不经本脚本，重命名仅影响本地/自定义构建产物。
+ * 版本与产品名**从实际文件名解析**，不读 tauri.conf.json：发布构建用
+ * `--config '{"version":"<product>"}'` 覆盖版本，配置里的 version 可能与之不同，
+ * 按配置匹配会静默匹配不上。
+ *
+ * 本地与 CI 都必须改名（2026-10-28 用户裁决）：CI 发布同样走本脚本，跳过会让
+ * 文档里的文件名与用户下载到的对不上。
  */
+function renameWithReleaseSuffix({ kind, pattern, toName, label }) {
+  const dir = resolveBundleDir(kind)
+  if (!dir) return
+  for (const file of readdirSync(dir)) {
+    const match = file.match(pattern)
+    if (!match) continue
+    const renamed = toName(match)
+    if (renamed === file) continue
+    for (const suffix of ['', '.sig']) {
+      const from = join(dir, file + suffix)
+      const to = join(dir, renamed + suffix)
+      if (!existsSync(from)) continue
+      try {
+        renameSync(from, to)
+        console.log(`[tauri-build] ${label}已重命名: ${file}${suffix} -> ${renamed}${suffix}`)
+      } catch (err) {
+        console.warn(`[tauri-build] 重命名 ${file}${suffix} 失败: ${err.message}`)
+      }
+    }
+  }
+}
+
+/** NSIS：WasmNest_0.0.1_x64-setup.exe → WasmNest-0.0.1-release-x64-setup.exe */
 function renameInstallerWithReleaseSuffix() {
-  if (process.env.GITHUB_ACTIONS) return
-
-  let productName, version
-  try {
-    const config = JSON.parse(readFileSync(join(projectRoot, 'src-tauri/tauri.conf.json'), 'utf8'))
-    productName = config.productName
-    version = config.version
-  } catch (err) {
-    console.warn(`[tauri-build] 读取 tauri.conf.json 失败，跳过安装包重命名: ${err.message}`)
-    return
-  }
-
-  const nsisDir = join(projectRoot, 'src-tauri/target/release/bundle/nsis')
-  if (!existsSync(nsisDir)) return
-
-  const pattern = new RegExp(
-    `^${escapeRegExp(productName)}_${escapeRegExp(version)}_(\\w+)-setup\\.exe$`,
-  )
-  for (const file of readdirSync(nsisDir)) {
-    const match = file.match(pattern)
-    if (!match) continue
-    const arch = match[1]
-    const renamed = `${productName}-${version}-release-${arch}-setup.exe`
-    for (const suffix of ['', '.sig']) {
-      const from = join(nsisDir, file + suffix)
-      const to = join(nsisDir, renamed + suffix)
-      if (!existsSync(from)) continue
-      try {
-        renameSync(from, to)
-        console.log(`[tauri-build] 安装包已重命名: ${file}${suffix} -> ${renamed}${suffix}`)
-      } catch (err) {
-        console.warn(`[tauri-build] 重命名 ${file}${suffix} 失败: ${err.message}`)
-      }
-    }
-  }
+  renameWithReleaseSuffix({
+    kind: 'nsis',
+    pattern: /^(.+)_([0-9][^_-]*)_(\w+)-setup\.exe$/,
+    toName: (m) => `${m[1]}-${m[2]}-release-${m[3]}-setup.exe`,
+    label: '安装包',
+  })
 }
 
-/**
- * DEB 安装包重命名为带 release 标记的格式
- *
- * Tauri 2 打包器固定用 {productName}_{version}_{arch}.deb 命名，
- * 重命名为 {name}-{version}-release-{arch}.deb 以与移动端 APK 风格一致。
- */
+/** DEB：WasmNest_0.0.1_amd64.deb → WasmNest-0.0.1-release-amd64.deb */
 function renameDebWithReleaseSuffix() {
-  if (process.env.GITHUB_ACTIONS) return
-
-  let productName, version
-  try {
-    const config = JSON.parse(readFileSync(join(projectRoot, 'src-tauri/tauri.conf.json'), 'utf8'))
-    productName = config.productName
-    version = config.version
-  } catch (err) {
-    console.warn(`[tauri-build] 读取 tauri.conf.json 失败，跳过 DEB 重命名: ${err.message}`)
-    return
-  }
-
-  const debDir = join(projectRoot, 'src-tauri/target/release/bundle/deb')
-  if (!existsSync(debDir)) return
-
-  // 注意：模板字符串里的正则转义必须双反斜杠——`\w` 会被字符串字面量吃掉变成
-  // 字面量 w，导致架构名永远匹配不上、重命名静默空转（与上方 NSIS 分支一致）。
-  const pattern = new RegExp(
-    `^${escapeRegExp(productName)}_${escapeRegExp(version)}_(\\w+)\\.deb$`,
-  )
-  for (const file of readdirSync(debDir)) {
-    const match = file.match(pattern)
-    if (!match) continue
-    const arch = match[1]
-    const renamed = `${productName}-${version}-release-${arch}.deb`
-    for (const suffix of ['', '.sig']) {
-      const from = join(debDir, file + suffix)
-      const to = join(debDir, renamed + suffix)
-      if (!existsSync(from)) continue
-      try {
-        renameSync(from, to)
-        console.log(`[tauri-build] DEB 包已重命名: ${file}${suffix} -> ${renamed}${suffix}`)
-      } catch (err) {
-        console.warn(`[tauri-build] 重命名 ${file}${suffix} 失败: ${err.message}`)
-      }
-    }
-  }
+  renameWithReleaseSuffix({
+    kind: 'deb',
+    pattern: /^(.+)_([0-9][^_-]*)_(\w+)\.deb$/,
+    toName: (m) => `${m[1]}-${m[2]}-release-${m[3]}.deb`,
+    label: 'DEB 包',
+  })
 }
 
 // pnpm run 会在脚本参数前注入一个 `--`（pnpm 的参数分隔符，非 tauri CLI 参数）；

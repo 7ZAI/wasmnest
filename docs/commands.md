@@ -26,10 +26,10 @@
 | `pnpm run check:links` | markdown 死链锁（仓内跟踪 .md 的相对链接目标存在性；husky pre-commit 暂存含 .md 时自动跑；外链 / 锚点不探测——issue #14） |
 | `node scripts/check-release-manifest.mjs --print-hash` | 打印当前双端 WIT 指纹（更新 manifest 用） |
 | `node scripts/set-host-version.mjs <x.y.z>` | **发布时**同步宿主运行时版本三处（manifest `hostRuntime.version` / `tauri.conf.json` / `src-tauri/Cargo.toml`）；只写文件，不发布、不提交 |
-| `node scripts/update-host-runtime-artifacts.mjs --dir <资产目录>` | **发布后**把三平台真实 sha256 与 sourceCommit 写回 manifest（host-release workflow 用） |
 | `node scripts/bump-version.mjs --patch\|--minor\|--major\|-v X.Y.Z [--desktop\|--mobile\|--both] [--commit] [--tag]` | 双端版本号（各 3 处） |
 | `node scripts/package-sdks.mjs --list \| --target <desktop\|mobile\|all>` | 两端 SDK 构建 + 打包（npm tarball + crates + zip + SHA256 清单） |
 | `node scripts/app-script.mjs <slug> <desktop\|mobile> <script>` | 转发到应用仓单 app 脚本（见 §5.3） |
+| `node scripts/vendor-apps.mjs [--dest <目录>] [--end desktop] [--only <id,...>] [--dry-run]` | 把应用仓已发布的成品包（`<slug>-<end>-v<ver>.zip`）校验后铺进宿主随包目录（默认 `wasmnest-desktop/src-tauri/resources/plugins/desktop`）。三道校验：zip sha256 / 元数据 `source.libRef` == 清单 `repos.lib.tag` / 解出的 `plugin.json` 对齐清单；发布流水线用它内置应用（见 docs/contracts.md §7.1） |
 | `node scripts/adaptive-run.mjs -- <cmd>` | 自适应构建包装 |
 | `node scripts/audit-rust-tests.mjs` · `scripts/run-test-split.sh --crate <子串>` | Rust 测试体量审计 / 批量拆分（见 docs/testing.md §3） |
 
@@ -40,8 +40,8 @@
 | `pnpm install` | 本端依赖（独立 workspace，`packages/*`） |
 | `pnpm run tauri:dev` | 宿主 dev（`scripts/dev-run.js`：端口预检 → 插件产物预检 → tauri dev → 前端 watch；**bedcode 前端不参与 watch**，改了它单独重建 §5.2）。宿主启动的 file watch 覆盖整个 `src-tauri/`——**别在宿主冷构建期间手工往 `src-tauri/` 拷产物**，会触发重启风暴（机制见 `scripts/dev-run.js` 头注释） |
 | 裸 `tauri dev` | 等价地保证插件产物最新：`tauri.conf.json` 的 `beforeDevCommand` 串入 `node scripts/plugin-precheck.mjs`（与 dev-run 共用同一预检模块，幂等），宿主 cargo build 前完成 6 个插件（4 apps + 2 servers）的 wasm / 前端陈旧补建与直写 resources；**但不带前端 watch**——改插件前端请用 `tauri:dev` 或手动 §5.2 |
-| `pnpm run tauri:build` | 生产构建（`scripts/tauri-build.js` 解析 updater 签名；无密钥时自动关闭更新包产物） |
-| `pnpm run host:pack` | 产出「可运行宿主产物 + 分发资产」（`scripts/package-host.mjs`；产物契约 = 应用仓 `.scratch/2026-10-21-host-runtime-distribution/CONTRACT.md` §1）。默认写 `dist-host/host-desktop/`（**不在 `dist/` 下**，避免被 `vite build` 清空）并产出 `dist-host/host-desktop-<version>-<platform>-<arch>.tar.gz` + `.sha256`；`host-version.json` 的版本事实来自 `release-manifest.json` 的 `hostRuntime`。`--skip-build` 复用 `src-tauri/target/debug/<bin>` 重打资产；`--out` / `--asset-dir` 覆盖落点；`--via-cargo` 绕开 tauri CLI 版本一致性检查。应用侧以 env `WASMNEST_PLUGINS_DIR` 指定 plugins 目录 |
+| `pnpm run tauri:build` | 生产构建（`scripts/tauri-build.js` 解析 updater 签名；无密钥时自动关闭更新包产物；成功后把安装包重命名为 `<name>-<version>-release-<arch>[-setup].exe/.deb` —— **本地与 CI 同名**，命名规则在脚本头注释固定） |
+| `pnpm run host:pack` | 产出「可直接运行的宿主产物**目录**」（`scripts/package-host.mjs`；产物契约 = 应用仓 `.scratch/2026-10-21-host-runtime-distribution/CONTRACT.md` §1）。默认写 `dist-host/host-desktop/`（**不在 `dist/` 下**，避免被 `vite build` 清空）；`host-version.json` 的版本事实来自 `release-manifest.json` 的 `hostRuntime`。**不再产出 tar.gz / sha256**（2026-10-28 裁决：平台仓不发布任何压缩包，分发走安装包）。`--skip-build` 复用 `src-tauri/target/debug/<bin>` 重铺产物；`--out` 覆盖落点；`--via-cargo` 绕开 tauri CLI 版本一致性检查。应用侧以 env `WASMNEST_PLUGINS_DIR` 指定 plugins 目录 |
 | `pnpm run plugins:build` | 全量应用构建（`scripts/plugin-build.js --all`，注册表 = 5 个应用名单单一真源，见 §5.1） |
 | `pnpm run plugins:dev` | 单插件 dev 构建（`scripts/plugin-dev.js`，见 §5.2） |
 | `pnpm run test:run` | vitest（宿主 `src/__tests__` + **桌面 SDK 契约测试** `packages/plugin-sdk-desktop/__tests__`） |
@@ -80,8 +80,21 @@ crates.io 精确版本；同场开发由平台仓根 `.cargo/config.toml` 的
 与 `[patch.crates-io]` 指回兄弟目录 / 工作树 SDK（patch 不进发布包，`Cargo.toml`
 内不得出现 `[patch]`——门禁脚本会转红）。
 
-## 4. 移动端（`wasmnest-mobile/`）
+### 3.2 发布产物（唯一出口 = 终端用户安装包）
 
+平台仓**不再发布任何 tar.gz**（2026-10-28 裁决）。发布链只有一条：
+
+| 项 | 值 |
+| --- | --- |
+| 触发 | tag `v<product>`（平台仓 tag 规则 `vX.Y.Z`，**不带 host 前缀**） |
+| workflow | `.github/workflows/product-release.yml`（`vendor` → `build` + `android` → `publish`） |
+| 产物 | Windows `WasmNest-<ver>-release-x64-setup.exe`（NSIS perMachine）、Linux `WasmNest-<ver>-release-amd64.deb` + `WasmNest_<ver>_amd64.AppImage`、Android `WasmNest-<ver>-release-arm64.apk`、`latest.json`、各产物 `.sha256` |
+
+- **桌面随包应用不本地构建**：`vendor` job 跑 `node scripts/vendor-apps.mjs`，下载应用仓成品包并按清单 sha256 / libRef / plugin.json 三道校验后铺进 `resources/plugins/desktop/`（`resources/plugins/**` 只入库 `.gitkeep`，漏了就发空壳安装包）。
+- **移动端随包应用必须现场构建**：应用仓只发布 desktop zip（`apps.<id>.ends.mobile` 无 `package`），`android` job 按清单 `repos.apps.tag` 检出应用仓源码，由 APK 的 `beforeBuildCommand`（`pnpm run build:all` → `plugins:build`）构建移动插件（wasm32-unknown-unknown + componentize）后打进 APK assets；空壳判据 = APK 内至少一个 `assets/resources/plugins/**/plugin.json`。
+- 缺签名密钥（`TAURI_SIGNING_PRIVATE_KEY` / `WINDOWS_CERTIFICATE_*` / `ANDROID_KEYSTORE_*`）时构建**显性失败**，不产出未签名安装包；验证流水线用 `workflow_dispatch` 的 `unsigned=true`（Android 用一次性临时 keystore）。契约与密钥清单见 docs/contracts.md §7。
+
+## 4. 移动端（`wasmnest-mobile/`）
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm install` | 本端依赖（独立工程 workspace） |

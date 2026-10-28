@@ -35,6 +35,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
 const REPO_ROOT = resolve(__dirname, '../..')
 const IS_WIN = platform() === 'win32'
+// 组件化工具真源（随桌面 SDK 发布）：平台侧构建直接按仓内路径注入给移动 SDK CLI，
+// 不依赖应用仓根 node_modules（CI 只装单应用工程，那里没有桌面 SDK）
+const COMPONENTIZE_MANIFEST = resolve(
+  REPO_ROOT,
+  'wasmnest-desktop/packages/plugin-sdk-desktop/tools/componentize/Cargo.toml',
+)
 
 const args = process.argv.slice(2)
 let targetPlugin = null
@@ -119,6 +125,11 @@ function runCli(npxCmd, cwd, pluginId, extraArgs) {
     execSync(`${npxCmd} --no-install wasmnest-plugin build ${extraArgs.join(' ')}`, {
       cwd,
       stdio: 'inherit',
+      env: {
+        ...process.env,
+        WASMNEST_COMPONENTIZE_MANIFEST:
+          process.env.WASMNEST_COMPONENTIZE_MANIFEST ?? COMPONENTIZE_MANIFEST,
+      },
     })
   } catch (e) {
     throw new Error(`[plugin-build] 插件 ${pluginId}（${cwd}）构建失败: ${e.message}`)
@@ -171,14 +182,9 @@ function buildSharedRust(cwd, manifest, sharedRustManifest) {
   }
 
   // 组件化（core module → Component；工具幂等，已是组件时直通）
-  // P1：工具随桌面 SDK 发布，落在 SDK `tools/`；平台仓内直接按相对路径取
-  const componentizeManifest = resolve(
-    REPO_ROOT,
-    'wasmnest-desktop/packages/plugin-sdk-desktop/tools/componentize/Cargo.toml',
-  )
   console.log('[plugin-build] 组件化共享 wasm (Component Model)')
   execSync(
-    `cargo run --release --manifest-path "${componentizeManifest}" -- "${wasmPath}" -o "${wasmPath}"`,
+    `cargo run --release --manifest-path "${COMPONENTIZE_MANIFEST}" -- "${wasmPath}" -o "${wasmPath}"`,
     { cwd, stdio: 'inherit' },
   )
   return wasmPath

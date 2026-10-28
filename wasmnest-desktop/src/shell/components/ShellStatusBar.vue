@@ -9,7 +9,9 @@
         {{ ready ? t('shell.statusBar.ready') : t('shell.statusBar.loading') }}
       </span>
       <template v-for="item in startItems" :key="item.id">
-        <component :is="item.component" v-if="item.component" :data-ext-id="item.id" />
+        <ShellExtBoundary v-if="item.component">
+          <component :is="item.component" :data-ext-id="item.id" />
+        </ShellExtBoundary>
         <button
           v-else-if="item.onSelect"
           type="button"
@@ -42,7 +44,9 @@
         {{ t('shell.statusBar.apps', { count: appCount }) }}
       </span>
       <template v-for="item in endItems" :key="item.id">
-        <component :is="item.component" v-if="item.component" :data-ext-id="item.id" />
+        <ShellExtBoundary v-if="item.component">
+          <component :is="item.component" :data-ext-id="item.id" />
+        </ShellExtBoundary>
         <button
           v-else-if="item.onSelect"
           type="button"
@@ -80,6 +84,7 @@ import { useShellExtensions } from '../extensions'
 import type { ShellStatusBarItem } from '../extensions/types'
 import { logger } from '@/utils/frontendLogger'
 import ShellIcon from './ShellIcon.vue'
+import ShellExtBoundary from './ShellExtBoundary.vue'
 
 const { t } = useI18n()
 const appsStore = useShellApps()

@@ -41,6 +41,7 @@
 - 改 WIT / 契约 / 版本 → docs/contracts.md §3 全链：`check:wit` + 受影响 app 重建 + `check:manifest` 全绿。
 - 改权限 / 清单 / 应用注册表 → `manifest-gen` / `manifest-validate` 通过；`check:manifest` 通过（涉及 id / rustLibrary / 端变化时）；相关边界锁同步更新并跑绿。
 - 改移动壳 / Kotlin / gradle → 移动 `test:run` + gradlew 验证 + 真机 / 模拟器目验。
+- 改发布流水线 / 安装包配置 / 随包应用铺放（`tauri.conf.json` 的 bundle·updater / `.github/workflows/product-release.yml` / `scripts/vendor-apps.mjs` / `scripts/build-latest-json.mjs`）→ 根 `pnpm run test:run`（含 vendor-apps 与 latest.json 契约测试）+ `node scripts/vendor-apps.mjs --dry-run` 核对计划 + `product-release.yml` 的 `workflow_dispatch` dry_run（契约见 docs/contracts.md §7）。
 - 改跨端面 → `../wasmnest-test/cross-end-tests` 全量通过（写清「跑了 / 没跑」）。
 - 宿主侧任何改动 → docs/architecture.md §1.4 自检三问通过（B1–B6 零命中；未在宿主新增业务类型 / 状态 / 存储 / 路由 / 默认值）。
 - 迁移 / 新增锁 → Seam 3（§4）。

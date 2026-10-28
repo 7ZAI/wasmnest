@@ -65,7 +65,7 @@ cmd_verify() {
     | grep -qx 'wasm32-wasip3' \
     || die "wasm32-wasip3 target 未安装（${WASIP3_NIGHTLY}），先执行 scripts/wasip3-toolchain.sh install"
   rustup run "${WASIP3_NIGHTLY}" rustc --version
-  rustup run "${WASIP3_NIGHTLY}" rustup target list --installed | rg 'wasm32-wasip3'
+  rustup run "${WASIP3_NIGHTLY}" rustup target list --installed | grep 'wasm32-wasip3'
   log "工具链就绪 ✅"
 }
 

@@ -504,6 +504,30 @@ pub fn pty_error_of(raw: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// 轮询至 PTY 句柄被摘除，返回 `not found` 文案
+///
+/// kill / 自然退出后引擎进入只读窗口（`EXIT_READ_WINDOW`，环供退出处理器取尾段），
+/// 期间 `pty-is-running` 返回 `{running:false}`，窗口到期才摘除并转为不可寻址。
+pub async fn wait_pty_handle_retired(plugin: &Arc<Mutex<LoadedWasmPlugin>>, pty_id: &str) -> String {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let raw = {
+            let mut guard = plugin.lock().await;
+            guard
+                .invoke_command("pty-is-running", &serde_json::json!({ "ptyId": pty_id }).to_string())
+                .expect("pty-is-running call")
+        };
+        if let Some(err) = pty_error_of(&raw) {
+            return err;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "句柄必须在 5s 内摘除（只读窗口到期），got: {raw}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+}
+
 /// `data` 字段（list<u8>）→ 文本（PTY 输出含控制字符，按 lossy 处理）
 pub fn pty_fetched_text(value: &serde_json::Value) -> String {
     let bytes: Vec<u8> = value

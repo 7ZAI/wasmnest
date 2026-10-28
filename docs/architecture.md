@@ -88,6 +88,12 @@
 - 主库 schema 单一事实源在能力仓 `../wasmnest-lib/wasmnest-wasm-core`（`db.rs` + `db/schema.sql`）；迁移**必须幂等**；禁止手改生产库；改 schema 必须补幂等测试。
 - 插件存储隔离：插件 KV 走 `plugin_storage` 表（属主分区 / 前缀纵深 / 护栏）；系统空间 `__system__` 只用于宿主机制（如审批记录），不占插件命名空间。
 
+### 7.1 认证记录真源与 BedCode 残留双写（2026-10-28 核实）
+
+- **单中心注册表（ADR 0031）**：`com.wasmnest.auth-center` 在 boot 激活时自注册为唯一认证中心，其他插件的注册请求被拒（`already registered by ...`）。宿主 `/api/auth/*` 七端点与连接裁决（`auth-policy`）都归它；认证记录真源 = **auth-center 私有库**（`auth_pairings` / `auth_biometric_keys` / `auth_connection_history`），撤销走 `auth-center.trust.revoke`。
+- **已知残留**：BedCode（`com.wasmnest.bedcode`）仍自带整套认证实现（应用仓 `apps/bedcode/desktop/rust/src/{auth_records,auth_http}`）——`activate` 里仍给自己私有库建 `auth_pairings` 等表，旧互调 api 仍提供 biometric / jwt 签发验签。产品面已切到 auth-center（HTTP 路由只由 auth-center 登记；`session.trust.*` 命令经 `auth_center_client` 互调中心），**但这份残留仍写第二份私有库**：两侧数据不合并、互不可见。
+- **改动判据**：碰 trust / 配对 / 生物认证前先确认落在哪一侧（产品面 = auth-center 私有库；BedCode 残留 = 其旧互调 api + 自己的库）。合并两侧数据面 / 退役 BedCode 残留属产品裁决（未排期），退役时按 §3 退役面纪律 fail-visible 处理，不得静默让一侧查不到就返回空。
+
 ## 8. 运行监控（host-metrics）
 
 - **机制**：能力仓 WIT `host-metrics` 只暴露一个只读原语 `snapshot: func() -> result<string, string>`（JSON 字符串），world core 的 import 数 8 → 9。快照内容 = 内核 `MetricsRegistry::snapshot()`：每插件 Store 线性内存当前 / 峰值、导出调用次数 / 在飞 / 耗时直方图、燃料、生命周期计数与最近时间、trap 原因分布、grow 被拒、激活耗时、授权决策、总线背压、配额上限；另含注册制系统段（当前 `task`）。

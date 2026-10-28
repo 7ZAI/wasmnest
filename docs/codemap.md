@@ -111,7 +111,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 ### 2.4 桌面脚本（`scripts/`）
 
-`dev-run.js`（宿主 dev：端口预检 → WASM/前端缺失预建 → tauri dev → `PLUGIN_WATCH_CMDS` 起前端 watch；bedcode 前端不参与 watch）、`plugin-build.js`（`PLUGINS` 注册表 = 5 个应用名单单一真源）、`plugin-dev.js`（单插件 dev）、`tauri-build.js`（updater 签名）、`package-host.mjs`（`host:pack` 宿主产物分发，见 docs/commands.md §3）、`check-target-size.js`（target 治理）、`generate-*.js`（图标生成）、`install-tauri-deps.sh`。**每个脚本头注释自解释。**插件前端 watch 闭环（`plugin-watch.js`）已随桌面 SDK 发布（`packages/plugin-sdk-desktop/bin/`），`dev-run.js` 反向引 SDK 内同一份实现。
+`dev-run.js`（宿主 dev：端口预检 → WASM/前端缺失预建 → tauri dev → `PLUGIN_WATCH_CMDS` 起前端 watch；bedcode 前端不参与 watch）、`plugin-build.js`（`PLUGINS` 注册表 = 5 个应用名单单一真源）、`plugin-dev.js`（单插件 dev）、`tauri-build.js`（updater 签名 + 安装包重命名，本地/CI 同名）、`package-host.mjs`（`host:pack` 宿主产物分发，见 docs/commands.md §3）、`check-target-size.js`（target 治理）、`generate-*.js`（图标生成）、`install-tauri-deps.sh`。**每个脚本头注释自解释。**插件前端 watch 闭环（`plugin-watch.js`）已随桌面 SDK 发布（`packages/plugin-sdk-desktop/bin/`），`dev-run.js` 反向引 SDK 内同一份实现。
 
 ## 3. 移动端导览（`wasmnest-mobile/`）
 

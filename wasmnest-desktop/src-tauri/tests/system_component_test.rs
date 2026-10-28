@@ -98,51 +98,59 @@ async fn test_system_component_capability_routing_end_to_end() {
 /// 真实认证中心 wasip3 产物经宿主 async 运行时加载：`enforce_connection_policy`
 /// **查注册表**（ADR 0031，不再是「能力探测 + 排序取首个」）找到中心，调中心
 /// `auth-policy` capability 导出；**验签在中心内部**（ADR 0033：入场密钥自持，
-/// 宿主 `utils/auth/jwt.rs` 已退役）——故 token 一律经
-/// `wasmnest_desktop_lib::utils::auth::test_tokens::issue` 从中心签出（走生产 `auth-grant` 路径）。
+/// 宿主 `utils/auth/jwt.rs` 已退役）——故 token 用中心自己的密钥环签出
+/// （测试把中心密钥环种成已知密钥，等价于中心自签）。
 /// 覆盖：
 /// - 无中心在册 → **拒绝**（`no auth center registered`，fail-closed K3）
 /// - 激活 + 注册中心 + 私有库无配对记录 → 放行（无信任锚点，仅凭验签）
 /// - 私有库存在活跃配对记录 → 放行
-/// - 经插件撤销（`session.trust.revoke` 软删私有库真源）→ 拒绝（原因透出，
+/// - 经插件撤销（`auth-center.trust.revoke` 软删私有库真源）→ 拒绝（原因透出，
 ///   deny_kind=policy）
 /// - 未撤销的其他设备 token → 放行
 /// - 实例消失（停用）→ 调用失败 → **拒绝**（`auth center unavailable`，
 ///   deny_kind=unavailable，不再 fail-open 放行）
 ///
-/// 注册路径：新 SDK 产物在 activate 内自注册（v32）；测试兼容旧产物——激活后
-/// 若注册表仍空则手动注册（模拟 v32 中心）。各裁决段落前 `ensure_center`
-/// 幂等重注册，免疫同二进制内注册表单测的并发 reset（全局静态，测试并行）。
+/// 注册路径：auth-center 插件 activate 内自注册（单中心）；服务型插件在
+/// `PluginHost::new` 内先于私库根注入激活，本用例随后停用 → 无中心阶段 →
+/// 重启（schema 建表 + 重新注册），免疫同二进制内注册表单测的并发 reset。
 #[tokio::test(flavor = "multi_thread")]
 async fn test_server_auth_policy_closed_loop() {
     use wasmnest_desktop_lib::utils::auth::auth_center as bridge;
     use wasmnest_desktop_lib::wasm_core::host_api::auth_center as registry;
 
     const PAIRING_ID: &str = "p-policy";
-    const CENTER_METHODS: [&str; 4] = ["pairing_code", "qr", "biometric", "jwt"];
-    let session_id = bridge::SESSION_PLUGIN_ID;
+    const CENTER_ID: &str = "com.wasmnest.auth-center";
+    const TEST_KEY: [u8; 32] = [0x5a; 32];
 
     // 全局注册表清零（同二进制内注册表单测并行跑，先复位再登记保证本文确定性）
     // 串行闸门：单中心 desk 独占，两条全局注册表集成用例互斥执行（防并行清台）
     let _permit = registry::registry_gate().acquire().await.expect("registry test gate");
-    // 闸门内清台：顺序反了会清掉另一个用例在闸门内登记的中心（并行红）
     registry::reset();
 
-    // ============ 激活真实认证中心产物 ============
-    let wasm_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
-    if !wasm_path.exists() {
-        eprintln!("[skip] session wasip3 artifact not built");
+    // ============ 真实认证中心产物（服务型随包插件，setup_host 内自动激活） ============
+    let center_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../resources/plugins/desktop/com.wasmnest.auth-center/wasmnest_plugin_auth_center.wasm");
+    if !center_wasm.exists() {
+        eprintln!("[skip] auth-center wasip3 artifact not built");
         return;
     }
     let host = setup_host().await;
 
+    // 服务型插件在 `PluginHost::new` 内即自动激活，那时私有库根尚未注入 → 认证
+    // 记录 schema 初始化降级。先种已知密钥环（activate 读一次并校验格式、之后本
+    // 用例用同一把钥匙签 token），再停用重启：schema 按插件真源建出 + 重新注册。
+    // 种子必须在插件在册时写（host-auth 走属主 `auth` 权限门，停用会撤销授权）。
+    wasmnest_desktop_lib::utils::auth::test_tokens::seed_keyring(host.wasm_host_ctx(), CENTER_ID, &TEST_KEY);
+    host.deactivate_plugin(CENTER_ID, false)
+        .await
+        .expect("deactivate auth-center");
+    assert!(!registry::is_registered(), "停用中心必须注销注册");
+
     // ============ fail-closed 锁（K3）：无中心 = 拒绝，不得静默放行 ============
-    // 此刻中心还没激活，**造不出**合法 token（v33：宿主无签发面）——但也不需要：
-    // 无中心分支在解析凭证之前就拒了，凭证是什么不影响结论。用一个显眼的占位串
-    // 顺带锁住「拒绝文本不得回显凭据」。
+    // 此刻无中心，**造不出**合法 token（v33：宿主无签发面）——也不需要：无中心
+    // 分支在解析凭证之前就拒了，凭证是什么不影响结论。用一个显眼的占位串顺带
+    // 锁住「拒绝文本不得回显凭据」。
     let placeholder_token = "pre-center-placeholder-not-a-real-token";
-    assert!(!registry::is_registered(), "reset 后无中心在册");
     let no_center =
         bridge::enforce_connection_policy(host.as_ref(), placeholder_token).expect_err("无中心必须拒绝（fail-closed）");
     assert!(
@@ -154,62 +162,30 @@ async fn test_server_auth_policy_closed_loop() {
         "错误文本不得含凭据/token 片段（AGENTS §8）: {no_center}"
     );
 
-    let component = host
-        .wasm_runtime()
-        .compile_component(&std::fs::read(&wasm_path).expect("read session artifact"))
-        .expect("compile session artifact");
-    let plugin = host
-        .wasm_runtime()
-        .instantiate_component(&component, session_id, host.wasm_host_ctx().clone(), &[], None)
-        .expect("instantiate session");
-    if !plugin.exported_capabilities().iter().any(|c| c == "auth-policy") {
-        eprintln!("[skip] session artifact lacks auth-policy export (rebuild with current SDK)");
-        return;
-    }
-    host.install_instance(session_id, plugin, CallModel::Mutex).await;
-    let mut loaded = make_plugin(session_id, PluginSource::Wasm, PluginState::Loaded);
-    loaded.manifest.rust_library = "bedcode_plugin_terminal_session".to_string();
-    loaded.manifest.permissions = vec!["auth".to_string(), "peer".to_string(), "storage".to_string()];
-    host.plugins().write().await.insert(session_id.to_string(), loaded);
-
-    // 种子：把中心的入场密钥环种成**已知密钥**（必须在 activate 之前——中心
-    // activate 会读一次密钥环，格式不对即阻断激活）。之后本用例用这把密钥签
-    // 测试 token：与中心**同一把**钥匙，故中心必然认。
-    // 走种子而非 `auth-grant` 互调：互调要总线派发落地（自建 PluginHost 未
-    // `init_message_bus` 时等不到回复），那是测试基建限制，不是被测行为。
-    // 种入要过中心的 `auth` 权限门（`auth_secret_set` 判据），故先授权
-    host.permission().grant_permissions(
-        session_id,
-        &["auth".to_string(), "peer".to_string(), "storage".to_string()],
-    );
-    const TEST_KEY: [u8; 32] = [0x5a; 32];
-    wasmnest_desktop_lib::utils::auth::test_tokens::seed_keyring(host.wasm_host_ctx(), session_id, &TEST_KEY);
-    host.activate_plugin(session_id, false).await.expect("activate session");
-
-    // 注册中心：新 SDK 产物 activate 内已自注册；旧产物（v31）未注册 → 手动
-    // 注册（模拟 v32 中心的动态就绪段）。幂等：已注册则 register 报
-    // 「already registered」忽略（免疫注册表单测并发 reset 后自动补位）。
-    let ensure_center = || {
-        let _ = registry::register(
-            bridge::SESSION_PLUGIN_ID,
-            CENTER_METHODS.iter().map(|s| s.to_string()).collect(),
-        );
-    };
-    ensure_center();
-    assert!(
-        registry::is_registered(),
-        "会话中心注册（自注册或手动补位）后必须有一个在册中心"
+    host.activate_plugin(CENTER_ID, false)
+        .await
+        .expect("activate auth-center (seeded keyring, schema against injected db root)");
+    assert!(registry::is_registered(), "中心 activate 必须自注册（单中心）");
+    assert_eq!(
+        registry::center().map(|e| e.owner),
+        Some(CENTER_ID.to_string()),
+        "在册中心必须是 auth-center"
     );
     assert!(bridge::session_active(), "注册后桥接门必须放行（注册表查询，无参）");
 
-    // ============ 激活会话中心 → 验签 + 策略取中心（注册表） ============
-    // token 只能从中心签出（v33）：走生产 `auth-grant` / `jwt` / `issue`
-    let valid_token = wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(
-        &TEST_KEY,
-        "device-1",
-        Some("Pixel 9"),
-        Some("fp-abc"),
-    );
+    // token 只能从中心签出（v33）：本用例把中心密钥环种成已知密钥，用同一把签
+    let sign = |sub: &str, name: &str, fp: &str| {
+        wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(&TEST_KEY, sub, Some(name), Some(fp))
+    };
+    let valid_token = sign("device-1", "Pixel 9", "fp-abc");
+
+    /// 中心私有库路径（setup_host 注入的私有库根 + 中心 id；schema 由 activate 建出）
+    fn center_db_path() -> std::path::PathBuf {
+        std::env::temp_dir()
+            .join(format!("wasmnest-hosttest-pluginroot-{}", std::process::id()))
+            .join("com.wasmnest.auth-center")
+            .join("plugin.db")
+    }
 
     // 私有库无配对记录 → 放行（无信任锚点，仅凭验签；搬迁前语义）
     let decision =
@@ -221,14 +197,10 @@ async fn test_server_auth_policy_closed_loop() {
     assert_eq!(decision.device_name.as_deref(), Some("Pixel 9"));
     assert_eq!(decision.fingerprint.as_deref(), Some("fp-abc"));
 
-    // 认证中心私有库写入活跃配对记录（v24 下沉后真源在私有库）→ 放行
+    // 认证中心私有库写入活跃配对记录（真源在中心私有库）→ 放行
     {
-        let db_path = std::env::temp_dir()
-            .join(format!("wasmnest-hosttest-pluginroot-{}", std::process::id()))
-            .join(bridge::SESSION_PLUGIN_ID)
-            .join("plugin.db");
-        let conn = rusqlite::Connection::open(&db_path)
-            .unwrap_or_else(|e| panic!("打开认证中心私有库失败 {}: {e}", db_path.display()));
+        let conn =
+            rusqlite::Connection::open(center_db_path()).unwrap_or_else(|e| panic!("打开认证中心私有库失败: {e}"));
         let _ = conn.busy_timeout(std::time::Duration::from_secs(10));
         conn.execute(
             "INSERT OR REPLACE INTO auth_pairings \
@@ -239,7 +211,6 @@ async fn test_server_auth_policy_closed_loop() {
         )
         .expect("seed auth_pairings");
     }
-    ensure_center();
     assert!(
         bridge::enforce_connection_policy(host.as_ref(), &valid_token).is_ok(),
         "已配对设备 → 放行"
@@ -247,17 +218,13 @@ async fn test_server_auth_policy_closed_loop() {
 
     // 经插件撤销（软删私有库真源）→ 拒绝（拒绝原因必须可读，deny_kind=policy）
     let revoked = host
-        .invoke_rust_command(session_id, "session.trust.revoke", json!({"id": PAIRING_ID}))
+        .invoke_rust_command(CENTER_ID, "auth-center.trust.revoke", json!({"id": PAIRING_ID}))
         .await
-        .expect("session.trust.revoke");
+        .expect("auth-center.trust.revoke");
     assert_eq!(revoked["removed"], true);
     {
-        let db_path = std::env::temp_dir()
-            .join(format!("wasmnest-hosttest-pluginroot-{}", std::process::id()))
-            .join(bridge::SESSION_PLUGIN_ID)
-            .join("plugin.db");
-        let conn = rusqlite::Connection::open(&db_path)
-            .unwrap_or_else(|e| panic!("打开认证中心私有库失败 {}: {e}", db_path.display()));
+        let conn =
+            rusqlite::Connection::open(center_db_path()).unwrap_or_else(|e| panic!("打开认证中心私有库失败: {e}"));
         let active: i32 = conn
             .query_row(
                 "SELECT is_active FROM auth_pairings WHERE id = ?1",
@@ -265,9 +232,8 @@ async fn test_server_auth_policy_closed_loop() {
                 |row| row.get(0),
             )
             .expect("软删保留记录");
-        assert_eq!(active, 0, "撤销由插件写私有库真源（is_active = 0）");
+        assert_eq!(active, 0, "撤销由中心写私有库真源（is_active = 0）");
     }
-    ensure_center();
     let deny = bridge::enforce_connection_policy(host.as_ref(), &valid_token).expect_err("撤销后必须拒绝");
     assert!(deny.contains("revoked"), "拒绝原因可读（deny_kind=policy）: {deny}");
     assert!(
@@ -276,21 +242,14 @@ async fn test_server_auth_policy_closed_loop() {
     );
 
     // 未撤销记录的其他设备 token → 放行（未命中从宽，搬迁前语义）
-    let other_token = wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(
-        &TEST_KEY,
-        "device-2",
-        Some("Phone 2"),
-        Some("fp-xyz"),
-    );
-    ensure_center();
+    let other_token = sign("device-2", "Phone 2", "fp-xyz");
     assert!(
         bridge::enforce_connection_policy(host.as_ref(), &other_token).is_ok(),
         "未撤销设备 → 放行"
     );
 
     // ============ 实例消失 → 调用失败 → 拒绝（deny_kind=unavailable） ============
-    host.wasm_plugins().write().await.remove(session_id);
-    ensure_center();
+    host.wasm_plugins().write().await.remove(CENTER_ID);
     let unavailable = bridge::enforce_connection_policy(host.as_ref(), &valid_token)
         .expect_err("实例缺失 → 必须拒绝（fail-closed，不再回退放行）");
     assert!(
@@ -303,19 +262,19 @@ async fn test_server_auth_policy_closed_loop() {
     );
 
     // 收尾清零（同二进制内并行的注册表单测互不污染）
-    registry::purge_for_plugin(bridge::SESSION_PLUGIN_ID);
+    registry::purge_for_plugin(CENTER_ID);
 }
 
-/// 2026-09-29 事故真源回归锁（spec §10 票 05 第 1 条）：**多候选必须落在注册者身上**
+/// 2026-09-29 事故真源回归锁（spec §10 票 05 第 1 条）：**裁决只认注册者**
 ///
 /// 复刻 2026-09-29 事故（原始当事者 agent-hub 已退役，回归锁用 ai-chatbox
-/// 顶替其位置——任一 rust-ts SDK 都无条件导出 auth-policy 默认拒绝实现，
-/// 判据不依赖具体 app）：候选按 id 排序在 bedcode **之前**、先行激活成候选；
-/// 旧裁决按「能力探测 + 排序取首个」会选中它而全局拒绝。新裁决只认注册表
-/// （ADR 0031 K1/K4）：
-/// ① 只注册 bedcode（ai-chatbox 不注册）→ 注册表属主 = bedcode；
-/// ② 未撤销 token 放行（若旧逻辑选中未注册者，其默认拒绝会让它 Err）；
-/// ③ 撤销后拒绝原因来自 bedcode 私有库 trust 真源（deny_kind=policy）；
+/// 顶替其位置——任一 rust-ts SDK 都无条件导出默认拒绝实现，判据不依赖具体 app）：
+/// 候选按 id 排序在会话中心 **之前**、且 SDK 无条件导出
+/// auth-policy 默认拒绝实现）先行激活成候选；旧裁决按「能力探测 + 排序取首个」
+/// 会选中它而全局拒绝。现裁决只认注册表（ADR 0031 K1/K4，单中心）：
+/// ① 中心由 auth-center 插件 activate 自注册；未注册候选排序在前也不被选中；
+/// ② 中心密钥签出的未撤销 token 放行（若旧逻辑选中未注册候选，其默认拒绝会让它 Err）；
+/// ③ 撤销后拒绝原因来自中心私有库 trust 真源（deny_kind=policy）；
 /// ④ 停用未注册者（ai-chatbox）不影响注册表（purge 只碰本人）。
 #[tokio::test(flavor = "multi_thread")]
 async fn test_auth_center_multi_candidate_registration_lock() {
@@ -327,29 +286,46 @@ async fn test_auth_center_multi_candidate_registration_lock() {
     // 闸门内清台：顺序反了会清掉另一个用例在闸门内登记的中心（并行红）
     registry::reset();
     const OTHER_CANDIDATE_ID: &str = "com.wasmnest.ai-chatbox";
-    const CENTER_METHODS: [&str; 4] = ["pairing_code", "qr", "biometric", "jwt"];
-    let session_id = bridge::SESSION_PLUGIN_ID;
+    const CENTER_ID: &str = "com.wasmnest.auth-center";
+    const TEST_KEY: [u8; 32] = [0x5a; 32];
 
-    // ai-chatbox 与 bedcode 两个 wasm 产物都必须可加载
-    let session_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
+    // ai-chatbox 与 bedcode 两个候选产物 + 中心产物都必须可加载
     let other_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../resources/plugins/desktop/com.wasmnest.ai-chatbox/wasmnest_plugin_ai_chatbox.wasm");
-    if !session_wasm.exists() || !other_wasm.exists() {
+    let session_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
+    let center_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../resources/plugins/desktop/com.wasmnest.auth-center/wasmnest_plugin_auth_center.wasm");
+    if !other_wasm.exists() || !session_wasm.exists() || !center_wasm.exists() {
         eprintln!("[skip] wasm artifacts not built");
         return;
     }
     let host = setup_host().await;
 
-    // 两个导出 auth-policy 的候选都进实例表（未注册者 id 排序在前）；ai-chatbox
+    // 服务型中心在 `PluginHost::new` 内先于私库根注入激活 → 重启一次：schema 按
+    // 真源建表。密钥环在 activate 之前种成已知密钥（测试据同一把签 token）；
+    // 种子写入走属主 `auth` 权限门，必须在插件在册时写（停用会撤销授权）
+    wasmnest_desktop_lib::utils::auth::test_tokens::seed_keyring(host.wasm_host_ctx(), CENTER_ID, &TEST_KEY);
+    host.deactivate_plugin(CENTER_ID, false)
+        .await
+        .expect("deactivate auth-center");
+    host.activate_plugin(CENTER_ID, false)
+        .await
+        .expect("activate auth-center");
+
+    // 两个导出 auth-policy 的候选都进实例表（ai-chatbox id 排序在前）；ai-chatbox
     // 激活失败不阻断本锁（它的激活可能与测试宿主能力面不完全匹配），实例仍在册
     for (id, wasm, lib) in [
         (OTHER_CANDIDATE_ID, &other_wasm, "wasmnest_plugin_ai_chatbox"),
-        (session_id, &session_wasm, "bedcode_plugin_terminal_session"),
+        (
+            bridge::SESSION_PLUGIN_ID,
+            &session_wasm,
+            "bedcode_plugin_terminal_session",
+        ),
     ] {
         let component = host
             .wasm_runtime()
-            .compile_component(&std::fs::read(&wasm).expect("read artifact"))
+            .compile_component(&std::fs::read(wasm).expect("read artifact"))
             .expect("compile artifact");
         let plugin = host
             .wasm_runtime()
@@ -364,54 +340,44 @@ async fn test_auth_center_multi_candidate_registration_lock() {
         loaded.manifest.rust_library = lib.to_string();
         loaded.manifest.permissions = vec!["auth".to_string(), "storage".to_string()];
         host.plugins().write().await.insert(id.to_string(), loaded);
-        // 种子密钥环：activate 之前种好，之后用同一把钥匙签测试 token
-        // （见同文件另一用例的注释：走互调要总线派发，自建 PluginHost 未
-        //  init_message_bus 时等不到回复）。种入要过 `auth` 权限门
-        host.permission().grant_permissions(id, &["auth".to_string()]);
-        const TEST_KEY: [u8; 32] = [0x5a; 32];
-        wasmnest_desktop_lib::utils::auth::test_tokens::seed_keyring(host.wasm_host_ctx(), id, &TEST_KEY);
+        // 候选自注册即使发生也只会被单中心拒绝（already registered），不影响在册中心
         if let Err(e) = host.activate_plugin(id, false).await {
             eprintln!("[warn] activate {id} failed (proceed with installed instance): {e}");
         }
     }
 
-    // 只注册 bedcode 为认证中心；ai-chatbox 即使排序在前也不被选中
-    let _ = registry::register(
-        bridge::SESSION_PLUGIN_ID,
-        CENTER_METHODS.iter().map(|s| s.to_string()).collect(),
-    );
+    // 单中心注册表：中心 = 自注册的 auth-center；未注册候选排序在前 + 导出默认
+    // 拒绝实现也不被选中（旧「能力探测 + 排序取首个」会选中它）
     assert_eq!(
         registry::center().map(|e| e.owner),
-        Some(bridge::SESSION_PLUGIN_ID.to_string()),
-        "注册表只认注册者（ai-chatbox 排序在前也不被选中）"
+        Some(CENTER_ID.to_string()),
+        "注册表只认注册者（未注册候选排序在前也不被选中）"
     );
 
-    // token 用**中心自己那份密钥环**（本用例给 bedcode 种子）签出：
-    // 验签方只能是 bedcode；若旧逻辑选中未注册者的默认拒绝实现，
-    // 它既没有这把密钥也验不过 → 裁决必错，与本用例要锁的「注册表说了算」同向
-    const TEST_KEY: [u8; 32] = [0x5a; 32];
+    // token 用**中心自己那份密钥环**（本用例给 auth-center 种子）签出：
+    // 若裁决落到未注册候选的默认拒绝实现，它既没有这把密钥也验不过 → 裁决必错
     let token = wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(
         &TEST_KEY,
         "device-t",
         Some("Phone"),
         Some("fp-t"),
     );
-    // 私有库无撤销记录 → 放行（若旧逻辑选中未注册者的默认拒绝，这里会是 Err）
+    // 私有库无撤销记录 → 放行（若旧逻辑选中未注册候选的默认拒绝，这里会是 Err）
     // 失败信息带裁决原文：三类拒因（no_center / unavailable / policy）排障路径完全不同，
     // 只报「assert is_ok」会把「注册表被并发清台」与「guest 调用超时」混成一个症状
     let decision = bridge::enforce_connection_policy(host.as_ref(), &token);
     assert!(
         decision.is_ok(),
-        "裁决必须落在已注册的 bedcode 身上（未注册者即使排序在前）: \
+        "裁决必须落在已注册的 auth-center 身上（未注册候选即使排序在前）: \
          decision={decision:?} registry={:?}",
         registry::center().map(|e| e.owner)
     );
 
-    // 撤销该设备（软删私有库真源 is_active=0）→ 拒绝，原因来自 bedcode 策略
+    // 撤销该设备（软删中心私有库真源 is_active=0）→ 拒绝，原因来自中心策略
     {
         let db_path = std::env::temp_dir()
             .join(format!("wasmnest-hosttest-pluginroot-{}", std::process::id()))
-            .join(bridge::SESSION_PLUGIN_ID)
+            .join(CENTER_ID)
             .join("plugin.db");
         let conn = rusqlite::Connection::open(&db_path).unwrap_or_else(|e| panic!("open center db: {e}"));
         let _ = conn.busy_timeout(std::time::Duration::from_secs(10));
@@ -423,30 +389,30 @@ async fn test_auth_center_multi_candidate_registration_lock() {
             [],
         )
         .expect("seed pairing");
-        // 经 trust.revoke 软删（与生产同路径：插件写私有库真源）
+        // 经中心命令软删（与生产同路径：插件写私有库真源）
         let revoked = host
-            .invoke_rust_command(session_id, "session.trust.revoke", json!({"id": "p-multi"}))
+            .invoke_rust_command(CENTER_ID, "auth-center.trust.revoke", json!({"id": "p-multi"}))
             .await
-            .expect("trust.revoke");
+            .expect("auth-center.trust.revoke");
         assert_eq!(revoked["removed"], true, "撤销软删 must be recorded");
     }
     let deny = bridge::enforce_connection_policy(host.as_ref(), &token).expect_err("撤销后必须拒绝");
     assert!(
         deny.contains("revoked"),
-        "拒绝原因来自 bedcode 的 trust 策略（deny_kind=policy）: {deny}"
+        "拒绝原因来自中心 trust 策略（deny_kind=policy）: {deny}"
     );
 
-    // 停用未注册者 → 注册表与裁决不受影响（purge 只碰本人）
+    // 停用未注册候选 → 注册表与裁决不受影响（purge 只碰本人）
     host.deactivate_plugin(OTHER_CANDIDATE_ID, false)
         .await
         .expect("deactivate unregistered candidate");
     assert_eq!(
         registry::center().map(|e| e.owner),
-        Some(bridge::SESSION_PLUGIN_ID.to_string()),
+        Some(CENTER_ID.to_string()),
         "停用未注册者不得回收认证中心"
     );
 
-    registry::purge_for_plugin(bridge::SESSION_PLUGIN_ID);
+    registry::purge_for_plugin(CENTER_ID);
 }
 
 /// spec §10 票 05 第 3/5/6 条：三类拒绝可区分 + 错误文案不含凭据片段

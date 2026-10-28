@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * package-host —— 产出「可运行宿主产物 + 可分发资产」（供 wasm-app 工程 dev / E2E 使用，不需平台仓源码）
+ * package-host —— 产出「可直接运行的宿主产物目录」（供 wasm-app 工程 dev / E2E 使用，不需平台仓源码）
  *
  * ## 为什么需要它
  *
@@ -17,26 +17,30 @@
  * ## 产物（宿主运行时产物契约 → 应用仓 `.scratch/2026-10-21-host-runtime-distribution/CONTRACT.md` §1）
  *
  * ```text
- * wasmnest-desktop/dist-host/                  # 默认资产目录（--asset-dir 可覆盖）
- *   ├─ host-desktop/                           # 目录形态（--out 可覆盖）
- *   │   ├─ <binary>                           # debug profile（保留 PluginDevWatcher 热重载 + devCsp）
- *   │   ├─ config.properties                  # 宿主内置配置（bundle.resources 在 --no-bundle 下不复制，随手带上）
- *   │   └─ host-version.json                  # 版本事实（hostVersion / platform / arch / sourceCommit / ...）
- *   ├─ host-desktop-<version>-<platform>-<arch>.tar.gz          # 扁平一层打包（CONTRACT §1.2）
- *   └─ host-desktop-<version>-<platform>-<arch>.tar.gz.sha256   # `<hex>  <文件名>`（CONTRACT §1.4）
+ * wasmnest-desktop/dist-host/                  # 默认产物父目录
+ *   └─ host-desktop/                           # 产物目录（--out 可覆盖）
+ *      ├─ <binary>                           # debug profile（保留 PluginDevWatcher 热重载 + devCsp）
+ *      ├─ config.properties                  # 宿主内置配置（bundle.resources 在 --no-bundle 下不复制，随手带上）
+ *      └─ host-version.json                  # 版本事实（hostVersion / platform / arch / sourceCommit / ...）
  * ```
  *
  * 产物目录**必须**在 `dist/` 之外（默认 `dist-host/`）：`frontendDist = ../dist`，`vite build`
  * 默认清空 `dist`，落在那里的产物会被下一次前端构建静默删除。
  *
+ * ## 不再产出压缩包（2026-10-28 用户裁决）
+ *
+ * 平台仓**不再构建 / 发布任何 tar.gz**：这里只落目录。面向终端用户的分发形态改为安装包，
+ * 机器侧的 tar.gz + sha256 分发链（含 `release-manifest.json` 的 `hostRuntime.artifacts`、
+ * `host-release.yml`、`update-host-runtime-artifacts.mjs`）已退役。
+ *
  * ## 用法
  *
  * ```bash
  * cd wasmnest/wasmnest-desktop
- * pnpm run host:pack                       # 构建（tauri build --debug --no-bundle）+ 收集 + tar.gz + sha256
+ * pnpm run host:pack                       # 构建（tauri build --debug --no-bundle）+ 收集到产物目录
  * pnpm run host:pack -- --via-cargo        # 绕开 tauri CLI 的版本一致性检查（见下）
- * pnpm run host:pack -- --skip-build       # 跳过构建，直接复用 src-tauri/target/debug/<bin> 重打资产
- * node scripts/package-host.mjs --out /tmp/host-desktop --asset-dir /tmp/assets
+ * pnpm run host:pack -- --skip-build       # 跳过构建，直接复用 src-tauri/target/debug/<bin> 重铺产物
+ * node scripts/package-host.mjs --out /tmp/host-desktop
  * ```
  *
  * ### `--via-cargo`（npm 包与 Rust crate minor 漂移时的通路）
@@ -72,46 +76,28 @@
  *
  * ## 失败口径
  *
- * 缺 manifest 段 / 缺二进制 / 缺 config / 打包失败 / git 身份读不到，全部 fail-visible
- *（点名缺什么 + 给出路，不静默降级）。tar 写入用 Node 内置 zlib 自实现 ustar，不依赖
- * 系统 `tar`（不假设 GNU tar）。
+ * 缺 manifest 段 / 缺二进制 / 缺 config / git 身份读不到，全部 fail-visible
+ *（点名缺什么 + 给出路，不静默降级）。
  */
 
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import {
   chmodSync,
   copyFileSync,
-  createReadStream,
-  createWriteStream,
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createGzip } from 'node:zlib'
-import { pipeline } from 'node:stream/promises'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const HOST_ROOT = resolve(__dirname, '..')
 const PLATFORM_ROOT = resolve(HOST_ROOT, '..')
 const IS_WIN = process.platform === 'win32'
-
-/** CONTRACT §1.2：资产 token ↔ Rust target 一一对应（只允许这 6 个） */
-const HOST_TARGETS = Object.freeze({
-  'linux-x86_64': 'x86_64-unknown-linux-gnu',
-  'linux-arm64': 'aarch64-unknown-linux-gnu',
-  'macos-x86_64': 'x86_64-apple-darwin',
-  'macos-arm64': 'aarch64-apple-darwin',
-  'windows-x86_64': 'x86_64-pc-windows-msvc',
-  'windows-arm64': 'aarch64-pc-windows-msvc',
-})
 
 /** 严格 semver 数字段（不允许前导零；CONTRACT 版本线都是 x.y.z） */
 const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
@@ -147,28 +133,6 @@ export function normalizePlatform(platform) {
 export function normalizeArch(arch) {
   if (arch === 'x64') return 'x86_64'
   return arch
-}
-
-/**
- * 资产文件名（CONTRACT §1.2）。
- * 平台 / 架构不在发布矩阵内时抛错：产出契约外的文件名等于制造无法被消费的发布物。
- */
-export function hostAssetFileName({ hostVersion, platform, arch }) {
-  const key = `${platform}-${arch}`
-  if (!(key in HOST_TARGETS)) {
-    throw new Error(
-      `[package-host] 平台 ${key} 不在 CONTRACT §1.2 发布矩阵内（允许：${Object.keys(HOST_TARGETS).join(' / ')}）`,
-    )
-  }
-  return `host-desktop-${hostVersion}-${platform}-${arch}.tar.gz`
-}
-
-/** sha256 边车内容（CONTRACT §1.4：`sha256sum` 形态 `<hex>  <文件名>`） */
-export function sha256SidecarContent(hex, fileName) {
-  if (!/^[0-9a-f]{64}$/.test(hex)) {
-    throw new Error(`[package-host] sha256 必须是 64 位小写 hex（收到：${hex}）`)
-  }
-  return `${hex}  ${fileName}\n`
 }
 
 /** host-version.json（CONTRACT §1.3；L3 瘦身已取消，不再写 profile） */
@@ -276,111 +240,6 @@ export function parseHostRuntimeManifest(manifest) {
   }
 }
 
-// ==================== tar.gz 写入（Node 内置 zlib + 自实现 ustar） ====================
-
-const TAR_BLOCK = 512
-
-function writeOctal(buf, offset, length, value) {
-  const digits = value.toString(8)
-  if (digits.length > length - 1) {
-    throw new Error(`[package-host] 数值 ${value} 超出 tar 字段宽度 ${length - 1}（八进制）`)
-  }
-  buf.write(digits.padStart(length - 1, '0') + '\0', offset, length, 'ascii')
-}
-
-/** 单个 tar 头（ustar；仅文件类型 '0'）。导出供测试校验格式。 */
-export function createTarHeader({ name, size, mode = 0o644, mtime = Math.floor(Date.now() / 1000) }) {
-  if (Buffer.byteLength(name) > 100) {
-    throw new Error(`[package-host] tar 条目名超过 100 字节（ustar name 字段）：${name}`)
-  }
-  const buf = Buffer.alloc(TAR_BLOCK)
-  buf.write(name, 0, 100, 'utf8')
-  writeOctal(buf, 100, 8, mode)
-  writeOctal(buf, 108, 8, 0) // uid
-  writeOctal(buf, 116, 8, 0) // gid
-  writeOctal(buf, 124, 12, size)
-  writeOctal(buf, 136, 12, mtime)
-  buf.fill(0x20, 148, 156) // checksum 先按空格计
-  buf.write('0', 156, 1, 'ascii') // typeflag = 普通文件
-  buf.write('ustar', 257, 6, 'ascii')
-  buf.write('00', 263, 2, 'ascii')
-  buf.write('root', 265, 32, 'ascii')
-  buf.write('root', 297, 32, 'ascii')
-  const sum = buf.reduce((acc, byte) => acc + byte, 0)
-  buf.write(sum.toString(8).padStart(6, '0') + '\0 ', 148, 8, 'ascii')
-  return buf
-}
-
-function writeChunk(stream, buf) {
-  return new Promise((resolvePromise, reject) => {
-    stream.write(buf, (err) => (err ? reject(err) : resolvePromise()))
-  })
-}
-
-/** 写 `<outFile>`：条目按传入顺序写入，内容流式读、gzip 压缩；末尾两个全零块结束归档 */
-async function writeTarGz(outFile, entries) {
-  const gzip = createGzip({ level: 9 })
-  const out = createWriteStream(outFile)
-  const finished = pipeline(gzip, out)
-  try {
-    for (const entry of entries) {
-      const size = statSync(entry.path).size
-      await writeChunk(gzip, createTarHeader({ name: entry.name, size, mode: entry.mode }))
-      if (size > 0) {
-        await new Promise((resolvePromise, reject) => {
-          const rs = createReadStream(entry.path)
-          rs.once('error', reject)
-          rs.once('end', resolvePromise)
-          rs.pipe(gzip, { end: false })
-        })
-      }
-      const pad = (TAR_BLOCK - (size % TAR_BLOCK)) % TAR_BLOCK
-      if (pad > 0) await writeChunk(gzip, Buffer.alloc(pad))
-    }
-    await writeChunk(gzip, Buffer.alloc(TAR_BLOCK * 2))
-  } catch (err) {
-    gzip.destroy()
-    out.destroy()
-    throw err
-  }
-  gzip.end()
-  await finished
-}
-
-async function sha256File(file) {
-  const hash = createHash('sha256')
-  for await (const chunk of createReadStream(file)) hash.update(chunk)
-  return hash.digest('hex')
-}
-
-/**
- * 目录形态 → tar.gz + `.sha256`（CONTRACT §1.1 / §1.2 / §1.4）。
- * tar 内**扁平一层**（`./<binary>` / `./config.properties` / `./host-version.json`，无目录项）。
- */
-export async function packHostDirectory({ dir, assetDir, hostVersion, platform, arch, binary }) {
-  const fileName = hostAssetFileName({ hostVersion, platform, arch })
-  const tarPath = join(assetDir, fileName)
-  const sidecarPath = `${tarPath}.sha256`
-
-  for (const required of [binary, 'config.properties', 'host-version.json']) {
-    if (!existsSync(join(dir, required))) {
-      throw new Error(
-        `[package-host] 产物目录缺 ${required}：${dir}（形态须符合 CONTRACT §1.1：二进制 + config.properties + host-version.json）`,
-      )
-    }
-  }
-
-  mkdirSync(assetDir, { recursive: true })
-  await writeTarGz(tarPath, [
-    { name: `./${binary}`, path: join(dir, binary), mode: 0o755 },
-    { name: './config.properties', path: join(dir, 'config.properties'), mode: 0o644 },
-    { name: './host-version.json', path: join(dir, 'host-version.json'), mode: 0o644 },
-  ])
-  const sha256 = await sha256File(tarPath)
-  writeFileSync(sidecarPath, sha256SidecarContent(sha256, fileName))
-  return { fileName, tarPath, sidecarPath, sha256 }
-}
-
 // ==================== CLI ====================
 
 function fail(msg, hint) {
@@ -402,11 +261,6 @@ function gitOutput(cwd, args) {
 function readText(file, label) {
   if (!existsSync(file)) fail(`[package-host] 缺 ${label}：${file}`)
   return readFileSync(file, 'utf-8')
-}
-
-/** 资产目录默认 = 产物目录的父目录（`dist-host/host-desktop` → `dist-host/`） */
-function defaultAssetDir(outDir) {
-  return dirname(outDir)
 }
 
 /**
@@ -474,7 +328,6 @@ async function main() {
   const viaCargo = argv.includes('--via-cargo')
   const skipBuild = argv.includes('--skip-build')
   const outDir = resolve(HOST_ROOT, valueOf('--out', 'dist-host/host-desktop'))
-  const assetDir = resolve(HOST_ROOT, valueOf('--asset-dir', defaultAssetDir(outDir)))
 
   if (viaCargo && skipBuild) fail('[package-host] --via-cargo 与 --skip-build 互斥（一个要构建，一个跳过构建）')
 
@@ -518,12 +371,6 @@ async function main() {
 
   const platform = normalizePlatform(process.platform)
   const arch = normalizeArch(process.arch)
-  try {
-    // 提前校验发布矩阵（资产命名规则与 CONTRACT §1.2 一致）
-    hostAssetFileName({ hostVersion: truth.version, platform, arch })
-  } catch (err) {
-    fail(err.message)
-  }
 
   if (tauriConf.version !== truth.version) {
     console.warn(
@@ -602,20 +449,6 @@ async function main() {
   })
   writeFileSync(join(outDir, 'host-version.json'), JSON.stringify(hostVersion, null, 2) + '\n')
 
-  let asset
-  try {
-    asset = await packHostDirectory({
-      dir: outDir,
-      assetDir,
-      hostVersion: truth.version,
-      platform,
-      arch,
-      binary: binName,
-    })
-  } catch (err) {
-    fail(`[package-host] 资产打包失败：${err.message}`)
-  }
-
   console.log(`\n[package-host] 宿主产物已生成：${outDir}`)
   console.log(`[package-host]   - ${binName}`)
   console.log('[package-host]   - config.properties')
@@ -623,8 +456,7 @@ async function main() {
     `[package-host]   - host-version.json（hostVersion=${hostVersion.hostVersion}, sdk=${hostVersion.sdkVersion}, ` +
       `wit=${hostVersion.witVersion}, mountContract=${hostVersion.mountContract}）`,
   )
-  console.log(`[package-host] 分发资产：${asset.tarPath}`)
-  console.log(`[package-host]   sha256=${asset.sha256}（边车：${asset.sidecarPath}）`)
+  console.log(`[package-host] 分发：该目录可直接运行，不再产出 tar.gz / sha256（2026-10-28 裁决）`)
   console.log('\n[package-host] 应用侧用法：')
   console.log('[package-host]   cd <应用仓>/apps/<slug>/desktop')
   console.log(`[package-host]   pnpm run dev:host -- --host ${outDir}`)

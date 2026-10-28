@@ -158,7 +158,9 @@ const PLUGIN_SESSION_FACE: [(&str, &str); 7] = [
 const FRONTEND_FACE: [(&str, &str); 3] = [
     ("src/plugin/sessionCommands.ts", "'bedcode.list-sessions'"),
     ("src/plugin/sessionCommands.ts", "'bedcode.stop-session'"),
-    ("src/composables/useMobileConnection.ts", "sessionCommands."),
+    // 2026-10-25 `useMobileConnection.ts` 拆分为 `mobile-connection/` 目录，
+    // 会话域（sessionCommands.* 调用）落在 sessions.ts
+    ("src/composables/mobile-connection/sessions.ts", "sessionCommands."),
 ];
 
 // ==================== 通用扫描 ====================

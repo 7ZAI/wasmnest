@@ -21,10 +21,9 @@
  *  6. `repos.apps.tag` == 应用仓 HEAD 的精确 tag（应用仓不是 git 仓时打印显式 skip，
  *     计 warning 但不失败——本地快照布局用；发布装配必须是 git checkout）；
  *  7. `hostRuntime` 段（CONTRACT §2.3）：必填字段齐全、version 为 semver、sourceCommit 为
- *     40 位 hex；libTag / witVersion / sdkVersion / mountContract 与各自真源一致；
- *     `artifacts` 的 key 必须是 CONTRACT §1.2 的 6 个平台-架构 token，`file` 必须等于
- *     `host-desktop-<version>-<platform>-<arch>.tar.gz`，`sha256` 为 64 位 hex；空
- *     `artifacts` 表示「宿主未发布」——打印提示但不失败（发布前允许）。
+ *     40 位 hex；libTag / witVersion / sdkVersion / mountContract 与各自真源一致。
+ *     `artifacts` **已退役**（2026-10-28：平台仓不再构建 / 发布任何 tar.gz）：字段残留即红
+ *     （退役面 fail-visible，防止机器工件线静默回接）。
  *
  * 用法：
  *   node scripts/check-release-manifest.mjs               # 校验
@@ -38,7 +37,6 @@ import { fileURLToPath } from 'node:url'
 
 import { appsRoot } from './app-paths.mjs'
 import { libRoot } from './lib-paths.mjs'
-import { hostAssetFileName } from '../wasmnest-desktop/scripts/package-host.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -48,7 +46,7 @@ const WIT_DIRS = [
   'wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit',
 ]
 
-/** CONTRACT §2.3：hostRuntime 必填字段（不含发布时才有的 artifacts 内容） */
+/** CONTRACT §2.3：hostRuntime 必填字段（`artifacts` 已退役，见下方退役检查） */
 export const HOST_RUNTIME_REQUIRED_FIELDS = Object.freeze([
   'version',
   'sourceCommit',
@@ -56,16 +54,11 @@ export const HOST_RUNTIME_REQUIRED_FIELDS = Object.freeze([
   'witVersion',
   'sdkVersion',
   'mountContract',
-  'artifacts',
 ])
-
-/** CONTRACT §1.2：资产 token（platform-arch） */
-export const HOST_ARTIFACT_KEY_RE = /^(linux|macos|windows)-(x86_64|arm64)$/
 
 /** 严格 semver 数字段（不允许前导零） */
 const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const HEX40_RE = /^[0-9a-f]{40}$/i
-const HEX64_RE = /^[0-9a-f]{64}$/
 
 /** 递归收集目录下全部文件（相对平台仓根的路径），目录不存在时抛错（fail-visible） */
 function listFiles(relDir, root) {
@@ -168,39 +161,10 @@ export function validateHostRuntime(manifest, { sdkVersion, mountContract } = {}
     )
   }
 
-  const artifacts = hostRuntime.artifacts
-  if (!artifacts || typeof artifacts !== 'object' || Array.isArray(artifacts)) {
-    fail('hostRuntime.artifacts 必须是对象（无发布物时写 {}；CONTRACT §2.3）')
-    return { errors, notices }
-  }
-  const keys = Object.keys(artifacts)
-  if (keys.length === 0) {
-    notices.push('宿主未发布：hostRuntime.artifacts 为空（tar.gz / sha256 待 host-release workflow 填充）')
-  }
-  for (const key of keys) {
-    const entry = artifacts[key]
-    if (!HOST_ARTIFACT_KEY_RE.test(key)) {
-      fail(
-        `hostRuntime.artifacts 的 key=${key} 不在 CONTRACT §1.2 矩阵内（linux|macos|windows)-(x86_64|arm64）`,
-      )
-      continue
-    }
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-      fail(`hostRuntime.artifacts["${key}"] 必须是对象（file + sha256）`)
-      continue
-    }
-    const [platform, arch] = key.split('-')
-    const expectedFile = hostAssetFileName({
-      hostVersion: hostRuntime.version,
-      platform,
-      arch,
-    })
-    if (entry.file !== expectedFile) {
-      fail(`hostRuntime.artifacts["${key}"].file=${entry.file} 与命名规则=${expectedFile} 不一致`)
-    }
-    if (typeof entry.sha256 !== 'string' || !HEX64_RE.test(entry.sha256)) {
-      fail(`hostRuntime.artifacts["${key}"].sha256 必须是 64 位 hex`)
-    }
+  // tar.gz 资产线已退役（2026-10-28 用户裁决：平台仓不再构建 / 发布任何 tar.gz）。
+  // 字段残留 = 退役面回接：下游会以为还有可下载的机器工件，直接红。
+  if ('artifacts' in hostRuntime) {
+    fail('hostRuntime.artifacts 已退役：平台仓不再发布 tar.gz（机器工件线已删除，分发走安装包）；请从 release-manifest.json 删掉该字段')
   }
 
   return { errors, notices }
@@ -353,6 +317,24 @@ export function runManifestCheck({ root = ROOT } = {}) {
         entry.path === `${group}/${slug}`,
         `manifest.apps["${id}"].path=${entry.path} 与应用仓实际 ${group}/${slug} 不一致`,
       )
+      // 随包分发的成品包钉法（scripts/vendor-apps.mjs 消费）：version 必须 semver，
+      // desktop 端必须钉 package（应用仓 app-release 的固定命名）+ sha256。
+      requireField(
+        typeof entry.version === 'string' && SEMVER_RE.test(entry.version),
+        `manifest.apps["${id}"].version 缺失或非 semver（安装包里的应用版本必须钉住，不接受 latest）`,
+      )
+      const desktopEnd = entry.ends?.desktop
+      if (desktopEnd) {
+        const expectedPackage = `${slug}-desktop-v${entry.version}.zip`
+        requireField(
+          desktopEnd.package === expectedPackage,
+          `manifest.apps["${id}"].ends.desktop.package=${desktopEnd.package} 与应用仓命名规则=${expectedPackage} 不一致`,
+        )
+        requireField(
+          typeof desktopEnd.sha256 === 'string' && /^[0-9a-f]{64}$/.test(desktopEnd.sha256),
+          `manifest.apps["${id}"].ends.desktop.sha256 必须是 64 位小写 hex（安装包靠它校验收到的成品包）`,
+        )
+      }
       const declaredEnds = Object.keys(entry.ends ?? {})
       for (const [end, rustLibrary] of ends) {
         if (!declaredEnds.includes(end)) {
@@ -444,6 +426,6 @@ if (isMain) {
   console.log(
     `[manifest] ok：product=${manifest.product} lib=${manifest.repos.lib.tag} apps=${manifest.repos.apps.tag} ` +
       `contract=${manifest.contract.package}@${manifest.contract.version}（${Object.keys(manifest.apps).length} app id） ` +
-      `host=${hostRuntime.version}（artifacts=${Object.keys(hostRuntime.artifacts).length}）`,
+      `host=${hostRuntime.version}`,
   )
 }

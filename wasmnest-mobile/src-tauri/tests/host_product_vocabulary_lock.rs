@@ -151,8 +151,9 @@ const WHITELIST: &[(&str, &[&str])] = &[
         &["MobileEvent", "SessionSummary", "SyncSession", "TaskStatus"],
     ),
     ("src/handler/system.rs", &["MobileEvent"]),
+    ("src/model/message/mod.rs", &["AuthPayload", "SessionControl"]),
     (
-        "src/model/message.rs",
+        "src/model/message/tests.rs",
         &["AuthPayload", "AuthStage", "SessionControl", "session_token"],
     ),
     ("src/router.rs", &["MobileEvent"]), // 桶 hub 再导出（记账形态）

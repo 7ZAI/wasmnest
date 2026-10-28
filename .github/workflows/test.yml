@@ -14,9 +14,8 @@
 #    `../wasmnest-apps`（双端宿主测试的跨仓读取面：桌面 hostAppBoundaryLock /
 #    i18nDriftLock 等读 app 源码；移动 vitest `@apps` 别名；随包产物源码）
 #    按兄弟目录检出，默认 `dev`；
-#  - CI 只做校验——按 `release-manifest.json` 钉住精确 tag 是**发布流水线**的事
-#    （host-release / app-release）；开发期钉 tag 会让依赖未发 tag 的 lib 改动
-#    长期误红 `check:wit`；
+#  - CI 只做校验——按 `release-manifest.json` 钉住精确 tag 是**发布流水线**的事；
+#    开发期钉 tag 会让依赖未发 tag 的 lib 改动长期误红 `check:wit`；
 #  - ref 可配：workflow_dispatch input > 仓库变量 `WASMNEST_LIB_REF` /
 #    `WASMNEST_APPS_REF` > `dev`；
 #  - 三仓均公开，匿名克隆即可；若转私有，参照应用仓 `fetch-cross-repo.mjs` 的
@@ -506,6 +505,14 @@ jobs:
 
       - name: 重建随包插件产物（plugins:build）
         run: pnpm --dir wasmnest-${{ matrix.end }} run plugins:build
+
+      # SDK / system-test 夹具产物由 fixture_keeper 运行期构建；它必须跑在其余
+      # e2e 之前（cargo test 的二进制执行顺序不保证 keeper 先跑，component_e2e
+      # 等只读用例会先撞上「产物缺失」直接红）
+      - name: 构建测试夹具（desktop 专用，fixture_keeper）
+        if: matrix.end == 'desktop'
+        working-directory: wasmnest/wasmnest-desktop/src-tauri
+        run: cargo test --test fixture_keeper
 
       - name: 全量 cargo test（含随包产物 e2e）
         working-directory: wasmnest/wasmnest-${{ matrix.end }}/src-tauri

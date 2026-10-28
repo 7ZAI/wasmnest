@@ -58,6 +58,15 @@ pub fn transport_faces() -> Vec<Arc<dyn TransportFace>> {
     ]
 }
 
+/// 插件是否已注册传输面端点（HTTP 或 WS 任一）
+///
+/// 端点注册表按面分离（http `registry` / ws `endpoint`），组合根之外不得同时认识
+/// 两个面；端点事实统一经本函数查询。
+pub fn plugin_has_endpoints(plugin_id: &str) -> bool {
+    wasmnest_server_http::registry::count_by_owner(plugin_id) > 0
+        || wasmnest_server_websocket::endpoint::count_by_owner(plugin_id) > 0
+}
+
 /// 启动 Actix Web 服务器（HTTP + WebSocket 统一端口）
 ///
 /// 兼容面：签名与拆分前的 `server::core::app::start_http_server` 一致，宿主调用点
