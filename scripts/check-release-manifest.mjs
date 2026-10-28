@@ -317,6 +317,24 @@ export function runManifestCheck({ root = ROOT } = {}) {
         entry.path === `${group}/${slug}`,
         `manifest.apps["${id}"].path=${entry.path} 与应用仓实际 ${group}/${slug} 不一致`,
       )
+      // 随包分发的成品包钉法（scripts/vendor-apps.mjs 消费）：version 必须 semver，
+      // desktop 端必须钉 package（应用仓 app-release 的固定命名）+ sha256。
+      requireField(
+        typeof entry.version === 'string' && SEMVER_RE.test(entry.version),
+        `manifest.apps["${id}"].version 缺失或非 semver（安装包里的应用版本必须钉住，不接受 latest）`,
+      )
+      const desktopEnd = entry.ends?.desktop
+      if (desktopEnd) {
+        const expectedPackage = `${slug}-desktop-v${entry.version}.zip`
+        requireField(
+          desktopEnd.package === expectedPackage,
+          `manifest.apps["${id}"].ends.desktop.package=${desktopEnd.package} 与应用仓命名规则=${expectedPackage} 不一致`,
+        )
+        requireField(
+          typeof desktopEnd.sha256 === 'string' && /^[0-9a-f]{64}$/.test(desktopEnd.sha256),
+          `manifest.apps["${id}"].ends.desktop.sha256 必须是 64 位小写 hex（安装包靠它校验收到的成品包）`,
+        )
+      }
       const declaredEnds = Object.keys(entry.ends ?? {})
       for (const [end, rustLibrary] of ends) {
         if (!declaredEnds.includes(end)) {

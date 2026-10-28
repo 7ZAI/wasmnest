@@ -1,0 +1,402 @@
+name: Desktop Product Release
+
+# 面向终端用户的**产品安装包**发布。平台仓**不再发布任何 tar.gz**（2026-10-28 裁决），
+# 这是唯一的分发出口。
+#
+# 触发：tag `v<product>` → Windows NSIS / Linux deb + AppImage + 自动升级用的
+#       `latest.json` → GitHub Release（标记 Latest）。
+#
+# 三个 job：
+#   1. vendor —— 下载应用仓已发布的成品包（zip + 元数据）铺进 `resources/plugins/desktop`，
+#      三道校验（zip sha256 / source.libRef == repos.lib.tag / plugin.json 的
+#      id·version·platform）。**安装包必须带应用**：该目录只入库 `.gitkeep`，漏了就发空壳。
+#   2. build  —— 双平台打安装包（release profile），缺密钥即红，绝不产出未签名包。
+#   3. publish —— 组装 latest.json + 建 Release（Latest）。
+#
+# 前置（人工；版本只在发布时设置，口径见 docs/public/versioning.md）：
+#   1. 改 `release-manifest.json` 的 `product` + 根 `package.json` 版本（必须一致）；
+#   2. secrets：
+#        TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD  ← 自动升级签名（minisign）**【强制]**
+#        WINDOWS_CERTIFICATE_BASE64 / WINDOWS_CERTIFICATE_PASSWORD        ← Windows Authenticode **【可选】**
+#      用户 2026-10-28 裁决「先不签」：缺证书不再阻断发布，只打 warning，并在 Release 说明里
+#      自动标「Windows 安装包未签名（SmartScreen 会提示未知发布者）」。updater 用 minisign，
+#      与 Authenticode 是两套东西——不签代码不影响自动升级。
+#      Linux deb/AppImage 不做发布签名（不自建 apt 源，装上即用）。
+#   3. `workflow_dispatch` 勾 dry_run 跑一遍（只上 Actions artifact，不建 Release）；
+#   4. git tag "v$(node -p "require('./release-manifest.json').product")" && git push origin <tag>
+#
+# Windows 证书形态：CA/B forum 2023-06 起不再签发可导出的纯软件证书。若改用云签名
+# （Azure Trusted Signing / SSL.com eSigner），把下面「导入证书」那一步换成 tauri 的
+# `bundle.windows.signCommand` 即可，其余步骤不变。
+#
+# 跨仓依赖：vendor 只读应用仓的 **Release 资产**（不检 apps 源码、不需要 wasip3 工具链）；
+# build 按 manifest 的 `repos.lib.tag` 检出兄弟目录 `../wasmnest-lib`（根 `.cargo/config.toml`
+# 的 [patch] 靠它落地）。
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只构建并上传 Actions artifact（不创建 Release）'
+        type: boolean
+        default: true
+      unsigned:
+        description: '跳过签名（仅用于验证流水线；强制不发布）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: product-release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # 平台仓检出到 <workspace>/wasmnest；能力仓兄弟目录由 build job 自行克隆
+    # （R1 同场布局，根 .cargo/config.toml 的 [patch] 依赖它）。
+    working-directory: wasmnest
+
+env:
+  SCCACHE_CACHE_SIZE: '2147483648'
+  CARGO_BUILD_JOBS: '4'
+  # AppImage 打包器（linuxdeploy）在没有 FUSE 的 runner 上需要解包运行
+  APPIMAGE_EXTRACT_AND_RUN: '1'
+
+jobs:
+  # ------------------- 1) 铺随包应用（下载应用仓成品包，只做一遍）
+  # 为什么下载而不是本地构建：应用仓 app-release 已产出成品 zip + 元数据
+  # （sha256 / wasmHash / source.libRef），平台不需要 apps 源码、wasip3 nightly 与
+  # 6 套 node_modules；发布构建时间从 ~90min 压到 ~20min，应用集合由清单精确钉住。
+  # 校验三道：zip sha256 / libRef == repos.lib.tag / plugin.json 的 id·version·platform。
+  vendor:
+    name: 铺随包应用（apps 成品包）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 只依赖 node 内置 + 系统 unzip，不需要 pnpm / apps 源码 / wasm 工具链
+      - name: 下载并校验应用成品包
+        run: node scripts/vendor-apps.mjs --dest wasmnest-desktop/src-tauri/resources/plugins/desktop
+
+      - name: 校验随包应用落点（每个目录都有 plugin.json）
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir=wasmnest-desktop/src-tauri/resources/plugins/desktop
+          dirs="$(find "$dir" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+          jsons="$(find "$dir" -mindepth 1 -maxdepth 2 -name plugin.json | wc -l | tr -d ' ')"
+          echo "随包应用目录 ${dirs} 个 / plugin.json ${jsons} 个"
+          [ "$dirs" -ge 1 ] && [ "$dirs" -eq "$jsons" ] || { echo '::error::随包应用产物不完整'; exit 1; }
+
+      - name: 上传随包应用产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugins-desktop
+          path: wasmnest/wasmnest-desktop/src-tauri/resources/plugins/desktop/**
+          if-no-files-found: error
+
+  # ------------------- 2) 安装包构建（每平台一个 runner）
+  build:
+    name: build ${{ matrix.target }}
+    needs: vendor
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+            bundles: deb,appimage
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            bundles: nsis
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 0
+
+      - name: 校验 tag 与 manifest product 一致
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          expected="v$(node -p "require('./release-manifest.json').product")"
+          if [ "${GITHUB_REF_NAME}" != "$expected" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} 与 manifest.product 推导值 ${expected} 不一致"
+            exit 1
+          fi
+
+      - name: 校验 manifest.product 与根 package.json 版本一致
+        shell: bash
+        run: |
+          product="$(node -p "require('./release-manifest.json').product")"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$product" != "$pkg" ]; then
+            echo "::error::product=${product} 与根 package.json=${pkg} 不一致（发布前先同步）"
+            exit 1
+          fi
+          echo "PRODUCT=$product" >> "$GITHUB_ENV"
+
+      - name: 安装 Linux 宿主系统依赖（WebKitGTK / AppImage 打包工具）
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            libappindicator3-dev librsvg2-dev patchelf libfuse2 file \
+            libsoup-3.0-dev libssl-dev pkg-config libgtk-3-dev build-essential
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: wasmnest/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            wasmnest/pnpm-lock.yaml
+            wasmnest/wasmnest-desktop/pnpm-lock.yaml
+
+      # 根 .cargo/config.toml 的 patch 指回 ../wasmnest-lib/<crate>（缺目录 cargo 直接报错）
+      - name: 检出能力仓（兄弟目录，按 manifest 精确 tag）
+        shell: bash
+        run: |
+          set -euo pipefail
+          lib_tag="$(node -p "require('./release-manifest.json').repos.lib.tag")"
+          git clone --depth 1 --branch "$lib_tag" https://github.com/7ZAI/wasmnest-lib.git ../wasmnest-lib
+          echo "wasmnest-lib @ $lib_tag"
+
+      - name: 安装平台仓依赖 + 构建桌面 SDK
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir wasmnest-desktop install --frozen-lockfile
+          pnpm --dir wasmnest-desktop/packages/plugin-sdk-desktop run build
+
+      - name: 取回随包应用产物
+        uses: actions/download-artifact@v4
+        with:
+          name: plugins-desktop
+          path: wasmnest/wasmnest-desktop/src-tauri/resources/plugins/desktop
+
+      - name: 校验随包应用产物落地
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir=wasmnest-desktop/src-tauri/resources/plugins/desktop
+          dirs="$(find "$dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
+          jsons="$(find "$dir" -mindepth 1 -maxdepth 2 -name plugin.json 2>/dev/null | wc -l | tr -d ' ')"
+          echo "随包应用目录 ${dirs} 个 / plugin.json ${jsons} 个"
+          if [ "$dirs" -lt 1 ] || [ "$dirs" -ne "$jsons" ]; then
+            echo "::error::artifact 还原不完整（目录 ${dirs} / plugin.json ${jsons}）：安装包会是空壳"
+            exit 1
+          fi
+
+      # ------------------------------- 签名前置：缺密钥即显性失败（不产出未签名包）
+      - name: 校验自动升级签名密钥
+        if: inputs.unsigned != true
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "::error::缺 TAURI_SIGNING_PRIVATE_KEY —— 没有它不生成 .sig，latest.json 无法组装，自动升级失效"
+            exit 1
+          fi
+
+      # Windows 代码签名：**可选**（2026-10-28 用户裁决：先不签）。
+      # 有证书 → 导入，构建时按 thumbprint 签；无证书 → warning 继续，
+      # Release 说明会自动标「未签名」。不静默：缺代码签名不影响自动升级
+      # （updater 用 minisign，与 Authenticode 是两套东西）。
+      - name: 导入 Windows 代码签名证书（可选）
+        id: wincert
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE_BASE64) {
+            Write-Warning '未配置 WINDOWS_CERTIFICATE_BASE64：本次产出未签名安装包（SmartScreen 会提示「未知发布者」）'
+            "signed=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+          $secure = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $secure
+          if (-not $cert.Thumbprint) { Write-Error '证书导入后取不到 Thumbprint'; exit 1 }
+          "thumbprint=$($cert.Thumbprint)" >> $env:GITHUB_OUTPUT
+          "signed=true" >> $env:GITHUB_OUTPUT
+          Write-Host "证书 thumbprint=$($cert.Thumbprint)"
+
+      - name: 构建安装包（release profile）
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          BUNDLES: ${{ matrix.bundles }}
+          WIN_THUMBPRINT: ${{ steps.wincert.outputs.thumbprint }}
+          UNSIGNED: ${{ inputs.unsigned }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ "$UNSIGNED" = "true" ]; then
+            echo "::warning::unsigned=true：跳过签名，产物不可用于发布"
+          fi
+          cfg="{\"version\":\"${PRODUCT}\""
+          if [ -n "${WIN_THUMBPRINT:-}" ]; then
+            cfg="$cfg,\"bundle\":{\"windows\":{\"certificateThumbprint\":\"${WIN_THUMBPRINT}\"}}"
+          fi
+          cfg="$cfg}"
+          node wasmnest-desktop/scripts/tauri-build.js \
+            --target "${TARGET}" --bundles "${BUNDLES}" --config "$cfg"
+
+      - name: 校验产物齐备
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          BUNDLES: ${{ matrix.bundles }}
+        run: |
+          set -euo pipefail
+          base="wasmnest-desktop/src-tauri/target/${TARGET}/release/bundle"
+          for kind in ${BUNDLES//,/ }; do
+            [ -d "$base/$kind" ] || { echo "::error::缺产物目录 $base/$kind"; exit 1; }
+            ls -1 "$base/$kind"
+            count="$(find "$base/$kind" -maxdepth 1 -type f | wc -l | tr -d ' ')"
+            [ "$count" -gt 0 ] || { echo "::error::$base/$kind 为空"; exit 1; }
+          done
+
+      - name: 上传安装包 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-${{ matrix.target }}
+          # .sig 必须一起上传：latest.json 的 signature 字段取自它
+          path: |
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/deb/*
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*
+          if-no-files-found: error
+
+  # ------------------- 3) 合并产物 + 组装 latest.json + 建 Release
+  publish:
+    name: 发布 GitHub Release（Latest）
+    needs: build
+    if: inputs.unsigned != true && (github.event_name == 'push' || inputs.dry_run == false)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 1
+
+      - uses: actions/download-artifact@v4
+        with:
+          # 只合并安装包 artifact；plugins-desktop 是构建中间物，不能混进发布资产
+          pattern: product-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: 解析 release 元数据
+        shell: bash
+        run: |
+          set -euo pipefail
+          product="$(node -p "require('./release-manifest.json').product")"
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="v${product}"
+          fi
+          echo "PRODUCT=${product}" >> "$GITHUB_ENV"
+          echo "TAG=${tag}" >> "$GITHUB_ENV"
+
+      - name: 生成产物 sha256 边车（传输校验用）
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ../release-assets
+          shopt -s nullglob
+          for f in *-setup.exe *.deb *.AppImage *.AppImage.tar.gz; do
+            sha256sum "$f" > "$f.sha256"
+          done
+          ls -1
+
+      - name: 组装 latest.json（自动升级入口）
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/build-latest-json.mjs \
+            --assets-dir ../release-assets \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}" \
+            --version "${PRODUCT}" \
+            --out ../release-assets/latest.json
+          cat ../release-assets/latest.json
+
+      - name: 写发布说明
+        shell: bash
+        env:
+          WIN_CERT_PRESENT: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p ../release-notes
+          cat > ../release-notes/notes.md <<'EOF'
+          ## 安装
+
+          | 平台 | 下载 | 说明 |
+          | --- | --- | --- |
+          | Windows 10/11 x64 | `WasmNest-<version>-release-x64-setup.exe` | 装到 `Program Files`（需管理员）；Authenticode 已签名 |
+          | Debian / Ubuntu amd64 | `WasmNest-<version>-release-amd64.deb` | `sudo apt install ./WasmNest-<version>-release-amd64.deb` |
+          | 任意 Linux amd64 | `WasmNest_<version>_amd64.AppImage` | `chmod +x` 后直接运行；**唯一支持自动升级**的 Linux 形态 |
+
+          `latest.json` 是宿主自动升级的入口文件（客户端按它校验版本与签名），不需要手动下载。
+          每个产物都有同名 `.sha256`（`sha256sum -c <file>.sha256` 校验）。
+
+          > 平台仓不再发布 tar.gz（机器工件线已退役），本发布就是唯一分发出口。
+          EOF
+          sed -i "s/<version>/${PRODUCT}/g" ../release-notes/notes.md
+          if [ "${WIN_CERT_PRESENT}" != "true" ]; then
+            cat >> ../release-notes/notes.md <<'EOF'
+
+          > ⚠ **Windows 安装包未做 Authenticode 签名**：安装时 SmartScreen 会提示
+          > 「未知发布者 / Windows 已保护你的电脑」，需点「更多信息 → 仍要运行」。
+          > 不影响运行与自动升级（自动升级由独立的 minisign 签名保护）。
+          EOF
+          fi
+
+      - name: 创建 Release（Latest）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" ../release-assets/* --clobber
+            gh release edit "$TAG" --latest
+          else
+            gh release create "$TAG" ../release-assets/* \
+              --title "WasmNest ${PRODUCT}" \
+              --notes-file ../release-notes/notes.md \
+              --latest
+          fi

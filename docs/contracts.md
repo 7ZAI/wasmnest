@@ -10,7 +10,7 @@
   2. `repos.lib.tag` == 能力仓 `../wasmnest-lib` HEAD 的**精确 tag**（tag 漂移或工作树脏即红）；
   3. `contract.version` == `../wasmnest-lib/wasmnest-contract/src/lib.rs` 的 `PACKAGE_VERSION`；
   4. `contract.witSha256` == 双端组合 WIT 产物指纹（`node scripts/check-release-manifest.mjs --print-hash` 重算）；
-  5. `apps` 段覆盖应用仓**全部** `apps/<slug>/<end>/plugin.json`（end 感知，`ends.<end>.artifact` == 该端 `rustLibrary + '.wasm'`）；
+  5. `apps` 段覆盖应用仓**全部** `apps/<slug>/<end>/plugin.json`（end 感知，`ends.<end>.artifact` == 该端 `rustLibrary + '.wasm'`）；每个 app 必填 `version`（semver），`ends.desktop` 必填 `package`（`<slug>-desktop-v<version>.zip`，应用仓 `app-release.yml` 的固定命名）与 `sha256`（64 位 hex）—— 发布时由 `scripts/vendor-apps.mjs` 按这两项下载并校验成品包；
   6. `repos.apps.tag` == 应用仓 HEAD 精确 tag（发布装配口径）；
   7. `hostRuntime` 段（宿主运行时独立版本线）：`version` 为 semver；`sourceCommit` 为 40 位 hex；`libTag` / `witVersion` / `sdkVersion` / `mountContract` 分别等于 `repos.lib.tag` / `contract.version` / 桌面 SDK 版本 / 宿主 `MOUNT_CONTRACT`。`artifacts` 字段**已退役**（2026-10-28：平台仓不再构建 / 发布任何 tar.gz，机器工件线 `host-release.yml` 与其回写脚本已删除）；字段残留即红（退役面 fail-visible），分发改走终端用户安装包。
 - **什么时候必须动它**：新增 / 改名 / 停用应用或变更 `rustLibrary`；WIT / 契约版本变更；能力仓指针移动；发布版本号变更。改动后跑 `pnpm run check:manifest`。
@@ -85,3 +85,65 @@
 | `pnpm-lock.yaml` / 被跟踪的 `Cargo.lock` | 锁文件 | **只经包管理器变更，禁止手编**（宿主 `src-tauri/Cargo.lock` 刻意不入库；SDK / 夹具的 Cargo.lock 入库） |
 | 不入库清单补充 | — | `*.local`、`gen/android/.../assets/_up_/`、宿主 `src-tauri/Cargo.lock`、生成物权限词汇文件（.gitignore / .prettierignore 已覆盖） |
 | 发布签名材料 | — | 本地持有，不入库（TAURI_SIGNING_PRIVATE_KEY 等，见 docs/security.md §1） |
+## 7. 发布线（唯一分发出口 = 终端用户安装包）
+
+平台仓**不再发布任何 tar.gz**（2026-10-28 用户裁决）：机器工件线（`host-v*` + `host-release.yml`
++ `update-host-runtime-artifacts.mjs` + `hostRuntime.artifacts`）已整体删除，字段残留会被
+`check:manifest` 判红。**有且只有一条发布线**：
+
+| 项 | 值 |
+| --- | --- |
+| tag | `v<product>`（平台仓 tag 规则 = `vX.Y.Z`，**不带 host 前缀**） |
+| workflow | `.github/workflows/product-release.yml`（`vendor` → `build` → `publish`） |
+| 资产 | Windows `WasmNest-<ver>-release-x64-setup.exe`（NSIS perMachine）、Linux `WasmNest-<ver>-release-amd64.deb` + `WasmNest_<ver>_amd64.AppImage`、`latest.json`、各产物 `.sha256` |
+| 消费方 | 终端用户 / 宿主自动升级（`plugins.updater.endpoints`） |
+
+### 7.1 随包应用（vendor 阶段）
+
+安装包里的应用**不本地构建**，直接取应用仓已发布的成品：
+
+```
+<slug>-<end>-v<X.Y.Z>.zip     plugin.json + index.js（已构建）+ icon + *.wasm（扁平一层）
+<slug>-<end>-v<X.Y.Z>.json    元数据：artifact.sha256 / wasm.wasmHash / source.libRef
+```
+
+`scripts/vendor-apps.mjs` 按 `release-manifest.json` 的 `apps.<id>.version` +
+`ends.desktop.package` / `sha256` 下载并铺进 `src-tauri/resources/plugins/desktop/<pluginId>/`，
+执行三道校验（任一不过即中断，绝不产出空壳 / 坏壳安装包）：
+
+1. zip 实际 sha256 == 清单 `ends.desktop.sha256`；
+2. 元数据 `source.libRef` == 清单 `repos.lib.tag`（WIT 版本写在 import 名里，不等则实例化必失败）；
+3. 解出的 `plugin.json`：`id` / `version` / `platform`（含本端）/ `rustLibrary + '.wasm'` / `main` 全对齐清单。
+
+> 应用版本是**清单字段**，不是「latest」：任何一个 app 发版，都要把平台清单里该 app 的
+> `version` + `sha256`（+ `package`）同批更新，否则 `vendor` 会因 sha 不符直接红。
+
+### 7.2 `latest.json`（自动升级入口）
+
+- 生产者 = `scripts/build-latest-json.mjs`（`product-release.yml` 的 publish job），**禁止手写**。
+- 必填：`version`（= `manifest.product`）/ `pub_date` / `platforms`；`platforms` 键是 Tauri updater 的 target key：
+
+| target key | 产物 | 说明 |
+| --- | --- | --- |
+| `windows-x86_64` | `*-setup.exe` + `.sig` | NSIS（就地升级走新安装包） |
+| `linux-x86_64` | `*.AppImage[.tar.gz]` + `.sig` | **Linux 唯一可升级形态** |
+
+- `.deb` **不进** `platforms`（updater 在 Linux 只支持 AppImage 就地替换），但仍作为资产发布。
+- `url` = `https://github.com/<repo>/releases/download/<tag>/<file>`；`signature` = 同名 `.sig` 内容。
+- 失败口径：同 target 0 个 / 多于 1 个 / 缺 `.sig` / 空签名 → 抛错（残缺 `latest.json` 会让已装客户端的升级检查长期失败且无人察觉）。
+
+### 7.3 签名物料（只在 GitHub Secrets，不入库）
+
+| Secret | 作用 | 缺失后果 |
+| --- | --- | --- |
+| `TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD` | 升级包 minisign 签名 | 不生成 `.sig` → `latest.json` 组装失败 |
+| `WINDOWS_CERTIFICATE_BASE64` / `_PASSWORD` | Windows Authenticode（`.pfx`） | 安装包弹「未知发布者」（SmartScreen） |
+
+- 公钥真源 = `wasmnest-desktop/src-tauri/tauri.conf.json` 的 `plugins.updater.pubkey`，必须与私钥配对；换钥 = 换公钥 + 换两个 secret，同时进行。
+- 缺密钥时 `product-release.yml` **显性失败**，不产出未签名安装包；只验证流水线用 `workflow_dispatch` 的 `unsigned=true`（强制不发布）。
+- 2023-06 后不再签发可导出 `.pfx` 的纯软件证书；改用云签名（Azure Trusted Signing / SSL.com eSigner）时，把「导入证书」步骤换成 `bundle.windows.signCommand`，其余契约不变。
+
+### 7.4 版本真源
+
+- 资产名里的 `<ver>` = `manifest.product`，构建时用 `--config '{"version":"<product>"}'` 覆盖；`tauri.conf.json` 的 `version` 仍是 `set-host-version.mjs` 的写入点（两条版本线共用一份构建配置，不改文件）。
+- 发布前一致性：`manifest.product` == 根 `package.json` 版本 == tag 去掉 `v`；`product-release.yml` 逐项校验，不一致即红。

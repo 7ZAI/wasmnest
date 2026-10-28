@@ -21,42 +21,72 @@
   "apps": {
     "com.wasmnest.agent-hub": {
       "path": "apps/agent-hub",
+      "version": "0.0.1",
       "ends": {
-        "desktop": { "artifact": "wasmnest_plugin_agent_hub.wasm" }
+        "desktop": {
+          "artifact": "wasmnest_plugin_agent_hub.wasm",
+          "package": "agent-hub-desktop-v0.0.1.zip",
+          "sha256": "1a3d26fb930098918e5662231fd569c888ddf7e7aee1b473e1a033241522c92b"
+        }
       }
     },
     "com.wasmnest.ai-chatbox": {
       "path": "apps/ai-chatbox",
+      "version": "0.0.1",
       "ends": {
-        "desktop": { "artifact": "wasmnest_plugin_ai_chatbox.wasm" },
+        "desktop": {
+          "artifact": "wasmnest_plugin_ai_chatbox.wasm",
+          "package": "ai-chatbox-desktop-v0.0.1.zip",
+          "sha256": "bcc9a14a9a336c06e72ef9f78a46742ecb7a6e9f27714e9203354ec207fe42cc"
+        },
         "mobile": { "artifact": "wasmnest_plugin_ai_chatbox.wasm" }
       }
     },
     "com.wasmnest.bedcode": {
       "path": "apps/bedcode",
+      "version": "0.0.1",
       "ends": {
-        "desktop": { "artifact": "bedcode_plugin_terminal_session.wasm" },
+        "desktop": {
+          "artifact": "bedcode_plugin_terminal_session.wasm",
+          "package": "bedcode-desktop-v0.0.1.zip",
+          "sha256": "eff9e846ab6f132f77354c09f3ab0b10db293c4f6e9381acab9bf06e45061fb6"
+        },
         "mobile": { "artifact": "bedcode_plugin_terminal_session.wasm" }
       }
     },
     "com.wasmnest.file-transfer": {
       "path": "apps/file-transfer",
+      "version": "0.0.1",
       "ends": {
-        "desktop": { "artifact": "wasmnest_plugin_file_transfer.wasm" },
+        "desktop": {
+          "artifact": "wasmnest_plugin_file_transfer.wasm",
+          "package": "file-transfer-desktop-v0.0.1.zip",
+          "sha256": "0f302a68742edd1934dd9976a540422bf72e702129f1a3ebb5e5792da0d1f183"
+        },
         "mobile": { "artifact": "wasmnest_plugin_file_transfer.wasm" }
       }
     },
     "com.wasmnest.monitor": {
       "path": "servers/monitor",
+      "version": "0.0.1",
       "ends": {
-        "desktop": { "artifact": "wasmnest_plugin_monitor.wasm" },
+        "desktop": {
+          "artifact": "wasmnest_plugin_monitor.wasm",
+          "package": "monitor-desktop-v0.0.1.zip",
+          "sha256": "20b6fcdd4ecafc9a74fe1eee55cf39fe097fb8b8b6b1e61d8be4f44a6fd09ee5"
+        },
         "mobile": { "artifact": "wasmnest_plugin_monitor.wasm" }
       }
     },
     "com.wasmnest.auth-center": {
       "path": "servers/auth-center",
+      "version": "0.0.1",
       "ends": {
-        "desktop": { "artifact": "wasmnest_plugin_auth_center.wasm" }
+        "desktop": {
+          "artifact": "wasmnest_plugin_auth_center.wasm",
+          "package": "auth-center-desktop-v0.0.1.zip",
+          "sha256": "c77433ebac246319609f4f1cdfd46c28b06f605c6c03754bebd3fd2d53c92e9b"
+        }
       }
     }
   }

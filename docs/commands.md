@@ -29,6 +29,7 @@
 | `node scripts/bump-version.mjs --patch\|--minor\|--major\|-v X.Y.Z [--desktop\|--mobile\|--both] [--commit] [--tag]` | 双端版本号（各 3 处） |
 | `node scripts/package-sdks.mjs --list \| --target <desktop\|mobile\|all>` | 两端 SDK 构建 + 打包（npm tarball + crates + zip + SHA256 清单） |
 | `node scripts/app-script.mjs <slug> <desktop\|mobile> <script>` | 转发到应用仓单 app 脚本（见 §5.3） |
+| `node scripts/vendor-apps.mjs [--dest <目录>] [--end desktop] [--only <id,...>] [--dry-run]` | 把应用仓已发布的成品包（`<slug>-<end>-v<ver>.zip`）校验后铺进宿主随包目录（默认 `wasmnest-desktop/src-tauri/resources/plugins/desktop`）。三道校验：zip sha256 / 元数据 `source.libRef` == 清单 `repos.lib.tag` / 解出的 `plugin.json` 对齐清单；发布流水线用它内置应用（见 docs/contracts.md §7.1） |
 | `node scripts/adaptive-run.mjs -- <cmd>` | 自适应构建包装 |
 | `node scripts/audit-rust-tests.mjs` · `scripts/run-test-split.sh --crate <子串>` | Rust 测试体量审计 / 批量拆分（见 docs/testing.md §3） |
 
@@ -79,8 +80,20 @@ crates.io 精确版本；同场开发由平台仓根 `.cargo/config.toml` 的
 与 `[patch.crates-io]` 指回兄弟目录 / 工作树 SDK（patch 不进发布包，`Cargo.toml`
 内不得出现 `[patch]`——门禁脚本会转红）。
 
-## 4. 移动端（`wasmnest-mobile/`）
+### 3.2 发布产物（唯一出口 = 终端用户安装包）
 
+平台仓**不再发布任何 tar.gz**（2026-10-28 裁决）。发布链只有一条：
+
+| 项 | 值 |
+| --- | --- |
+| 触发 | tag `v<product>`（平台仓 tag 规则 `vX.Y.Z`，**不带 host 前缀**） |
+| workflow | `.github/workflows/product-release.yml`（`vendor` → `build` → `publish`） |
+| 产物 | Windows `WasmNest-<ver>-release-x64-setup.exe`（NSIS perMachine）、Linux `WasmNest-<ver>-release-amd64.deb` + `WasmNest_<ver>_amd64.AppImage`、`latest.json`、各产物 `.sha256` |
+
+- **随包应用不本地构建**：`vendor` job 跑 `node scripts/vendor-apps.mjs`，下载应用仓成品包并按清单 sha256 / libRef / plugin.json 三道校验后铺进 `resources/plugins/desktop/`（`resources/plugins/**` 只入库 `.gitkeep`，漏了就发空壳安装包）。
+- 缺签名密钥（`TAURI_SIGNING_PRIVATE_KEY` / `WINDOWS_CERTIFICATE_*`）时构建**显性失败**，不产出未签名安装包；验证流水线用 `workflow_dispatch` 的 `unsigned=true`。契约与密钥清单见 docs/contracts.md §7。
+
+## 4. 移动端（`wasmnest-mobile/`）
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm install` | 本端依赖（独立工程 workspace） |
