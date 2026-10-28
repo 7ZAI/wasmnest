@@ -12,8 +12,8 @@
   4. `contract.witSha256` == 双端组合 WIT 产物指纹（`node scripts/check-release-manifest.mjs --print-hash` 重算）；
   5. `apps` 段覆盖应用仓**全部** `apps/<slug>/<end>/plugin.json`（end 感知，`ends.<end>.artifact` == 该端 `rustLibrary + '.wasm'`）；
   6. `repos.apps.tag` == 应用仓 HEAD 精确 tag（发布装配口径）；
-  7. `hostRuntime` 段（宿主运行时独立版本线）：`version` 为 semver；`sourceCommit` 为 40 位 hex；`libTag` / `witVersion` / `sdkVersion` / `mountContract` 分别等于 `repos.lib.tag` / `contract.version` / 桌面 SDK 版本 / 宿主 `MOUNT_CONTRACT`；`artifacts` 的 key 为 `linux|macos|windows` × `x86_64|arm64`，`file` 必须等于 `host-desktop-<version>-<platform>-<arch>.tar.gz`、`sha256` 为 64 位 hex。**空 `artifacts` = 宿主未发布**（打印提示，不红）；发布时由 `host-v*` tag 触发的 `.github/workflows/host-release.yml` 产出资产并回写真实 sha256（开 PR）。
-- **什么时候必须动它**：新增 / 改名 / 停用应用或变更 `rustLibrary`；WIT / 契约版本变更；能力仓指针移动；发布版本号变更；宿主运行时发布（`hostRuntime.artifacts` / `sourceCommit` 由 workflow 回写）。改动后跑 `pnpm run check:manifest`。
+  7. `hostRuntime` 段（宿主运行时独立版本线）：`version` 为 semver；`sourceCommit` 为 40 位 hex；`libTag` / `witVersion` / `sdkVersion` / `mountContract` 分别等于 `repos.lib.tag` / `contract.version` / 桌面 SDK 版本 / 宿主 `MOUNT_CONTRACT`。`artifacts` 字段**已退役**（2026-10-28：平台仓不再构建 / 发布任何 tar.gz，机器工件线 `host-release.yml` 与其回写脚本已删除）；字段残留即红（退役面 fail-visible），分发改走终端用户安装包。
+- **什么时候必须动它**：新增 / 改名 / 停用应用或变更 `rustLibrary`；WIT / 契约版本变更；能力仓指针移动；发布版本号变更。改动后跑 `pnpm run check:manifest`。
 
 ## 2. WIT / 契约真源链
 

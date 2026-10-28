@@ -14,9 +14,8 @@
 #    `../wasmnest-apps`（双端宿主测试的跨仓读取面：桌面 hostAppBoundaryLock /
 #    i18nDriftLock 等读 app 源码；移动 vitest `@apps` 别名；随包产物源码）
 #    按兄弟目录检出，默认 `dev`；
-#  - CI 只做校验——按 `release-manifest.json` 钉住精确 tag 是**发布流水线**的事
-#    （host-release / app-release）；开发期钉 tag 会让依赖未发 tag 的 lib 改动
-#    长期误红 `check:wit`；
+#  - CI 只做校验——按 `release-manifest.json` 钉住精确 tag 是**发布流水线**的事；
+#    开发期钉 tag 会让依赖未发 tag 的 lib 改动长期误红 `check:wit`；
 #  - ref 可配：workflow_dispatch input > 仓库变量 `WASMNEST_LIB_REF` /
 #    `WASMNEST_APPS_REF` > `dev`；
 #  - 三仓均公开，匿名克隆即可；若转私有，参照应用仓 `fetch-cross-repo.mjs` 的

@@ -1,5 +1,5 @@
 {
-  "$comment": "跨仓版本唯一表达（三仓拆分 spec §6）。谁写：平台仓发布流程；谁读：Seam 1 装配校验、各仓 release workflow、scripts/check-release-manifest.mjs。一致性判据与该脚本头注逐条对应：product == 平台仓 package.json 版本；repos.lib.tag == 能力仓 ../wasmnest-lib HEAD 的精确 tag（工作树干净）；contract.version == ../wasmnest-lib/wasmnest-contract/src/lib.rs 的 PACKAGE_VERSION；contract.witSha256 == 双端组合 WIT 产物指纹（--print-hash 可重算）；hostRuntime 段是宿主运行时的独立版本线（version 独立于 product，sourceCommit / libTag / witVersion / sdkVersion / mountContract 记录构建身份，artifacts 为各平台 tar.gz + sha256，发布时由 host-release workflow 填充，未发布时为空对象）；apps 段为 end 感知结构——同一 plugin id 可双端各一份，ends.<end>.artifact == 该端 plugin.json 的 rustLibrary + '.wasm'，9 份端应用全覆盖；repos.apps.tag == 应用仓 HEAD 的精确 tag。插件清单（原 scripts/plugin-package-list.json）并入 apps 段。整数 ABI 已退役（ADR 0051 D2）：端形态由 AbiPolicy（abi-form）与各端 WIT 组合表达，不写进本清单。",
+  "$comment": "跨仓版本唯一表达（三仓拆分 spec §6）。谁写：平台仓发布流程；谁读：Seam 1 装配校验、各仓 release workflow、scripts/check-release-manifest.mjs。一致性判据与该脚本头注逐条对应：product == 平台仓 package.json 版本；repos.lib.tag == 能力仓 ../wasmnest-lib HEAD 的精确 tag（工作树干净）；contract.version == ../wasmnest-lib/wasmnest-contract/src/lib.rs 的 PACKAGE_VERSION；contract.witSha256 == 双端组合 WIT 产物指纹（--print-hash 可重算）；hostRuntime 段是宿主运行时的独立版本线（version 独立于 product，sourceCommit / libTag / witVersion / sdkVersion / mountContract 记录构建身份，artifacts 字段已退役（平台仓不再发布 tar.gz））；apps 段为 end 感知结构——同一 plugin id 可双端各一份，ends.<end>.artifact == 该端 plugin.json 的 rustLibrary + '.wasm'，9 份端应用全覆盖；repos.apps.tag == 应用仓 HEAD 的精确 tag。插件清单（原 scripts/plugin-package-list.json）并入 apps 段。整数 ABI 已退役（ADR 0051 D2）：端形态由 AbiPolicy（abi-form）与各端 WIT 组合表达，不写进本清单。",
   "product": "0.0.1",
   "repos": {
     "lib": { "tag": "lib-v0.0.1" },
@@ -16,22 +16,7 @@
     "libTag": "lib-v0.0.1",
     "witVersion": "0.0.1",
     "sdkVersion": "0.0.1",
-    "mountContract": "1",
-    "artifacts": {
-      "linux-x86_64": {
-        "file": "host-desktop-0.0.1-linux-x86_64.tar.gz",
-        "sha256": "c931ef5197e9a8ece8d0cbd6289584a8db7f2c81f4d33a514b5ebb3c4f389868"
-      },
-      "macos-arm64": {
-        "file": "host-desktop-0.0.1-macos-arm64.tar.gz",
-        "sha256": "9abaa99e2bc83116a58d6fddb6f7eb8443088c7e57ed657cf027c93db73dae83"
-      },
-      "windows-x86_64": {
-        "file": "host-desktop-0.0.1-windows-x86_64.tar.gz",
-        "sha256": "2123fe1a516cfdae1d6b56f4e2347f578ec26d11e404cb9d7019fae0b1322750"
-      }
-    },
-    "$comment": "artifacts 由 host-release workflow 发布时填充（真实 tar.gz sha256）；未发布时为空（check:manifest 允许并提示）。sourceCommit 在发布时重写为构建 commit。"
+    "mountContract": "1"
   },
   "apps": {
     "com.wasmnest.agent-hub": {
