@@ -345,15 +345,10 @@ fn test_pty_exit_event_and_purge_roundtrip() {
         assert_eq!(event["sender"], "host", "事件由宿主发布");
         assert_eq!(event["payload"]["reason"], "killed", "kill 路径 reason 固定");
 
-        // 摘除即不可寻址（句柄与环一并释放）
-        let after_kill = {
-            let mut guard = plugin_a.lock().await;
-            guard
-                .invoke_command("pty-is-running", &serde_json::json!({ "ptyId": killed_id }).to_string())
-                .expect("以 error 载荷回传")
-        };
+        // 只读窗口到期即摘除（kill 后窗口内环仍可取尾段，随后不可寻址）
+        let after_kill = wait_pty_handle_retired(&plugin_a, &killed_id).await;
         assert!(
-            pty_command_error(&after_kill).contains("not found"),
+            after_kill.contains("not found"),
             "kill 摘除后句柄必须不可寻址，got: {after_kill}"
         );
 
@@ -377,6 +372,9 @@ fn test_pty_exit_event_and_purge_roundtrip() {
             event["payload"]["exitCode"], 3,
             "退出码必须经 WIT/bus 原样送达插件: {event}"
         );
+        // 自然退出同样先进入只读窗口，等摘除后再进入停用回收断言（否则窗口期
+        // 条目会被 purge 一并计入，回收数虚增）
+        let _ = wait_pty_handle_retired(&plugin_a, &exited_id).await;
 
         // ==================== 停用回收：只碰本人 ====================
         let mine = {
@@ -661,15 +659,10 @@ fn test_pty_isolation_and_contract_matrix_roundtrip() {
             event["payload"]["reason"], "killed",
             "①-h kill 路径 reason 固定: {event}"
         );
-        let after_kill = {
-            let mut guard = plugin_a.lock().await;
-            guard
-                .invoke_command("pty-is-running", &serde_json::json!({ "ptyId": pty_id }).to_string())
-                .expect("以 error 载荷回传")
-        };
+        let after_kill = wait_pty_handle_retired(&plugin_a, &pty_id).await;
         assert!(
-            pty_command_error(&after_kill).contains("not found"),
-            "①-i 退出即摘除：句柄必须不再可寻址: {after_kill}"
+            after_kill.contains("not found"),
+            "①-i 只读窗口到期即摘除：句柄必须不再可寻址: {after_kill}"
         );
 
         // ==================== ② 属主隔离矩阵（每一个句柄型函数） ====================

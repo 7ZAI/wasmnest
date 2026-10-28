@@ -58,13 +58,14 @@ async fn bundled_id(manager: &PluginLifecycleManager, suffix: &str) -> String {
 /// 平台侧这里只钉组合根里的调用顺序。
 #[test]
 fn boot_clears_activation_snapshot_before_creating_host() {
-    let lib_rs = include_str!("../src/lib.rs");
-    let clear = lib_rs
+    // boot 装配点在 bootstrap/mod.rs（lib.rs 已收薄为入口声明）
+    let boot_src = include_str!("../src/bootstrap/mod.rs");
+    let clear = boot_src
         .find("clear_persisted_activation_snapshot(&plugin_storage)")
-        .expect("lib.rs boot 必须在 PluginHost::new 前调用 clear_persisted_activation_snapshot");
-    let host_new = lib_rs
+        .expect("bootstrap boot 必须在 PluginHost::new 前调用 clear_persisted_activation_snapshot");
+    let host_new = boot_src
         .find("wasm_core::PluginHost::new")
-        .expect("lib.rs 必须创建 PluginHost");
+        .expect("bootstrap boot 必须创建 PluginHost");
     assert!(
         clear < host_new,
         "清理激活快照必须在 PluginHost::new 之前（否则旧快照会复活 L3 应用）"

@@ -119,6 +119,8 @@ async fn mint_token_via_biometric(
 
 /// 会话中心插件 id（认证端点编排的权威实现方）
 const SESSION_PLUGIN_ID: &str = "com.wasmnest.bedcode";
+/// 认证中心插件 id（`/api/auth/*` 七端点的属主；认证记录真源 = 其私有库）
+const AUTH_CENTER_ID: &str = "com.wasmnest.auth-center";
 
 /// 随包插件产物目录（`cargo test` 前须重建产物，见 AGENTS §3）
 ///
@@ -147,16 +149,16 @@ fn session_plugin_db_root() -> &'static PathBuf {
     })
 }
 
-/// 会话中心插件私有库文件（插件 activate 后存在，schema 见插件
-/// `auth_records::store::SCHEMA`：auth_pairings / auth_connection_history）
-fn session_plugin_db_path() -> PathBuf {
-    session_plugin_db_root().join("com.wasmnest.bedcode").join("plugin.db")
+/// 认证中心插件私有库文件（`/api/auth/*` 处理方 = auth-center；schema 见其
+/// `auth_records::store::SCHEMA`：auth_pairings / auth_biometric_keys / auth_connection_history）
+fn auth_center_db_path() -> PathBuf {
+    session_plugin_db_root().join(AUTH_CENTER_ID).join("plugin.db")
 }
 
 /// 白盒种子：直写认证中心私有库 `auth_pairings` 播种配对（id 固定，测试持有；
 /// schema 由插件 activate 建出）
 fn seed_pairing_in_plugin_db(id: &str, device_name: &str, fingerprint: &str) {
-    let conn = rusqlite::Connection::open(session_plugin_db_path()).expect("open plugin db");
+    let conn = rusqlite::Connection::open(auth_center_db_path()).expect("open plugin db");
     conn.execute(
         "INSERT OR REPLACE INTO auth_pairings \
          (id, device_name, device_fingerprint, address, uid_hash, paired_at, last_seen, \
@@ -169,7 +171,7 @@ fn seed_pairing_in_plugin_db(id: &str, device_name: &str, fingerprint: &str) {
 
 /// 白盒断言：认证中心私有库中某设备的连接历史（auth_method, result）
 fn plugin_db_history(device_id: &str) -> Vec<(String, String)> {
-    let conn = rusqlite::Connection::open(session_plugin_db_path()).expect("open plugin db");
+    let conn = rusqlite::Connection::open(auth_center_db_path()).expect("open plugin db");
     let mut stmt = conn
         .prepare("SELECT auth_method, result FROM auth_connection_history WHERE device_id = ?1")
         .expect("prepare history query");
@@ -183,7 +185,7 @@ fn plugin_db_history(device_id: &str) -> Vec<(String, String)> {
 
 /// 白盒断言：认证中心私有库中某指纹的配对显示名（无行 → None）
 fn plugin_db_pairing_name(fingerprint: &str) -> Option<String> {
-    let conn = rusqlite::Connection::open(session_plugin_db_path()).expect("open plugin db");
+    let conn = rusqlite::Connection::open(auth_center_db_path()).expect("open plugin db");
     conn.query_row(
         "SELECT device_name FROM auth_pairings WHERE device_fingerprint = ?1",
         rusqlite::params![fingerprint],
@@ -195,7 +197,7 @@ fn plugin_db_pairing_name(fingerprint: &str) -> Option<String> {
 /// 白盒断言（B-downsink 后）：认证中心私有库 `auth_biometric_keys` 公钥读
 /// （公钥真源已从宿主 `plugin_secrets` 迁入插件私有库，宿主不再托管）
 fn biometric_public_key_in_db(fingerprint: &str) -> Option<String> {
-    let conn = rusqlite::Connection::open(session_plugin_db_path()).expect("open plugin db");
+    let conn = rusqlite::Connection::open(auth_center_db_path()).expect("open plugin db");
     conn.query_row(
         "SELECT public_key FROM auth_biometric_keys WHERE fingerprint = ?1",
         rusqlite::params![fingerprint],
@@ -204,12 +206,10 @@ fn biometric_public_key_in_db(fingerprint: &str) -> Option<String> {
     .ok()
 }
 
-/// 白盒种子（B-downsink 后）：直写认证中心私有库 `auth_biometric_keys`
-/// 生物凭证公钥（幂等覆盖；schema 由插件 activate 建出）
-/// 白盒种子（B-downsink 后）：直写认证中心私有库 `auth_biometric_keys`
-/// 生物凭证公钥（幂等覆盖；schema 由插件 activate 建出）
+/// 白盒种子：直写认证中心私有库 `auth_biometric_keys` 生物凭证公钥
+/// （幂等覆盖；schema 由插件 activate 建出）
 fn seed_biometric_public_key(fingerprint: &str, public_key: &str) {
-    let conn = rusqlite::Connection::open(session_plugin_db_path()).expect("open plugin db");
+    let conn = rusqlite::Connection::open(auth_center_db_path()).expect("open plugin db");
     conn.execute(
         "INSERT OR REPLACE INTO auth_biometric_keys (fingerprint, public_key, updated_at) \
          VALUES (?1, ?2, '2026-09-22T00:00:00Z')",
@@ -284,6 +284,14 @@ async fn init_test_app_context() {
         plugin_host
             .wasm_host_ctx()
             .set_plugin_db_root(Some(session_plugin_db_root().clone()));
+        // 服务型插件在 `PluginHost::new` 内即自动激活，那时私有库根尚未注入 →
+        // auth-center 的认证记录 schema 初始化降级（no such table）。根注入后
+        // 重启一次，让它按插件真源建表（schema 属插件，测试不复制 SQL）。
+        plugin_host.deactivate_plugin(AUTH_CENTER_ID, false).await.ok();
+        plugin_host
+            .activate_plugin(AUTH_CENTER_ID, false)
+            .await
+            .expect("re-activate com.wasmnest.auth-center with plugin db root");
         plugin_host
             .activate_plugin(SESSION_PLUGIN_ID, false)
             .await
@@ -375,9 +383,8 @@ async fn http_biometric_auth_contract() {
     let verify_url = format!("{base}/api/auth/biometric-verify");
     let bind_url = format!("{base}/api/auth/biometric-bind");
 
-    // 测试用配对：v24 认证记录下沉后双落点——配对记录在认证中心私有库
-    // `auth_pairings`（白盒种子：直写私有库，schema 由 activate 建出）；生物
-    // 公钥在宿主 `plugin_secrets`（key = `biometric:<fp>`，§8 指定存储位）
+    // 测试用配对：认证记录（配对 / 生物公钥）真源 = auth-center 私有库——
+    // `auth_pairings` 与 `auth_biometric_keys` 白盒直写（schema 由 activate 建出）
     let (spki_b64, signing_key) = make_keypair();
     let fingerprint = "fp-bio-http-001";
     let pairing_id = "p-bio-http-001";
