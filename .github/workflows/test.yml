@@ -29,7 +29,9 @@
 #  - husky pre-commit（WIT 锁 + eslint + check:links）与 CI 重复是 **by design**：
 #    钩子可被跳过，CI 不可。
 #
-# 分支说明：远端当前只有 `dev`（默认分支，即主线）；`main` 出现后 push 触发自然生效。
+# 分支说明：**push 只在 `main` 上触发 CI**（用户 2026-10-28 定：四仓 `dev` 推送一律不跑
+# GitHub CI，dev 的验证靠本地命令 + husky + 显式 `workflow_dispatch`）；`PR`、nightly、
+# 手跑照旧。
 #
 # 时长口径（spec §4.3）：node 层目标 ≤ 10 分钟；Rust 首跑不限（wasmtime 48 编译
 # 大头），sccache 命中后目标 ≤ 30 分钟，达不到先拆 job 再谈优化。
@@ -39,7 +41,7 @@ name: test
 on:
   pull_request:
   push:
-    branches: [main, dev]
+    branches: [main]
   schedule:
     # nightly 03:30 北京时间（UTC 19:30）：跑 rust-full 全量面
     - cron: '30 19 * * *'
@@ -383,7 +385,7 @@ jobs:
             --test retired_mobile_mdns_advertise_lock
 
   # ------------------------------- Rust 全量层：随包产物 e2e + 全量 cargo test（不进 PR 阻断）
-  # 触发：push 到 main/dev、nightly、workflow_dispatch 勾选 rust_full。
+  # 触发：push 到 main、nightly、workflow_dispatch 勾选 rust_full（dev 推送不触发）。
   # 依赖链最重的一条：检三仓 → 拼装 WIT → 构建双端 SDK dist → 装应用工程 →
   # 重建随包插件产物（desktop 需 pinned wasip3 nightly）→ 双端全量 cargo test。
   rust-full:
