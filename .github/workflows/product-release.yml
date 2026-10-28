@@ -296,11 +296,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: product-${{ matrix.target }}
-          # .sig 必须一起上传：latest.json 的 signature 字段取自它
+          # 只传产物文件，不传目录：appimage 目录里还有 Tauri 留下的
+          # WasmNest.AppDir/ 解包树（几十 MB 的 usr/lib 依赖），会把 artifact 吹大且
+          # 让后续摊平步骤撞名。.sig 必须一起传：latest.json 的 signature 取自它。
           path: |
-            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*
-            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/deb/*
-            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe*
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb*
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage*
           if-no-files-found: error
 
   # ------------------- 3) 合并产物 + 组装 latest.json + 建 Release
@@ -331,8 +333,8 @@ jobs:
         run: |
           set -euo pipefail
           cd ../release-assets
-          find . -mindepth 2 -type f -exec mv -t . {} +
-          find . -mindepth 1 -type d -empty -delete
+          find . -mindepth 2 -maxdepth 2 -type f -exec mv -t . {} +
+          find . -mindepth 1 -maxdepth 1 -type d -empty -delete
           ls -1
 
       - name: 解析 release 元数据
