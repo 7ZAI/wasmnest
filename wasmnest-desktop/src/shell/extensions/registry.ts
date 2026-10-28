@@ -30,6 +30,7 @@ const orderedThemeSkins = computed(() => [...themeSkins.value].sort(byOrder))
 
 /** 注册 / 替换一个状态栏项 */
 export function registerStatusBarItem(item: ShellStatusBarItem): ShellExtensionHandle {
+  assertExtensionId('status bar item', item.id)
   if (!item.label && !item.component) {
     throw new Error(`[shell-extensions] status bar item "${item.id}" needs label or component`)
   }
@@ -51,6 +52,10 @@ export function registerStatusBarItem(item: ShellStatusBarItem): ShellExtensionH
 
 /** 注册 / 替换一个设置页扩展项 */
 export function registerSettingsEntry(entry: ShellSettingsEntry): ShellExtensionHandle {
+  assertExtensionId('settings entry', entry.id)
+  if (!entry.label.trim()) {
+    throw new Error(`[shell-extensions] settings entry "${entry.id}" needs a non-blank label`)
+  }
   const next: ShellSettingsEntry = { ...entry }
   settingsEntries.value = [
     ...settingsEntries.value.filter((current) => current.id !== next.id),
@@ -65,6 +70,7 @@ export function registerSettingsEntry(entry: ShellSettingsEntry): ShellExtension
 
 /** 注册 / 替换一套主题皮肤 */
 export function registerThemeSkin(skin: ShellThemeSkin): ShellExtensionHandle {
+  assertExtensionId('theme skin', skin.id)
   if (skin.id === SHELL_SKIN_DEFAULT) {
     throw new Error(`[shell-extensions] theme skin id "${SHELL_SKIN_DEFAULT}" is reserved`)
   }
@@ -84,6 +90,19 @@ export function clearShellExtensions(): void {
   statusBarItems.value = []
   settingsEntries.value = []
   themeSkins.value = []
+}
+
+/**
+ * 扩展点 id 契约：必须是 trim 后的非空串。
+ *
+ * 空 / 空白 / 前后带空白的 id 会破坏「同 id 覆盖」语义（多个空 id 彼此顶掉或共存），
+ * 并让消费组件的 v-for :key、选中态比较出现重复 / 非法键。注册表是第三方贡献的
+ * 契约边界，非法 id 在注册时即拒绝，而不是延迟到渲染期炸。
+ */
+function assertExtensionId(kind: string, id: string): void {
+  if (typeof id !== 'string' || id.trim() === '' || id !== id.trim()) {
+    throw new Error(`[shell-extensions] ${kind} id must be a non-blank, trimmed string`)
+  }
 }
 
 function assertTokens(skinId: string, tokens: Record<string, string> | undefined): void {

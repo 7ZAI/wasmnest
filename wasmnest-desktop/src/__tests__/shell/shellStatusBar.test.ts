@@ -9,7 +9,8 @@ import type { Ref } from 'vue'
  *   1. 常驻宿主机制事实（就绪 / 应用数 / 待审批）可直接读；
  *   2. 扩展项按 align 分左右两区、按 order 排序；
  *   3. 文本项有 onSelect 才是按钮，无 onSelect 是静态文本；
- *   4. 扩展动作失败只进日志，不拖垮状态栏。
+ *   4. 扩展动作失败只进日志，不拖垮状态栏；
+ *   5. 扩展自定义组件渲染抛错被边界吞掉，不冒泡到全局 errorHandler。
  */
 
 const mocks = vi.hoisted(() => ({
@@ -133,5 +134,25 @@ describe('平台状态栏', () => {
     expect(mocks.loggerError).toHaveBeenCalled()
     expect(mocks.loggerError.mock.calls[0][0]).toContain('broken')
     expect(wrapper.find('.shell-statusbar').exists()).toBe(true)
+  })
+
+  it('扩展自定义组件渲染抛错被边界吞掉，其余条目不受影响', () => {
+    const Boom = {
+      render: () => {
+        throw new Error('render boom')
+      },
+    }
+    registerStatusBarItem({ id: 'boom', component: Boom })
+    registerStatusBarItem({ id: 'ok', label: 'OK ext' })
+
+    const wrapper = mount(ShellStatusBar)
+
+    // 渲染错误只进日志并就地降级，不冒泡成挂载异常
+    expect(mocks.loggerError).toHaveBeenCalled()
+    const [message, error] = mocks.loggerError.mock.calls[0]
+    expect(message).toContain('status bar extension render failed')
+    expect((error as Error).message).toContain('boom')
+    // 失败的扩展项不再渲染，其余条目照常
+    expect(wrapper.text()).toContain('OK ext')
   })
 })

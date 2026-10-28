@@ -48,6 +48,19 @@ describe('桌面壳扩展点注册表', () => {
     expect(() => registerStatusBarItem({ id: 'empty' })).toThrow(/label or component/)
   })
 
+  it('三类注册都拒绝空 / 空白 / 未 trim 的 id', () => {
+    for (const bad of ['', '   ', ' padded ']) {
+      expect(() => registerStatusBarItem({ id: bad, label: 'X' })).toThrow(/non-blank/)
+      expect(() => registerSettingsEntry({ id: bad, label: 'X' })).toThrow(/non-blank/)
+      expect(() => registerThemeSkin({ id: bad, label: 'X' })).toThrow(/non-blank/)
+    }
+  })
+
+  it('设置项必须提供非空 label', () => {
+    expect(() => registerSettingsEntry({ id: 'x', label: '' })).toThrow(/non-blank label/)
+    expect(() => registerSettingsEntry({ id: 'x', label: '   ' })).toThrow(/non-blank label/)
+  })
+
   it('设置项按 order 排序，独立于状态栏注册', () => {
     registerSettingsEntry({ id: 'b', label: 'B', order: 2 })
     registerSettingsEntry({ id: 'a', label: 'A', order: 1 })
