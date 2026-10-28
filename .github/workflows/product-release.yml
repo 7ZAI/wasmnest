@@ -380,8 +380,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
       # Android release 构建的 target（宿主编译）+ Gradle 中间产物 + NDK 体积都不小，
       # runner 预装的 dotnet / ghc / boost 本任务用不到，先腾出几个 GB 再装 NDK。
       - name: 释放 runner 磁盘
@@ -392,14 +390,24 @@ jobs:
           df -h /
 
       # gen/android 的 compileSdk/targetSdk = 36，NDK 版本必须与本地构建一致（29.0.14206865）。
-      # runner 镜像可能已带其中一部分，缺什么装什么（不重复下载几百 MB 的 NDK）。
+      # 不引 android-actions/setup-android：该动作在新镜像上执行 `sdkmanager tools`，
+      # 这个包已被 Google 下架 → 动作直接失败（run 40674433249 实测）。runner 自带
+      # ANDROID_HOME 与 cmdline-tools，直接用预装 sdkmanager，缺什么装什么。
       - name: 安装 Android SDK 平台 / 构建工具 / NDK
         shell: bash
         run: |
           set -euo pipefail
-          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          if [ -z "$sdk_root" ]; then
-            echo '::error::ANDROID_HOME / ANDROID_SDK_ROOT 均未设置（setup-android 未生效？）'
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$sdk_root" ]; then
+            echo "::error::找不到 Android SDK（$sdk_root）"
+            exit 1
+          fi
+          sdkmanager="$(command -v sdkmanager || true)"
+          if [ -z "$sdkmanager" ]; then
+            sdkmanager="$(find "$sdk_root/cmdline-tools" -maxdepth 3 -type f -name sdkmanager 2>/dev/null | sort | tail -1)"
+          fi
+          if [ -z "$sdkmanager" ] || [ ! -x "$sdkmanager" ]; then
+            echo "::error::找不到 sdkmanager（cmdline-tools 缺失）"
             exit 1
           fi
           need=()
@@ -408,12 +416,13 @@ jobs:
           [ -d "$sdk_root/ndk/29.0.14206865" ] || need+=("ndk;29.0.14206865")
           if [ "${#need[@]}" -gt 0 ]; then
             echo "安装: ${need[*]}"
-            # sdkmanager 的 license 交互在 pipefail 下会因 yes 收到 SIGPIPE 退出；
-            # 只吞这一条，真正安装失败仍然显性退出
-            yes | sdkmanager --licenses > /dev/null || true
-            sdkmanager --install "${need[@]}"
+            # license 交互在 pipefail 下会因 yes 收到 SIGPIPE 退出；只吞这一条，安装失败仍显性退出
+            yes | "$sdkmanager" --sdk_root="$sdk_root" --licenses > /dev/null || true
+            "$sdkmanager" --sdk_root="$sdk_root" --install "${need[@]}"
           fi
           {
+            echo "ANDROID_HOME=$sdk_root"
+            echo "ANDROID_SDK_ROOT=$sdk_root"
             echo "NDK_HOME=$sdk_root/ndk/29.0.14206865"
             echo "ANDROID_NDK_HOME=$sdk_root/ndk/29.0.14206865"
           } >> "$GITHUB_ENV"
