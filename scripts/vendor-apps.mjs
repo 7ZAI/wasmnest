@@ -194,13 +194,6 @@ export function verifyPluginJson(pluginJson, plan, end) {
   }
 }
 
-/** 计算文件 sha256（流式，避免整包进内存） */
-export function sha256File(path) {
-  const hash = createHash('sha256')
-  hash.update(readFileSync(path))
-  return hash.digest('hex')
-}
-
 /** 解 zip 到目录（依赖系统 unzip；缺失 / 失败都显性报错） */
 export function unzipInto(zipPath, destDir) {
   const result = spawnSync('unzip', ['-q', '-o', zipPath, '-d', destDir], { encoding: 'utf8' })
@@ -214,8 +207,18 @@ export function unzipInto(zipPath, destDir) {
   }
 }
 
+/** 单次下载超时（本地网络拉 GitHub Release 实测会长时间无响应；对挂起直接报错，不拖死 job） */
+const DOWNLOAD_TIMEOUT_MS = 120_000
+
 async function download(url) {
-  const res = await fetch(url)
+  let res
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
+  } catch (err) {
+    throw new Error(
+      `[vendor-apps] 下载失败（${err?.name === 'TimeoutError' ? `${DOWNLOAD_TIMEOUT_MS}ms 超时` : err?.message}）：${url}`,
+    )
+  }
   if (!res.ok) {
     throw new Error(`[vendor-apps] 下载失败 ${res.status} ${res.statusText}：${url}`)
   }
