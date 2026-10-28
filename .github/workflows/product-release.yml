@@ -384,7 +384,7 @@ jobs:
 
           | 平台 | 下载 | 说明 |
           | --- | --- | --- |
-          | Windows 10/11 x64 | `WasmNest-<version>-release-x64-setup.exe` | 装到 `Program Files`（需管理员）；Authenticode 已签名 |
+          | Windows 10/11 x64 | `WasmNest-<version>-release-x64-setup.exe` | 装到 `Program Files`（需管理员）；代码签名状态见下方说明 |
           | Debian / Ubuntu amd64 | `WasmNest-<version>-release-amd64.deb` | `sudo apt install ./WasmNest-<version>-release-amd64.deb` |
           | 任意 Linux amd64 | `WasmNest_<version>_amd64.AppImage` | `chmod +x` 后直接运行；**唯一支持自动升级**的 Linux 形态 |
 
@@ -402,6 +402,26 @@ jobs:
           > 不影响运行与自动升级（自动升级由独立的 minisign 签名保护）。
           EOF
           fi
+
+      # 重发同版本时清掉上一轮的陈旧资产：\`gh release upload --clobber\` 只覆盖同名文件，
+      # 改名 / 删产物后旧文件会永远躺在 Release 里（v0.0.1 实测残留过 6 个旧名文件）。
+      - name: 清理陈旧资产（只保留本次产物）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo 'release 尚不存在，跳过清理'
+            exit 0
+          fi
+          keep="$(cd ../release-assets && ls -1)"
+          gh release view "$TAG" --json assets --jq '.assets[].name' | while read -r name; do
+            if ! grep -qxF "$name" <<< "$keep"; then
+              echo "删除陈旧资产: $name"
+              gh release delete-asset "$TAG" "$name" --yes
+            fi
+          done
 
       - name: 创建 Release（Latest）
         env:
