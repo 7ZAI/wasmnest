@@ -323,6 +323,18 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      # 上传时用了三个 glob（nsis / deb / appimage），upload-artifact 按「多 glob 的最近公共祖先」
+      # 保留层级 → 下载后是 release-assets/{nsis,deb,appimage}/<file>。摊平成一层，
+      # latest.json 的资产判定与 gh release 上传都按平铺目录工作。
+      - name: 摊平安装包目录
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ../release-assets
+          find . -mindepth 2 -type f -exec mv -t . {} +
+          find . -mindepth 1 -type d -empty -delete
+          ls -1
+
       - name: 解析 release 元数据
         shell: bash
         run: |
