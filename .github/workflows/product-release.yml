@@ -253,6 +253,10 @@ jobs:
 
       - name: 构建安装包（release profile）
         shell: bash
+        # cwd 必须在宿主工程根：tauri 在当前 cwd 执行 beforeBuildCommand
+        # （`pnpm run shell:sync` 只存在于 wasmnest-desktop/package.json，
+        #  从仓库根跑会报 Missing script: shell:sync）
+        working-directory: wasmnest/wasmnest-desktop
         env:
           TARGET: ${{ matrix.target }}
           BUNDLES: ${{ matrix.bundles }}
@@ -270,7 +274,7 @@ jobs:
             cfg="$cfg,\"bundle\":{\"windows\":{\"certificateThumbprint\":\"${WIN_THUMBPRINT}\"}}"
           fi
           cfg="$cfg}"
-          node wasmnest-desktop/scripts/tauri-build.js \
+          node scripts/tauri-build.js \
             --target "${TARGET}" --bundles "${BUNDLES}" --config "$cfg"
 
       - name: 校验产物齐备
