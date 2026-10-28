@@ -40,9 +40,9 @@ fn warn_no_lease_assembly(api: &str) {
 /// 插件是否已注册传输面端点（HTTP 或 WS 任一）。
 ///
 /// 以端点注册表为单一事实源：没有端点的应用不因界面打开而拉起传输面。
+/// 端点事实跨两个面，查询收口在组合根（本模块不得同时认识两个面 crate）。
 pub fn plugin_uses_transport(plugin_id: &str) -> bool {
-    wasmnest_server_http::registry::count_by_owner(plugin_id) > 0
-        || wasmnest_server_websocket::endpoint::count_by_owner(plugin_id) > 0
+    crate::server::composition::plugin_has_endpoints(plugin_id)
 }
 
 /// 为该插件 acquire `net.transport`（幂等；调用方已确认端点存在）。
