@@ -97,7 +97,8 @@ describe('crate 身份（发布名与二进制名解耦）', () => {
   it('能力仓依赖全部是 git tag（可发布）；宿主不直接依赖 SDK', () => {
     expect(manifest).not.toMatch(/path\s*=\s*"[^"]*wasmnest-lib/)
     expect(manifest).toMatch(/git\s*=\s*"https:\/\/github\.com\/7ZAI\/wasmnest-lib"/)
-    expect(manifest).toMatch(/tag\s*=\s*"lib-v0\.0\.2"/)
+    // 钉版真源 = release-manifest.json 的 repos.lib.tag（当前 lib-v0.0.1）
+    expect(manifest).toMatch(/tag\s*=\s*"lib-v0\.0\.1"/)
     // 2026-10-25 契约依赖收口（db81007）：宿主不再直接依赖 SDK（发布不再前置 SDK 上
     // crates.io），权限 / FORM_COMPONENT / 事件 topic 词汇改读 wasm-core 真源。锁随该
     // 决策改口径——断言「桌面宿主 manifest 里没有 SDK 直接依赖」，而不是断言它以

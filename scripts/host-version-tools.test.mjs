@@ -16,6 +16,7 @@
  * | C-005 | update-host-runtime-artifacts | artifacts 与 sourceCommit 写入；其余 hostRuntime 字段不变 |
  * | C-006 | update-host-runtime-artifacts | 产物目录收集：边车解析 + 未发布态（空目录）报错 |
  * | C-007 | update-host-runtime-artifacts | 缺 hostRuntime 段 → 抛错 |
+ * | C-008 | update-host-runtime-artifacts | 写回后的对象缩进跟住原位置（不得比同级字段浅一级） |
  */
 import { describe, it, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -33,7 +34,7 @@ const MANIFEST_TEXT = `{
   "$comment": "跨仓版本唯一表达",
   "product": "0.0.1",
   "repos": {
-    "lib": { "tag": "lib-v0.0.2" },
+    "lib": { "tag": "lib-v0.0.1" },
     "apps": { "tag": "apps-v0.0.1" }
   },
   "contract": {
@@ -44,7 +45,7 @@ const MANIFEST_TEXT = `{
   "hostRuntime": {
     "version": "0.0.1",
     "sourceCommit": "${'c'.repeat(40)}",
-    "libTag": "lib-v0.0.2",
+    "libTag": "lib-v0.0.1",
     "witVersion": "0.0.1",
     "sdkVersion": "0.0.1",
     "mountContract": "1",
@@ -97,7 +98,7 @@ describe('applyHostVersion', () => {
     assert.equal(manifest.hostRuntime.version, '0.0.2')
     assert.equal(manifest.product, '0.0.1', 'product 是平台产品版本，不随宿主运行时版本走')
     assert.equal(manifest.hostRuntime.$comment, JSON.parse(MANIFEST_TEXT).hostRuntime.$comment)
-    assert.equal(manifest.repos.lib.tag, 'lib-v0.0.2')
+    assert.equal(manifest.repos.lib.tag, 'lib-v0.0.1')
 
     const conf = JSON.parse(out.tauriConf)
     assert.equal(conf.version, '0.0.2')
@@ -169,6 +170,19 @@ describe('applyHostRuntimeArtifacts', () => {
       () => applyHostRuntimeArtifacts('{ "product": "0.0.1" }', { artifacts, sourceCommit: 'f'.repeat(40) }),
       /hostRuntime/,
     )
+  })
+
+  it('C-008 缩进：写回的 hostRuntime 内部字段与同级字段同基准缩进', () => {
+    const out = applyHostRuntimeArtifacts(MANIFEST_TEXT, { artifacts, sourceCommit: 'f'.repeat(40) })
+    // 同级字段用 2 空格基准（`"hostRuntime": {` 那行），其内部字段必须是 4 空格；
+    // 首次发布时这里被写成了 2 空格，与 `apps` 段整块错位（仅影响可读性，JSON 仍合法）。
+    assert.match(out, /^ {2}"hostRuntime": \{$/m)
+    for (const key of ['"version"', '"sourceCommit"', '"artifacts"', '"$comment"']) {
+      assert.match(out, new RegExp(`^ {4}${key.replace(/[$"]/g, '\\$&')}`, 'm'), `${key} 应为 4 空格缩进`)
+    }
+    assert.match(out, /^ {2}\},$/m)
+    // 且写回后仍是合法 JSON，字段值未漂移
+    assert.deepEqual(JSON.parse(out).hostRuntime.artifacts, artifacts)
   })
 })
 

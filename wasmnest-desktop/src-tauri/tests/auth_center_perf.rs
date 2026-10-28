@@ -104,20 +104,10 @@ fn auth_center_hotpath_cost_probe() {
     // （`host-auth secret-get`），链路更短且与被测的热路径无关（热路径是
     // `verify-device-token`，不是签发）。
     const PROBE_KEY: [u8; 32] = [0x5a; 32];
-    wasmnest_desktop_lib::utils::auth::test_tokens::seed_keyring(
-        &host_ctx,
-        "com.wasmnest.bedcode",
-        &PROBE_KEY,
-    );
+    wasmnest_desktop_lib::utils::auth::test_tokens::seed_keyring(&host_ctx, "com.wasmnest.bedcode", &PROBE_KEY);
 
     let mut plugin = wasm_runtime
-        .load_plugin_from_file(
-            &wasm_path,
-            "com.wasmnest.bedcode",
-            Arc::clone(&host_ctx),
-            &[],
-            None,
-        )
+        .load_plugin_from_file(&wasm_path, "com.wasmnest.bedcode", Arc::clone(&host_ctx), &[], None)
         .expect("load wasip3 session");
     {
         let _center_desk = gate_rt.block_on(wasmnest_desktop_lib::wasm_core::test_support::hold_registry_desk());

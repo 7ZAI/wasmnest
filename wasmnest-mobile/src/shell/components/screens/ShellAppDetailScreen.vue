@@ -199,7 +199,8 @@
       <div class="px-4 pt-3 flex flex-col gap-2.5">
         <button
           type="button"
-          class="w-full rounded-[10px] border border-[var(--mobile-border)] px-4 py-3 shell-type-label text-[var(--mobile-text-primary)] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)] min-h-[var(--mobile-touch-target-min)]"
+          class="w-full rounded-[10px] border border-[var(--mobile-border)] px-4 py-3 shell-type-label text-[var(--mobile-text-primary)] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)] min-h-[var(--mobile-touch-target-min)] disabled:opacity-40 disabled:cursor-not-allowed disabled:text-[var(--mobile-text-disabled)] disabled:active:bg-transparent"
+          :disabled="!canStop"
           @click="handleStop"
         >
           <!-- 停止动作按装配角色分词语：系统服务说「停止服务」（2026-10-23 用户裁决）。
@@ -309,6 +310,14 @@ const canRemove = computed(
 )
 const canAutostart = computed(
   () => (appId.value ? supportsAutostart(appId.value) : false),
+)
+/**
+ * 停止只在应用可能持有运行时实例时可用：未启动 / 已停用 / 待审批没有可停止的对象，
+ * 按钮置灰而不是让用户点了没反应。error 保留可点——启动失败后仍可能需要清掉残留实例，
+ * 停止失败后的重试也走这里。
+ */
+const canStop = computed(
+  () => app.value?.state === 'running' || app.value?.state === 'error',
 )
 const autostart = ref(false)
 const autostartBusy = ref(false)

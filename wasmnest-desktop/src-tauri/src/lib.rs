@@ -11,6 +11,8 @@ pub mod first_party_dirs;
 // 宿主侧插件能力面（能力域端口 adapter / 强制引用行 / 白名单条目同处）——
 // 票 02 批次 02 起：域实现搬进 `packages/` 能力 crate 后，宿主侧的接线落这里
 pub mod plugin;
+// 应用版本更新链路（GitHub Release 检查 / 校验下载；安装复用 api_bridge 升级模式）
+pub mod plugin_updates;
 pub mod server;
 pub mod system;
 pub mod utils;
@@ -36,7 +38,5 @@ mod bench_channel;
 
 // ==================== Re-exports ====================
 
-
-
-pub use bootstrap::{AppStartTime, run, run_with};
+pub use bootstrap::{run, run_with, AppStartTime};
 pub use system::{AppConfig, AppContext, AppError, Result};

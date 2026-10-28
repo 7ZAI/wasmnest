@@ -28,6 +28,7 @@ import { fileURLToPath } from 'url'
 import { platform, homedir } from 'os'
 
 import { readSharedRustManifest } from './lib/shared-rust.js'
+import { pruneStaleAndroidPluginAssets } from './lib/android-resources.js'
 import { appsRoot } from '../../scripts/app-paths.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -182,6 +183,10 @@ function buildSharedRust(cwd, manifest, sharedRustManifest) {
   )
   return wasmPath
 }
+
+// Tauri 的 gen/android 资源复制不清理已删除条目：插件改名 / 下架后旧目录会残留并
+// 进入 APK。每次构建后按当前资源目录对齐一次（dev-run 启动时亦会兜底执行）。
+pruneStaleAndroidPluginAssets(ROOT)
 
 // 构建产物已写入 src-tauri/resources/plugins/mobile（APK 资源源），
 // 但宿主 dev（tauri:dev 桌面窗口 / tauri:android:dev）启动时按

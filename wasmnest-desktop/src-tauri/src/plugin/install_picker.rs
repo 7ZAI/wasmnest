@@ -33,9 +33,7 @@ pub struct PickedPackage {
 /// 用户取消返回 `Ok(None)`（与「包损坏」可区分——后者 fail-visible 报错，
 /// 不静默当成取消）。
 #[tauri::command]
-pub async fn plugin_pick_app_package(
-    app_handle: tauri::AppHandle,
-) -> crate::Result<Option<PickedPackage>> {
+pub async fn plugin_pick_app_package(app_handle: tauri::AppHandle) -> crate::Result<Option<PickedPackage>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     app_handle
         .dialog()
@@ -43,21 +41,18 @@ pub async fn plugin_pick_app_package(
         .add_filter("zip", &["zip"])
         .pick_file(move |selection| {
             if tx.send(selection).is_err() {
-                tracing::debug!(
-                    "plugin_pick_app_package: receiver dropped before dialog completed"
-                );
+                tracing::debug!("plugin_pick_app_package: receiver dropped before dialog completed");
             }
         });
-    let selection = rx.await.map_err(|e| {
-        crate::AppError::Plugin(format!("plugin_pick_app_package: dialog channel closed: {e}"))
-    })?;
+    let selection = rx
+        .await
+        .map_err(|e| crate::AppError::Plugin(format!("plugin_pick_app_package: dialog channel closed: {e}")))?;
     let Some(file_path) = selection else {
         return Ok(None); // 用户取消选择（与「被拒」可区分：None，不回错误）
     };
     let path = super::platform_picker::path_to_string(file_path)?;
-    let plugin_id = wasmnest_wasm_core::manager::downloader::PluginDownloader::peek_plugin_id(
-        std::path::Path::new(&path),
-    )?;
+    let plugin_id =
+        wasmnest_wasm_core::manager::downloader::PluginDownloader::peek_plugin_id(std::path::Path::new(&path))?;
     tracing::info!(path = %path, plugin_id = %plugin_id, "[API] plugin_pick_app_package");
     Ok(Some(PickedPackage { path, plugin_id }))
 }

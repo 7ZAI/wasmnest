@@ -57,6 +57,7 @@ import { syncLinkCryptoContextToNative, initLinkCryptoPinSync } from '@/composab
 import { useFontSize } from '@/composables/useFontSize'
 import { useSettingsStore } from '@/stores/settings'
 import { completeStartupTask, startupReady } from '@/composables/useAppStartup'
+import { useStandaloneRouteBack } from '@/composables/useStandaloneRouteBack'
 import { registerHostSurfaceEnv } from '@/shell/hostSurfaceEnv'
 // mDNS 广播暂时禁用：移动端目前不需要被发现，避免扫描到自身
 // import { useMdnsAdvertiser } from '@/composables/useMdnsAdvertiser'
@@ -113,6 +114,9 @@ splashGuardTimer = setTimeout(hideSplash, SPLASH_GUARD_MS)
 // mDNS 广播暂时禁用
 // const { startAdvertise, stopAdvertise } = useMdnsAdvertiser()
 
+// 壳外整页路由的系统返回兜底（浏览历史回退；壳根由 ShellHost 自行兜底）
+const standaloneRouteBack = useStandaloneRouteBack()
+
 onMounted(async () => {
   setupTheme()
   setupFontSize()
@@ -146,6 +150,7 @@ onUnmounted(async () => {
   if (splashGuardTimer) clearTimeout(splashGuardTimer)
   stopSplashReadyWatch?.()
   stopSplashReadyWatch = null
+  standaloneRouteBack.dispose()
   cleanupTheme()
   for (const unlisten of unlistenQueue.splice(0)) {
     try {

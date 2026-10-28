@@ -20,6 +20,7 @@ import { resolve, dirname, join, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { readSharedRustManifest } from './lib/shared-rust.js'
+import { pruneStaleAndroidPluginAssets } from './lib/android-resources.js'
 import { appDir } from '../../scripts/app-paths.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -495,6 +496,10 @@ const hostCmd = hostOverride ? [hostBin, hostArgs] : DEFAULT_HOST_CMD
 ensureAdbFd0Shim()
 await precheckDevPort()
 await precheckAdbReverse()
+
+// Tauri 向 gen/android 复制 resources 是增量的：插件改名 / 下架后旧目录会残留并随
+// APK 打包，宿主按两个 id 装载同名应用。每次 dev 启动前按源目录对齐一次。
+pruneStaleAndroidPluginAssets(ROOT)
 
 // 1. 插件 WASM 新鲜度预检 + 自动补建（串行同步，完成后才启动 watch / 宿主，
 //    防止「新前端 + 旧 WASM」静默错配）

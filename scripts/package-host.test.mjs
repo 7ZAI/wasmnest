@@ -107,7 +107,7 @@ describe('buildHostVersionJson', () => {
     platform: 'linux',
     arch: 'x86_64',
     sourceCommit: 'ca295a802edcc53ea9d938bad186e6d17b670e48',
-    libTag: 'lib-v0.0.2',
+    libTag: 'lib-v0.0.1',
     witVersion: '0.0.1',
     sdkVersion: '0.0.1',
     mountContract: '1',
@@ -125,7 +125,7 @@ describe('buildHostVersionJson', () => {
     assert.equal(meta.platform, 'linux')
     assert.equal(meta.arch, 'x86_64')
     assert.equal(meta.sourceCommit, input.sourceCommit)
-    assert.equal(meta.libTag, 'lib-v0.0.2')
+    assert.equal(meta.libTag, 'lib-v0.0.1')
     assert.equal(meta.witVersion, '0.0.1')
     assert.equal(meta.sdkVersion, '0.0.1')
     assert.equal(meta.mountContract, '1')
@@ -192,12 +192,12 @@ describe('resolveHostBinaryName', () => {
 // ==================== C-007 manifest 版本事实 ====================
 describe('parseHostRuntimeManifest', () => {
   const valid = {
-    repos: { lib: { tag: 'lib-v0.0.2' } },
+    repos: { lib: { tag: 'lib-v0.0.1' } },
     contract: { version: '0.0.1' },
     hostRuntime: {
       version: '0.0.1',
       sourceCommit: 'ca295a802edcc53ea9d938bad186e6d17b670e48',
-      libTag: 'lib-v0.0.2',
+      libTag: 'lib-v0.0.1',
       witVersion: '0.0.1',
       sdkVersion: '0.0.1',
       mountContract: '1',
@@ -209,7 +209,7 @@ describe('parseHostRuntimeManifest', () => {
       version: '0.0.1',
       sdkVersion: '0.0.1',
       mountContract: '1',
-      libTag: 'lib-v0.0.2',
+      libTag: 'lib-v0.0.1',
       witVersion: '0.0.1',
     })
   })
@@ -230,7 +230,7 @@ describe('parseHostRuntimeManifest', () => {
   })
   it('反例：libTag 与 repos.lib.tag 不一致 → 抛错', () => {
     assert.throws(
-      () => parseHostRuntimeManifest({ ...valid, hostRuntime: { ...valid.hostRuntime, libTag: 'lib-v0.0.1' } }),
+      () => parseHostRuntimeManifest({ ...valid, hostRuntime: { ...valid.hostRuntime, libTag: 'lib-v0.9.9' } }),
       /libTag/,
     )
   })

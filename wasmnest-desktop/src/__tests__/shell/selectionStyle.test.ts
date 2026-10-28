@@ -12,6 +12,8 @@ import { readFileSync } from 'node:fs'
  *
  * 选中填充是固定近黑，不取 --color-primary：后者在深色主题下会翻成浅色，
  * 用户明确要求「选中背景为黑色，不是白色」。边框同样不许用黑色描边。
+ * 深色档例外（2026-10-26 用户裁决，仅快捷磁贴）：黑底在近黑暗带上与未选块贴色，
+ * 改用信息蓝淡染底 + 蓝图标表达「开」，不用边框 / 描边当线索，且不反转成白底。
  */
 
 const read = (path: string): string => readFileSync(path, 'utf-8')
@@ -92,6 +94,20 @@ describe('其余选择：固定黑底 + 固定白字，不用勾章', () => {
       /\.tile\.on svg,\s*\.tile\.on \.tt b,\s*\.tile\.on \.tt span\s*\{[^}]*var\(--selection-solid-ink\)/,
     )
     expect(src.match(/:aria-pressed=/g)?.length ?? 0).toBe(3)
+  })
+
+  it('快捷磁贴深色档：不用边框，信息蓝淡染底 + 蓝图标表达「开」（2026-10-26 用户裁决）', () => {
+    const src = read(QUICK)
+    // 深色覆盖块位于基线 `.tile.on` 之后，rule(src, '.tile.on') 仍命中基线黑底块
+    // （黑底白字基线不受影响，见上一条）
+    expect(src).toMatch(
+      /:root\.dark \.tile\.on\s*\{[^}]*background:\s*color-mix\(in srgb,\s*var\(--color-info\)\s*16%,\s*var\(--bg-card\)\)/,
+    )
+    expect(src).toMatch(/:root\.dark \.tile\.on svg\s*\{[^}]*color:\s*var\(--color-info\)/)
+    // 深色档不得再用边框 / 描边作选中线索
+    const darkBlock = src.match(/:root\.dark \.tile\.on\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(darkBlock).not.toContain('border-color: color-mix')
+    expect(darkBlock).not.toContain('box-shadow')
   })
 
   it('授权档位：选中黑底 + 白字，aria-pressed 宣布当前档', () => {

@@ -354,7 +354,9 @@ describe('R3 壳等价物在场（正面钉）', () => {
       )
     }
     const router = readFileSync(join(process.cwd(), 'src/router/index.ts'), 'utf8')
-    expect(router, '壳默认路由 mobile-shell 应在 router 在场').toContain('mobile-shell')
+    expect(router, '壳默认路由应引用 SHELL_ROUTE_NAME（壳入口在场）').toContain('SHELL_ROUTE_NAME')
+    const routeNames = readFileSync(join(process.cwd(), 'src/router/routeNames.ts'), 'utf8')
+    expect(routeNames, '壳默认路由名 mobile-shell 应在 routeNames 在场').toContain('mobile-shell')
   })
 
   it('should_notExistOnDisk_when_systemBarRetired', () => {

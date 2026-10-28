@@ -76,10 +76,7 @@ const PLUGIN_AUTH_FACE: [(&str, &str); 5] = [
     ("rust/src/auth.rs", "fn request_pairing("),
     ("rust/src/auth.rs", "fn verify_pairing_code("),
     ("rust/src/commands.rs", "\"bedcode.verify-pairing-code\""),
-    (
-        "rust/src/commands.rs",
-        "\"bedcode.authenticate-with-biometric\"",
-    ),
+    ("rust/src/commands.rs", "\"bedcode.authenticate-with-biometric\""),
     ("plugin.json", "\"auth\""),
 ];
 

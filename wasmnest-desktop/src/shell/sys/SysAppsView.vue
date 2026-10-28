@@ -118,8 +118,58 @@
           <ShellIcon name="trash" :size="13" /> {{ t('shell.apps.uninstall') }}
         </button>
       </div>
+
+      <!-- 更新面（应用版本更新全链路）：仅 user-installed 业务应用（与卸载同门槛，
+           builtin/scanned 的更新走宿主发布装配）。兼容判断在 useAppUpdates（壳持有
+           MOUNT_CONTRACT 与宿主版本）：不兼容只给原因、绝不出现更新按钮。 -->
+      <div
+        v-if="isUpdatable(app)"
+        class="update-line"
+        :data-testid="`sys-apps-update-${app.pluginId}`"
+      >
+        <button
+          class="shell-btn ghost"
+          :data-testid="`sys-apps-update-check-${app.pluginId}`"
+          :disabled="updateBusy(app.id)"
+          @click="onCheckUpdate(app)"
+        >
+          <ShellIcon name="reset" :size="13" /> {{ t('shell.apps.update.check') }}
+        </button>
+        <span
+          v-if="updateStatusText(app.id)"
+          class="sub-note update-status"
+          :class="{ err: updateStatusIsBad(app.id) }"
+          :data-testid="`sys-apps-update-status-${app.pluginId}`"
+        >{{ updateStatusText(app.id) }}</span>
+        <button
+          v-if="updateStates[app.id]?.status === 'available'"
+          class="shell-btn"
+          :data-testid="`sys-apps-update-apply-${app.pluginId}`"
+          :disabled="updateBusy(app.id) || app.state === 'running' || app.state === 'degraded'"
+          :title="t('shell.apps.uninstallDisabled')"
+          @click="onApplyUpdate(app)"
+        >
+          <ShellIcon name="transfer" :size="13" />
+          {{ t('shell.apps.update.apply', { version: updateStates[app.id]?.latestVersion }) }}
+        </button>
+        <p
+          v-if="updateReasonText(app.id)"
+          class="note err update-reason"
+        >{{ updateReasonText(app.id) }}</p>
+      </div>
       </ShellCard>
     </template>
+
+    <!-- 安装应用（本地 zip）：原生选包对话框（Rust 发起，前端不传任意路径）→
+         既有 plugin_install_from_file；安装后清单自动刷新 -->
+    <ShellCard :title="t('shell.apps.install')" icon="file">
+      <p class="note">{{ t('shell.apps.installDesc') }}</p>
+      <div class="flex gap-2">
+        <button class="shell-btn ghost" data-testid="sys-apps-install" @click="onInstallZip">
+          <ShellIcon name="folder" :size="13" /> {{ t('shell.apps.install') }}
+        </button>
+      </div>
+    </ShellCard>
 
     <!-- 权限入口（与「权限与授权」系统页同构跳转；策略/记录呈现单一口径） -->
     <ShellCard :title="t('shell.apps.permCardTitle')" icon="shield">
@@ -146,9 +196,13 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { invoke } from '@/utils/invoke'
+import { ensureHostCredential } from '@/utils/appCommands'
+import { showUserError } from '@/utils/userError'
 import { chipMetaOf, isHighRisk } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
 import { isServiceKind, useShellApps, type ShellAppEntry } from '../composables/useShellApps'
+import { useAppUpdates, type AppUpdateState } from '../composables/useAppUpdates'
 import ShellIcon from '../components/ShellIcon.vue'
 import ShellCard from '../components/ShellCard.vue'
 
@@ -225,6 +279,78 @@ function onStop(app: ShellAppEntry) {
 function onUninstall(app: ShellAppEntry) {
   state.dialog.value = 'uninstall'
   state.dialogAppId.value = app.id
+}
+
+// ==================== 应用更新面（应用版本更新全链路） ====================
+
+const updates = useAppUpdates()
+/** script setup 顶层 ref：模板里自动解包（`updateStates[app.id]` 直取状态） */
+const updateStates = updates.states
+
+/** 更新面只对 user-installed 业务应用开放（与卸载同门槛；builtin 走宿主发布装配） */
+function isUpdatable(app: ShellAppEntry): boolean {
+  return app.source === 'user-installed' && !isServiceKind(app.kind)
+}
+
+function updateBusy(appId: string): boolean {
+  const st = updates.states.value[appId]
+  return st?.status === 'checking' || st?.status === 'updating'
+}
+
+function updateStatusIsBad(appId: string): boolean {
+  const st = updates.states.value[appId]
+  return st?.status === 'error' || st?.status === 'incompatible'
+}
+
+/** 状态行文案（i18n 单一来源；idle 不渲染） */
+function updateStatusText(appId: string): string {
+  const st: AppUpdateState | undefined = updates.states.value[appId]
+  if (!st) return ''
+  switch (st.status) {
+    case 'checking':
+      return t('shell.apps.update.checking')
+    case 'up-to-date':
+      return t('shell.apps.update.upToDate', { version: st.currentVersion ?? '' })
+    case 'available':
+      return t('shell.apps.update.available', { version: st.latestVersion ?? '' })
+    case 'incompatible':
+      return t('shell.apps.update.incompatible', { version: st.latestVersion ?? '' })
+    case 'updating':
+      return t('shell.apps.update.updating')
+    case 'error':
+      return t('shell.apps.update.failed')
+    default:
+      return ''
+  }
+}
+
+/** 不兼容原因（独立成行红字；版本号等参数在 composable 里已装好） */
+function updateReasonText(appId: string): string {
+  const reason = updates.states.value[appId]?.reason
+  return reason ? t(reason.key, reason.params ?? {}) : ''
+}
+
+function onCheckUpdate(app: ShellAppEntry) {
+  void updates.check(app.pluginId)
+}
+
+async function onApplyUpdate(app: ShellAppEntry) {
+  const ok = await updates.applyUpdate(app.pluginId)
+  // 升级成功后清单里的版本号 / 状态需要重新投影（wasm-core 已换目录重装载）
+  if (ok) await appsStore.refresh()
+}
+
+/** 安装应用（本地 zip）：原生选包 → 既有安装命令（首装模式） */
+async function onInstallZip() {
+  try {
+    const credential = await ensureHostCredential()
+    const picked = await invoke<string | null>('plugin_pick_app_zip')
+    if (!picked) return // 用户取消
+    await invoke('plugin_install_from_file', { path: picked, credential })
+    await appsStore.refresh()
+  } catch (e) {
+    showUserError(e)
+  }
 }
 </script>
 
@@ -314,6 +440,22 @@ function onUninstall(app: ShellAppEntry) {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+.update-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+.update-status.err {
+  color: var(--color-danger-ink);
+}
+.update-reason {
+  width: 100%;
+  margin: 0;
 }
 .note {
   font-size: calc(12px * var(--ui-scale));

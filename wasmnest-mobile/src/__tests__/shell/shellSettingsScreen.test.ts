@@ -40,9 +40,6 @@ vi.mock('@/shell/composables/useShellNavigation', () => ({
     back: mockNavBack,
   }),
 }))
-vi.mock('@/shell/composables/usePlatform', () => ({
-  usePlatform: () => ({ platformInfo: ref({ platform: 'android', osType: 'android' }) }),
-}))
 vi.mock('@/shell/composables/useShellPreferences', () => ({
   useShellPreferences: () => ({
     floatingNav,
@@ -171,9 +168,10 @@ describe('C-ST2 入口跳转口径', () => {
 })
 
 describe('C-ST7 设置项文案双语在场', () => {
+  // `runtime` 随顶部「本机」标识卡一起退役（版本号只在「关于」入口的 hint 里），
+  // 故不在本表——留着会要求一个已经没人使用的文案键。
   const KEYS = [
     'about',
-    'runtime',
     'appearance',
     'appearanceHint',
     'permissions',

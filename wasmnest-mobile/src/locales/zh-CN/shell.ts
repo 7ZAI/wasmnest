@@ -23,7 +23,6 @@ export default {
       cancel: '取消',
     },
     home: {
-      localDevice: '本机',
       slotsTitle: '快捷卡片',
       appsTitle: '应用',
       appAria: '{name}，{state}',
@@ -200,7 +199,6 @@ export default {
       // 各应用自持）；2026-10-15：出站策略入口一并移除（用户指令，旧实现页与路由暂留，
       // 见 revision-2.md R11）。
       about: '关于 WasmNest',
-      runtime: 'WasmNest Mobile {version}',
     },
     permissions: {
       pending: '待审批',

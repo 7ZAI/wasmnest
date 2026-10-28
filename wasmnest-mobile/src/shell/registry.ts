@@ -93,11 +93,16 @@ class ShellRegistryClass {
     this.publish()
   }
 
-  /** 获取应用（含合并后的贡献） */
+  /**
+   * 获取应用（含合并后的贡献）
+   *
+   * 必须从响应式清单读取而不是内部 Map：调用方普遍在 computed 里取单个应用
+   * （详情页 / 运行屏 / 胶囊菜单），读 Map 不会建立响应式依赖——patchApp 或
+   * 清单重拉后 computed 不重算，界面状态会停在旧值（2026-10-27 真机：停止服务后
+   * 详情页仍显示「运行中」）。
+   */
   getApp(appId: string): ShellApp | undefined {
-    const rec = this.apps.get(appId)
-    if (!rec) return undefined
-    return this.toView(rec.app)
+    return this.appsRef.value.find((app) => app.id === appId)
   }
 
   /** 清理单个应用（记录 + 贡献） */

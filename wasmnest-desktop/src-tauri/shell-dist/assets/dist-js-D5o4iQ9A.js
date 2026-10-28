@@ -1,0 +1,1 @@
+import"./index-B805C8Kt.js";function e(){return window.__TAURI_OS_PLUGIN_INTERNALS__.platform}function t(){return window.__TAURI_OS_PLUGIN_INTERNALS__.version}function n(){return window.__TAURI_OS_PLUGIN_INTERNALS__.os_type}function r(){return window.__TAURI_OS_PLUGIN_INTERNALS__.arch}export{r as arch,e as platform,n as type,t as version};

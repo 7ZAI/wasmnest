@@ -19,19 +19,20 @@
  * 2. `cargo package --list` 包含 `src/**` / `tauri.conf.json` / `capabilities/**` /
  *    `icons/**` / `resources/config.properties` / `shell-dist/**`；
  * 3. `cargo metadata --no-deps` 成功（manifest 可被外部工程解析）；
- * 4. 依赖图可发布：不得残留 `wasmnest-lib` 的 path 依赖，12 条能力仓依赖走
- *    git tag（`tag = "lib-v0.0.2"`），桌面 SDK 走 crates.io 精确版本
- *    （`=0.0.1`）；`[patch]` 只允许留在 `.cargo/config.toml`（发布包不带配置，
- *    写进 manifest 会让包不可发布）；
+ * 4. 依赖图可发布：不得有任何 path 依赖；能力仓依赖逐条对账（11 条 git 依赖，
+ *    `tag` 必须等于 `release-manifest.json` 的 `repos.lib.tag`，`version` 与 tag
+ *    对齐）；`[patch]` 只允许留在 `.cargo/config.toml`（发布包不带配置，写进
+ *    manifest 会让包不可发布）。桌面 SDK 已不是本 crate 的直接依赖（批 2 / issue #36），
+ *    它只作为 `wasmnest-wasm-core` 的 `desktop-assembly` 传递依赖由能力仓声明；
  * 5. 壳前端漂移：`dist/` 在场时跑 `sync-shell-dist.mjs --check`；干净 checkout
  *    （没有 `dist/`）允许跳过并打印提示，不伪装成通过。
  *
  * ## 前置（fail-visible，不静默降级）
  *
- * `cargo package --list` 需要能解析 `wasmnest-plugin-api`（crates.io 尚未发布时由
- * 平台仓根 `.cargo/config.toml` 的 `[patch.crates-io]` 指回工作树 SDK）。完整
- * `cargo package`（verify 编译）不在本门禁内：它要求 SDK 已发布到 crates.io，
- * 见 CONTRACT §5.4 的发布前置。
+ * `cargo package --list` 需要能解析能力仓 `wasmnest-wasm-core` 的传递依赖
+ * `wasmnest-plugin-api`（本地开发由平台仓根 `.cargo/config.toml` 的
+ * `[patch.crates-io]` 指回工作树 SDK）。完整 `cargo package`（verify 编译）不在
+ * 本门禁内：它要求 SDK 已发布到 crates.io，见 CONTRACT §5.4 的发布前置。
  */
 
 import { spawnSync } from 'node:child_process'
@@ -43,6 +44,37 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const DESKTOP_ROOT = resolve(__dirname, '..')
 const CRATE_ROOT = join(DESKTOP_ROOT, 'src-tauri')
 const MANIFEST = join(CRATE_ROOT, 'Cargo.toml')
+/** 跨仓版本唯一真源（repos.lib.tag）；main 用它覆盖下面的默认 tag */
+const RELEASE_MANIFEST = resolve(DESKTOP_ROOT, '..', 'release-manifest.json')
+
+/**
+ * 能力仓依赖的默认固定 tag（兜底常量；CLI 实际以 release-manifest.json 为准）。
+ * 发布线 = `lib-v0.0.1`。
+ */
+export const EXPECTED_LIB_TAG = 'lib-v0.0.1'
+
+/**
+ * 宿主直接消费的能力仓 crate 清单（2026-10-22 peer-net-dissolve 后 11 条：
+ * `wasmnest-server-peer-net-base` 已并入 `wasmnest-server-peer-net`）。
+ * 增删拆分 crate 时同步本清单——清单外/缺失都会转红。
+ */
+export const EXPECTED_LIB_CRATES = [
+  'wasmnest-link-crypto',
+  'wasmnest-server-base',
+  'wasmnest-host-kit',
+  'wasmnest-wasm-core',
+  'wasmnest-pty-engine',
+  'wasmnest-discovery-engine',
+  'wasmnest-crypto-engine',
+  'wasmnest-server-core',
+  'wasmnest-server-http',
+  'wasmnest-server-websocket',
+  'wasmnest-server-peer-net',
+]
+
+const LIB_GIT_URL = 'https://github.com/7ZAI/wasmnest-lib'
+/** TOML 1.0 要求 inline table 单行，故逐行解析依赖声明即可 */
+const INLINE_DEP_RE = /^([A-Za-z0-9_-]+)\s*=\s*\{([^}]*)\}\s*$/gm
 
 /** 发布包里必须出现的条目（id 供报告与测试引用，label 为人类可读名） */
 export const REQUIRED_PACKAGE_ENTRIES = [
@@ -112,30 +144,64 @@ export function parseCrateIdentity(manifestText) {
 /**
  * manifest 的可发布性检查（返回问题列表；空数组 = 合规）。
  *
- * - 能力仓依赖必须是 git tag（path 依赖会让 `cargo package` / 外部工程消费失效）；
- * - SDK 必须是 crates.io 精确版本（本地开发经 `.cargo/config.toml` 的 patch 指回）；
+ * - 任何 path 依赖都不允许（`cargo package` / 外部工程消费时不存在本地路径）；
+ * - 能力仓依赖逐条对账：git 源 + tag（默认等于 release-manifest 的 repos.lib.tag）+
+ *   version 与 tag 对齐；清单外 / 缺失同样报错（拆分合并后不留下悬空条目）；
+ * - 桌面 SDK 不是本 crate 的直接依赖（批 2 / issue #36），故不在这里声明/断言；
  * - `[patch]` 不得留在这个 manifest（发布包会带它，cargo 拒绝 patch 进包）。
+ *
+ * @param {string} manifestText
+ * @param {{ tag?: string, crates?: string[] }} [options]
  */
-export function manifestPublishabilityIssues(manifestText) {
+export function manifestPublishabilityIssues(manifestText, options = {}) {
+  const expectedTag = options.tag ?? EXPECTED_LIB_TAG
+  const expectedCrates = options.crates ?? EXPECTED_LIB_CRATES
   const issues = []
+  const deps = [...manifestText.matchAll(INLINE_DEP_RE)].map((m) => ({ name: m[1], body: m[2] }))
+
   const libPath = manifestText.match(/path\s*=\s*"[^"]*wasmnest-lib[^"]*"/g) ?? []
   if (libPath.length > 0) {
     issues.push(`仍有 ${libPath.length} 条 wasmnest-lib path 依赖；能力仓依赖必须改为 git tag（否则包不可发布）`)
   }
-
-  const gitDeps = manifestText.match(/git\s*=\s*"https:\/\/github\.com\/7ZAI\/wasmnest-lib"/g) ?? []
-  if (gitDeps.length !== 12) {
-    issues.push(`能力仓 git 依赖应为 12 条，实际 ${gitDeps.length} 条`)
-  }
-  if (gitDeps.length > 0 && !/tag\s*=\s*"lib-v0\.0\.2"/.test(manifestText)) {
-    issues.push('能力仓 git 依赖缺少固定 tag（当前发布线 = lib-v0.0.2）')
+  const otherPathDeps = deps
+    .filter((d) => /\bpath\s*=/.test(d.body) && !d.body.includes('wasmnest-lib'))
+    .map((d) => d.name)
+  if (otherPathDeps.length > 0) {
+    issues.push(`存在 path 依赖：${otherPathDeps.join(', ')}（发布 manifest 不允许 path，本地开发用 .cargo/config.toml 的 [patch]）`)
   }
 
-  if (!/wasmnest-plugin-api\s*=\s*\{[^}]*version\s*=\s*"=0\.0\.1"/.test(manifestText)) {
-    issues.push('wasmnest-plugin-api 必须是 crates.io 精确版本 =0.0.1（本地源码经 .cargo/config.toml patch）')
+  if (!/^lib-v\d+\.\d+\.\d+/.test(expectedTag)) {
+    issues.push(`能力仓 tag 形如 lib-vX.Y.Z，当前 "${expectedTag}"（真源 = release-manifest.json 的 repos.lib.tag）`)
   }
-  if (/wasmnest-plugin-api\s*=\s*\{\s*path/.test(manifestText)) {
-    issues.push('wasmnest-plugin-api 仍是 path 依赖；发布 manifest 不允许 path')
+  const expectedVersion = expectedTag.replace(/^lib-v/, '')
+
+  for (const crate of expectedCrates) {
+    const decls = deps.filter((d) => d.name === crate)
+    if (decls.length === 0) {
+      issues.push(`${crate} 缺少依赖声明（应为 version = "${expectedVersion}" + git tag "${expectedTag}"）`)
+      continue
+    }
+    for (const { body } of decls) {
+      if (!body.includes(LIB_GIT_URL)) {
+        issues.push(`${crate} 不走能力仓 git 源 ${LIB_GIT_URL}`)
+        continue
+      }
+      const tag = body.match(/\btag\s*=\s*"([^"]+)"/)?.[1]
+      if (tag !== expectedTag) {
+        issues.push(`${crate} 的 tag 应为 "${expectedTag}"，实际 "${tag ?? '缺失'}"（真源 = release-manifest.json）`)
+      }
+      const version = body.match(/\bversion\s*=\s*"([^"]+)"/)?.[1]
+      if (version !== expectedVersion) {
+        issues.push(`${crate} 的 version 应为 "${expectedVersion}"（与 tag 对齐），实际 "${version ?? '缺失'}"`)
+      }
+    }
+  }
+
+  const unexpected = deps
+    .filter((d) => d.body.includes(LIB_GIT_URL) && !expectedCrates.includes(d.name))
+    .map((d) => d.name)
+  if (unexpected.length > 0) {
+    issues.push(`能力仓依赖清单未登记：${unexpected.join(', ')}（增删/拆分 crate 时同步 EXPECTED_LIB_CRATES）`)
   }
 
   if (/^\[patch\./m.test(manifestText)) {
@@ -160,6 +226,21 @@ function fail(message) {
   process.exit(1)
 }
 
+/** 读 release-manifest.json 的 repos.lib.tag（跨仓版本唯一真源；缺失 = fail-visible） */
+function readReleaseLibTag() {
+  if (!existsSync(RELEASE_MANIFEST)) fail(`缺 release-manifest.json：${RELEASE_MANIFEST}`)
+  let tag
+  try {
+    tag = JSON.parse(readFileSync(RELEASE_MANIFEST, 'utf-8'))?.repos?.lib?.tag
+  } catch (error) {
+    fail(`release-manifest.json 解析失败：${error.message}`)
+  }
+  if (typeof tag !== 'string' || tag.length === 0) {
+    fail('release-manifest.json 缺 repos.lib.tag（能力仓版本真源）')
+  }
+  return tag
+}
+
 function main() {
   if (!existsSync(MANIFEST)) fail(`缺 src-tauri/Cargo.toml：${MANIFEST}`)
 
@@ -175,7 +256,8 @@ function main() {
     fail(`[lib].name 应为 wasmnest_desktop_lib，实际 "${identity.libName}"`)
   }
 
-  const publishIssues = manifestPublishabilityIssues(manifestText)
+  const releaseTag = readReleaseLibTag()
+  const publishIssues = manifestPublishabilityIssues(manifestText, { tag: releaseTag })
   if (publishIssues.length > 0) {
     fail(`依赖图不可发布：\n  - ${publishIssues.join('\n  - ')}`)
   }

@@ -24,7 +24,6 @@ export default {
       cancel: 'Cancel',
     },
     home: {
-      localDevice: 'This device',
       slotsTitle: 'Quick cards',
       appsTitle: 'Apps',
       appAria: '{name}, {state}',
@@ -203,7 +202,6 @@ export default {
       // app). 2026-10-15: the egress policy entry was removed too (user request; legacy
       // page and route stay until retired, see revision-2.md R11).
       about: 'About WasmNest',
-      runtime: 'WasmNest Mobile {version}',
     },
     permissions: {
       pending: 'Pending approval',

@@ -8,7 +8,7 @@
 | 项 | 要求 |
 | --- | --- |
 | Tauri | **2**（写 API 前确认是 v2） |
-| wasmtime | **双端 48**，升级必须双端同步（ADR 0019）；桌面 `[patch.crates-io]` 把 `wasmnest-plugin-api` 指回工作树 SDK（`desktop/src-tauri/Cargo.toml`），**patch 目标版本必须与能力仓声明一致**（不一致 cargo 直接失败，别去放宽） |
+| wasmtime | **双端 48**，升级必须双端同步（ADR 0019）；桌面 `[patch.crates-io]` 把 `wasmnest-plugin-api` 指回工作树 SDK（平台仓根 `.cargo/config.toml`），**patch 目标版本必须与能力仓声明一致**（不一致 cargo 直接失败，别去放宽） |
 | wasip3 工具链 | 桌面一般应用走 `wasm32-wasip3`，pinned nightly 单一事实源在 `scripts/wasip3-toolchain.sh`（`WASIP3_NIGHTLY`，当前 `nightly-2026-09-16`；切换点 stable ≥ 1.99 写在该脚本头注） |
 | sccache | 根 `.cargo/config.toml` 强制 `rustc-wrapper = "sccache"`——未装则一切 cargo 命令直接失败，**这是显性失败设计，不要加降级绕过**；绝不要设 `CARGO_INCREMENTAL=1`（sccache 会拒绝执行，见 `.cargo/config.toml` 注释） |
 | 构建资源自适应 | 重型构建用 `node ../scripts/adaptive-run.mjs -- <cmd>`（可在任一目录以正确 cwd 执行）；逃生阀 `WASMNEST_ADAPTIVE=0`、档位 `WASMNEST_BUILD_PROFILE=parallel\|balanced\|serial` |
@@ -69,11 +69,14 @@
 但平台仓**刻意没有根 workspace**（30+ 独立 Cargo.toml / 8 个 target 落点，见根
 `.cargo/config.toml` 头注），`cargo install --git <平台仓> wasmnest-desktop-runtime`
 无法定位 crate。故 L2 的安装通道取 **crates.io**；能力仓依赖仍用 git tag
-（`lib-v0.0.2`）固定编译期版本。**不要**为 cargo git 安装新增根 workspace（会改变
+（`lib-v0.0.1`）固定编译期版本。**不要**为 cargo git 安装新增根 workspace（会改变
 平台仓全部 target / lock 布局）。
 
-依赖图与本地开发：12 条 `wasmnest-lib` 依赖 = git tag；桌面 SDK = crates.io 精确
-版本；同场开发由平台仓根 `.cargo/config.toml` 的 `[patch."https://github.com/7ZAI/wasmnest-lib"]`
+依赖图与本地开发：11 条 `wasmnest-lib` 依赖 = git tag（tag 真源 =
+`release-manifest.json` 的 `repos.lib.tag`）；桌面 SDK 已不是宿主直接依赖（批 2 /
+issue #36），只作为能力仓 `wasmnest-wasm-core` 的 `desktop-assembly` 传递依赖走
+crates.io 精确版本；同场开发由平台仓根 `.cargo/config.toml` 的
+`[patch."https://github.com/7ZAI/wasmnest-lib"]`
 与 `[patch.crates-io]` 指回兄弟目录 / 工作树 SDK（patch 不进发布包，`Cargo.toml`
 内不得出现 `[patch]`——门禁脚本会转红）。
 
