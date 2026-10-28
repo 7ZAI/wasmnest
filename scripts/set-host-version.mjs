@@ -147,8 +147,8 @@ function main() {
   console.log(`[set-host-version]   - ${files.manifest}（hostRuntime.version）`)
   console.log(`[set-host-version]   - ${files.tauriConf}（version）`)
   console.log(`[set-host-version]   - ${files.cargoToml}（[package].version）`)
-  console.log('[set-host-version] 下一步（发布）：提交 → 打 tag host-v' + version)
-  console.log('[set-host-version]   （平台仓已不再发布 tar.gz；tag 仅作版本标记）')
+  console.log('[set-host-version] 下一步（发布）：提交 → 按平台仓 tag 规则打 v' + version)
+  console.log('[set-host-version]   宿主运行时不再有独立 tag 前缀（host-v* 已退役）')
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()
