@@ -63,7 +63,7 @@ const ASSET_RULES = [
 ]
 
 /** 不是更新载体、但允许出现在资产目录里的文件（不报错、不进 platforms） */
-const IGNORED_RULES = [/\.deb$/i, /^latest\.json$/i, /\.sha256$/i, /\.sig$/i]
+const IGNORED_RULES = [/\.deb$/i, /\.apk$/i, /^latest\.json$/i, /\.sha256$/i, /\.sig$/i]
 
 /**
  * 把一个文件名归类到 Tauri updater 的 target key。

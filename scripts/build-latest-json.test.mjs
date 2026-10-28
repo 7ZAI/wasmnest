@@ -6,7 +6,7 @@
  *
  * 行为契约：
  * | 契约ID | 来源 | 规则 |
- * | C-001 | classifyAsset | `-setup.exe` / `.AppImage[.tar.gz]` 归到对应 target key；同时兼容 `_x64-setup.exe` 与 `-release-x64-setup.exe`；deb / latest.json / .sig / .sha256 不算载体；未知返回 null |
+ * | C-001 | classifyAsset | `-setup.exe` / `.AppImage[.tar.gz]` 归到对应 target key；同时兼容 `_x64-setup.exe` 与 `-release-x64-setup.exe`；deb / apk / latest.json / .sig / .sha256 不算载体；未知返回 null |
  * | C-002 | classifyAsset | `.AppImage.tar.gz` 必须先于裸 `.AppImage` 命中（更新包不能被当成安装包） |
  * | C-003 | collectArtifacts | 缺 `<artifact>.sig` 直接抛错并点名；目录无载体抛错；签名内容 trim |
  * | C-004 | buildLatestJson | `<baseUrl>/<encodeURIComponent(name)>`；platforms 键稳定排序；signature 原样 |
@@ -64,8 +64,9 @@ describe('classifyAsset（C-001 / C-002）', () => {
     assert.notEqual(classifyAsset(`${name}.sig`), 'linux-x86_64')
   })
 
-  it('deb / latest.json / .sig / .sha256 不是更新载体', () => {
+  it('deb / apk / latest.json / .sig / .sha256 不是更新载体', () => {
     assert.equal(classifyAsset('WasmNest_0.0.1_amd64.deb'), null)
+    assert.equal(classifyAsset('WasmNest-0.0.1-release-arm64.apk'), null)
     assert.equal(classifyAsset('latest.json'), null)
     assert.equal(classifyAsset('WasmNest_0.0.1_x64-setup.exe.sig'), null)
     assert.equal(classifyAsset('WasmNest_0.0.1_x64-setup.exe.sha256'), null)
@@ -86,6 +87,8 @@ describe('collectArtifacts（C-003）', () => {
     writeFileSync(join(dir, 'WasmNest_0.0.1_amd64.AppImage.tar.gz'), 'x')
     writeFileSync(join(dir, 'WasmNest_0.0.1_amd64.AppImage.tar.gz.sig'), ' SIGLN \n')
     writeFileSync(join(dir, 'WasmNest_0.0.1_amd64.deb'), 'x')
+    // Android APK 与 deb 一样是发布资产但不是桌面 updater 载体：忽略，不报错
+    writeFileSync(join(dir, 'WasmNest-0.0.1-release-arm64.apk'), 'x')
 
     const artifacts = collectArtifacts(dir)
     assert.deepEqual(

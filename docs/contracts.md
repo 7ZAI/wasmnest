@@ -94,9 +94,9 @@
 | 项 | 值 |
 | --- | --- |
 | tag | `v<product>`（平台仓 tag 规则 = `vX.Y.Z`，**不带 host 前缀**） |
-| workflow | `.github/workflows/product-release.yml`（`vendor` → `build` → `publish`） |
-| 资产 | Windows `WasmNest-<ver>-release-x64-setup.exe`（NSIS perMachine）、Linux `WasmNest-<ver>-release-amd64.deb` + `WasmNest_<ver>_amd64.AppImage`、`latest.json`、各产物 `.sha256` |
-| 消费方 | 终端用户 / 宿主自动升级（`plugins.updater.endpoints`） |
+| workflow | `.github/workflows/product-release.yml`（`vendor` → `build` + `android` → `publish`） |
+| 资产 | Windows `WasmNest-<ver>-release-x64-setup.exe`（NSIS perMachine）、Linux `WasmNest-<ver>-release-amd64.deb` + `WasmNest_<ver>_amd64.AppImage`、Android `WasmNest-<ver>-release-arm64.apk`、`latest.json`、各产物 `.sha256` |
+| 消费方 | 终端用户 / 桌面宿主自动升级（`plugins.updater.endpoints`）；Android 靠手动装 APK 覆盖升级 |
 
 ### 7.1 随包应用（vendor 阶段）
 
@@ -118,6 +118,12 @@
 > 应用版本是**清单字段**，不是「latest」：任何一个 app 发版，都要把平台清单里该 app 的
 > `version` + `sha256`（+ `package`）同批更新，否则 `vendor` 会因 sha 不符直接红。
 
+移动端**不走 vendor**：应用仓 `app-release` 只产出 desktop zip，`apps.<id>.ends.mobile`
+只有 `artifact`（无 `package` / `sha256`）。`android` job 按清单 `repos.apps.tag` 检出应用仓
+源码，由 APK 的 `beforeBuildCommand`（`pnpm run build:all` → `plugins:build`）现场构建移动
+插件（wasm32-unknown-unknown + componentize）到 `resources/plugins/mobile/` 再打进 APK assets；
+随包范围仍由清单 `ends.mobile` 决定，空壳判据 = APK 内至少一个 `assets/resources/plugins/**/plugin.json`。
+
 ### 7.2 `latest.json`（自动升级入口）
 
 - 生产者 = `scripts/build-latest-json.mjs`（`product-release.yml` 的 publish job），**禁止手写**。
@@ -129,6 +135,7 @@
 | `linux-x86_64` | `*.AppImage[.tar.gz]` + `.sig` | **Linux 唯一可升级形态** |
 
 - `.deb` **不进** `platforms`（updater 在 Linux 只支持 AppImage 就地替换），但仍作为资产发布。
+- Android `.apk` 同样**不进** `platforms`（桌面 updater 没有 Android target）：作为发布资产原样提供，移动端暂无自动升级。
 - `url` = `https://github.com/<repo>/releases/download/<tag>/<file>`；`signature` = 同名 `.sig` 内容。
 - 失败口径：同 target 0 个 / 多于 1 个 / 缺 `.sig` / 空签名 → 抛错（残缺 `latest.json` 会让已装客户端的升级检查长期失败且无人察觉）。
 
@@ -138,12 +145,16 @@
 | --- | --- | --- |
 | `TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD` | 升级包 minisign 签名 | 不生成 `.sig` → `latest.json` 组装失败 |
 | `WINDOWS_CERTIFICATE_BASE64` / `_PASSWORD` | Windows Authenticode（`.pfx`） | 安装包弹「未知发布者」（SmartScreen） |
+| `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` | Android APK 签名（keystore） | `android` job 显性失败；`unsigned=true` 用一次性临时 keystore（仅验证流水线，产物不可分发） |
 
 - 公钥真源 = `wasmnest-desktop/src-tauri/tauri.conf.json` 的 `plugins.updater.pubkey`，必须与私钥配对；换钥 = 换公钥 + 换两个 secret，同时进行。
 - 缺密钥时 `product-release.yml` **显性失败**，不产出未签名安装包；只验证流水线用 `workflow_dispatch` 的 `unsigned=true`（强制不发布）。
+- Android keystore 生成一次即可（密码离线保管，`*.keystore` / `key.properties` 均不入库）：
+  `keytool -genkeypair -keystore wasmnest-release.keystore -alias wasmnest -keyalg RSA -keysize 2048 -validity 10000`，
+  `base64 -w0 wasmnest-release.keystore` 写入 `ANDROID_KEYSTORE_BASE64`。**换 keystore 会让已装 APK 无法覆盖升级**（签名不一致）。
 - 2023-06 后不再签发可导出 `.pfx` 的纯软件证书；改用云签名（Azure Trusted Signing / SSL.com eSigner）时，把「导入证书」步骤换成 `bundle.windows.signCommand`，其余契约不变。
 
 ### 7.4 版本真源
 
-- 资产名里的 `<ver>` = `manifest.product`，构建时用 `--config '{"version":"<product>"}'` 覆盖；`tauri.conf.json` 的 `version` 仍是 `set-host-version.mjs` 的写入点（两条版本线共用一份构建配置，不改文件）。
+- 资产名里的 `<ver>` = `manifest.product`，构建时用 `--config '{"version":"<product>"}'` 覆盖；`tauri.conf.json` 的 `version` 仍是 `set-host-version.mjs` 的写入点（两条版本线共用一份构建配置，不改文件）。Android 的 `tauri android build` 用同一 `--config` 覆盖 `versionName`（`versionCode` 默认按 semver 推导：`major*1e6 + minor*1e3 + patch`）。
 - 发布前一致性：`manifest.product` == 根 `package.json` 版本 == tag 去掉 `v`；`product-release.yml` 逐项校验，不一致即红。

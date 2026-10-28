@@ -87,11 +87,12 @@ crates.io 精确版本；同场开发由平台仓根 `.cargo/config.toml` 的
 | 项 | 值 |
 | --- | --- |
 | 触发 | tag `v<product>`（平台仓 tag 规则 `vX.Y.Z`，**不带 host 前缀**） |
-| workflow | `.github/workflows/product-release.yml`（`vendor` → `build` → `publish`） |
-| 产物 | Windows `WasmNest-<ver>-release-x64-setup.exe`（NSIS perMachine）、Linux `WasmNest-<ver>-release-amd64.deb` + `WasmNest_<ver>_amd64.AppImage`、`latest.json`、各产物 `.sha256` |
+| workflow | `.github/workflows/product-release.yml`（`vendor` → `build` + `android` → `publish`） |
+| 产物 | Windows `WasmNest-<ver>-release-x64-setup.exe`（NSIS perMachine）、Linux `WasmNest-<ver>-release-amd64.deb` + `WasmNest_<ver>_amd64.AppImage`、Android `WasmNest-<ver>-release-arm64.apk`、`latest.json`、各产物 `.sha256` |
 
-- **随包应用不本地构建**：`vendor` job 跑 `node scripts/vendor-apps.mjs`，下载应用仓成品包并按清单 sha256 / libRef / plugin.json 三道校验后铺进 `resources/plugins/desktop/`（`resources/plugins/**` 只入库 `.gitkeep`，漏了就发空壳安装包）。
-- 缺签名密钥（`TAURI_SIGNING_PRIVATE_KEY` / `WINDOWS_CERTIFICATE_*`）时构建**显性失败**，不产出未签名安装包；验证流水线用 `workflow_dispatch` 的 `unsigned=true`。契约与密钥清单见 docs/contracts.md §7。
+- **桌面随包应用不本地构建**：`vendor` job 跑 `node scripts/vendor-apps.mjs`，下载应用仓成品包并按清单 sha256 / libRef / plugin.json 三道校验后铺进 `resources/plugins/desktop/`（`resources/plugins/**` 只入库 `.gitkeep`，漏了就发空壳安装包）。
+- **移动端随包应用必须现场构建**：应用仓只发布 desktop zip（`apps.<id>.ends.mobile` 无 `package`），`android` job 按清单 `repos.apps.tag` 检出应用仓源码，由 APK 的 `beforeBuildCommand`（`pnpm run build:all` → `plugins:build`）构建移动插件（wasm32-unknown-unknown + componentize）后打进 APK assets；空壳判据 = APK 内至少一个 `assets/resources/plugins/**/plugin.json`。
+- 缺签名密钥（`TAURI_SIGNING_PRIVATE_KEY` / `WINDOWS_CERTIFICATE_*` / `ANDROID_KEYSTORE_*`）时构建**显性失败**，不产出未签名安装包；验证流水线用 `workflow_dispatch` 的 `unsigned=true`（Android 用一次性临时 keystore）。契约与密钥清单见 docs/contracts.md §7。
 
 ## 4. 移动端（`wasmnest-mobile/`）
 | 命令 | 说明 |
