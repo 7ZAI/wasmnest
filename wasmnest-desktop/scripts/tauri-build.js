@@ -103,11 +103,13 @@ function escapeRegExp(text) {
  * Tauri 2 打包器固定用 {productName}_{version}_{arch}-setup.exe 命名（BundleConfig
  * 无 fileName 字段），与移动端 APK 的 {name}-{version}-release.apk 风格不一致。
  * 本步骤在构建成功后重命名安装包及其 .sig（签名覆盖文件内容、与文件名无关，同步改名即可）。
- * CI（GitHub Actions）走 tauri-action 发布链路不经本脚本，重命名仅影响本地/自定义构建产物。
+ *
+ * **本地与 CI 必须同名**（2026-10-28）：CI 发布构建同样走本脚本（`product-release.yml`），
+ * 所以**不能**按 `GITHUB_ACTIONS` 跳过重命名——否则本地叫
+ * `WasmNest-0.0.1-release-x64-setup.exe`、Release 上却叫 `WasmNest_0.0.1_x64-setup.exe`，
+ * 文档里的文件名与用户下载到的对不上（历史上就是这么漂的）。
  */
 function renameInstallerWithReleaseSuffix() {
-  if (process.env.GITHUB_ACTIONS) return
-
   let productName, version
   try {
     const config = JSON.parse(readFileSync(join(projectRoot, 'src-tauri/tauri.conf.json'), 'utf8'))
@@ -147,11 +149,10 @@ function renameInstallerWithReleaseSuffix() {
  * DEB 安装包重命名为带 release 标记的格式
  *
  * Tauri 2 打包器固定用 {productName}_{version}_{arch}.deb 命名，
- * 重命名为 {name}-{version}-release-{arch}.deb 以与移动端 APK 风格一致。
+ * 重命名为 {name}-{version}-release-{arch}.deb 以与移动端 APK 风格一致；
+ * CI 同样要改名（理由同上方 NSIS 分支：本地与发布产物必须同名）。
  */
 function renameDebWithReleaseSuffix() {
-  if (process.env.GITHUB_ACTIONS) return
-
   let productName, version
   try {
     const config = JSON.parse(readFileSync(join(projectRoot, 'src-tauri/tauri.conf.json'), 'utf8'))

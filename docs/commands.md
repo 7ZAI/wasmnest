@@ -40,7 +40,7 @@
 | `pnpm install` | 本端依赖（独立 workspace，`packages/*`） |
 | `pnpm run tauri:dev` | 宿主 dev（`scripts/dev-run.js`：端口预检 → 插件产物预检 → tauri dev → 前端 watch；**bedcode 前端不参与 watch**，改了它单独重建 §5.2）。宿主启动的 file watch 覆盖整个 `src-tauri/`——**别在宿主冷构建期间手工往 `src-tauri/` 拷产物**，会触发重启风暴（机制见 `scripts/dev-run.js` 头注释） |
 | 裸 `tauri dev` | 等价地保证插件产物最新：`tauri.conf.json` 的 `beforeDevCommand` 串入 `node scripts/plugin-precheck.mjs`（与 dev-run 共用同一预检模块，幂等），宿主 cargo build 前完成 6 个插件（4 apps + 2 servers）的 wasm / 前端陈旧补建与直写 resources；**但不带前端 watch**——改插件前端请用 `tauri:dev` 或手动 §5.2 |
-| `pnpm run tauri:build` | 生产构建（`scripts/tauri-build.js` 解析 updater 签名；无密钥时自动关闭更新包产物） |
+| `pnpm run tauri:build` | 生产构建（`scripts/tauri-build.js` 解析 updater 签名；无密钥时自动关闭更新包产物；成功后把安装包重命名为 `<name>-<version>-release-<arch>[-setup].exe/.deb` —— **本地与 CI 同名**，命名规则在脚本头注释固定） |
 | `pnpm run host:pack` | 产出「可运行宿主产物 + 分发资产」（`scripts/package-host.mjs`；产物契约 = 应用仓 `.scratch/2026-10-21-host-runtime-distribution/CONTRACT.md` §1）。默认写 `dist-host/host-desktop/`（**不在 `dist/` 下**，避免被 `vite build` 清空）并产出 `dist-host/host-desktop-<version>-<platform>-<arch>.tar.gz` + `.sha256`；`host-version.json` 的版本事实来自 `release-manifest.json` 的 `hostRuntime`。`--skip-build` 复用 `src-tauri/target/debug/<bin>` 重打资产；`--out` / `--asset-dir` 覆盖落点；`--via-cargo` 绕开 tauri CLI 版本一致性检查。应用侧以 env `WASMNEST_PLUGINS_DIR` 指定 plugins 目录 |
 | `pnpm run plugins:build` | 全量应用构建（`scripts/plugin-build.js --all`，注册表 = 5 个应用名单单一真源，见 §5.1） |
 | `pnpm run plugins:dev` | 单插件 dev 构建（`scripts/plugin-dev.js`，见 §5.2） |
