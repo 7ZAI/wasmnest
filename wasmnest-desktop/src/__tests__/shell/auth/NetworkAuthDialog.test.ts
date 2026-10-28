@@ -84,7 +84,7 @@ async function emitRequest(overrides: Record<string, unknown> = {}): Promise<voi
   tauriEvent.lastNetworkAuthHandler?.({
     payload: {
       requestId: 'req-net-1',
-      pluginId: 'com.wasmnest.agent-hub',
+      pluginId: 'com.wasmnest.bedcode',
       origin: 'https://api.github.com:443',
       ...overrides,
     },
@@ -134,7 +134,7 @@ describe('NetworkAuthDialog 组件（票 05）', () => {
     const dialog = document.querySelector('.max-w-sm')
     expect(dialog).toBeTruthy()
     expect(dialog?.textContent).toContain('网络访问授权')
-    expect(dialog?.textContent).toContain('com.wasmnest.agent-hub')
+    expect(dialog?.textContent).toContain('com.wasmnest.bedcode')
     expect(dialog?.textContent).toContain('https://api.github.com:443')
     // 同意 = 此地址此后免询问：范围说不清时用户只能猜
     expect(dialog?.textContent).toContain('同意后不再询问')

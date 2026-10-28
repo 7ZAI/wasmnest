@@ -308,13 +308,15 @@ async fn test_server_auth_policy_closed_loop() {
 
 /// 2026-09-29 事故真源回归锁（spec §10 票 05 第 1 条）：**多候选必须落在注册者身上**
 ///
-/// 复刻事故：agent-hub（按 id 排序在 bedcode **之前**、且 SDK 无条件导出
-/// auth-policy 默认拒绝实现）先行激活成候选；旧裁决按「能力探测 + 排序取首个」
-/// 会选中 agent-hub 而全局拒绝。新裁决只认注册表（ADR 0031 K1/K4）：
-/// ① 只注册 bedcode（agent-hub 不注册）→ 注册表属主 = bedcode；
-/// ② 未撤销 token 放行（若旧逻辑选中 agent-hub，其默认拒绝会让它 Err）；
+/// 复刻 2026-09-29 事故（原始当事者 agent-hub 已退役，回归锁用 ai-chatbox
+/// 顶替其位置——任一 rust-ts SDK 都无条件导出 auth-policy 默认拒绝实现，
+/// 判据不依赖具体 app）：候选按 id 排序在 bedcode **之前**、先行激活成候选；
+/// 旧裁决按「能力探测 + 排序取首个」会选中它而全局拒绝。新裁决只认注册表
+/// （ADR 0031 K1/K4）：
+/// ① 只注册 bedcode（ai-chatbox 不注册）→ 注册表属主 = bedcode；
+/// ② 未撤销 token 放行（若旧逻辑选中未注册者，其默认拒绝会让它 Err）；
 /// ③ 撤销后拒绝原因来自 bedcode 私有库 trust 真源（deny_kind=policy）；
-/// ④ 停用未注册者（agent-hub）不影响注册表（purge 只碰本人）。
+/// ④ 停用未注册者（ai-chatbox）不影响注册表（purge 只碰本人）。
 #[tokio::test(flavor = "multi_thread")]
 async fn test_auth_center_multi_candidate_registration_lock() {
     use wasmnest_desktop_lib::utils::auth::auth_center as bridge;
@@ -324,25 +326,25 @@ async fn test_auth_center_multi_candidate_registration_lock() {
     let _permit = registry::registry_gate().acquire().await.expect("registry test gate");
     // 闸门内清台：顺序反了会清掉另一个用例在闸门内登记的中心（并行红）
     registry::reset();
-    const AGENT_HUB_ID: &str = "com.wasmnest.agent-hub";
+    const OTHER_CANDIDATE_ID: &str = "com.wasmnest.ai-chatbox";
     const CENTER_METHODS: [&str; 4] = ["pairing_code", "qr", "biometric", "jwt"];
     let session_id = bridge::SESSION_PLUGIN_ID;
 
-    // agent-hub 与 bedcode 两个 wasm 产物都必须可加载
+    // ai-chatbox 与 bedcode 两个 wasm 产物都必须可加载
     let session_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
-    let hub_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.agent-hub/wasmnest_plugin_agent_hub.wasm");
-    if !session_wasm.exists() || !hub_wasm.exists() {
+    let other_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../resources/plugins/desktop/com.wasmnest.ai-chatbox/wasmnest_plugin_ai_chatbox.wasm");
+    if !session_wasm.exists() || !other_wasm.exists() {
         eprintln!("[skip] wasm artifacts not built");
         return;
     }
     let host = setup_host().await;
 
-    // 两个导出 auth-policy 的候选都进实例表（agent-hub id 排序在前）；agent-hub
+    // 两个导出 auth-policy 的候选都进实例表（未注册者 id 排序在前）；ai-chatbox
     // 激活失败不阻断本锁（它的激活可能与测试宿主能力面不完全匹配），实例仍在册
     for (id, wasm, lib) in [
-        (AGENT_HUB_ID, &hub_wasm, "wasmnest_plugin_agent_hub"),
+        (OTHER_CANDIDATE_ID, &other_wasm, "wasmnest_plugin_ai_chatbox"),
         (session_id, &session_wasm, "bedcode_plugin_terminal_session"),
     ] {
         let component = host
@@ -373,7 +375,7 @@ async fn test_auth_center_multi_candidate_registration_lock() {
         }
     }
 
-    // 只注册 bedcode 为认证中心；agent-hub 即使排序在前也不被选中
+    // 只注册 bedcode 为认证中心；ai-chatbox 即使排序在前也不被选中
     let _ = registry::register(
         bridge::SESSION_PLUGIN_ID,
         CENTER_METHODS.iter().map(|s| s.to_string()).collect(),
@@ -381,11 +383,11 @@ async fn test_auth_center_multi_candidate_registration_lock() {
     assert_eq!(
         registry::center().map(|e| e.owner),
         Some(bridge::SESSION_PLUGIN_ID.to_string()),
-        "注册表只认注册者（agent-hub 排序在前也不被选中）"
+        "注册表只认注册者（ai-chatbox 排序在前也不被选中）"
     );
 
     // token 用**中心自己那份密钥环**（本用例给 bedcode 种子）签出：
-    // 验签方只能是 bedcode；若旧逻辑选中 agent-hub 的默认拒绝实现，
+    // 验签方只能是 bedcode；若旧逻辑选中未注册者的默认拒绝实现，
     // 它既没有这把密钥也验不过 → 裁决必错，与本用例要锁的「注册表说了算」同向
     const TEST_KEY: [u8; 32] = [0x5a; 32];
     let token = wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(
@@ -394,13 +396,13 @@ async fn test_auth_center_multi_candidate_registration_lock() {
         Some("Phone"),
         Some("fp-t"),
     );
-    // 私有库无撤销记录 → 放行（若旧逻辑选中 agent-hub 的默认拒绝，这里会是 Err）
+    // 私有库无撤销记录 → 放行（若旧逻辑选中未注册者的默认拒绝，这里会是 Err）
     // 失败信息带裁决原文：三类拒因（no_center / unavailable / policy）排障路径完全不同，
     // 只报「assert is_ok」会把「注册表被并发清台」与「guest 调用超时」混成一个症状
     let decision = bridge::enforce_connection_policy(host.as_ref(), &token);
     assert!(
         decision.is_ok(),
-        "裁决必须落在已注册的 bedcode 身上（agent-hub 未被注册即使排序在前）: \
+        "裁决必须落在已注册的 bedcode 身上（未注册者即使排序在前）: \
          decision={decision:?} registry={:?}",
         registry::center().map(|e| e.owner)
     );
@@ -434,10 +436,10 @@ async fn test_auth_center_multi_candidate_registration_lock() {
         "拒绝原因来自 bedcode 的 trust 策略（deny_kind=policy）: {deny}"
     );
 
-    // 停用 agent-hub（未注册者）→ 注册表与裁决不受影响（purge 只碰本人）
-    host.deactivate_plugin(AGENT_HUB_ID, false)
+    // 停用未注册者 → 注册表与裁决不受影响（purge 只碰本人）
+    host.deactivate_plugin(OTHER_CANDIDATE_ID, false)
         .await
-        .expect("deactivate agent-hub");
+        .expect("deactivate unregistered candidate");
     assert_eq!(
         registry::center().map(|e| e.owner),
         Some(bridge::SESSION_PLUGIN_ID.to_string()),

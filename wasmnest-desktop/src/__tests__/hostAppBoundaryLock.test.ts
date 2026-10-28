@@ -43,7 +43,7 @@ function hostSources(): string[] {
  * L2 内部业务，随宿主分发）住 `servers/`。
  */
 const APP_ENTRIES = [
-  ...['agent-hub', 'ai-chatbox', 'file-transfer', 'bedcode'].map((slug) =>
+  ...['ai-chatbox', 'file-transfer', 'bedcode'].map((slug) =>
     appPath(slug, 'desktop', 'src/entry.ts'),
   ),
   projectPath('servers', 'auth-center', 'desktop', 'src/entry.ts'),
@@ -79,7 +79,7 @@ describe('宿主 / 应用边界锁', () => {
   })
 
   it('L3 各 app entry.ts 导出 mountApp 契约（宿主 useAppMount 装载面）', () => {
-    expect(APP_ENTRIES.length, 'app 清单不得为空（否则本锁空转）').toBe(6)
+    expect(APP_ENTRIES.length, 'app 清单不得为空（否则本锁空转）').toBe(5)
     for (const entry of APP_ENTRIES) {
       expect(existsSync(entry), `${entry} 缺失（app 前端必须可装载）`).toBe(true)
       const code = stripComments(readFileSync(entry, 'utf-8'))
@@ -119,7 +119,7 @@ describe('宿主 / 应用边界锁', () => {
   })
 
   it('L5 各 app entry.ts 导出 mountPreview 契约（多任务卡片预览面）', () => {
-    expect(APP_ENTRIES.length, 'app 清单不得为空（否则本锁空转）').toBe(6)
+    expect(APP_ENTRIES.length, 'app 清单不得为空（否则本锁空转）').toBe(5)
     // 逐项收集再断言：红灯一次性点名全部缺失项（循环内断言只报第一个）
     const missing: string[] = []
     const fieldOffenders: string[] = []

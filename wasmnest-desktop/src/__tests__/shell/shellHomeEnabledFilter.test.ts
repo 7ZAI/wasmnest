@@ -138,12 +138,12 @@ describe('主屏宿主系统级服务（L1/L2 = 服务网格，不进应用 / �
     mocks.plugins.value = [
       entry({ id: 'com.wasmnest.auth-center', pluginId: 'com.wasmnest.auth-center', name: 'Auth Center', kind: 'internal-business', enabled: true }),
       entry({ id: 'com.wasmnest.monitor', pluginId: 'com.wasmnest.monitor', name: 'MonitoringService', kind: 'internal-business', enabled: true }),
-      entry({ id: 'com.wasmnest.agent-hub', pluginId: 'com.wasmnest.agent-hub', name: 'Agent Hub', enabled: true }),
+      entry({ id: 'com.wasmnest.ai-chatbox', pluginId: 'com.wasmnest.ai-chatbox', name: 'AI Chatbox', enabled: true }),
     ]
     const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
 
     // 业务应用照常出现在应用网格；两个系统服务不在应用网格（也不以插件名出现）
-    expect(wrapper.text()).toContain('Agent Hub')
+    expect(wrapper.text()).toContain('AI Chatbox')
     expect(wrapper.text()).not.toContain('Auth Center')
     expect(wrapper.text()).not.toContain('MonitoringService')
     // 服务区：标题 + 两个服务（本地化名 key，mock t 原样返回）
@@ -155,7 +155,7 @@ describe('主屏宿主系统级服务（L1/L2 = 服务网格，不进应用 / �
   it('分区顺序固定为 应用 → 服务 → 系统', () => {
     mocks.plugins.value = [
       entry({ id: 'com.wasmnest.auth-center', pluginId: 'com.wasmnest.auth-center', name: 'Auth Center', kind: 'internal-business', enabled: true }),
-      entry({ id: 'com.wasmnest.agent-hub', pluginId: 'com.wasmnest.agent-hub', name: 'Agent Hub', enabled: true }),
+      entry({ id: 'com.wasmnest.ai-chatbox', pluginId: 'com.wasmnest.ai-chatbox', name: 'AI Chatbox', enabled: true }),
     ]
     const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
 
@@ -175,14 +175,14 @@ describe('主屏宿主系统级服务（L1/L2 = 服务网格，不进应用 / �
   it('搜索命中服务 → 服务区条目出现；应用网格不因服务被搜到而出现', () => {
     mocks.plugins.value = [
       entry({ id: 'com.wasmnest.auth-center', pluginId: 'com.wasmnest.auth-center', name: 'Auth Center', kind: 'internal-business', enabled: true }),
-      entry({ id: 'com.wasmnest.agent-hub', pluginId: 'com.wasmnest.agent-hub', name: 'Agent Hub', enabled: true }),
+      entry({ id: 'com.wasmnest.ai-chatbox', pluginId: 'com.wasmnest.ai-chatbox', name: 'AI Chatbox', enabled: true }),
     ]
     mocks.homeQ.value = 'Auth'
     const wrapper = mount(ShellHome, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
 
     // 搜索按宿主本地化名命中（mock t 返回 key：'shell.home.serviceAuthCenter' 含 'Auth'）
     expect(wrapper.text()).toContain('shell.home.serviceAuthCenter')
-    expect(wrapper.text()).not.toContain('Agent Hub')
+    expect(wrapper.text()).not.toContain('AI Chatbox')
   })
 
   it('服务点击打开应用面（openApp），宿主系统页点击仍走 openSys', async () => {

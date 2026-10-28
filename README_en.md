@@ -101,7 +101,7 @@ WasmNest consists of four peer repositories, expected in a sibling layout:
 | --- | --- | --- |
 | **[wasmnest](https://github.com/7ZAI/wasmnest)** (this repo) | Host and release surface | Desktop / mobile hosts, per-end SDKs, WIT composition, cross-repo version manifest, build and packaging tools |
 | **[wasmnest-lib](https://github.com/7ZAI/wasmnest-lib)** | Reusable mechanisms | wasm runtime core, host API implementation layer, server transports, PTY / mDNS / notify / crypto engines, contract constants |
-| **[wasmnest-apps](https://github.com/7ZAI/wasmnest-apps)** | Business home | BedCode, AI Chatbox, File Transfer, Agent Hub and other wasm apps |
+| **[wasmnest-apps](https://github.com/7ZAI/wasmnest-apps)** | Business home | BedCode, AI Chatbox, File Transfer and other wasm apps (Agent Hub merged into BedCode) |
 | **[wasmnest-test](https://github.com/7ZAI/wasmnest-test)** | Cross-end gate | Real mobile client ↔ real desktop server interop, cross-repo contract locks |
 
 The platform consumes the capability repo directly through Cargo sibling paths (no copies, no submodules). Non-standard layouts can override `WASMNEST_LIB_ROOT` and `WASMNEST_APPS_ROOT`; a missing directory fails visibly instead of returning a possibly invalid path.
@@ -115,7 +115,6 @@ All business apps live in the apps repo; the tables below list the built-ins shi
 | [**BedCode**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/bedcode) | `com.wasmnest.bedcode` | desktop + mobile | Terminal session center: pairing and trust, session lifecycle orchestration, task queue and agent integration; the mobile side is a remote terminal controller |
 | [**AI Chatbox**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/ai-chatbox) | `com.wasmnest.ai-chatbox` | desktop + mobile | Multi-provider AI chat: streaming output, multi-session management, JSONL conversation logs |
 | [**File Transfer**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/file-transfer) | `com.wasmnest.file-transfer` | desktop + mobile | LAN peer discovery and bidirectional file transfer: queues, pause/resume, resumable transfers, shared directories |
-| [**Agent Hub**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/agent-hub) | `com.wasmnest.agent-hub` | desktop | Unified console for Agent CLIs: install/uninstall, Skills management, provider configuration, usage stats |
 
 **System services** (assembly role `internal-business`) do not appear in the task switcher; the only close entry is "Disable" on the app management page (desktop) / app details page (mobile).
 

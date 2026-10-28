@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn slug_of_plugin_id_strips_first_party_prefix_only() {
-        assert_eq!(slug_of_plugin_id("com.wasmnest.agent-hub"), Some("agent-hub"));
+        assert_eq!(slug_of_plugin_id("com.wasmnest.file-transfer"), Some("file-transfer"));
         assert_eq!(slug_of_plugin_id("com.wasmnest.bedcode"), Some("bedcode"));
         assert_eq!(slug_of_plugin_id("com.wasmnest."), None);
         assert_eq!(slug_of_plugin_id("com.other.app"), None);
@@ -509,15 +509,18 @@ mod tests {
     #[test]
     fn parse_release_tag_is_strict() {
         assert_eq!(
-            parse_release_tag("agent-hub-v0.0.2", "agent-hub"),
+            parse_release_tag("file-transfer-v0.0.2", "file-transfer"),
             Some(semver::Version::new(0, 0, 2))
         );
         // 其他应用的同形 tag 不算命中
-        assert_eq!(parse_release_tag("bedcode-v0.0.2", "agent-hub"), None);
+        assert_eq!(parse_release_tag("bedcode-v0.0.2", "file-transfer"), None);
         // 非法形态
-        assert_eq!(parse_release_tag("agent-hub-v1", "agent-hub"), None);
-        assert_eq!(parse_release_tag("agent-hub-0.0.2", "agent-hub"), None);
-        assert_eq!(parse_release_tag("agent-hub-v0.0.2-rc.1", "agent-hub").is_some(), true);
+        assert_eq!(parse_release_tag("file-transfer-v1", "file-transfer"), None);
+        assert_eq!(parse_release_tag("file-transfer-0.0.2", "file-transfer"), None);
+        assert_eq!(
+            parse_release_tag("file-transfer-v0.0.2-rc.1", "file-transfer").is_some(),
+            true
+        );
     }
 
     fn release(tag: &str, draft: bool, prerelease: bool, assets: &[(&str, u64)]) -> serde_json::Value {
@@ -534,30 +537,30 @@ mod tests {
     #[test]
     fn pick_latest_release_takes_highest_version_and_skips_drafts() {
         let releases = json!([
-            release("agent-hub-v0.0.1", false, false, &[]),
-            release("bedcode-v9.9.9", false, false, &[]),  // 其他应用不算
-            release("agent-hub-v0.0.9", true, false, &[]), // draft 不算
-            release("agent-hub-v0.0.8", false, true, &[]), // prerelease 不算
+            release("file-transfer-v0.0.1", false, false, &[]),
+            release("bedcode-v9.9.9", false, false, &[]), // 其他应用不算
+            release("file-transfer-v0.0.9", true, false, &[]), // draft 不算
+            release("file-transfer-v0.0.8", false, true, &[]), // prerelease 不算
             release(
-                "agent-hub-v0.0.3",
+                "file-transfer-v0.0.3",
                 false,
                 false,
-                &[("agent-hub-desktop-v0.0.3.zip", 123)]
+                &[("file-transfer-desktop-v0.0.3.zip", 123)]
             ),
             release("apps-v1.0.0", false, false, &[]), // 整仓 tag 不算
         ]);
-        let picked = pick_latest_release(&releases, "agent-hub").unwrap();
-        assert_eq!(picked.tag, "agent-hub-v0.0.3");
+        let picked = pick_latest_release(&releases, "file-transfer").unwrap();
+        assert_eq!(picked.tag, "file-transfer-v0.0.3");
         assert_eq!(picked.version, semver::Version::new(0, 0, 3));
         assert_eq!(picked.assets.len(), 1);
-        assert_eq!(picked.assets[0].name, "agent-hub-desktop-v0.0.3.zip");
+        assert_eq!(picked.assets[0].name, "file-transfer-desktop-v0.0.3.zip");
     }
 
     #[test]
     fn pick_latest_release_names_slug_when_nothing_matches() {
         let releases = json!([release("bedcode-v0.0.1", false, false, &[])]);
-        let err = pick_latest_release(&releases, "agent-hub").unwrap_err();
-        assert!(err.to_string().contains("agent-hub"), "实际: {err}");
+        let err = pick_latest_release(&releases, "file-transfer").unwrap_err();
+        assert!(err.to_string().contains("file-transfer"), "实际: {err}");
     }
 
     fn metadata(plugin_id: &str, version: &str, compat: serde_json::Value) -> serde_json::Value {
@@ -575,12 +578,13 @@ mod tests {
     #[test]
     fn validate_release_metadata_accepts_wellformed_with_compat() {
         let meta = metadata(
-            "com.wasmnest.agent-hub",
+            "com.wasmnest.file-transfer",
             "0.0.2",
             json!({ "hostRuntime": "0.0.1", "mountContract": "1", "sdkVersion": "0.0.1", "witVersion": "0.0.1" }),
         );
-        let (zip, sha, bytes, compat) = validate_release_metadata(&meta, "com.wasmnest.agent-hub", "0.0.2").unwrap();
-        assert_eq!(zip, "agent-hub-desktop-v0.0.2.zip");
+        let (zip, sha, bytes, compat) =
+            validate_release_metadata(&meta, "com.wasmnest.file-transfer", "0.0.2").unwrap();
+        assert_eq!(zip, "file-transfer-desktop-v0.0.2.zip");
         assert_eq!(sha, "a".repeat(64));
         assert_eq!(bytes, 42);
         assert_eq!(
@@ -597,12 +601,12 @@ mod tests {
     /// 旧发布物缺 compat 段 → 合法但 compat=None（不兼容裁决归前端，本层不吞信息）
     #[test]
     fn validate_release_metadata_allows_missing_compat_as_none() {
-        let meta = metadata("com.wasmnest.agent-hub", "0.0.1", serde_json::Value::Null);
+        let meta = metadata("com.wasmnest.file-transfer", "0.0.1", serde_json::Value::Null);
         // 上面 helper 里 compat 显式 null；这里再验一个完全没有 compat 键的形态
-        let mut raw = metadata("com.wasmnest.agent-hub", "0.0.1", serde_json::Value::Null);
+        let mut raw = metadata("com.wasmnest.file-transfer", "0.0.1", serde_json::Value::Null);
         raw.as_object_mut().unwrap().remove("compat");
         for meta in [meta, raw] {
-            let (_, _, _, compat) = validate_release_metadata(&meta, "com.wasmnest.agent-hub", "0.0.1").unwrap();
+            let (_, _, _, compat) = validate_release_metadata(&meta, "com.wasmnest.file-transfer", "0.0.1").unwrap();
             assert_eq!(compat, None);
         }
     }
@@ -610,52 +614,58 @@ mod tests {
     #[test]
     fn validate_release_metadata_rejects_identity_and_integrity_drift() {
         let base = metadata(
-            "com.wasmnest.agent-hub",
+            "com.wasmnest.file-transfer",
             "0.0.2",
             json!({ "hostRuntime": "0.0.1", "mountContract": "1", "sdkVersion": "0.0.1", "witVersion": "0.0.1" }),
         );
         // id 冒名
         let mut m = base.clone();
         m["plugin"]["id"] = json!("com.wasmnest.bedcode");
-        assert!(validate_release_metadata(&m, "com.wasmnest.agent-hub", "0.0.2").is_err());
+        assert!(validate_release_metadata(&m, "com.wasmnest.file-transfer", "0.0.2").is_err());
         // 端不符
         let mut m = base.clone();
         m["end"] = json!("mobile");
-        assert!(validate_release_metadata(&m, "com.wasmnest.agent-hub", "0.0.2").is_err());
+        assert!(validate_release_metadata(&m, "com.wasmnest.file-transfer", "0.0.2").is_err());
         // tag 版本与元数据版本不一致
-        assert!(validate_release_metadata(&base, "com.wasmnest.agent-hub", "0.0.3").is_err());
+        assert!(validate_release_metadata(&base, "com.wasmnest.file-transfer", "0.0.3").is_err());
         // schema 不支持
         let mut m = base.clone();
         m["schema"] = json!(2);
-        assert!(validate_release_metadata(&m, "com.wasmnest.agent-hub", "0.0.2").is_err());
+        assert!(validate_release_metadata(&m, "com.wasmnest.file-transfer", "0.0.2").is_err());
         // 摘要形态
         let mut m = base.clone();
         m["artifact"]["sha256"] = json!("deadbeef");
-        assert!(validate_release_metadata(&m, "com.wasmnest.agent-hub", "0.0.2").is_err());
+        assert!(validate_release_metadata(&m, "com.wasmnest.file-transfer", "0.0.2").is_err());
     }
 
     #[test]
     fn validate_download_args_self_certifies() {
         let (tag, version) = validate_download_args(
-            "agent-hub",
-            "agent-hub-v0.0.2",
-            "agent-hub-desktop-v0.0.2.zip",
+            "file-transfer",
+            "file-transfer-v0.0.2",
+            "file-transfer-desktop-v0.0.2.zip",
             &"a".repeat(64),
         )
         .unwrap();
-        assert_eq!(tag, "agent-hub-v0.0.2");
+        assert_eq!(tag, "file-transfer-v0.0.2");
         assert_eq!(version, "0.0.2");
         // 资产名与 tag 不吻合 → 拒（URL 只由 Rust 拼，前端传不进任意值）
-        assert!(validate_download_args("agent-hub", "agent-hub-v0.0.2", "evil.zip", &"a".repeat(64)).is_err());
+        assert!(validate_download_args("file-transfer", "file-transfer-v0.0.2", "evil.zip", &"a".repeat(64)).is_err());
         // 非法 tag → 拒
         assert!(validate_download_args(
-            "agent-hub",
+            "file-transfer",
             "https://evil.example/x.zip",
-            "agent-hub-desktop-v0.0.2.zip",
+            "file-transfer-desktop-v0.0.2.zip",
             &"a".repeat(64)
         )
         .is_err());
         // 摘要形态 → 拒
-        assert!(validate_download_args("agent-hub", "agent-hub-v0.0.2", "agent-hub-desktop-v0.0.2.zip", "zz").is_err());
+        assert!(validate_download_args(
+            "file-transfer",
+            "file-transfer-v0.0.2",
+            "file-transfer-desktop-v0.0.2.zip",
+            "zz"
+        )
+        .is_err());
     }
 }

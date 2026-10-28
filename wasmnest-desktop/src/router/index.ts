@@ -12,7 +12,7 @@
  * 应用路由前缀（bedcode 保持既有路径，深链 /terminal-window/:id 语义不变）：
  * - com.wasmnest.bedcode：/pairing /sessions /tasks /settings(.*)?
  *   /server /history /terminal-window/:id
- * - com.wasmnest.agent-hub：/hub
+ * - com.wasmnest.bedcode 增：/agents（Agent 管理域，并入自 agent-hub）
  * - com.wasmnest.ai-chatbox：/chat
  * - com.wasmnest.file-transfer：/transfer
  * - com.wasmnest.monitor：/monitor
@@ -23,7 +23,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AppMountSlot from '@/shell/mount/AppMountSlot.vue'
 import {
   TERMINAL_PLUGIN_ID,
-  AGENT_HUB_PLUGIN_ID,
   AI_CHATBOX_PLUGIN_ID,
   FILE_TRANSFER_PLUGIN_ID,
   MONITOR_PLUGIN_ID,
@@ -73,6 +72,13 @@ const router = createRouter({
       props: { appId: TERMINAL_PLUGIN_ID, route: '/tasks' },
     },
     {
+      // Agent 管理域（原 agent-hub 并入 bedcode）
+      path: '/agents',
+      name: 'app-agents',
+      component: AppMountSlot,
+      props: { appId: TERMINAL_PLUGIN_ID, route: '/agents' },
+    },
+    {
       // 连接历史：设备列表「历史」按钮 query 深链直达
       path: '/history',
       name: 'history',
@@ -112,12 +118,6 @@ const router = createRouter({
     },
 
     // ==================== 其余 wasm app 应用面（独立界面，挂载整包） ====================
-    {
-      path: '/hub',
-      name: 'app-agent-hub',
-      component: AppMountSlot,
-      props: { appId: AGENT_HUB_PLUGIN_ID, route: '/hub' },
-    },
     {
       path: '/chat',
       name: 'app-ai-chatbox',

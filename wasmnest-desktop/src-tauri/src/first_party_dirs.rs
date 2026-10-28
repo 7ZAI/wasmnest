@@ -23,33 +23,24 @@ use wasmnest_wasm_core::security::fs_auth::TrustedDir;
 pub fn first_party_dirs() -> Vec<(&'static str, Vec<TrustedDir>)> {
     vec![
         (
-            // agent-hub 技能库：规范库在 `~/.agents/skills`，分发目标由
-            // `wasm-apps/agent-hub/rust/src/skills.rs::TARGET_SEGS` 决定（claude / pi 家级私有目录）。
-            // 分发与落后检测逐文件读写这些目录，弹窗会把一次「同步技能」拆成 N 次点击。
-            "com.wasmnest.agent-hub",
-            vec![
-                TrustedDir::Home(".agents"),
-                TrustedDir::Home(".claude/skills"),
-                TrustedDir::Home(".pi/agent/skills"),
-                // agent-hub 数据根下的**输出目录**（判据 ②）：detect / install /
-                // skills / usage 的 host-process 产物 `runs/*.log` 都写在这，
-                // 回灌读取（handle_process_done 的 fs_read(output_path)）后即删。
-                // 范围精确到 runs/ 子目录：该插件统计库与会话数据不在这棵子树
-                // （走 host-storage / 用户授权），本豁免不含任何用户内容。
-                TrustedDir::Home(".wasmnest/agent-hub/runs"),
-            ],
-        ),
-        (
             // bedcode 的 agent 集成面：`task/hooks.rs` 在会话启动前把 hooks / 扩展
             // 写进项目根的 `.claude` / `.codex` / `.pi` / `.opencode`，并清理全局
             // `~/.claude/settings.json` 里属于本插件的那段。项目根由用户选，目录段名由
             // 各 CLI 约定——只有段名是能写进清单的那一半。
+            // Agent 管理域（原 agent-hub 并入）的家目录豁免同原 agent-hub 条目：
+            // 技能规范库 / 分发目标（skills.rs TARGET_SEGS）与自身 runs 输出目录。
             "com.wasmnest.bedcode",
             vec![
                 TrustedDir::ProjectSegment(".claude"),
                 TrustedDir::ProjectSegment(".codex"),
                 TrustedDir::ProjectSegment(".pi"),
                 TrustedDir::ProjectSegment(".opencode"),
+                TrustedDir::Home(".agents"),
+                TrustedDir::Home(".claude/skills"),
+                TrustedDir::Home(".pi/agent/skills"),
+                // hub 数据根下的**输出目录**（判据 ②）：detect / install / skills /
+                // usage 的 host-process 产物 `runs/*.log` 都写在这，回灌读取后即删。
+                TrustedDir::Home(".wasmnest/bedcode/hub/runs"),
             ],
         ),
     ]
@@ -77,7 +68,7 @@ mod tests {
         }
         // 已知消费者清单（增删条目必须同时交代这里与上方归属注释）
         let ids: Vec<&str> = list.iter().map(|(id, _)| *id).collect();
-        assert_eq!(ids, vec!["com.wasmnest.agent-hub", "com.wasmnest.bedcode"]);
+        assert_eq!(ids, vec!["com.wasmnest.bedcode"]);
     }
 
     /// 目录形态合法：Home 相对路径不以 `/` 开头（join 后必须落在家目录内），

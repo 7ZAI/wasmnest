@@ -296,12 +296,12 @@ describe('宿主系统级服务（L1/L2 = 服务宫格，不进应用 / 系统�
     apps.value = [
       service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
       service('com.wasmnest.monitor', 'internal-business', 'MonitoringService'),
-      app('com.wasmnest.agent-hub', 'running', 'Agent Hub'),
+      app('com.wasmnest.ai-chatbox', 'running', 'AI Chatbox'),
     ]
     const wrapper = mount(ShellHomeScreen)
 
     // 业务应用在应用宫格；两个系统服务不在（也不以插件名出现）
-    expect(wrapper.text()).toContain('Agent Hub')
+    expect(wrapper.text()).toContain('AI Chatbox')
     expect(wrapper.text()).not.toContain('Auth Center')
     expect(wrapper.text()).not.toContain('MonitoringService')
 
@@ -318,7 +318,7 @@ describe('宿主系统级服务（L1/L2 = 服务宫格，不进应用 / 系统�
   it('分区顺序固定为 应用 → 服务 → 系统', () => {
     apps.value = [
       service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
-      app('com.wasmnest.agent-hub', 'running', 'Agent Hub'),
+      app('com.wasmnest.ai-chatbox', 'running', 'AI Chatbox'),
     ]
     const wrapper = mount(ShellHomeScreen)
 

@@ -46,7 +46,6 @@ wasmnest/                                   # 平台仓根（本文件所在）
 
 | slug（应用仓目录） | 插件 id | 端 | 前端形态 |
 | --- | --- | --- | --- |
-| agent-hub | `com.wasmnest.agent-hub` | desktop | 桌面挂载包 |
 | ai-chatbox | `com.wasmnest.ai-chatbox` | desktop + mobile | 挂载包 / 壳运行面 |
 | bedcode（显示名 BedCode） | `com.wasmnest.bedcode` | desktop + mobile | 挂载包 / 壳运行面 |
 | file-transfer | `com.wasmnest.file-transfer` | desktop + mobile | 双端单产物（移动经 `desktop-compat` 桩） |

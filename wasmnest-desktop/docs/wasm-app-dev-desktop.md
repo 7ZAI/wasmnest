@@ -83,7 +83,7 @@ pnpm run build -- --frontend-only / --rust-only   # 只构建一半（rust-ts �
 
 内置 wasm 应用（住应用仓 `../wasmnest-apps/apps/`）：`ai-chatbox`（侧边栏 AI 面板 + 终端工具栏项）、
 `bedcode`（会话中心：配对信任 / 会话编排 / 任务队列，会话事实真源；插件 id `com.wasmnest.bedcode`）、
-`file-transfer`（局域网文件传输）、`agent-hub`（Agent CLI 管理台）、`monitor`（只读运行指标）。
+`file-transfer`（局域网文件传输）、`monitor`（只读运行指标）。
 
 ## 4. 浏览器开发环境（Dev Shell）
 
@@ -139,7 +139,7 @@ Rust 后端逻辑、真实 HTTP 端点、系统文件选择需在真实宿主验
 | SDK 浏览器开发环境 | `wasmnest-desktop/packages/plugin-sdk-desktop/dev-shell/` |
 | 插件宿主（Rust） | `wasmnest-desktop/src-tauri/src/plugin/`（端差异域的 WIT 绑定 + Host impl：api_call / app / auth / bindings / connection / crypto / fs / guest_events / host_facts / http / mdns / notify / peer / platform / platform_picker / process / pty / task / timer / ws；机制整核在 `../wasmnest-lib/wasmnest-wasm-core`） |
 | 前端插件运行时 | 旧仓 `src/plugin/`（context / registry / loader / contributionKinds 等贡献面）——已随桌面挂载包形态退役，宿主壳经 `src/shell/` 运行时装载（见头部说明） |
-| 内置 wasm 应用 | 应用仓 `../wasmnest-apps/apps/{ai-chatbox,bedcode,file-transfer,agent-hub,monitor}` |
+| 内置 wasm 应用 | 应用仓 `../wasmnest-apps/apps/{ai-chatbox,bedcode,file-transfer,monitor}` |
 | 机制整核与能力域 crate | 能力仓 `../wasmnest-lib/wasmnest-wasm-core`（机制内核）与 `../wasmnest-lib/wasmnest-*`（能力域 / 传输面 / 引擎） |
 | WIT 契约真源 | `../wasmnest-lib/wasmnest-wasm-core/wit/core.wit` + 能力域 `../wasmnest-lib/wasmnest-*/wit/<domain>.wit` + 端 `rust/wit-src/cap-*.wit`；端 `rust/wit/` 是生成物，改契约跑 `pnpm run check:wit`（平台仓根） |
 | 开发约束清单 | [`../../docs/knowledge/wasm-app-development-checklist.md`](../../docs/knowledge/wasm-app-development-checklist.md)（API / 权限 / 存储 / 事件 / 认证中心等红线） |

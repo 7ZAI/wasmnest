@@ -133,7 +133,7 @@ describe('应用图标色调（机制级哈希，spec-c §4：零产品映射）
       'bedcode',
       'ai-chatbox',
       'file-transfer',
-      'agent-hub',
+      'monitor',
       'mobile-bridge',
       'zzz',
     ]) {
@@ -147,7 +147,7 @@ describe('应用图标色调（机制级哈希，spec-c §4：零产品映射）
         'bedcode',
         'ai-chatbox',
         'file-transfer',
-        'agent-hub',
+        'monitor',
         'mobile-bridge',
         'com.example.one',
         'com.example.two',

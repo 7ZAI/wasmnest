@@ -118,7 +118,7 @@ const PRODUCT_ID_PREFIX: &str = "com.wasmnest.";
 /// 格式占位段：出现在**格式校验类**夹具 / 示例里的裸占位不是产品身份
 ///
 /// 只收「明显不是任何真实插件」的中性词。真实产品插件名（bedcode /
-/// agent-hub / file-transfer / ai-chatbox …）一律不在此表——出现在生产代码里就红。
+/// file-transfer / ai-chatbox / monitor …）一律不在此表——出现在生产代码里就红。
 const PLACEHOLDER_SEGMENTS: &[&str] = &["xxx", "test", "other", "example", "sample"];
 
 /// 已退役的宿主面词汇（AGENTS §5.3）：`host-session` / `host-terminal` 连同权限位
@@ -417,7 +417,7 @@ fn scanner_is_not_vacuous() {
         "字符串内的 `//` 不得被当注释起点（否则真命中会被静默丢弃，锁被无声解除），实得 {url_line:?}"
     );
     for (src, must_not_contain, why) in [
-        ("let a = 1; // com.wasmnest.agent-hub", "agent-hub", "行尾注释"),
+        ("let a = 1; // com.wasmnest.file-transfer", "file-transfer", "行尾注释"),
         ("// com.wasmnest.ai-chatbox", "ai-chatbox", "行首注释"),
     ] {
         let out = strip_line_comments(src);
@@ -443,7 +443,7 @@ fn scanner_is_not_vacuous() {
     fs::write(
         src_dir.join("probe.rs"),
         "let live = \"com.wasmnest.bedcode\";\n\
-         // com.wasmnest.agent-hub\n\
+         // com.wasmnest.file-transfer\n\
          #[cfg(test)]\n\
          mod tests {\n\
              let dead = \"com.wasmnest.ai-chatbox\";\n\
@@ -461,7 +461,7 @@ fn scanner_is_not_vacuous() {
         !text.contains("ai-chatbox"),
         "`#[cfg(test)]` 之后的测试区必须被截断，否则锁会把测试夹具当成生产代码；实得 {text:?}"
     );
-    assert!(!text.contains("agent-hub"), "注释必须被剥掉；实得 {text:?}");
+    assert!(!text.contains("file-transfer"), "注释必须被剥掉；实得 {text:?}");
     assert_eq!(
         probe.rel, "src/probe.rs",
         "rel 必须是 crate 内相对路径（报错文案靠它定位），实得 {:?}",
@@ -492,7 +492,7 @@ fn placeholder_segments_do_not_mask_real_product_segments() {
     // 反例：真实产品段必须被认出（逐一列举，防有人把真产品名塞进占位表）
     for real in [
         "bedcode",
-        "agent-hub",
+        "monitor",
         "file-transfer",
         "ai-chatbox",
         "auto-task",

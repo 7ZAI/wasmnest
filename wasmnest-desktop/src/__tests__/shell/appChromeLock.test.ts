@@ -28,7 +28,7 @@ import { appPath } from '../support/appPaths'
 const HOST_SHELL = 'src/shell/ShellHost.vue'
 const MOUNT_SLOT = 'src/shell/mount/AppMountSlot.vue'
 // 桌面四应用工程目录（三仓拆分 §5-E7：住应用仓 apps/<slug>/desktop）
-const DESKTOP_APPS = ['agent-hub', 'ai-chatbox', 'bedcode', 'file-transfer'].map((slug) =>
+const DESKTOP_APPS = ['ai-chatbox', 'bedcode', 'file-transfer'].map((slug) =>
   appPath(slug, 'desktop'),
 )
 const APP_LAYOUT = appPath('bedcode', 'desktop', 'src/components/AppLayout.vue')
@@ -153,7 +153,7 @@ describe('L4 wasm-app 主界面不自绘标题栏', () => {
 describe('L5 挂载包样式不覆盖宿主 token', () => {
   it('各 app style.css 不在 :root 重定义 --bg-page / --text-primary', () => {
     const apps = DESKTOP_APPS.filter((root) => existsSync(root))
-    expect(apps.length, 'app 目录扫描面不得为空').toBeGreaterThanOrEqual(4)
+    expect(apps.length, 'app 目录扫描面不得为空').toBeGreaterThanOrEqual(3)
 
     const offenders: string[] = []
     for (const root of apps) {

@@ -32,7 +32,6 @@ use wasmnest_desktop_lib::plugin::lifecycle::{
 
 /// 目录名后缀（随包产物；`com.wasmnest.bedcode` 的实现 id 尾段）
 const TERMINAL_SESSION_ID_SUFFIX: &str = "bedcode";
-const AGENT_HUB_ID_SUFFIX: &str = "agent-hub";
 
 /// 构造编排层（同一宿主的薄包装）
 async fn setup_manager() -> Arc<PluginLifecycleManager> {
@@ -58,13 +57,14 @@ async fn bundled_id(manager: &PluginLifecycleManager, suffix: &str) -> String {
 /// 平台侧这里只钉组合根里的调用顺序。
 #[test]
 fn boot_clears_activation_snapshot_before_creating_host() {
-    let lib_rs = include_str!("../src/lib.rs");
-    let clear = lib_rs
+    // 65964b9 起 boot 编排自 lib.rs 抽到 bootstrap/mod.rs：组合根顺序在那里钉
+    let boot_rs = include_str!("../src/bootstrap/mod.rs");
+    let clear = boot_rs
         .find("clear_persisted_activation_snapshot(&plugin_storage)")
-        .expect("lib.rs boot 必须在 PluginHost::new 前调用 clear_persisted_activation_snapshot");
-    let host_new = lib_rs
+        .expect("boot 必须在 PluginHost::new 前调用 clear_persisted_activation_snapshot");
+    let host_new = boot_rs
         .find("wasm_core::PluginHost::new")
-        .expect("lib.rs 必须创建 PluginHost");
+        .expect("boot 必须创建 PluginHost");
     assert!(
         clear < host_new,
         "清理激活快照必须在 PluginHost::new 之前（否则旧快照会复活 L3 应用）"
@@ -80,7 +80,6 @@ async fn list_loaded_projects_real_bundled_apps() {
     // 随包四应用在册（真实产物目录扫描；缺一个 = 构建/装配断链）
     for suffix in [
         TERMINAL_SESSION_ID_SUFFIX,
-        AGENT_HUB_ID_SUFFIX,
         "ai-chatbox",
         "file-transfer",
     ] {
@@ -91,31 +90,31 @@ async fn list_loaded_projects_real_bundled_apps() {
     }
 
     // L3 业务应用：空持久化状态下 boot 不得自动激活
-    let agent_hub = bundled_id(&manager, AGENT_HUB_ID_SUFFIX).await;
+    let subject = bundled_id(&manager, TERMINAL_SESSION_ID_SUFFIX).await;
     assert!(
-        !manager.is_running(&agent_hub).await,
-        "agent-hub 是 L3 业务应用，空持久化状态下 boot 不得自动激活"
+        !manager.is_running(&subject).await,
+        "bedcode 是 L3 业务应用，空持久化状态下 boot 不得自动激活"
     );
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn activate_then_deactivate_toggles_running_state() {
     let manager = setup_manager().await;
-    let agent_hub = bundled_id(&manager, AGENT_HUB_ID_SUFFIX).await;
+    let subject = bundled_id(&manager, TERMINAL_SESSION_ID_SUFFIX).await;
 
     // 打开（壳 openApp 时序：preauthorize 先行 + activate_after_preauth 会话级激活）
     manager
-        .preauthorize(&agent_hub)
+        .preauthorize(&subject)
         .await
         .expect("preauthorize (空路径直接放行)");
-    manager.activate_after_preauth(&agent_hub).await.expect("打开 = 激活");
-    assert!(manager.is_running(&agent_hub).await, "激活后应运行");
-    assert!(manager.is_activated(&agent_hub).await, "严格 Activated");
+    manager.activate_after_preauth(&subject).await.expect("打开 = 激活");
+    assert!(manager.is_running(&subject).await, "激活后应运行");
+    assert!(manager.is_activated(&subject).await, "严格 Activated");
 
     // 关闭（真停用：deactivate persist=true → 持久化停用态）
-    manager.deactivate(&agent_hub).await.expect("关闭 = 停用");
-    assert!(!manager.is_running(&agent_hub).await, "停用后不应运行");
-    assert!(!manager.is_activated(&agent_hub).await, "停用后严格 Activated 为假");
+    manager.deactivate(&subject).await.expect("关闭 = 停用");
+    assert!(!manager.is_running(&subject).await, "停用后不应运行");
+    assert!(!manager.is_activated(&subject).await, "停用后严格 Activated 为假");
 }
 
 /// 打开是**会话级**动作：`activate_after_preauth` 不得写「下次 boot 复活」快照
@@ -125,23 +124,23 @@ async fn activate_then_deactivate_toggles_running_state() {
 #[tokio::test(flavor = "multi_thread")]
 async fn open_is_session_scoped_deactivate_persists_stop() {
     let manager = setup_manager().await;
-    let agent_hub = bundled_id(&manager, AGENT_HUB_ID_SUFFIX).await;
+    let subject = bundled_id(&manager, TERMINAL_SESSION_ID_SUFFIX).await;
     let storage = manager.host().storage();
 
     // 打开（persist=false）→ 运行中，但快照里不得出现 true
-    manager.activate_after_preauth(&agent_hub).await.expect("activate");
-    assert!(manager.is_running(&agent_hub).await, "打开后应运行");
+    manager.activate_after_preauth(&subject).await.expect("activate");
+    assert!(manager.is_running(&subject).await, "打开后应运行");
     let map = storage.load_activated_plugins().await.expect("load activated map");
     assert!(
-        !map.get(&agent_hub).copied().unwrap_or(false),
+        !map.get(&subject).copied().unwrap_or(false),
         "打开不得写启动复活快照（persist=false）"
     );
 
     // 关闭（persist=true）→ 快照明确写停用（boot 不复活）
-    manager.deactivate(&agent_hub).await.expect("deactivate");
+    manager.deactivate(&subject).await.expect("deactivate");
     let map = storage.load_activated_plugins().await.expect("load activated map");
     assert_eq!(
-        map.get(&agent_hub).copied(),
+        map.get(&subject).copied(),
         Some(false),
         "停用后快照必须明确写 false（下次 boot 不复活）"
     );
@@ -150,30 +149,30 @@ async fn open_is_session_scoped_deactivate_persists_stop() {
 #[tokio::test(flavor = "multi_thread")]
 async fn enabled_pref_roundtrip_and_persisted_in_system_partition() {
     let manager = setup_manager().await;
-    let agent_hub = bundled_id(&manager, AGENT_HUB_ID_SUFFIX).await;
+    let subject = bundled_id(&manager, TERMINAL_SESSION_ID_SUFFIX).await;
 
     // 缺省 = 可见（主屏入口可见性缺省成立——停用是显式 false，缺省不隐藏任何应用）
     assert!(
-        manager.is_enabled(&agent_hub).await,
+        manager.is_enabled(&subject).await,
         "无偏好行 = 主屏入口可见（启用语义：主屏入口可见性，2026-10-21 用户裁决）"
     );
 
-    manager.set_enabled(&agent_hub, true).await.expect("set enabled");
+    manager.set_enabled(&subject, true).await.expect("set enabled");
     assert!(
-        manager.is_enabled(&agent_hub).await,
+        manager.is_enabled(&subject).await,
         "置 true 后生效；偏好行可读且为 true"
     );
     // 持久化契约：用户显式 true 也落行（可见取向显式化，不依赖缺省推断）
     let storage = manager.host().storage();
     let value = storage
-        .get(SYSTEM_PLUGIN_ID, &format!("{ENABLED_KEY_PREFIX}{agent_hub}"))
+        .get(SYSTEM_PLUGIN_ID, &format!("{ENABLED_KEY_PREFIX}{subject}"))
         .await
         .expect("read pref row");
     assert_eq!(value, Some(serde_json::json!(true)), "偏好行必须可读且为 true");
 
-    manager.set_enabled(&agent_hub, false).await.expect("set disabled");
+    manager.set_enabled(&subject, false).await.expect("set disabled");
     assert!(
-        !manager.is_enabled(&agent_hub).await,
+        !manager.is_enabled(&subject).await,
         "置 false = 主屏 / 搜索隐藏入口（不停止已运行实例，由壳层过滤）"
     );
 }
@@ -181,29 +180,29 @@ async fn enabled_pref_roundtrip_and_persisted_in_system_partition() {
 #[tokio::test(flavor = "multi_thread")]
 async fn autostart_pref_roundtrip_without_activating() {
     let manager = setup_manager().await;
-    let agent_hub = bundled_id(&manager, AGENT_HUB_ID_SUFFIX).await;
+    let subject = bundled_id(&manager, TERMINAL_SESSION_ID_SUFFIX).await;
 
-    assert!(!manager.is_autostart(&agent_hub).await, "缺省 = 不自启");
+    assert!(!manager.is_autostart(&subject).await, "缺省 = 不自启");
 
-    manager.set_autostart(&agent_hub, true).await.expect("set autostart");
-    assert!(manager.is_autostart(&agent_hub).await, "置 true 后生效");
+    manager.set_autostart(&subject, true).await.expect("set autostart");
+    assert!(manager.is_autostart(&subject).await, "置 true 后生效");
 
     // 只改偏好，不在当前进程立即激活（移动端同款语义：偏好 → 下次 boot 生效）
     assert!(
-        !manager.is_running(&agent_hub).await,
+        !manager.is_running(&subject).await,
         "set_autostart 不得触发当前进程激活"
     );
 
     // 持久化契约：系统分区 plugin.autostart.{id} 行
     let storage = manager.host().storage();
     let value = storage
-        .get(SYSTEM_PLUGIN_ID, &format!("{AUTOSTART_KEY_PREFIX}{agent_hub}"))
+        .get(SYSTEM_PLUGIN_ID, &format!("{AUTOSTART_KEY_PREFIX}{subject}"))
         .await
         .expect("read pref row");
     assert_eq!(value, Some(serde_json::json!(true)), "偏好行必须可读且为 true");
 
-    manager.set_autostart(&agent_hub, false).await.expect("set false");
-    assert!(!manager.is_autostart(&agent_hub).await, "置 false 后回退");
+    manager.set_autostart(&subject, false).await.expect("set false");
+    assert!(!manager.is_autostart(&subject).await, "置 false 后回退");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -240,16 +239,16 @@ async fn apply_autostart_stops_role_driven_service_when_disabled_by_preference()
 #[tokio::test(flavor = "multi_thread")]
 async fn apply_autostart_is_idempotent_and_activates_marked_apps() {
     let manager = setup_manager().await;
-    let agent_hub = bundled_id(&manager, AGENT_HUB_ID_SUFFIX).await;
+    let subject = bundled_id(&manager, TERMINAL_SESSION_ID_SUFFIX).await;
 
     // 无任何自启偏好 → 零副作用（不得把「没标自启」的应用带起来）
     assert_eq!(manager.apply_autostart().await, 0, "无偏好不得激活任何应用");
 
     // 给 L3 业务应用标自启 → boot 装配补激活；重复调用幂等
-    manager.set_autostart(&agent_hub, true).await.expect("set autostart");
+    manager.set_autostart(&subject, true).await.expect("set autostart");
     assert_eq!(manager.apply_autostart().await, 1, "标自启的应用应被补激活");
-    assert!(manager.is_running(&agent_hub).await, "自启应用应运行");
+    assert!(manager.is_running(&subject).await, "自启应用应运行");
     assert_eq!(manager.apply_autostart().await, 0, "已运行再装配 = 幂等零动作");
     // 已运行应用不受再次装配影响（状态保持）
-    assert!(manager.is_running(&agent_hub).await);
+    assert!(manager.is_running(&subject).await);
 }

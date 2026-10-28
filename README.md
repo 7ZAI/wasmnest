@@ -101,7 +101,7 @@ WasmNest 由四个平级仓库组成，默认按同场（sibling）布局摆放�
 | --- | --- | --- |
 | **[wasmnest](https://github.com/7ZAI/wasmnest)**（本仓） | 宿主与发布面 | 桌面 / 移动宿主、端内 SDK、WIT 拼装、跨仓版本清单、构建与打包工具 |
 | **[wasmnest-lib](https://github.com/7ZAI/wasmnest-lib)** | 可复用机制 | wasm 运行时内核、host API 实现层、server 传输面、PTY / mDNS / 通知 / 加密等能力域引擎、契约常量 |
-| **[wasmnest-apps](https://github.com/7ZAI/wasmnest-apps)** | 业务主场 | BedCode、AI Chatbox、File Transfer、Agent Hub 等 wasm 应用 |
+| **[wasmnest-apps](https://github.com/7ZAI/wasmnest-apps)** | 业务主场 | BedCode、AI Chatbox、File Transfer 等 wasm 应用（Agent Hub 已并入 BedCode） |
 | **[wasmnest-test](https://github.com/7ZAI/wasmnest-test)** | 跨端门禁 | 真实移动端客户端 ↔ 真实桌面端服务器互连、跨仓契约锁 |
 
 平台通过 Cargo sibling path 直接消费能力仓（不复制、不挂 submodule）。非标准布局可用 `WASMNEST_LIB_ROOT`、`WASMNEST_APPS_ROOT` 覆盖；缺失时显性报错，不会返回可能无效的路径。
@@ -115,7 +115,6 @@ WasmNest 由四个平级仓库组成，默认按同场（sibling）布局摆放�
 | [**BedCode**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/bedcode) | `com.wasmnest.bedcode` | 桌面 + 移动 | 终端会话中心：配对与信任、会话生命周期编排、任务队列与 Agent 集成；移动端为远程终端控制端 |
 | [**AI Chatbox**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/ai-chatbox) | `com.wasmnest.ai-chatbox` | 桌面 + 移动 | 多供应商 AI 对话：流式输出、多会话管理、JSONL 对话日志 |
 | [**File Transfer**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/file-transfer) | `com.wasmnest.file-transfer` | 桌面 + 移动 | 内网对端发现与双向文件传输：队列、暂停 / 恢复、断点续传、共享目录 |
-| [**Agent Hub**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/agent-hub) | `com.wasmnest.agent-hub` | 桌面 | Agent CLI 统一管理台：安装 / 卸载、Skills 管理、供应商配置、使用统计 |
 
 **系统服务**（装配角色 `internal-business`）不进多任务卡，关闭的唯一入口是应用管理页（桌面）/ 应用详情页（移动）的「停用」。
 

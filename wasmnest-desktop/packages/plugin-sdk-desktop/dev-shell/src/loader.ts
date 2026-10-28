@@ -21,7 +21,6 @@ import type { AppBundleModule } from './shell/types'
 import { apps, getDevMock, pushLog, registerDevMock, type DevAppState } from './registry'
 import { createDomainContext } from './mock/domain-context'
 import { registerFileTransferMock } from './mock/file-transfer'
-import { registerAgentHubMock } from './mock/agent-hub'
 
 export const ready = ref(false)
 
@@ -95,10 +94,6 @@ export function prepareAppMocks(appId: string): { dispose(): void } {
   // 是否注入由 app 的 devMock 种子子域决定，dev-shell 不写死 app 身份
   if (seed.peer || seed.transfer) {
     disposers.push(registerFileTransferMock(context, appId))
-    pushLog('info', appId, '已注册领域命令 mock（通用接线，种子来自 app devMock）')
-  }
-  if (seed.detection || seed.install || seed.skills || seed.providers || seed.usage) {
-    disposers.push(registerAgentHubMock(context, appId))
     pushLog('info', appId, '已注册领域命令 mock（通用接线，种子来自 app devMock）')
   }
   return {

@@ -86,17 +86,6 @@ export const PLUGIN_WATCH_CMDS = [
     wasmFile: 'target/wasm-apps/wasm32-unknown-unknown/release/wasmnest_plugin_file_transfer.wasm',
   },
   {
-    // Agent Hub：与其余桌面 wasm 应用同一条闭环。缺席本表时 `tauri dev` 不给它起
-    // vite watch，改前端只能手工 `build:frontend`，产物长期停在旧构建
-    // （2026-10-06 实测：dist 里残留旧 CSS，热力图渲染成整块色块）。补上后
-    // 前端改动 → vite 重建 → 复制进 resources → 宿主 emit plugin:dev-reload，
-    // 与另三个应用同一条闭环；WASM 仍走 ensurePluginWasm() 的缺失/陈旧补建。
-    slug: 'agent-hub',
-    id: 'com.wasmnest.agent-hub',
-    args: ['scripts/build.js', '--watch'],
-    wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_agent_hub.wasm',
-  },
-  {
     // Monitor：系统服务（L2），工程住应用仓 `servers/` 分组；只读指标看板，
     // 前端与 Rust 都轻，走与其他应用同一条 watch 闭环。
     group: 'servers',

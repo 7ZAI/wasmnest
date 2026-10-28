@@ -1,7 +1,7 @@
 /**
  * 领域 mock 的接线适配器（dev-shell 内部用）
  * -----------------------------------------------------------------------------
- * 领域 mock（file-transfer / agent-hub）此前把命令 handler 注册进 app 的
+ * 领域 mock（file-transfer）此前把命令 handler 注册进 app 的
  * `PluginContext`。挂载包形态下 **app 自己持 context**（宿主注入 env，app 在
  * `entry.ts` 里造 context），dev-shell 触不到它——但领域 mock 仍需要两条通道：
  *

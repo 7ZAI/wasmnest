@@ -97,7 +97,7 @@ WASMNEST_DEV_PLUGINS="<应用目录>[::<入口文件>]" pnpm exec vite --config 
 ### 领域种子（devMock）
 
 app 在 `src/index.ts` 导出 `devMock`（各 app 自持演示数据）时，dev-shell 按种子
-子域挂载对应领域 mock（file-transfer 的 peer / transfer 域、agent-hub 的五个域）。
+子域挂载对应领域 mock（file-transfer 的 peer / transfer 域；agent-hub 的域 mock 已随应用并入 bedcode 退役）。
 **没有导出的 app**（如 ai-chatbox / bedcode / monitor）只校验壳与布局：其命令会在
 日志面板里报「未注册 mock」，这是预期状态，不是 dev-shell 的故障。
 
