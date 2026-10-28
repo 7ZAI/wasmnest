@@ -696,7 +696,9 @@ jobs:
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" ../release-assets/* --clobber
-            gh release edit "$TAG" --latest
+            # 重发（同 tag）必须同步说明：只 upload 会让资产换了、说明停在旧版本
+            # （v0.0.1 实测：Android APK 已上传但说明仍无 Android 行 / 仍称已签名）
+            gh release edit "$TAG" --notes-file ../release-notes/notes.md --latest
           else
             gh release create "$TAG" ../release-assets/* \
               --title "WasmNest ${PRODUCT}" \
