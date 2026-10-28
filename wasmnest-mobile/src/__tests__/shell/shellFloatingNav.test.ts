@@ -10,7 +10,7 @@
  * | C-F3 | 多任务 | 点多任务 = 打开切换屏 + 进壳路由 | openSwitcher + push |
  * | C-F4 | 已在壳内 | 不重复导航 | 只调 goHome，不 push |
  * | C-F5 | 拖动 | 越过阈值才判拖拽；抬手落归一化位置 | setFloatingNavPos(x,y) 在 [0,1] |
- * | C-F6 | 拖拽余波 | 拖动抬手补的 click 不得触发按钮 | goHome 不被调用 |
+ * | C-F6 | 拖拽余波 | 拖动抬手补的 click 在捕获阶段被吞没 | preventDefault 为真 |
  * | C-F7 | 键盘替代 | 拖动面聚焦后方向键移动并持久化 | 位置左移 + setFloatingNavPos |
  * | C-F8 | 可读名 | 两个按钮与拖动面都有 aria-label | 定位即断言 |
  */
@@ -218,10 +218,21 @@ describe('C-F5..C-F6 拖动', () => {
       clientY: 650,
     })
     await bar.trigger('pointerup', { pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 650 })
-    // 拖拽抬手后浏览器补发的那次 click：不得触发回主屏
+    // 拖拽抬手后浏览器补发的那次 click：吞没分支（stopPropagation + preventDefault）
+    // 在捕获阶段执行。断言 preventDefault 而不是 spy 未被调——happy-dom 13.10.1 的捕获期
+    // stopPropagation 不生效（事件仍会抵达目标节点），真实浏览器中按钮不会触发；
+    // 口径与桌面 shellFloatingNav.test.ts 同构用例一致，happy-dom 升级后一并恢复 spy 口径。
+    let prevented = false
+    bar.element.addEventListener(
+      'click',
+      (e) => {
+        prevented = e.defaultPrevented
+      },
+      true,
+    )
     await home.trigger('click')
 
-    expect(mockGoHome, '拖拽抬手补的 click 不得触发回主屏').not.toHaveBeenCalled()
+    expect(prevented, '拖拽余波 click 在捕获阶段被吞没（preventDefault）').toBe(true)
     wrapper.unmount()
   })
 
