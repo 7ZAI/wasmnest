@@ -76,7 +76,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | --- | --- |
 | `main.ts` | 宿主入口（壳装配 / 路由 / i18n / 权限配置） |
 | `router/index.ts` | 路由真源之一：`/` 主屏、`/sys/:pageId` 系统页（`:sub` 子路由 = 同卡二级页，如 `/sys/settings/appearance` 外观）、各 app 路由（指向 `AppMountSlot`）、未匹配显性 not-found |
-| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`appSurfaceRegistry.ts` = 表面实例记账（attach / detach / dispose，表面保活），`AppPreviewTile.vue` = 多任务卡的应用自绘预览面装载 / 3s 超时 / 回退品牌卡）；`sys/`（系统页）；`settings/`；`auth/`；`extensions/`（壳扩展点注册表：状态栏项 / 设置项 / 主题，只注册排序、不解释业务语义） |
+| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`appSurfaceRegistry.ts` = 表面实例记账（attach / detach / dispose / 多任务卡 preview 态，表面保活），`AppSurfaceTile.vue` = 多任务卡内的真实实例容器（实例搬运 / 等比缩放 / 回退品牌卡））；`sys/`（系统页）；`settings/`；`auth/`；`extensions/`（壳扩展点注册表：状态栏项 / 设置项 / 主题，只注册排序、不解释业务语义） |
 | `shell/composables/useShellApps.ts` | **应用路由真源**：`SURFACE_ROUTES`（新增桌面应用必须同步，见 §6） |
 | `shell/composables/shortcutsModel.ts` · `useShellShortcuts.ts` | 壳快捷键（ADR 0060）：纯模型（动作表 / `e.code` 组合键规范化 / 标准策略校验 / 应用卡轮换）+ capture 抢占装配与动作执行；配置页 `sys/SysShortcutsView.vue`（`/sys/settings/shortcuts`，存储 = `ShellUiPrefs.shortcuts` 壳偏好轨） |
 | `shell/types.ts` · `state.ts` / `useShellState.ts` | 壳状态面（宿主零业务状态：首次打开创建、切走只藏、停用 / 卸载才销毁） |
@@ -182,7 +182,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 改桌面快捷键 | `src/shell/composables/shortcutsModel.ts`（动作表 / 规范化 / 校验，纯函数）+ `useShellShortcuts.ts`（capture 抢占装配，ADR 0060）+ `sys/SysShortcutsView.vue`（配置页）+ `shell/ShellHost.vue`（装配点）；动键盘让位语义先读 ADR 0060 与 `useHomeSearch` 让位判据；跑桌面 `test:run`（含 `shortcutsModel` / `useShellShortcuts` / `i18nDriftLock`） |
 | 改桌面悬浮导航 | `src/shell/components/ShellFloatingNav.vue`（回主屏 / 多任务胶囊，与移动端 ShellFloatingNav 同构）+ `ShellHost.vue`（装配点：bareWindow 不渲染、`floatNavBottomReserve` 让位状态栏）+ `src/shell/styles/shell.css` 的 `.shell-floatnav` 段（Liquid Glass 材质与三层降级）+ `useShellSettings` 的 `floatingNav` / `floatingNavPos` 偏好；改动后必须同步 dev-shell 的 `src/styles/shell.css` 副本（visualParity 锁）；跑桌面 `test:run`（含 `shellFloatingNav` / `useShellSettingsFloatingNav`） |
 | 改桌面设置页 / 状态栏 / 主题 | `src/shell/extensions/**`（注册表契约）+ `src/shell/components/ShellStatusBar.vue` + `src/shell/settings/Settings{Theme,Extensions}Section.vue` + `src/shell/sys/SysSettingsView.vue`（**关于固定最后**；样式调整项在外观二级页 `SysAppearanceView.vue`）+ `src/styles/theme-presets.css`（内置主题 token 与结构规则）；机制口径见 docs/frontend.md §6 与 ADR 0059；跑桌面 `test:run`（含 `settingsOrderLock` / `shellExtensions` / `themePresetCoverage` / `shellStatusBar`） |
-| 改多任务卡片 / 应用预览面（`mountPreview`） | `wasmnest-desktop/src/shell/components/ShellTaskSwitcher.vue` + `src/shell/mount/{useAppMount.ts,AppPreviewTile.vue}`（`mountAppPreview(root, env)` = 装载入口，`PREVIEW_MOUNT_TIMEOUT_MS` = 3s）+ `src/shell/mount/appSession.ts`（`lastRoute`）；契约 = `AppPreviewEnv` / `AppPreviewHandle` / `MountPreview`（宿主与五个 app `entry.ts` 同形，L5 锁钉住）；应用侧内容裁决在 `../wasmnest-apps`；跑桌面 `test:run` + 应用仓各 app `test:run` / `build:frontend` + 真实 `tauri:dev` 目验 |
+| 改多任务卡片（真实实例 / 卡片尺寸） | `wasmnest-desktop/src/shell/components/ShellTaskSwitcher.vue` + `src/shell/mount/{AppSurfaceTile.vue,appSurfaceRegistry.ts,useAppMount.ts}`（`attachPreview` / `fitPreview` / `detachPreview` = 实例搬运与缩放；`returnAppSurfaceToSlot` = 普通收起送回挂载槽）+ `src/shell/composables/recentsLayout.ts`（卡片尺寸 / 横版比例）；卡片 = 保活实例本身（2026-10-30 起不再有应用自绘预览面）；应用侧内容裁决在 `../wasmnest-apps`；跑桌面 `test:run` + 真实 `tauri:dev` 目验（多实例实时渲染成本） |
 | 改移动宿主壳 / 运行面 / 注册表 | `wasmnest-mobile/src/shell/registry.ts`（职责边界：只注册不决策）+ 移动 SDK `src/types.ts`（`UIRegistry`）+ docs/architecture.md §4；优先移动 SDK dev-shell 预览 |
 | 改插件机制 / 生命周期 / 能力接线（Rust） | 该端 `src-tauri/src/plugin/**`（每域一个文件，端口 adapter + 白名单条目同处，**先读文件头注释**）+ 能力仓对应 crate；跑该端 `cargo test` |
 | 改权限 / 授权闸门 | 本端 SDK `rust/src/permission.rs`（词汇真源）+ docs/contracts.md §4 + docs/security.md §1；生成物重出（桌面 SDK 目录 `pnpm run gen:permissions`）；跑相关锁 |
@@ -209,7 +209,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 | 锁 | 位置（本仓） | 钉住什么 |
 | --- | --- | --- |
-| `hostAppBoundaryLock.test.ts` | `wasmnest-desktop/src/__tests__/` | 宿主零 app 源码 import、零 `__WASMNEST_SHARED__`、零旧贡献面；逐字校验五个桌面 app `src/entry.ts` 的 `mountApp` 契约；**L5 预览契约锁**：五个 entry 必须导出 `mountPreview` 且带 `appId` / `lastRoute` / `appInvoke` / `appStorageGet` / `locale` / `theme` 关键字段、宿主声明 `AppPreviewEnv` / `AppPreviewHandle` 且 `mountPreview?` 可选、预览路径禁用 `refreshChannelToken` / 写存储（**新增 / 改名桌面应用必须同步其 `APP_ENTRIES`**） |
+| `hostAppBoundaryLock.test.ts` | `wasmnest-desktop/src/__tests__/` | 宿主零 app 源码 import、零 `__WASMNEST_SHARED__`、零旧贡献面；逐字校验五个桌面 app `src/entry.ts` 的 `mountApp` 契约；**L5 自绘预览契约退役锁**：宿主不得再声明 / 装载 `mountPreview`、`AppPreviewTile.vue` 不得回归、app 卡必须挂 `AppSurfaceTile`、卡片搬运路径禁用 `refreshChannelToken` / 写存储（**新增 / 改名桌面应用必须同步其 `APP_ENTRIES`**） |
 | `tailwindContentCoverage.test.ts` | 同上 | 宿主 Tailwind content 不得残留 app 路径 |
 | `appBundlePathLock.test.ts` · `appChromeLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 挂载包路径单一来源（`resources/plugins/desktop` 层级）；壳标题栏常驻、应用不得自绘标题栏/窗口控制/拖拽区 |
 | `appSurfaceKeepAlive.test.ts` · `useAppMountKeepAlive.test.ts` | `wasmnest-desktop/src/__tests__/shell/mount/` | **表面保活**：挂载槽常驻（`v-show`，不得回 `v-if` 分支）、销毁点唯一在 `ShellHost` 运行态 disposer、挂载槽切走只 `detach`、界面租约跟实例生命周期（首次创建 acquire / dispose release）、`setActive?` 是可选契约；装载层行为（复用不重建、detach 不销毁、并发首次 mount 合并为一次） |
@@ -234,7 +234,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 | 锁文件（端） | 锁对象 | 性质 | 处置方向 | 为何不能用行为测试表达 |
 | --- | --- | --- | --- | --- |
-| `hostAppBoundaryLock.test.ts`（桌面） | 宿主零 app 源码 import / 零 `__WASMNEST_SHARED__`；`mountApp` / `mountPreview` 契约逐字同形 | 边界契约 | 保留 | 宿主与独立挂载包是运行时装载关系，无编译期约束；契约漂移只在文本可比对时可见 |
+| `hostAppBoundaryLock.test.ts`（桌面） | 宿主零 app 源码 import / 零 `__WASMNEST_SHARED__`；`mountApp` 契约逐字同形；自绘预览契约退役（不得回接 `mountPreview`） | 边界契约 | 保留 | 宿主与独立挂载包是运行时装载关系，无编译期约束；契约漂移只在文本可比对时可见 |
 | `tailwindContentCoverage.test.ts`（桌面） | Tailwind content 只扫宿主源码 + SDK 组件 | 边界契约 | 保留 | 被测对象就是 `tailwind.config.js` 的扫描范围文本本身 |
 | `appBundlePathLock.test.ts`（桌面） | 挂载包路径单一来源；禁 `plugins/desktop` 落点字面量 | 边界契约 | 保留 | 同一路径约定前后端各写一遍的事故只能靠禁字面量防复发 |
 | `i18nTemplateKeys.test.ts`（桌面） | 全壳 `t('字面量')` key 必须在 zh-CN 与 en 消息集存在 | 边界契约 | 保留（含防空转断言） | 跨全部模板与两套消息集的交叉一致性，无单点行为可测 |

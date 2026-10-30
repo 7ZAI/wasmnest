@@ -36,10 +36,19 @@ const mocks = vi.hoisted(() => ({
   /** 壳状态共享桩：工具栏 / 全屏层 / 主屏挂同一份（状态收敛的载体） */
   state: null as unknown as Record<string, unknown>,
   appsStore: null as unknown as Record<string, unknown>,
+  /** 挂载层 API 桩：多任务收起时把前台实例送回挂载槽 */
+  returnAppSurfaceToSlot: vi.fn(() => true),
 }))
 
 vi.mock('@/shell/composables/useShellState', () => ({
   useShellState: () => mocks.state,
+}))
+
+vi.mock('@/shell/mount/useAppMount', () => ({
+  returnAppSurfaceToSlot: mocks.returnAppSurfaceToSlot,
+  presentAppSurfaceInPreview: vi.fn(() => false),
+  fitAppSurfacePreview: vi.fn(() => false),
+  leaveAppSurfacePreview: vi.fn(() => false),
 }))
 
 vi.mock('@/shell/composables/useShellApps', async () => {
@@ -107,7 +116,7 @@ function entry(overrides: Partial<ShellAppEntry>): ShellAppEntry {
   } as ShellAppEntry
 }
 
-const box = <T,>(v: T) => ({ value: v }) as { value: T }
+const box = <T>(v: T) => ({ value: v }) as { value: T }
 
 /** 后台卡 key → 标题（i18n mock 返回 key，标题用假名好断言） */
 const cardTitleOf = (key: string) => (key.startsWith('app:') ? '后台应用甲' : '系统设置页')
@@ -144,6 +153,7 @@ beforeEach(() => {
     appOf: () => undefined,
   }
   vi.mocked(appIconUrl).mockReset()
+  mocks.returnAppSurfaceToSlot.mockClear()
 })
 
 afterEach(() => {
@@ -158,8 +168,8 @@ const TILE_STUB = {
     '<span class="tile-stub" :data-plugin-id="pluginId ?? \'\'" :data-icon-file="iconFile ?? \'\'"></span>',
 }
 const PREVIEW_STUB = {
-  props: ['appId', 'lastRoute'],
-  template: '<div class="preview-stub" :data-app-id="appId"></div>',
+  props: ['appId', 'icon', 'iconFile', 'tone'],
+  template: '<div class="surface-stub" :data-app-id="appId"></div>',
 }
 
 function mountHome() {
@@ -182,7 +192,7 @@ function q(selector: string): HTMLElement {
 
 function mountSwitcher() {
   const wrapper = mount(ShellTaskSwitcher, {
-    global: { stubs: { ShellAppTile: TILE_STUB, AppPreviewTile: PREVIEW_STUB } },
+    global: { stubs: { ShellAppTile: TILE_STUB, AppSurfaceTile: PREVIEW_STUB } },
     attachTo: document.body,
   })
   return wrapper
@@ -199,7 +209,9 @@ async function click(selector: string): Promise<void> {
 describe('主屏不再展示运行区（挂载行为）', () => {
   it('后台有卡也不在主屏铺开：运行面只在多任务全屏层，主屏只留应用/服务/系统网格', () => {
     mocks.state.cards.value = ['app:com.wasmnest.test.app', 'sys:settings']
-    mocks.appsStore.plugins.value = [entry({ id: 'com.wasmnest.test.app', pluginId: 'com.wasmnest.test.app', name: 'DemoApp' })]
+    mocks.appsStore.plugins.value = [
+      entry({ id: 'com.wasmnest.test.app', pluginId: 'com.wasmnest.test.app', name: 'DemoApp' }),
+    ]
 
     const wrapper = mountHome()
 
@@ -214,7 +226,9 @@ describe('主屏不再展示运行区（挂载行为）', () => {
   })
 
   it('主屏应用图块拿到应用 id（图标还原为应用自带那张，不是哈希 glyph）', () => {
-    mocks.appsStore.plugins.value = [entry({ id: 'com.wasmnest.test.app', pluginId: 'com.wasmnest.test.app', name: 'DemoApp' })]
+    mocks.appsStore.plugins.value = [
+      entry({ id: 'com.wasmnest.test.app', pluginId: 'com.wasmnest.test.app', name: 'DemoApp' }),
+    ]
 
     const wrapper = mountHome()
 
@@ -335,7 +349,12 @@ describe('全屏层卡片装配（挂载 DOM 断言）', () => {
     mocks.state.recentsOpen.value = true
     mocks.state.cards.value = ['app:com.wasmnest.test.app', 'sys:settings']
     mocks.appsStore.appOf = vi.fn(() =>
-      entry({ id: 'com.wasmnest.test.app', pluginId: 'com.wasmnest.test.app', name: 'DemoApp', iconFile: 'icon.svg' }),
+      entry({
+        id: 'com.wasmnest.test.app',
+        pluginId: 'com.wasmnest.test.app',
+        name: 'DemoApp',
+        iconFile: 'icon.svg',
+      }),
     )
     mountSwitcher()
 
@@ -350,12 +369,12 @@ describe('全屏层卡片装配（挂载 DOM 断言）', () => {
     expect(appCard!.querySelector('.ts-meta .tile-stub')!.getAttribute('data-plugin-id')).toBe(
       'com.wasmnest.test.app',
     )
-    // app 卡预览面：挂在缩略区、带 appId（lastRoute 由 appSession 记忆面解析）
-    const preview = appCard!.querySelector('.preview-stub')
-    expect(preview?.getAttribute('data-app-id')).toBe('com.wasmnest.test.app')
-    // 系统页卡没有 app bundle：保持 glyph 分支，不塞预览组件
+    // app 卡缩略区：真实实例容器（2026-10-30 起不再挂应用自绘预览面）
+    const surface = appCard!.querySelector('.surface-stub')
+    expect(surface?.getAttribute('data-app-id')).toBe('com.wasmnest.test.app')
+    // 系统页卡没有实例：保持 glyph 分支，不塞实例容器
     expect(sysCard!.querySelector('.ts-thumb .glyph-box')).toBeTruthy()
-    expect(sysCard!.querySelector('.preview-stub')).toBeNull()
+    expect(sysCard!.querySelector('.surface-stub')).toBeNull()
   })
 
   it('预览容器不在打开按钮内部（单一覆盖层动作，避免嵌套交互元素）', () => {
@@ -371,7 +390,7 @@ describe('全屏层卡片装配（挂载 DOM 断言）', () => {
     expect(openBtn, '唯一打开动作按钮在场').toBeTruthy()
     // 打开按钮必须是自闭合空按钮：视觉层（预览面 / 信息条 / 缩略区）都不得嵌进去
     expect(openBtn!.childElementCount).toBe(0)
-    expect(openBtn!.querySelector('.preview-stub, .ts-thumb, .ts-meta')).toBeNull()
+    expect(openBtn!.querySelector('.surface-stub, .ts-thumb, .ts-meta')).toBeNull()
   })
 
   it('「运行中」不再用 chip 重复（后台卡默认就是在跑）；异常态仍提示', async () => {
@@ -408,6 +427,57 @@ describe('全屏层卡片装配（挂载 DOM 断言）', () => {
     // 末行单卡由 recentsCardPlacement 注入显式位置（正中）
     expect(cards[6]!.style.gridColumn).toBe('3 / span 2')
     expect(cards[6]!.style.gridRow).toBe('3')
+  })
+})
+
+// ==================== 收起时的实例去向 ====================
+
+describe('多任务收起：前台实例必须送回挂载槽（2026-10-30 真实实例卡片）', () => {
+  /** 前台实例在打开多任务时被搬进卡片：普通收起必须送回，否则应用“消失” */
+  function originFixture(cards: string[]): void {
+    mocks.state.recentsOpen.value = true
+    mocks.state.activeCard.value = 'app:com.wasmnest.test.app'
+    mocks.state.cards.value = cards
+    mocks.appsStore.appOf = vi.fn((id: string) => entry({ id, pluginId: id, name: id }))
+  }
+
+  it('普通收起（Esc / 点空白）：送回挂载槽', async () => {
+    originFixture(['app:com.wasmnest.test.app', 'sys:settings'])
+    mountSwitcher()
+    await nextTick()
+
+    mocks.state.recentsOpen.value = false
+    await nextTick()
+
+    expect(mocks.returnAppSurfaceToSlot).toHaveBeenCalledWith('com.wasmnest.test.app')
+  })
+
+  it('切到别的应用：不抢挂载槽（实例去向由 AppMountSlot 的 appId watcher 接管）', async () => {
+    originFixture(['app:com.wasmnest.test.app', 'app:com.wasmnest.other'])
+    mountSwitcher()
+    await nextTick()
+
+    const mains = document.body.querySelectorAll<HTMLButtonElement>('.ts-card-main')
+    mains[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await nextTick()
+    expect(mocks.state.activateCard).toHaveBeenCalledWith('app:com.wasmnest.other')
+
+    mocks.state.recentsOpen.value = false
+    await nextTick()
+
+    expect(mocks.returnAppSurfaceToSlot).not.toHaveBeenCalled()
+  })
+
+  it('切回同一张卡：仍要送回（appId 没变，挂载槽不会自己 re-attach）', async () => {
+    originFixture(['app:com.wasmnest.test.app'])
+    mountSwitcher()
+    await nextTick()
+
+    await click('.ts-card-main')
+    mocks.state.recentsOpen.value = false
+    await nextTick()
+
+    expect(mocks.returnAppSurfaceToSlot).toHaveBeenCalledWith('com.wasmnest.test.app')
   })
 })
 

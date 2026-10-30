@@ -33,7 +33,7 @@ const BAND_MIN: RecentsBand = { width: 700, height: 470, gap: 16 }
 /** 「两行三列」格子的尺寸基准：第 6 张及以后卡宽必须等于它 */
 const TWO_BY_THREE = recentsCardWidth(6, BAND_16_9)
 
-/** 卡高（由 3/4 比例派生，与 CSS aspect-ratio 同一公式） */
+/** 卡高（由 16:10 比例派生，与 CSS aspect-ratio 同一公式） */
 const cardHeight = recentsCardHeight
 
 describe('卡片数 → 网格形状（最多 3 列，尺寸行数封顶 2 行）', () => {
@@ -57,14 +57,14 @@ describe('卡片数 → 网格形状（最多 3 列，尺寸行数封顶 2 行�
   it('常量口径：最多 3 列、可视 2 行', () => {
     expect(RECENTS_MAX_COLS).toBe(3)
     expect(RECENTS_MAX_VISIBLE_ROWS).toBe(2)
-    expect(RECENTS_CARD_ASPECT).toBeCloseTo(3 / 4)
+    expect(RECENTS_CARD_ASPECT).toBeCloseTo(16 / 10)
   })
 })
 
 describe('方向：卡片越少越大，第 6 张起封底', () => {
-  it('单卡取带内最大 3:4 卡（宽度受带高限制，且明显大于旧的 420px 上限）', () => {
+  it('单卡取带内最大 16:10 卡（宽度受带高限制，且明显大于旧的 420px 上限）', () => {
     const width = recentsCardWidth(1, BAND_16_9)
-    // 宽窗口下高度是瓶颈：宽 = 0.75 × 带高（不是三等分，也不是 420）
+    // 宽窗口下高度是瓶颈：宽 = 1.6 × 带高（不是三等分，也不是 420）
     expect(width).toBe(Math.floor(BAND_16_9.height * RECENTS_CARD_ASPECT))
     expect(width).toBeGreaterThan(420)
     expect(cardHeight(width)).toBeLessThanOrEqual(BAND_16_9.height)
@@ -111,7 +111,7 @@ describe('几何：解算结果在带内不溢宽，两行放得下、三行必�
     expect(height * 3 + BAND_16_9.gap * 2).toBeGreaterThan(BAND_16_9.height)
   })
 
-  it('卡高 = 卡宽 / 3:4（行高与 aspect-ratio 同一公式，不另立一套比例）', () => {
+  it('卡高 = 卡宽 / 16:10（行高与 aspect-ratio 同一公式，不另立一套比例）', () => {
     const width = recentsCardWidth(3, BAND_16_9)
     expect(recentsCardHeight(width)).toBeCloseTo(width / RECENTS_CARD_ASPECT)
     expect(recentsCardHeight(0)).toBe(0)

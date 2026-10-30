@@ -8,9 +8,10 @@ import {
 /**
  * 应用表面实例记账（机制 B 的「保活半边」）契约
  *
- * 语义（`.scratch/2026-10-23-app-surface-keepalive/spec.md` §2.1）：
+ * 语义（`.scratch/2026-10-23-app-surface-keepalive/spec.md` §2.1；2026-10-30 追加预览态）：
  *   首次打开 → register + attach；切走 → detach（容器脱文档，实例保留）；
- *   切回 → attach（同一容器节点放回槽，状态不重建）；停用 / 卸载 → dispose（才 unmount）。
+ *   切回 → attach（同一容器节点放回槽，状态不重建）；停用 / 卸载 → dispose（才 unmount）；
+ *   多任务卡 → attachPreview（同一实例搬进卡片，等比缩放、不谎报前台）/ detachPreview。
  *
  * 这些断言锁住的核心不变量是「detach 不销毁、dispose 才销毁」——写反了就是
  * 「切回来应用被重置」（用户可感知）或「停用了实例还赖在内存里」（泄漏）。
@@ -166,5 +167,109 @@ describe('应用表面实例注册表', () => {
     expect(host.parentElement).toBe(slot)
     expect(() => registry.detach(APP)).not.toThrow()
     expect(host.parentElement).toBeNull()
+  })
+})
+
+/** jsdom 不做布局：给元素伪造布局尺寸（只读 getter，模拟真实实测值） */
+function fakeSize(el: HTMLElement, width: number, height: number): void {
+  Object.defineProperty(el, 'clientWidth', { configurable: true, get: () => width })
+  Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => height })
+}
+
+describe('多任务卡预览态：真实实例搬运（2026-10-30）', () => {
+  let slot: HTMLElement
+  let box: HTMLElement
+  let registry: AppSurfaceRegistry
+  let host: HTMLElement
+  let handle: ReturnType<typeof makeHandle>
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    slot = document.createElement('div')
+    document.body.appendChild(slot)
+    box = document.createElement('div')
+    box.className = 'app-live-surface'
+    document.body.appendChild(box)
+    registry = createAppSurfaceRegistry()
+    host = document.createElement('div')
+    host.className = 'app-instance-host'
+    handle = makeHandle()
+    // 整幅（全屏应用区）1280×800；卡片缩略区 640×400（正好 0.5）
+    fakeSize(host, 1280, 800)
+    fakeSize(box, 640, 400)
+    registry.register(APP, host, handle)
+    registry.attach(APP, slot)
+    handle.setActive.mockClear()
+  })
+
+  it('搬进卡片：同一节点、不销毁、不谎报前台、固定整幅尺寸并等比缩小', () => {
+    expect(registry.attachPreview(APP, box)).toBe(true)
+
+    expect(host.parentElement, '必须是同一个容器节点（实例状态原样）').toBe(box)
+    expect(registry.get(APP)?.location).toBe('preview')
+    expect(handle.unmount).not.toHaveBeenCalled()
+    expect(handle.setActive, '卡片不是可交互前台，不得通知 setActive(true)').toHaveBeenCalledWith(
+      false,
+    )
+    // 布局尺寸保持整幅：终端不 resize / 不重排，只是视觉缩小
+    expect(host.style.width).toBe('1280px')
+    expect(host.style.height).toBe('800px')
+    expect(host.style.transform).toBe('translate(0px, 0px) scale(0.5)')
+    expect(host.inert, '卡片里的实例不可交互 / 不可聚焦').toBe(true)
+  })
+
+  it('卡片尺寸变化：fitPreview 重算缩放并居中留边', () => {
+    registry.attachPreview(APP, box)
+    fakeSize(box, 640, 200)
+
+    expect(registry.fitPreview(APP)).toBe(true)
+    // 等比取小（0.25），宽度方向居中：(640 - 320) / 2 = 160
+    expect(host.style.transform).toBe('translate(160px, 0px) scale(0.25)')
+  })
+
+  it('detachPreview 摘回后台：清掉缩放内联样式，实例与记账保留', () => {
+    registry.attachPreview(APP, box)
+
+    expect(registry.detachPreview(APP)).toBe(true)
+
+    expect(host.parentElement, '卡片收起后必须脱离文档（后台不渲染）').toBeNull()
+    expect(registry.get(APP)?.location).toBe('detached')
+    expect(registry.has(APP), '摘卡片不得销毁实例').toBe(true)
+    expect(handle.unmount).not.toHaveBeenCalled()
+    expect(host.style.width).toBe('')
+    expect(host.style.transform).toBe('')
+    expect(host.inert).toBe(false)
+  })
+
+  it('卡片直接放回挂载槽：清缩放态并恢复前台通知', () => {
+    registry.attachPreview(APP, box)
+
+    expect(registry.attach(APP, slot)).toBe(true)
+
+    expect(host.parentElement).toBe(slot)
+    expect(host.style.width).toBe('')
+    expect(host.style.transform).toBe('')
+    expect(host.inert).toBe(false)
+    expect(handle.setActive).toHaveBeenLastCalledWith(true)
+  })
+
+  it('非预览态调 detachPreview / fitPreview 返回 false（幂等，不误伤槽内实例）', () => {
+    expect(registry.detachPreview(APP)).toBe(false)
+    expect(registry.fitPreview(APP)).toBe(false)
+    expect(host.parentElement).toBe(slot)
+  })
+
+  it('未知实例 attachPreview 返回 false（卡片回退品牌卡）', () => {
+    expect(registry.attachPreview('ghost', box)).toBe(false)
+  })
+
+  it('卡片里被停用：dispose 仍只 unmount 一次并移除容器', async () => {
+    registry.attachPreview(APP, box)
+
+    await expect(registry.dispose(APP)).resolves.toBe(true)
+
+    expect(handle.unmount).toHaveBeenCalledTimes(1)
+    expect(host.parentElement).toBeNull()
+    expect(registry.has(APP)).toBe(false)
   })
 })

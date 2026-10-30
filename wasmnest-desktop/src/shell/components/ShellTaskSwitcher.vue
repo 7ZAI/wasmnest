@@ -1,5 +1,6 @@
 <template>
-  <!-- 全屏多任务层（安卓 recents 形态）：背景是当前界面的虚化快照，前景是运行中应用的大卡片。
+  <!-- 全屏多任务层（安卓 recents 形态）：背景是虚化底，前景是运行中应用的大卡片。
+       前台实例会被搬进自己的卡（缩略区展示真实页面），背景只剩壳的壁纸层。
        Teleport 到 body：壳根是 overflow:hidden 的定高 flex，且应用内容自带层叠上下文，
        留在里面会被裁掉 / 被应用弹层压住；全屏层必须独立于这两者。 -->
   <Teleport to="body">
@@ -34,12 +35,12 @@
           </header>
 
           <!-- 卡片带：卡片数决定卡片尺寸（2026-10-23 用户裁决，修正上一版反方向）。
-               1 张 = 带内最大 3:4 卡居中；越多越小，最小只缩到「3 列 × 2 行」的格子；
+               1 张 = 带内最大卡居中；越多越小，最小只缩到「3 列 × 2 行」的格子；
                第 7 张起不再缩小，改为纵向滚动（解算见 composables/recentsLayout.ts）。
-               缩略区 = 应用可选导出的 mountPreview 自绘只读预览面；缺失 / 失败 /
-               超时回退品牌渐变 + 图标（预览是应用自己重画的点时刻视图，宿主不抓主实例
-               DOM——表面保活后后台 DOM 仍在，但抓取会让旁路实例耦合主实例状态；
-               见 .scratch/2026-10-20-app-preview-contract）。 -->
+               缩略区 = **真实实例的当前页面**（2026-10-30 用户裁决）：宿主把保活实例
+               搬进卡片、按整幅尺寸等比缩放（不重排 / 终端不 resize / 滚动与输入原样），
+               不是截图 / 不是 DOM 克隆 / 不是应用自绘预览面；卡片里的实例 inert，
+               多任务层收起后回后台（脱离文档不渲染）。系统页卡没有实例，保持品牌卡。 -->
           <div
             ref="bandEl"
             class="ts-cards"
@@ -85,11 +86,10 @@
                 :class="kindOf(key) === 'app' ? undefined : 'tone-system'"
                 :style="kindOf(key) === 'app' ? undefined : thumbStyle()"
               >
-                <!-- app 卡：应用自绘只读预览面（未导出 / 失败 / 超时 → 品牌卡 fallback） -->
-                <AppPreviewTile
+                <!-- app 卡：保活实例本身（宿主搬进卡片并等比缩放；实例缺失 → 品牌卡 fallback） -->
+                <AppSurfaceTile
                   v-if="kindOf(key) === 'app'"
                   :app-id="idOf(key)"
-                  :last-route="lastRouteOf(idOf(key))"
                   :icon="entryOf(key)?.icon ?? 'grid'"
                   :icon-file="entryOf(key)?.iconFile"
                   :tone="toneOf(key)"
@@ -112,7 +112,9 @@
               <button
                 class="ts-card-x"
                 :title="
-                  kindOf(key) === 'app' ? t('shell.recents.stopInstance') : t('shell.recents.closePage')
+                  kindOf(key) === 'app'
+                    ? t('shell.recents.stopInstance')
+                    : t('shell.recents.closePage')
                 "
                 :aria-label="t('shell.recents.closeOne', { name: state.cardTitleOf(key) })"
                 @click="closeCard(key)"
@@ -141,13 +143,19 @@
  * ShellTaskSwitcher — 全屏多任务（安卓 recents 形态）
  *
  * 主屏不铺「正在运行」区（用户裁决 2026-10-17），打开过 / 后台运行的面统一在这个
- * 全屏层里呈现：背景是当前界面的**虚化**快照（backdrop blur），前景是每个应用一张
- * 大卡片（卡片数决定尺寸：少卡大、多卡小，见 `recentsLayout`），点卡片切回（应用续接
- * 离开时那一页），卡片顶部信息条（图标 + 名称）右端 ✕ 关闭单个实例，头部「全部关闭」
- * 一键清场；点空白 / ✕ / Esc 收起。
+ * 全屏层里呈现：背景是**虚化**底（前景实例会被搬走，背景只剩壳的壁纸层），前景是
+ * 每个应用一张大卡片（卡片数决定尺寸：少卡大、多卡小，见 `recentsLayout`），点卡片
+ * 切回（应用续接离开时那一页），卡片顶部信息条（图标 + 名称）右端 ✕ 关闭单个实例，
+ * 头部「全部关闭」一键清场；点空白 / ✕ / Esc 收起。
  *
- * 缩略区：app 卡交给 `AppPreviewTile`（应用可选导出 `mountPreview` 自绘只读预览面；
- * 未导出 / 失败 / 3s 超时回退品牌渐变 + 图标），系统页卡保持品牌渐变 + 36px glyph。
+ * 缩略区（2026-10-30 用户裁决）：app 卡展示**真实实例的当前页面**——`AppSurfaceTile`
+ * 请求挂载层把保活实例搬进卡片、按整幅尺寸等比缩放；系统页卡没有实例，保持品牌
+ * 渐变 + 36px glyph。代价：多任务层打开期间所有运行中应用都会重新渲染（收起即回
+ * 后台不渲染）；竖版窗口下真实画面按比例留边。
+ *
+ * 收货：普通收起（Esc / 点空白 / 切回同一张卡）时，前台实例必须送回挂载槽——
+ * 搬运发生在卡片里，不送回去应用就“消失”了。切到别的应用由 `AppMountSlot` 的
+ * appId watcher 接管（本层不抢）。
  *
  * 归属（AGENTS §5.1）：纯注册表投影 + 动作机械转发；卡清单与关闭语义唯一实现在
  * `useShellState`（activateCard 带页面续接、closeCard = 真停用），本组件不复制编排。
@@ -168,8 +176,8 @@ import {
 } from '../composables/recentsLayout'
 import ShellIcon from './ShellIcon.vue'
 import ShellAppTile from './ShellAppTile.vue'
-import AppPreviewTile from '../mount/AppPreviewTile.vue'
-import { lastRouteOf } from '../mount/appSession'
+import AppSurfaceTile from '../mount/AppSurfaceTile.vue'
+import { returnAppSurfaceToSlot } from '../mount/useAppMount'
 import type { CardKey } from '../types'
 import type { ShellAppEntry } from '../composables/useShellApps'
 
@@ -268,7 +276,7 @@ function unobserveBand(): void {
 
 /**
  * 系统页卡缩略区品牌渐变底：tone 固定 system 的语义色（与 tone-system 类同源）。
- * app 卡的品牌渐变 fallback 由 `AppPreviewTile` 自绘（同一条公式，单一实现）。
+ * app 卡的品牌渐变 fallback 由 `AppSurfaceTile` 自绘（同一条公式，单一实现）。
  */
 function thumbStyle(): Record<string, string> {
   const accent = 'var(--color-info)'
@@ -284,11 +292,51 @@ function thumbStyle(): Record<string, string> {
 function syncBandAndFocus(): void {
   if (!open.value) {
     unobserveBand()
+    restoreOriginAfterClose()
     return
   }
+  slotOriginAppId = activeAppCardId()
+  switchedTo = null
   measureBand()
   observeBand()
   rootEl.value?.focus()
+}
+
+/**
+ * 打开时处于前台的卡片（实例正在挂载槽里，会被 `AppSurfaceTile` 搬进卡片）。
+ *
+ * 只认「有卡的 app」：服务型应用不入卡，实例留在槽里不动；系统页没有实例。
+ */
+let slotOriginAppId: string | null = null
+/**
+ * 本次收起是否由「点卡片切换」触发。null = Esc / 点空白 / 关闭键等普通收起。
+ * 切到别的应用时实例去向由 AppMountSlot 的 appId watcher 接管，本层不抢。
+ */
+let switchedTo: CardKey | null = null
+
+function activeAppCardId(): string | null {
+  const key = state.activeCard.value
+  if (!key || kindOf(key) !== 'app') return null
+  return state.cards.value.includes(key) ? idOf(key) : null
+}
+
+/**
+ * 普通收起时把前台实例送回挂载槽。
+ *
+ * 打开多任务把前台实例从槽里搬进了卡片；Esc / 点空白 / 切回同一张卡都不会触发
+ * `AppMountSlot` 的重新 attach（appId 没变），不送回去应用就“消失”了。
+ * 切到别的应用 / 关掉前台卡时 activeCard 已变（`closeCard` 内部会切 MRU 次卡或
+ * 回主屏），跳过——否则会把旧实例塞回新应用正在用的槽里。
+ */
+function restoreOriginAfterClose(): void {
+  const origin = slotOriginAppId
+  const target = switchedTo
+  slotOriginAppId = null
+  switchedTo = null
+  if (!origin) return
+  if (target !== null && target !== `app:${origin}`) return
+  if (state.activeCard.value !== `app:${origin}`) return
+  returnAppSurfaceToSlot(origin)
 }
 
 // 开合时同步：`flush: 'post'` 保证 `v-if` 插入的元素在回调里已经存在（不用手工 nextTick）
@@ -353,6 +401,8 @@ function onBackdropClick(e: MouseEvent): void {
 }
 
 function switchTo(key: CardKey): void {
+  // 记录切换目标：收起时据此判断实例去向（切到别的面不抢挂载槽）
+  switchedTo = key
   state.activateCard(key)
 }
 function closeCard(key: CardKey): void {
@@ -496,7 +546,8 @@ function close(): void {
   align-content: start;
 }
 
-/* 卡片：竖版 3/4（缩略区 flex 撑满 + 顶部信息条），尺寸随卡片数自适应。
+/* 卡片：横版 16/10（缩略区 flex 撑满 + 顶部信息条）——桌面应用界面本来就是横向的，
+   竖卡只能把真实画面缩成中间一条带；比例与 recentsLayout 的 RECENTS_CARD_ASPECT 同源。
    宽度 = 跨 2 个半列轨道（轨道宽由 `--ts-card-w` 注入，见 recentsLayout）：
    少卡大、多卡小，最小到 2 行 3 列的格，第 7 张起整带滚动；兜底（首帧测量前 /
    无 ResizeObserver）是三等分，保证未测量时也不会溢出。
@@ -508,7 +559,7 @@ function close(): void {
   box-sizing: border-box;
   min-width: 0;
   grid-column: span 2;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 16 / 10;
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-sheet);
@@ -566,8 +617,8 @@ function close(): void {
 .ts-card .ts-thumb {
   pointer-events: none;
 }
-/* 缩略区：app 卡 = 应用自绘只读预览面（AppPreviewTile，尺寸由卡片决定）；
-   系统页卡 = 品牌渐变底 + 图标居中。预览挂载 / 回退切换不改变盒子尺寸，
+/* 缩略区：app 卡 = 真实实例的当前页面（AppSurfaceTile 搬运 + 等比缩放）；
+   系统页卡 = 品牌渐变底 + 图标居中。实例搬运 / 回退切换不改变盒子尺寸，
    卡片高度与网格位置不跳动。 */
 .ts-thumb {
   flex: 1;

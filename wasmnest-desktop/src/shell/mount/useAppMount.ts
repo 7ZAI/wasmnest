@@ -26,11 +26,10 @@
  * 前端照常调用两条命令，宿主命令层对这类应用直接返回 no-op，避免「界面卸载
  * 就把 8775 关掉」。
  *
- * 预览面（2026-10-20 多任务卡）：同一挂载包还可选导出 `mountPreview(root, env)`，
- * 由应用在卡片缩略区**自绘**一张只读、点时刻的预览面（不是截图 / 不是 DOM 克隆，
- * 见 `.scratch/2026-10-20-app-preview-contract/spec.md`）。宿主只负责给容器、装载、
- * 超时（调用方 AppPreviewTile 控制）与卸载；未导出 / 失败 / 超时 → 回退品牌卡。
- * 预览环境是收窄面（无宿主命令 / 无写存储 / 无事件出口），不新增权限位。
+ * 多任务卡片（2026-10-30 用户裁决）：卡片缩略区展示**真实实例的当前页面**——宿主把
+ * 保活实例的容器搬进卡片，按整幅尺寸等比缩放（不重排 / 不 resize 终端 / 滚动与输入
+ * 原样），不再要求应用自绘预览面；卡片里的实例 inert，收起后回后台（脱离文档不渲染）。
+ * 代价：多任务层打开期间所有运行中应用都会重新渲染（见 `ShellTaskSwitcher` 注释）。
  */
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { join } from '@tauri-apps/api/path'
@@ -140,46 +139,6 @@ export interface AppMountHandle {
   setTheme?(theme: string): void
 }
 
-// ==================== 预览契约（宿主面声明；各 app entry.ts 同形重复——drift 锁 L5 钉住） ====================
-
-/**
- * 应用预览环境（宿主注入；只读面）
- *
- * 与 {@link AppMountEnv} 的差异是**收窄**而非放行：不提供宿主面 `invoke`、写 / 删
- * 存储、事件出口（navigate / route）。预览是卡片里的旁路展示，不能请求宿主导航、
- * 不能写存储、不能上报路由；安全边界仍由 Rust 权限仲裁（预览没有新增权限）。
- */
-export interface AppPreviewEnv {
-  /** 插件 id（= 应用 id） */
-  appId: string
-  /** 应用上次自报的内部路径；无记录 = undefined（应用自行回落落地页） */
-  lastRoute?: string
-  /** 本 app 插件面命令（与主界面同一令牌 / 权限；预览侧只读使用） */
-  appInvoke: <T = unknown>(command: string, ...args: unknown[]) => Promise<T>
-  /** 本 app 插件 KV 只读访问 */
-  appStorageGet: <T = unknown>(key: string) => Promise<T | undefined>
-  locale: string
-  theme: string
-  platform?: string
-}
-
-/** 应用预览句柄（卸载卡片时宿主调用；预览实例不登记到主应用表面注册表） */
-export interface AppPreviewHandle {
-  unmount(): Promise<void>
-}
-
-/** entry.ts 可选导出；未导出 = 不支持预览（缺失不是错误，是能力声明） */
-export type MountPreview = (root: HTMLElement, env: AppPreviewEnv) => Promise<AppPreviewHandle>
-
-/**
- * 预览装载超时（毫秒）。
- *
- * **只覆盖 `mountPreview` 返回句柄**，不覆盖预览内部的数据加载：应用应先挂出骨架 /
- * 空态并立即返回 handle，再异步取数；把「等命令返回」放在 resolve 之前会让慢命令把
- * 整张卡打成 fallback。主应用装载仍用 {@link MOUNT_TIMEOUT_MS}。
- */
-export const PREVIEW_MOUNT_TIMEOUT_MS = 3000
-
 /** 装载超时（秒）；超时 = 包损坏 / 契约不匹配，显性报错不静默 */
 const MOUNT_TIMEOUT_MS = 8000
 
@@ -189,14 +148,12 @@ const MOUNT_TIMEOUT_MS = 8000
  */
 
 /**
- * app 挂载包模块面：`mountApp` 必有（否则契约不匹配），`mountPreview` 可选。
- * 「bundle 是否导出 mountPreview」就是应用的能力声明——宿主不维护预览名单。
+ * app 挂载包模块面：`mountApp` 必有（否则契约不匹配）。
  * `mountContract` 由各 app `entry.ts` 导出（与宿主 {@link MOUNT_CONTRACT} 比对）。
  */
 interface AppBundleModule {
   mountContract?: string
   mountApp?: (root: HTMLElement, env: AppMountEnv) => Promise<AppMountHandle>
-  mountPreview?: MountPreview
   mountMonitorPanel?: MountMonitorPanel
 }
 
@@ -289,9 +246,41 @@ export function listAppSurfaces(): string[] {
   return appSurfaces.list()
 }
 
+/** 最近一次把实例放进挂载槽的槽元素（多任务普通收起时把前台实例送回去） */
+let lastSlotEl: HTMLElement | null = null
+
 /** 把保活实例放回挂载槽（切回来）；返回 false = 没有实例（应走 mountAppBundle） */
 export function attachAppSurface(slotEl: HTMLElement, appId: string): boolean {
-  return appSurfaces.attach(appId, slotEl)
+  if (!appSurfaces.attach(appId, slotEl)) return false
+  lastSlotEl = slotEl
+  return true
+}
+
+/**
+ * 多任务卡：把实例搬进卡片缩略区（真实实例、按整幅尺寸等比缩放）。
+ *
+ * 卡片不是前台：实例在预览期间不收到 `setActive(true)`，收起后仍是后台实例。
+ *
+ * @returns false = 没有保活实例（例如装载失败 / 已被停用）→ 卡片回退品牌卡
+ */
+export function presentAppSurfaceInPreview(appId: string, boxEl: HTMLElement): boolean {
+  return appSurfaces.attachPreview(appId, boxEl)
+}
+
+/** 卡片尺寸变化（窗口缩放 / 卡片数变化）：重算等比缩放 */
+export function fitAppSurfacePreview(appId: string): boolean {
+  return appSurfaces.fitPreview(appId)
+}
+
+/** 卡片卸载：把实例从卡片摘下（保留实例，回后台不渲染） */
+export function leaveAppSurfacePreview(appId: string): boolean {
+  return appSurfaces.detachPreview(appId)
+}
+
+/** 多任务普通收起（没有切换应用）：把前台实例送回最近一次的挂载槽 */
+export function returnAppSurfaceToSlot(appId: string): boolean {
+  if (!lastSlotEl) return false
+  return attachAppSurface(lastSlotEl, appId)
 }
 
 /**
@@ -336,7 +325,7 @@ export function mountAppBundle(slotEl: HTMLElement, env: AppMountEnv): Promise<A
   const appId = env.appId
   const existing = appSurfaces.get(appId)
   if (existing) {
-    appSurfaces.attach(appId, slotEl)
+    attachAppSurface(slotEl, appId)
     return Promise.resolve(existing.handle as AppMountHandle)
   }
 
@@ -344,7 +333,7 @@ export function mountAppBundle(slotEl: HTMLElement, env: AppMountEnv): Promise<A
   if (pending) {
     return pending.then((handle) => {
       // 先到的装载已把实例登记进注册表：本槽只做 attach，绝不再 mount 一份
-      appSurfaces.attach(appId, slotEl)
+      attachAppSurface(slotEl, appId)
       return handle
     })
   }
@@ -379,36 +368,8 @@ async function mountAppSurface(slotEl: HTMLElement, env: AppMountEnv): Promise<A
     throw e
   }
   appSurfaces.register(appId, host, handle as AppSurfaceHandle)
-  appSurfaces.attach(appId, slotEl)
+  attachAppSurface(slotEl, appId)
   logger.log(`[AppMount] mounted: ${appId}`)
-  return handle
-}
-
-/**
- * 在 `root` 中挂载应用自绘的只读预览面（多任务卡片缩略区）
- *
- * - 与主应用共用 {@link loadAppModule}：同一 bundle URL / 模块缓存，不重复下载；
- * - **不做超时**：3s 预览超时由调用方（AppPreviewTile）控制，只覆盖返回句柄；
- * - **不登记**到 {@link appSurfaces}：预览实例与主应用实例生命周期独立，卸载由调用方
- *   持有 handle 完成（同一 app 主实例可能正在遮罩后运行，两者不得互相踩）；
- * - **不换发通道令牌**：预览是旁路展示，改身份绑定会作废主实例正在用的令牌。
- *
- * @returns `null` = bundle 未导出 `mountPreview`（正常的不支持，不是错误）
- * @throws bundle import 失败 / mountPreview 抛错 / 返回的 handle 无 `unmount`
- */
-export async function mountAppPreview(
-  root: HTMLElement,
-  env: AppPreviewEnv,
-): Promise<AppPreviewHandle | null> {
-  const module = await loadAppModule(env.appId)
-  if (typeof module.mountPreview !== 'function') return null
-
-  const handle = await module.mountPreview(root, env)
-  // 形状不对按失败处理（调用方清空容器 + 回退品牌卡），不把坏句柄当成功
-  if (!handle || typeof handle.unmount !== 'function') {
-    throw new Error(`app bundle "${env.appId}" mountPreview returned an invalid handle`)
-  }
-  logger.log(`[AppPreview] mounted preview: ${env.appId}`)
   return handle
 }
 
@@ -511,6 +472,9 @@ export function useAppMount() {
     unmountAppBundle,
     listAppSurfaces,
     notifyAppRoute,
-    mountAppPreview,
+    presentAppSurfaceInPreview,
+    fitAppSurfacePreview,
+    leaveAppSurfacePreview,
+    returnAppSurfaceToSlot,
   }
 }
