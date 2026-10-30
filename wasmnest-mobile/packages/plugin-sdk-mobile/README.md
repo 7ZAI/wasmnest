@@ -335,11 +335,45 @@ const options = [
 </template>
 ```
 
+### 首页快捷卡片（QuickCard）
+
+宿主壳首页的快捷卡片 = **SDK 公共外观 + 应用内容 + 宿主跳转**：应用只实现卡片内容，
+activate 期用 `context.ui.registerSlot` 注册；宿主壳负责展示、自动轮播（最多 5 张）与
+点击打开本应用，应用不需要也不应该在卡片里处理导航。
+
+```vue
+<script setup lang="ts">
+import QuickCard from '@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card'
+
+defineProps<{ activeCount: number }>()
+</script>
+
+<template>
+  <QuickCard
+    label="活跃会话"
+    :value="activeCount"
+    hint="正在运行"
+    tone="success"
+    :icon-path="['M4 5h16v14H4z', 'M8 10l3 2.5-3 2.5']"
+  />
+</template>
+```
+
+```ts
+context.ui.registerSlot({ id: 'sessions', component: SessionCard, order: 10 })
+```
+
+- 宿主把整张卡渲染成按钮（点击 = 启动并打开贡献方应用），卡片内不得再放按钮 / 链接；
+- 宿主按注册顺序截断展示（当前 5 张），多张时自动轮播——触摸 / 键盘聚焦 / 切后台 /
+  系统「减少动效」时停走，标题行提供暂停 / 播放控件；
+- `label` / `value` / `hint` / `tone` / `iconPath` 覆盖常见读数卡，复杂内容用默认插槽。
+
 当前提供（每个子路径 = 一个独立导出）：
 
 | 子路径 | 内容 | 用途 |
 |--------|------|------|
 | `./ui` | `Select` 组件 | 下拉选择（`update:modelValue` / `open` 事件，`md` / `sm` 尺寸） |
+| `./ui/quick-card` | `QuickCard` 组件 | 宿主壳首页快捷卡片公共外观（宿主 token / 明暗 / 字号自适应；点击归宿主） |
 | `./ui/plugin-global-dialog` | `PluginGlobalDialog` 组件 | 移动端宿主全局弹窗（应用根挂载一次；渲染由全局弹窗控制器驱动，与桌面端同构） |
 | `./ui/swipe-tabs` | `useSwipeTabs` composable | 弹窗/页签内容区横向滑动切换（内容区水平主导滑动超阈值触发 `onSwitch`；垂直主导不记录位移；`shouldSkip` 排除输入控件等不应作切页手势的起点） |
 | `./global-dialog` | 全局弹窗控制器 | 发布-订阅式弹窗队列（FIFO，同时至多一个；`update()` 生成新条目对象再广播），宿主与 dev-shell 共用 |
@@ -352,6 +386,7 @@ const options = [
 | `@binblink/wasmnest-plugin-sdk-mobile/vite` | `wasmnestPlugin()` Vite 构建插件 |
 | `@binblink/wasmnest-plugin-sdk-mobile/types` | 纯类型导出（仅类型，无运行时） |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui` | 共享 Vue 组件：`Select` |
+| `@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card` | `QuickCard` 首页快捷卡片 |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui/plugin-global-dialog` | `PluginGlobalDialog` |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui/swipe-tabs` | `useSwipeTabs` |
 | `@binblink/wasmnest-plugin-sdk-mobile/global-dialog` | 全局弹窗控制器 |

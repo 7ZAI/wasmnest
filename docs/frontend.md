@@ -20,6 +20,7 @@
 - 双端 app 均**自足 i18n**；移动端样式经 `?inline` 注入（宿主不加载插件 CSS）。
 - **表面保活（双端同一口径，2026-10-23；移动承载 2026-10-24 升级）**：应用只要没被停用，切走就只是「藏起来」——前端 DOM / 组件实例 / 滚动 / 表单 / 内存路由原样保留，**禁止**在切走路径上卸载实例（双端同为 `detach` 不 `dispose`）。停用 / 卸载才是唯一销毁点（桌面 `ShellHost` 运行态 disposer；移动 `useShellApps.stop` / `removeApp` 显式「先 dispose UI 再拆插件上下文」+ refresh 兜底对账）。移动承载 = 每应用一个**独立 Vue 应用**（`surfaceAppRegistry` 容器注册表 + `ShellAppSurface` 适配器 attach/detach + `ShellHost` 对账；壳卸载只 detach）。多实例解决的是应用上下文与错误边界（每实例独立 `errorHandler` 带 appId），**不是** CSS / DOM / window / IPC 隔离（同 webview 同信任域，ADR 0058）。后台**不渲染**（容器脱文档），不做后台动画 / 活体缩略图；唯一例外 = 多任务层打开期间实例被搬进卡片展示真实页面（桌面 `AppSurfaceTile` / 移动 `ShellSurfaceTile`，按整幅尺寸等比缩放；未运行 / 实例缺失卡回退品牌卡；层收起即回后台）。前后台契约：桌面 `AppMountHandle.setActive?(active)`、移动运行面内 `inject(SURFACE_ACTIVE_KEY)`（注册表按 attach/detach 推动，应用可据此暂停后台轮询，不实现零影响）。spec：`.scratch/2026-10-24-mobile-app-surface-vue-instances/spec.md`。
 - **服务型应用不进多任务（双端同一口径，2026-10-23）**：`isServiceKind`（`basic-service` / `internal-business`）的应用不产多任务卡——桌面服务面不入 `cards`（`enterServiceFace`）+ 右键菜单隐藏「停用」；移动 `ShellSwitcherScreen` 运行中与最近使用两个来源都过滤。关闭唯一入口 = 应用管理页（桌面）/ 应用详情页（移动）的「停用」。
+- **移动首页快捷卡片（2026-10-30）**：卡片 = SDK 公共外观（`packages/plugin-sdk-mobile/src/ui/QuickCard.vue`）+ 应用内容 + 宿主跳转。应用经 `registerSlot` 只登记内容组件；宿主把整张卡包成按钮（点击 = 启动并打开该应用），因此卡片内禁止再放按钮 / 链接。宿主按注册顺序最多展示 5 张（`src/shell/slotCards.ts`），多张时自动轮播（`useSlotCarousel`：触摸 / 键盘聚焦 / 切后台 / reduced motion 停走，标题行提供暂停 / 播放控件）。
 - 壳标题栏常驻：所有 app 页面共用壳标题栏，应用只占其下区域（`appChromeLock` 钉住；应用不得自绘标题栏 / 窗口控制 / 拖拽区）。
 
 ## 3. 移动宿主壳优先（强制）

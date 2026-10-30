@@ -401,15 +401,20 @@ describe('C-H6 空态', () => {
 describe('C-H7 快捷卡片轨道（横向轮播）', () => {
   const SlotCard = { template: '<div class="slot-card">slot</div>' }
 
-  function withSlot(): ShellApp {
+  function withSlots(count = 1): ShellApp {
     return {
       ...app('a', 'running', 'AppA'),
-      contributions: { slots: [{ id: 's1', component: SlotCard }] },
+      contributions: {
+        slots: Array.from({ length: count }, (_, index) => ({
+          id: `s${index}`,
+          component: SlotCard,
+        })),
+      },
     }
   }
 
   it('should_renderCardsInHorizontalSnapTrack_when_slotsRegistered', () => {
-    apps.value = [withSlot()]
+    apps.value = [withSlots()]
 
     const wrapper = mount(ShellHomeScreen)
     const track = wrapper.find('.shell-slot-track')
@@ -424,6 +429,49 @@ describe('C-H7 快捷卡片轨道（横向轮播）', () => {
     apps.value = [app('a', 'running', 'AppA')]
 
     expect(mount(ShellHomeScreen).find('.shell-slot-track').exists()).toBe(false)
+  })
+
+  it('should_capDisplayedCards_when_slotsExceedHostLimit', () => {
+    apps.value = [withSlots(8)]
+    const wrapper = mount(ShellHomeScreen)
+
+    expect(wrapper.findAll('.shell-slot-item')).toHaveLength(5)
+    wrapper.unmount()
+  })
+
+  it('should_openOwningApp_when_cardTapped', async () => {
+    apps.value = [withSlots(1)]
+    const wrapper = mount(ShellHomeScreen)
+
+    await wrapper.find('.shell-slot-card').trigger('click')
+
+    expect(mockOpen).toHaveBeenCalledWith('a')
+  })
+
+  it('should_keepAppActionAndCardContent_when_accessibleNameComposed', () => {
+    apps.value = [withSlots(1)]
+    const wrapper = mount(ShellHomeScreen)
+    const card = wrapper.find('.shell-slot-card')
+
+    // 动作前缀走 sr-only：读屏拿到「打开 <应用>」，但不覆盖应用自持的卡片读数
+    expect(card.find('.sr-only').text()).toContain('shell.home.slotOpen')
+    expect(card.text()).toContain('slot')
+  })
+
+  it('should_exposePauseControl_when_multipleCards', () => {
+    apps.value = [withSlots(2)]
+    const wrapper = mount(ShellHomeScreen)
+
+    expect(wrapper.find('button[aria-label="shell.home.slotPause"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('should_hidePauseControl_when_singleCard', () => {
+    apps.value = [withSlots(1)]
+
+    expect(mount(ShellHomeScreen).find('button[aria-label="shell.home.slotPause"]').exists()).toBe(
+      false,
+    )
   })
 })
 

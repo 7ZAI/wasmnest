@@ -53,7 +53,12 @@ export interface ShellPermissionGrant {
 /** 应用贡献给平台首页的快捷卡片 */
 export interface ShellSlotContribution {
   id: string
-  /** 卡片组件：接收 { app: ShellApp } prop，内容由应用自持 */
+  /**
+   * 卡片组件：接收 { app: ShellApp } prop，内容由应用自持。
+   *
+   * 壳把整张卡渲染成按钮并负责点击打开该应用（含启动），卡片内不得再放
+   * 按钮 / 链接；外观由应用用 SDK QuickCard 等公共组件承载。
+   */
   component: Component
   /** 排序权重，小者靠前；缺省 100 */
   order?: number

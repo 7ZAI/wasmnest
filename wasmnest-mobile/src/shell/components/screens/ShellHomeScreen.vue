@@ -57,14 +57,37 @@
     <!-- ==================== 内容 ==================== -->
     <div class="relative z-10 flex-1 min-h-0 overflow-y-auto pb-6 shell-content-cap">
       <!-- ======== 快捷卡片（应用贡献，横向轮播） ========
-           定宽卡片 + 原生 scroll-snap 横向滚动（原型 .slots 同形态）：拍一屏只露一张，
-           滑动切下一张。定宽而非 flex-1 是刻意的——卡片内容由应用自持，等宽拉伸会让
-           单行信息量不同的卡片看起来参差。 -->
+           定宽卡片 + 原生 scroll-snap 横向滚动：拍一屏只露一张，滑动切下一张，
+           多张时自动轮播（触摸 / 聚焦 / 切后台 / 减少动效时停走）。
+           整张卡是宿主按钮：点击启动并打开贡献方应用，卡片内容由应用自持、
+           不得自带交互（SDK QuickCard 是推荐外观）。 -->
       <template v-if="slotCards.length > 0">
-        <ShellSection :title="t('shell.home.slotsTitle')" class="shell-reveal shell-text-over-wall" :style="{ animationDelay: '80ms' }" />
-        <div class="shell-slot-track shell-reveal" role="list" :style="{ animationDelay: '120ms' }">
+        <ShellSection :title="t('shell.home.slotsTitle')" class="shell-reveal shell-text-over-wall" :style="{ animationDelay: '80ms' }">
+          <template v-if="slotCards.length > 1 && !reducedMotion" #action>
+            <button
+              type="button"
+              class="shell-icon-action"
+              :aria-label="playing ? t('shell.home.slotPause') : t('shell.home.slotPlay')"
+              @click="toggleAutoplay()"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <template v-if="playing">
+                  <path d="M9 5v14M15 5v14" />
+                </template>
+                <template v-else>
+                  <path d="M8 5.5v13l10-6.5Z" />
+                </template>
+              </svg>
+            </button>
+          </template>
+        </ShellSection>
+        <div ref="slotTrack" class="shell-slot-track shell-reveal" role="list" :style="{ animationDelay: '120ms' }">
           <div v-for="card in slotCards" :key="card.key" class="shell-slot-item" role="listitem">
-            <component :is="card.component" :app="card.app" />
+            <!-- 可访问名 = 隐藏动作前缀「打开 <应用>」+ 卡片内容：不覆盖应用自持的读数 -->
+            <button type="button" class="shell-slot-card" @click="open(card.app.id)">
+              <span class="sr-only">{{ t('shell.home.slotOpen', { name: card.app.name }) }}</span>
+              <component :is="card.component" :app="card.app" />
+            </button>
           </div>
         </div>
       </template>
@@ -189,13 +212,15 @@
  * 正文案纪律（2026-10-14 修订）：分组标题行只留标题与计数，不再写「平台自带」
  * 「由应用提供」「最近使用在前」这类方案期解释——用户看得到事实，不需要旁白。
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
 import { useShellNotifications } from '../../composables/useShellNotifications'
 import { useShellOpen } from '../../composables/useShellOpen'
 import { useShellOverlays } from '../../composables/useShellOverlays'
+import { useSlotCarousel } from '../../composables/useSlotCarousel'
+import { selectSlotCards } from '../../slotCards'
 import { isServiceKind } from '../../utils'
 import ShellAppCell from '../ShellAppCell.vue'
 import ShellBrandTile from '../ShellBrandTile.vue'
@@ -216,16 +241,16 @@ const badgeCount = computed(
   () => notificationCount.value + apps.value.filter((a) => a.state === 'approval').length,
 )
 
-/** 应用贡献的快捷卡片（按应用顺序展开，排序在 registry 侧完成） */
-const slotCards = computed(() =>
-  apps.value.flatMap((app) =>
-    (app.contributions.slots ?? []).map((slot) => ({
-      key: `${app.id}:${slot.id}`,
-      component: slot.component,
-      app,
-    })),
-  ),
-)
+/** 应用贡献的快捷卡片（注册顺序，超过展示上限的部分不渲染） */
+const slotCards = computed(() => selectSlotCards(apps.value))
+
+/** 轨道轮播：多张时自动播放，触摸 / 聚焦 / 切后台 / 减少动效时停走 */
+const slotTrack = ref<HTMLElement | null>(null)
+const {
+  playing,
+  reducedMotion,
+  toggle: toggleAutoplay,
+} = useSlotCarousel(slotTrack, computed(() => slotCards.value.length))
 
 /**
  * 服务 / 系统宫格图标与桌面壳同源：路径逐字取自桌面 ShellIcon（grid / shield /

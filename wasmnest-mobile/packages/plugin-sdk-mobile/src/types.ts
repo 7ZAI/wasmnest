@@ -196,7 +196,14 @@ export interface ShellSurfaceContribution {
 /** 宿主壳首页快捷卡片（应用自持内容，如「N 个活跃会话」） */
 export interface ShellSlotContribution {
   id: string
-  /** 卡片组件；壳透传 { app } prop */
+  /**
+   * 卡片组件；壳透传 { app } prop。
+   *
+   * 卡片外观建议用 `@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card` 的
+   * QuickCard（与宿主 token / 字号 / 明暗一致）。壳把整张卡渲染成按钮并负责
+   * 点击打开本应用——卡片内不得再放按钮 / 链接（嵌套交互会抢点击）。
+   * 宿主按自身展示上限截断（当前取注册顺序前若干张并自动轮播）。
+   */
   component: any
   /** 排序权重，小者靠前；缺省 100 */
   order?: number

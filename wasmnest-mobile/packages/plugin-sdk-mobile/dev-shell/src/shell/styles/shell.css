@@ -41,7 +41,11 @@
   min-height: 0;
 }
 
-.shell-ui {
+/* 同时挂 :root：宿主 chrome 并非都住在 .shell-ui 内——App 根的悬浮导航
+   （任意整页路由都要可见）与启动画面都在壳根之外，必须能取到同一套
+   结构 / 动效 token，否则 `var(--shell-dur-fast)` 之类的引用会静默失效。 */
+.shell-ui,
+:root {
   /* 壳内结构 token：只定义与平台 token 无关的几何量，避免各处硬编码同一数值 */
   --shell-radius-card: 12px;
   --shell-radius-control: 10px;
@@ -555,6 +559,30 @@
   min-width: 0;
   scroll-snap-align: start;
 }
+/* 整卡按钮：宿主接管点击（启动并打开贡献方应用），卡片内容不得再嵌套交互控件 */
+.shell-slot-card {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--shell-radius-card);
+  background: none;
+  color: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    opacity var(--shell-dur-fast) var(--shell-ease-standard),
+    transform var(--shell-dur-fast) var(--shell-ease-standard);
+}
+.shell-slot-card:active {
+  opacity: 0.86;
+  transform: scale(0.985);
+}
+.shell-slot-card:focus-visible {
+  outline: 2px solid var(--mobile-accent);
+  outline-offset: 2px;
+}
 
 /* ============================================================================
    应用运行页胶囊（菜单 / 多任务 / 回主屏）
@@ -587,6 +615,137 @@
   width: 1px;
   height: 16px;
   background: var(--mobile-border);
+}
+
+/* ============================================================================
+   悬浮导航（Liquid Glass 材质）
+   ----------------------------------------------------------------------------
+   用户明确要求「类似苹果手机的透明玻璃，形状是拉长的按钮」：横向胶囊
+   （约 133 × 56，两个 48 × 44 的图标键 + 中间细分隔），半透明材质 + 背景
+   模糊 + 极细描边 + 顶部高光。整壳只此一处，且默认关闭；材质只承担导航
+   控件，不铺到任何内容层。
+   三层降级（材质必须始终可读）：
+     · 不支持 backdrop-filter → 实色卡片底
+     · 用户开启「减少透明」 → 实色卡片底，不做模糊
+     · 减少动效 → 去掉入场动画与按压缩放，只留状态色
+   位置由组件写 transform（left/top 只是基准点），拖动时不触发布局。
+   ============================================================================ */
+.shell-floatnav {
+  position: fixed;
+  left: 0;
+  top: 0;
+  /* 宿主弹层（抽屉 / 通知栏 / 启动画面）均为 z-50+：悬浮条在它们之下，
+     弹层打开时由遮罩自然盖住，不抢弹窗的交互 */
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px;
+  border-radius: var(--shell-radius-pill);
+  border: 1px solid color-mix(in srgb, var(--mobile-text-primary) 16%, transparent);
+  background: color-mix(in srgb, var(--mobile-bg-card) 72%, transparent);
+  -webkit-backdrop-filter: blur(26px) saturate(200%);
+  backdrop-filter: blur(26px) saturate(200%);
+  box-shadow:
+    0 10px 28px color-mix(in srgb, var(--mobile-overlay) 40%, transparent),
+    0 1px 3px color-mix(in srgb, var(--mobile-overlay) 30%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--mobile-text-primary) 22%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--mobile-overlay) 22%, transparent);
+  opacity: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: grab;
+  transition:
+    opacity var(--shell-dur-fast) var(--shell-ease-standard),
+    box-shadow var(--shell-dur-fast) var(--shell-ease-standard);
+  animation: shell-floatnav-in var(--shell-dur-base) var(--shell-ease-out);
+}
+/* 玻璃高光面：斜向薄薄一层，让胶囊读作有厚度的材质而不是一块半透明色 */
+.shell-floatnav::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--mobile-text-primary) 13%, transparent) 0%,
+    color-mix(in srgb, var(--mobile-text-primary) 4%, transparent) 42%,
+    transparent 72%
+  );
+  pointer-events: none;
+}
+.shell-floatnav.is-ready {
+  opacity: 1;
+}
+.shell-floatnav:not(.is-ready) {
+  /* 尺寸未量到前不接收点击：避免首帧位置未定时被误触 */
+  pointer-events: none;
+}
+.shell-floatnav.is-dragging {
+  cursor: grabbing;
+  box-shadow:
+    0 18px 42px color-mix(in srgb, var(--mobile-overlay) 52%, transparent),
+    0 3px 8px color-mix(in srgb, var(--mobile-overlay) 34%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--mobile-text-primary) 28%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--mobile-overlay) 26%, transparent);
+}
+.shell-floatnav:focus-visible {
+  outline: 2px solid var(--mobile-accent);
+  outline-offset: 3px;
+}
+.shell-floatnav-btn {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 横向略宽于触控最小值：胶囊因此读作「拉长的按钮」而不是两个圆点 */
+  width: 48px;
+  height: var(--mobile-touch-target-min);
+  border-radius: var(--shell-radius-pill);
+  color: var(--mobile-text-primary);
+  transition:
+    background-color var(--shell-dur-fast) var(--shell-ease-standard),
+    transform var(--shell-dur-fast) var(--shell-ease-out);
+}
+.shell-floatnav-btn:active {
+  background: color-mix(in srgb, var(--mobile-accent) 20%, transparent);
+  /* 只缩放图标按钮的视觉，不改胶囊位置（transform 由外层承担） */
+  transform: scale(0.94);
+}
+.shell-floatnav-divider {
+  position: relative;
+  z-index: 1;
+  width: 1px;
+  height: 18px;
+  background: color-mix(in srgb, var(--mobile-border-active) 64%, transparent);
+}
+
+/* 不支持背景模糊：玻璃退化为实色卡片（文字对比不变） */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .shell-floatnav {
+    background: var(--mobile-bg-card);
+  }
+}
+
+/* 系统「减少透明」：与不支持模糊同口径，不做半透明 */
+@media (prefers-reduced-transparency: reduce) {
+  .shell-floatnav {
+    background: var(--mobile-bg-card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@keyframes shell-floatnav-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* ============================================================================
@@ -703,6 +862,7 @@
    运行中给一层可辨的水洗底（success-muted 在浅色主题下几乎不可见，用 color-mix
    把实色按比例混进底面色）；状态另有信息条文字冗余，不靠颜色单独传达。 */
 .shell-recents-thumb {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -724,6 +884,48 @@
   color: var(--mobile-text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 缩略区 = 真实实例的当前页面（2026-10-30 用户裁决，与桌面同口径）。
+   实例容器由注册表搬进来：固定整幅尺寸 + transform 等比缩放（布局不重排、
+   滚动 / 输入原样），卡片 overflow:hidden 裁掉多余部分；contain 把实例的
+   绘制关在卡片里，普通 fixed / absolute 弹层也跟着缩进卡片。 */
+.shell-live {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  contain: layout paint;
+  background: var(--mobile-bg-primary);
+}
+/* 品牌卡 fallback：与真实画面对齐同一盒子，切换不引起布局变化 */
+.shell-live-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 10px;
+  pointer-events: none;
+  transition: opacity var(--shell-dur-fast) var(--shell-ease-standard);
+}
+.shell-live-fallback.is-hidden {
+  opacity: 0;
+}
+/* 实例容器挂载点：填满卡片 + 裁切；就绪后短淡入（只动 opacity） */
+.shell-live-surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--shell-dur-fast) var(--shell-ease-standard);
+}
+.shell-live[data-live-state='live'] .shell-live-surface {
+  opacity: 1;
 }
 
 /* 唯一打开动作：覆盖整张卡的空按钮（视觉层 pointer-events:none）。
@@ -820,7 +1022,10 @@
   .shell-shade-leave-active,
   .shell-recents-grid-inner,
   .shell-recents-card,
+  .shell-live-fallback,
+  .shell-live-surface,
   .shell-reveal,
+  .shell-floatnav,
   .notify-card--flee {
     transition-duration: 0.01ms;
     animation: none;
@@ -832,10 +1037,15 @@
   .shell-segmented button,
   .shell-icon-action,
   .shell-capsule-btn,
+  .shell-floatnav-btn,
   .shell-btn-danger-outline,
   .shell-btn-danger-text,
   .shell-sys-tile,
+  .shell-slot-card,
   .shell-run-backdrop {
     transition-duration: 0.01ms;
+  }
+  .shell-slot-card:active {
+    transform: none;
   }
 }

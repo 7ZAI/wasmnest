@@ -24,6 +24,9 @@ export default {
     },
     home: {
       slotsTitle: '快捷卡片',
+      slotOpen: '打开 {name}',
+      slotPause: '暂停轮播',
+      slotPlay: '开始轮播',
       appsTitle: '应用',
       appAria: '{name}，{state}',
       emptyApps: '尚未安装 WASM 应用',

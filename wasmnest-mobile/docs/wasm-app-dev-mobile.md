@@ -223,6 +223,18 @@ wasmnest-plugin create com.example.ui-only "UI Only" --ts-only
 | `getPresetTasks()` | `{ usePresetTasks }` | 宿主预设任务 composable |
 | `getMobileApi()` | `MobileHostApi` | 宿主连接/HTTP 能力：`activeSessionId`（响应式 ref）+ AutoTask 队列接口（`httpTaskQueue*`、`httpSessionSettings`、`httpSetSessionMode`、`httpCurrentTask`），对端桌面端 REST API |
 
+### 首页快捷卡片（QuickCard + registerSlot）
+
+宿主壳首页的快捷卡片 = **SDK 公共外观 + 应用内容 + 宿主跳转**：
+
+1. 用 SDK 公共卡片 `@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card` 写内容组件
+   （`label` / `value` / `hint` / `tone` / `iconPath`，复杂内容用默认插槽）；
+2. `activate` 期 `context.ui.registerSlot({ id, component, order })` 注册，返回值随停用回收；
+3. 宿主壳按注册顺序最多展示 5 张，多张时自动轮播（触摸 / 键盘聚焦 / 切后台 /
+   系统「减少动效」时停走，标题行有暂停 / 播放控件）；点击整张卡会启动并打开本应用。
+
+卡片内不要放按钮 / 链接：整张卡已经是宿主的按钮（嵌套交互会抢点击）；应用不处理导航。
+
 ### 自渲染浮层（createApp 模式）
 
 插件需弹出自定义面板/弹窗时，可像内置 bedcode 插件（显示名 BedCode，任务域）一样自行挂载 Vue 应用（宿主只负责注册入口按钮，不承载插件 UI）：

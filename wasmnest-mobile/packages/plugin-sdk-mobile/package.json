@@ -48,6 +48,10 @@
       "types": "./src/ui/Select.d.ts",
       "import": "./src/ui/Select.vue"
     },
+    "./ui/quick-card": {
+      "types": "./src/ui/QuickCard.d.ts",
+      "import": "./src/ui/QuickCard.vue"
+    },
     "./ui/plugin-global-dialog": {
       "types": "./src/ui/plugin-global-dialog.d.ts",
       "import": "./src/ui/PluginGlobalDialog.vue"

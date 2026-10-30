@@ -25,6 +25,9 @@ export default {
     },
     home: {
       slotsTitle: 'Quick cards',
+      slotOpen: 'Open {name}',
+      slotPause: 'Pause carousel',
+      slotPlay: 'Play carousel',
       appsTitle: 'Apps',
       appAria: '{name}, {state}',
       emptyApps: 'No WASM app installed',
