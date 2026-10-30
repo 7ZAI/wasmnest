@@ -45,6 +45,18 @@ const mockStop = vi.fn(async () => true)
 const mockOpenShellApp = vi.fn(async () => true)
 const mockGoHome = vi.fn()
 const mockBack = vi.fn()
+/** 卡片实例搬运桩：默认「无实例」→ 品牌卡 fallback（真实实例行为由 shellSurfaceTile 测试锁住） */
+const surfaceApi = vi.hoisted(() => ({
+  present: vi.fn((_appId: string, _box: HTMLElement) => false),
+  fit: vi.fn((_appId: string) => false),
+  leave: vi.fn((_appId: string) => false),
+}))
+
+vi.mock('@/shell/surfaceRuntime', () => ({
+  presentSurfaceInPreview: surfaceApi.present,
+  fitSurfacePreview: surfaceApi.fit,
+  leaveSurfacePreview: surfaceApi.leave,
+}))
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -105,10 +117,18 @@ async function drag(
   withMove = true,
 ) {
   const grid = wrapper.find('.shell-recents-grid')
-  await grid.trigger('pointerdown', { clientX: from.x, clientY: from.y, pointerType: 'touch', button: 0 })
+  await grid.trigger('pointerdown', {
+    clientX: from.x,
+    clientY: from.y,
+    pointerType: 'touch',
+    button: 0,
+  })
   if (withMove) {
     // 先越过轴锁阈值，再落到目标位移（首次 move 只用来锁轴）
-    await grid.trigger('pointermove', { clientX: (from.x + to.x) / 2, clientY: (from.y + to.y) / 2 })
+    await grid.trigger('pointermove', {
+      clientX: (from.x + to.x) / 2,
+      clientY: (from.y + to.y) / 2,
+    })
     await grid.trigger('pointermove', { clientX: to.x, clientY: to.y })
   }
   await grid.trigger('pointerup', { clientX: to.x, clientY: to.y })
@@ -128,7 +148,11 @@ function installPointerCapture(): void {
     ['setPointerCapture', pointerCapture.set],
     ['releasePointerCapture', pointerCapture.release],
   ] as const) {
-    Object.defineProperty(Element.prototype, name, { configurable: true, writable: true, value: impl })
+    Object.defineProperty(Element.prototype, name, {
+      configurable: true,
+      writable: true,
+      value: impl,
+    })
   }
 }
 
@@ -158,6 +182,9 @@ beforeEach(() => {
   mockOpenShellApp.mockClear()
   mockGoHome.mockClear()
   mockBack.mockClear()
+  surfaceApi.present.mockClear()
+  surfaceApi.fit.mockClear()
+  surfaceApi.leave.mockClear()
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: VIEWPORT_WIDTH })
 })
 
@@ -209,7 +236,10 @@ describe('C-S24 服务型应用不进多任务（keepalive spec §3.3）', () =>
   it('should_filterRunningServiceApp_when_serviceKind', () => {
     pushRecent('svc')
     pushRecent('a')
-    apps.value = [app('svc', 'running', 'Monitor', 'internal-business'), app('a', 'running', 'AppA')]
+    apps.value = [
+      app('svc', 'running', 'Monitor', 'internal-business'),
+      app('a', 'running', 'AppA'),
+    ]
 
     const wrapper = mount(ShellSwitcherScreen)
 
@@ -244,7 +274,9 @@ describe('C-S2/C-S15 进入应用（整卡点击）', () => {
     const card = activeCard(mount(ShellSwitcherScreen))
 
     expect(card.findAll('button'), '每张卡只有「整卡进入」与「× 关闭」两个控件').toHaveLength(2)
-    expect(card.text(), '不再渲染独立的「进入 / 启动」按钮文案').not.toContain('shell.switcher.enter')
+    expect(card.text(), '不再渲染独立的「进入 / 启动」按钮文案').not.toContain(
+      'shell.switcher.enter',
+    )
     expect(card.text()).not.toContain('shell.switcher.launch')
   })
 
@@ -273,9 +305,7 @@ describe('C-S16 拖拽后不误触进入', () => {
 
     await drag(wrapper, { x: 200, y: 300 }, { x: 200, y: 150 })
     // 抬手后浏览器补的那次 click 落在整卡按钮上：必须被吞掉，否则上滑关闭顺手打开了应用
-    await activeCard(wrapper)
-      .find('button[aria-label="shell.switcher.enterApp"]')
-      .trigger('click')
+    await activeCard(wrapper).find('button[aria-label="shell.switcher.enterApp"]').trigger('click')
 
     expect(mockStop, '上滑超阈值应关闭').toHaveBeenCalledWith('a')
     expect(mockOpenShellApp, '拖拽余波 click 不得进入').not.toHaveBeenCalled()
@@ -288,9 +318,7 @@ describe('C-S16 拖拽后不误触进入', () => {
     const wrapper = mount(ShellSwitcherScreen)
 
     await drag(wrapper, { x: 200, y: 300 }, { x: 120, y: 300 })
-    await activeCard(wrapper)
-      .find('button[aria-label="shell.switcher.enterApp"]')
-      .trigger('click')
+    await activeCard(wrapper).find('button[aria-label="shell.switcher.enterApp"]').trigger('click')
 
     expect(activeId(wrapper), '横滑只切当前卡').toBe('b')
     expect(mockOpenShellApp, '拖拽余波 click 不得进入').not.toHaveBeenCalled()
@@ -304,9 +332,14 @@ describe('C-S17 关闭按钮独占手势', () => {
     const card = activeCard(mount(ShellSwitcherScreen))
 
     // 整卡覆盖按钮仍要能起手横滑 / 上滑；只有 × 排除在拖拽之外
-    expect(card.find('button[aria-label="shell.switcher.closeCard"]').attributes('data-card-ignore-drag'))
-      .toBe('')
-    expect(card.find('button.shell-recents-open').attributes('data-card-ignore-drag')).toBeUndefined()
+    expect(
+      card
+        .find('button[aria-label="shell.switcher.closeCard"]')
+        .attributes('data-card-ignore-drag'),
+    ).toBe('')
+    expect(
+      card.find('button.shell-recents-open').attributes('data-card-ignore-drag'),
+    ).toBeUndefined()
   })
 })
 
@@ -319,7 +352,10 @@ describe('C-S3/C-S4 关闭单张卡片', () => {
     await activeCard(wrapper).find('button[aria-label="shell.switcher.closeCard"]').trigger('click')
 
     expect(mockStop, '关闭运行中卡片 = 停用实例').toHaveBeenCalledWith('a')
-    expect(localStorage.getItem('wasmnest.shell.recentApps') ?? '[]', '关闭后不得以未运行身份复活').toBe('[]')
+    expect(
+      localStorage.getItem('wasmnest.shell.recentApps') ?? '[]',
+      '关闭后不得以未运行身份复活',
+    ).toBe('[]')
   })
 
   it('should_onlyDropFromRecents_when_dormantCardClosed', async () => {
@@ -364,10 +400,16 @@ describe('C-S3/C-S4 关闭单张卡片', () => {
 describe('C-S5 全部关闭', () => {
   it('should_stopEveryRunningAndClearRecents_when_closeAllTapped', async () => {
     pushRecent('b')
-    apps.value = [app('a', 'running', 'AppA'), app('b', 'stopped', 'AppB'), app('c', 'running', 'AppC')]
+    apps.value = [
+      app('a', 'running', 'AppA'),
+      app('b', 'stopped', 'AppB'),
+      app('c', 'running', 'AppC'),
+    ]
     const wrapper = mount(ShellSwitcherScreen)
 
-    const closeAll = wrapper.findAll('button').find((b) => b.text().includes('shell.switcher.closeAll'))!
+    const closeAll = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('shell.switcher.closeAll'))!
     await closeAll.trigger('click')
 
     expect(mockStop.mock.calls.map((c) => c[0]).sort()).toEqual(['a', 'c'])
@@ -382,7 +424,9 @@ describe('C-S5 全部关闭', () => {
     })
     const wrapper = mount(ShellSwitcherScreen)
 
-    const closeAll = wrapper.findAll('button').find((b) => b.text().includes('shell.switcher.closeAll'))!
+    const closeAll = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('shell.switcher.closeAll'))!
     await closeAll.trigger('click')
     await flushPromises()
 
@@ -397,7 +441,12 @@ describe('C-S6 上滑关闭手势', () => {
     const wrapper = mount(ShellSwitcherScreen)
 
     const grid = wrapper.find('.shell-recents-grid')
-    await grid.trigger('pointerdown', { clientX: 100, clientY: 200, pointerType: 'touch', button: 0 })
+    await grid.trigger('pointerdown', {
+      clientX: 100,
+      clientY: 200,
+      pointerType: 'touch',
+      button: 0,
+    })
     await grid.trigger('pointermove', { clientX: 102, clientY: 190 })
     await grid.trigger('pointermove', { clientX: 104, clientY: 160 })
     await wrapper.vm.$nextTick()
@@ -434,7 +483,12 @@ describe('C-S6 上滑关闭手势', () => {
 
     // 上滑超过阈值后又下拖回起点以下：以下滑方向为「取消」，不得关闭
     const grid = wrapper.find('.shell-recents-grid')
-    await grid.trigger('pointerdown', { clientX: 100, clientY: 300, pointerType: 'touch', button: 0 })
+    await grid.trigger('pointerdown', {
+      clientX: 100,
+      clientY: 300,
+      pointerType: 'touch',
+      button: 0,
+    })
     await grid.trigger('pointermove', { clientX: 101, clientY: 200 })
     await grid.trigger('pointermove', { clientX: 102, clientY: 360 })
     await grid.trigger('pointerup', { clientX: 102, clientY: 360 })
@@ -448,7 +502,12 @@ describe('C-S6 上滑关闭手势', () => {
     const wrapper = mount(ShellSwitcherScreen)
 
     const grid = wrapper.find('.shell-recents-grid')
-    await grid.trigger('pointerdown', { clientX: 100, clientY: 300, pointerType: 'touch', button: 0 })
+    await grid.trigger('pointerdown', {
+      clientX: 100,
+      clientY: 300,
+      pointerType: 'touch',
+      button: 0,
+    })
     await grid.trigger('pointercancel')
     await grid.trigger('pointerup', { clientX: 100, clientY: 100 })
 
@@ -730,7 +789,12 @@ describe('C-S8 卡片布局（与桌面同形）', () => {
     const wrapper = twoCards()
 
     const grid = wrapper.find('.shell-recents-grid')
-    await grid.trigger('pointerdown', { clientX: 200, clientY: 300, pointerType: 'touch', button: 0 })
+    await grid.trigger('pointerdown', {
+      clientX: 200,
+      clientY: 300,
+      pointerType: 'touch',
+      button: 0,
+    })
     await grid.trigger('pointermove', { clientX: 175, clientY: 300 })
     await grid.trigger('pointermove', { clientX: 150, clientY: 300 })
 
@@ -743,7 +807,9 @@ describe('C-S8 卡片布局（与桌面同形）', () => {
 
     const cards = wrapper.findAll('article.shell-recents-card')
     expect(cards).toHaveLength(2)
-    expect(cards[0].find('button[aria-current="true"]').exists(), '当前卡片有 aria-current').toBe(true)
+    expect(cards[0].find('button[aria-current="true"]').exists(), '当前卡片有 aria-current').toBe(
+      true,
+    )
     expect(cards[1].find('button[aria-current="true"]').exists()).toBe(false)
   })
 })
@@ -827,7 +893,11 @@ describe('C-S20 底部切换条退役', () => {
       join(process.cwd(), 'src/shell/components/screens/ShellSwitcherScreen.vue'),
       'utf8',
     )
-    for (const retired of ['shell.switcher.prev', 'shell.switcher.next', 'shell.switcher.position']) {
+    for (const retired of [
+      'shell.switcher.prev',
+      'shell.switcher.next',
+      'shell.switcher.position',
+    ]) {
       expect(source, `${retired} 不应再被引用`).not.toContain(retired)
     }
 
@@ -846,11 +916,11 @@ describe('C-S22 多任务缩放过渡（安卓 recents 观感）', () => {
     expect(cssBlock(sheet, '.shell-screen-recents-enter-from')).toContain('scale(')
     expect(cssBlock(sheet, '.shell-screen-recents-leave-to')).toContain('scale(')
     // enter/leave 共用一条规则（逗号分组），cssBlock 单选择器匹配不到，按组匹配
-    expect(sheet).toMatch(
-      /\.shell-screen-recents-enter-active,[\s\S]*?\{[^}]*transform:[^}]*\}/,
-    )
+    expect(sheet).toMatch(/\.shell-screen-recents-enter-active,[\s\S]*?\{[^}]*transform:[^}]*\}/)
     // reduced-motion 下这些过渡也必须收敛
-    expect(sheet).toContain('.shell-screen-recents-enter-active,\n  .shell-screen-recents-leave-active')
+    expect(sheet).toContain(
+      '.shell-screen-recents-enter-active,\n  .shell-screen-recents-leave-active',
+    )
   })
 
   it('卡片从略小 / 略低处缩放入场，逐张错峰', () => {
@@ -864,11 +934,45 @@ describe('C-S22 多任务缩放过渡（安卓 recents 观感）', () => {
   })
 
   it('ShellHost 把导航过渡名接到屏幕栈 Transition', () => {
-    const host = readFileSync(
-      join(process.cwd(), 'src/shell/components/ShellHost.vue'),
-      'utf8',
-    )
+    const host = readFileSync(join(process.cwd(), 'src/shell/components/ShellHost.vue'), 'utf8')
     expect(host).toContain(':name="transitionName"')
+  })
+})
+
+describe('C-S25 缩略区 = 真实实例（运行中卡片，2026-10-30）', () => {
+  it('should_presentLiveSurfaceForRunningCard_when_switcherMounted', async () => {
+    pushRecent('a')
+    pushRecent('b')
+    apps.value = [app('a', 'running', 'AppA'), app('b', 'stopped', 'AppB')]
+
+    mount(ShellSwitcherScreen)
+    await flushPromises()
+
+    // 只有运行中的卡片有实例可搬；未运行的最近使用卡不尝试（品牌卡）。
+    // 用集合断言而非次数：本文件前序用例的包装器未卸载，共享 apps ref 会一并重渲染。
+    const attempted = new Set(surfaceApi.present.mock.calls.map((call) => call[0]))
+    expect(attempted.has('a')).toBe(true)
+    expect(attempted.has('b')).toBe(false)
+  })
+
+  it('should_renderBrandFallback_when_instanceMissing', async () => {
+    apps.value = [app('a', 'running', 'AppA')]
+    const wrapper = mount(ShellSwitcherScreen)
+    await flushPromises()
+
+    const card = activeCard(wrapper)
+    expect(card.find('.shell-live').attributes('data-live-state')).toBe('fallback')
+    expect(card.text(), '实例缺失仍保留真实元信息').toContain('v1.0.0')
+  })
+
+  it('should_leavePreview_when_switcherUnmounted', async () => {
+    apps.value = [app('a', 'running', 'AppA')]
+    const wrapper = mount(ShellSwitcherScreen)
+    await flushPromises()
+
+    wrapper.unmount()
+
+    expect(surfaceApi.leave, '离开多任务 = 实例摘回后台（保留，不销毁）').toHaveBeenCalledWith('a')
   })
 })
 

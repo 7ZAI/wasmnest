@@ -838,6 +838,7 @@
    运行中给一层可辨的水洗底（success-muted 在浅色主题下几乎不可见，用 color-mix
    把实色按比例混进底面色）；状态另有信息条文字冗余，不靠颜色单独传达。 */
 .shell-recents-thumb {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -859,6 +860,48 @@
   color: var(--mobile-text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 缩略区 = 真实实例的当前页面（2026-10-30 用户裁决，与桌面同口径）。
+   实例容器由注册表搬进来：固定整幅尺寸 + transform 等比缩放（布局不重排、
+   滚动 / 输入原样），卡片 overflow:hidden 裁掉多余部分；contain 把实例的
+   绘制关在卡片里，普通 fixed / absolute 弹层也跟着缩进卡片。 */
+.shell-live {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  contain: layout paint;
+  background: var(--mobile-bg-primary);
+}
+/* 品牌卡 fallback：与真实画面对齐同一盒子，切换不引起布局变化 */
+.shell-live-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 10px;
+  pointer-events: none;
+  transition: opacity var(--shell-dur-fast) var(--shell-ease-standard);
+}
+.shell-live-fallback.is-hidden {
+  opacity: 0;
+}
+/* 实例容器挂载点：填满卡片 + 裁切；就绪后短淡入（只动 opacity） */
+.shell-live-surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--shell-dur-fast) var(--shell-ease-standard);
+}
+.shell-live[data-live-state='live'] .shell-live-surface {
+  opacity: 1;
 }
 
 /* 唯一打开动作：覆盖整张卡的空按钮（视觉层 pointer-events:none）。
@@ -955,6 +998,8 @@
   .shell-shade-leave-active,
   .shell-recents-grid-inner,
   .shell-recents-card,
+  .shell-live-fallback,
+  .shell-live-surface,
   .shell-reveal,
   .shell-floatnav,
   .notify-card--flee {

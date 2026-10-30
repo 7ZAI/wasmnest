@@ -14,6 +14,7 @@ import {
 import {
   createSurfaceAppRegistry,
   type SurfaceAppEnsureInput,
+  type SurfaceAppRecord,
   type SurfaceRegistryLogEvent,
   type SurfaceRegistryLogger,
 } from '@/shell/surfaceAppRegistry'
@@ -56,7 +57,13 @@ interface ProbeCounts {
  * 是否被销毁，全都能从渲染结果与计数读出。
  */
 function makeSurfaceProbe(label: string): { counts: ProbeCounts; component: Component } {
-  const counts: ProbeCounts = { mounted: 0, unmounted: 0, setups: 0, contexts: [], childContexts: [] }
+  const counts: ProbeCounts = {
+    mounted: 0,
+    unmounted: 0,
+    setups: 0,
+    contexts: [],
+    childContexts: [],
+  }
   const child = defineComponent({
     name: `SurfaceProbeChild${label}`,
     setup() {
@@ -101,7 +108,10 @@ function makeInput(component: Component, marker: string): SurfaceAppEnsureInput 
 }
 
 /** 日志收集器：T11「日志可见」等断言用 */
-function makeLogCollector(): { events: Array<{ level: string; event: SurfaceRegistryLogEvent }>; logger: SurfaceRegistryLogger } {
+function makeLogCollector(): {
+  events: Array<{ level: string; event: SurfaceRegistryLogEvent }>
+  logger: SurfaceRegistryLogger
+} {
   const events: Array<{ level: string; event: SurfaceRegistryLogEvent }> = []
   const push = (level: string) => (event: SurfaceRegistryLogEvent) => events.push({ level, event })
   return { events, logger: { info: push('info'), warn: push('warn'), error: push('error') } }
@@ -450,7 +460,17 @@ describe('运行面实例注册表：组件身份与错误隔离', () => {
               },
               'event',
             ),
-            h('button', { class: 'boom-render-btn', type: 'button', onClick: () => { explode.value = true } }, 'render'),
+            h(
+              'button',
+              {
+                class: 'boom-render-btn',
+                type: 'button',
+                onClick: () => {
+                  explode.value = true
+                },
+              },
+              'render',
+            ),
           ])
         }
       },
@@ -460,7 +480,9 @@ describe('运行面实例注册表：组件身份与错误隔离', () => {
     await registry.ensure(APP_B, makeInput(probeB.component, 'ctx-B'))
 
     // 事件错误：A 的 errorHandler 收到（appId=A、phase=event），不冒泡到调用方
-    expect(() => recordA.container.querySelector<HTMLButtonElement>('.boom-event-btn')!.click()).not.toThrow()
+    expect(() =>
+      recordA.container.querySelector<HTMLButtonElement>('.boom-event-btn')!.click(),
+    ).not.toThrow()
 
     // 渲染错误：触发重渲染后由调度器送进 A 的 errorHandler（appId=A、phase=render）
     recordA.container.querySelector<HTMLButtonElement>('.boom-render-btn')!.click()
@@ -503,7 +525,9 @@ describe('运行面实例注册表：组件身份与错误隔离', () => {
     })
     // 直接换 B 的组件身份（走 T13 的重建路径）注入会抛错的组件
     const recordB2 = await registry.ensure(APP_B, makeInput(boomB, 'ctx-B'))
-    expect(() => recordB2.container.querySelector<HTMLButtonElement>('.boom-b-btn')!.click()).not.toThrow()
+    expect(() =>
+      recordB2.container.querySelector<HTMLButtonElement>('.boom-b-btn')!.click(),
+    ).not.toThrow()
     expect(
       logs.events.some(({ event }) => event.appId === APP_B && event.phase === 'event'),
       'B 的错误落 B 的 errorHandler（每实例独立）',
@@ -531,5 +555,134 @@ describe('运行面实例注册表：组件身份与错误隔离', () => {
     expect(installedOn).toHaveLength(1)
     expect(installedOn[0], '插件装到该应用的 Vue 实例上').toBe(record.app)
     expect(record.container.querySelector('.probe-ctx')?.textContent, '注入清单生效').toBe('ctx-A')
+  })
+})
+
+describe('多任务卡预览态：真实实例搬运（2026-10-30）', () => {
+  let registry: ReturnType<typeof createSurfaceAppRegistry>
+  let logs: ReturnType<typeof makeLogCollector>
+
+  /** jsdom 不做布局：给元素伪造布局尺寸（模拟真实实测值） */
+  function fakeSize(el: HTMLElement, width: number, height: number): void {
+    Object.defineProperty(el, 'clientWidth', { configurable: true, get: () => width })
+    Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => height })
+  }
+
+  /** 卡片缩略区盒子（尺寸可改：模拟旋转 / 分屏后的重算） */
+  function makeBox(
+    width: number,
+    height: number,
+  ): { box: HTMLElement; resize: (w: number, h: number) => void } {
+    const box = document.createElement('div')
+    document.body.appendChild(box)
+    let w = width
+    let h = height
+    Object.defineProperty(box, 'clientWidth', { configurable: true, get: () => w })
+    Object.defineProperty(box, 'clientHeight', { configurable: true, get: () => h })
+    return {
+      box,
+      resize: (nextW, nextH) => {
+        w = nextW
+        h = nextH
+      },
+    }
+  }
+
+  /** 已 attach 过的实例：整幅 400×800（运行屏典型竖屏） */
+  async function attachedRecord(): Promise<SurfaceAppRecord> {
+    const probe = makeSurfaceProbe('A')
+    const record = await registry.ensure(APP_A, makeInput(probe.component, 'ctx-A'))
+    fakeSize(record.container, 400, 800)
+    registry.attach(APP_A, makeOutlet('run-outlet'))
+    return record
+  }
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    logs = makeLogCollector()
+    registry = createSurfaceAppRegistry({ logger: logs.logger })
+  })
+
+  it('搬进卡片：同一容器、不销毁、不谎报前台、固定整幅尺寸并等比缩小', async () => {
+    const record = await attachedRecord()
+    const { box } = makeBox(214, 237)
+
+    expect(registry.attachPreview(APP_A, box)).toBe(true)
+
+    expect(record.container.parentElement, '必须是同一个容器节点（实例状态原样）').toBe(box)
+    expect(record.location).toBe('preview')
+    expect(record.active.value, '卡片不是可交互前台').toBe(false)
+    expect(record.container.querySelector('[data-label="A"]'), 'DOM 子树保留').not.toBeNull()
+    // 布局尺寸保持整幅：终端不 resize / 不重排，只是视觉缩小
+    expect(record.container.style.width).toBe('400px')
+    expect(record.container.style.height).toBe('800px')
+    expect(record.container.style.transform).toMatch(/translate\(47\.75px, 0px\) scale\(0\.29625\)/)
+    expect(record.container.inert, '卡片里的实例不可交互 / 不可聚焦').toBe(true)
+  })
+
+  it('卡片尺寸变化：fitPreview 重算缩放并居中留边', async () => {
+    const record = await attachedRecord()
+    const { box, resize } = makeBox(214, 237)
+    registry.attachPreview(APP_A, box)
+
+    resize(200, 200)
+    expect(registry.fitPreview(APP_A)).toBe(true)
+
+    // 等比取小（200/800 = 0.25），宽度方向居中：(200 - 100) / 2 = 50
+    expect(record.container.style.transform).toBe('translate(50px, 0px) scale(0.25)')
+  })
+
+  it('detachPreview 摘回后台：清缩放内联样式，实例与记账保留', async () => {
+    const record = await attachedRecord()
+    const { box } = makeBox(214, 237)
+    registry.attachPreview(APP_A, box)
+
+    expect(registry.detachPreview(APP_A)).toBe(true)
+
+    expect(record.container.parentElement, '卡片收起后必须脱离文档（后台不渲染）').toBeNull()
+    expect(record.location).toBe('detached')
+    expect(registry.has(APP_A), '摘卡片不得销毁实例').toBe(true)
+    expect(record.container.style.width).toBe('')
+    expect(record.container.style.transform).toBe('')
+    expect(record.container.inert).toBe(false)
+  })
+
+  it('卡片直接放回运行屏插槽：清缩放态并恢复前台信号', async () => {
+    const record = await attachedRecord()
+    const { box } = makeBox(214, 237)
+    registry.attachPreview(APP_A, box)
+    const outlet = makeOutlet('next-run-outlet')
+
+    expect(registry.attach(APP_A, outlet)).toBe(true)
+
+    expect(record.container.parentElement).toBe(outlet)
+    expect(record.container.style.width).toBe('')
+    expect(record.container.style.transform).toBe('')
+    expect(record.container.inert).toBe(false)
+    expect(record.active.value).toBe(true)
+  })
+
+  it('非预览态调 detachPreview / fitPreview 返回 false（幂等，不误伤插槽实例）', async () => {
+    const record = await attachedRecord()
+
+    expect(registry.detachPreview(APP_A)).toBe(false)
+    expect(registry.fitPreview(APP_A)).toBe(false)
+    expect(record.container.parentElement?.className).toBe('run-outlet')
+  })
+
+  it('未知实例 attachPreview 返回 false（卡片回退品牌卡）', () => {
+    const { box } = makeBox(214, 237)
+    expect(registry.attachPreview('ghost', box)).toBe(false)
+  })
+
+  it('卡片里被停用：dispose 仍只 unmount 一次并移除容器', async () => {
+    const record = await attachedRecord()
+    const { box } = makeBox(214, 237)
+    registry.attachPreview(APP_A, box)
+
+    await expect(registry.dispose(APP_A)).resolves.toBe(true)
+
+    expect(record.container.parentElement).toBeNull()
+    expect(registry.has(APP_A)).toBe(false)
   })
 })

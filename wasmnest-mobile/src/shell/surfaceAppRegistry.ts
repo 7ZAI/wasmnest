@@ -13,6 +13,9 @@
  *   实例——切走保留（DOM / 组件状态 / 滚动 / 表单原样，后台不渲染），停用 /
  *   卸载才是唯一销毁点。attach / detach 同时推动该应用的响应式前台信号
  *   （应用侧经 SURFACE_ACTIVE_KEY 语义消费，可在后台暂停轮询 / 动画）。
+ * - `attachPreview` / `detachPreview`：多任务卡（2026-10-30）把同一容器搬进卡片
+ *   缩略区，按最近一次实测的整幅尺寸等比缩放（布局不重排、滚动 / 输入原样），
+ *   卡片**不是**可交互前台（前台信号推 false）；卡片卸载回后台。
  * - `dispose`：唯一会 `app.unmount()` 的路径；**先摘记账**再 unmount 再移除
  *   容器——unmount 期间的并发 attach 拿到 false，不会复用半销毁实例；幂等；
  *   能处理「创建在途」：在途 ensure 完成后发现记账已不在，不得重新登记，
@@ -55,6 +58,15 @@ export interface SurfaceRegistryLogger {
   error(event: SurfaceRegistryLogEvent): void
 }
 
+/** 实例当前挂在哪：运行屏插槽（前台）/ 多任务卡（预览）/ 后台（不在文档） */
+export type SurfaceAppLocation = 'outlet' | 'preview' | 'detached'
+
+/** 实例在文档里实测到的整幅尺寸（px） */
+export interface SurfaceAppSize {
+  width: number
+  height: number
+}
+
 /** 运行面实例记录（外部可观察面：查询 / 对账 / 测试都用它） */
 export interface SurfaceAppRecord {
   readonly appId: string
@@ -66,6 +78,21 @@ export interface SurfaceAppRecord {
   readonly component: Component
   /** 前台标记：attach 推 true / detach 推 false（响应式，经注入清单桥接给应用） */
   readonly active: Ref<boolean>
+  /** 当前挂载位置（由注册表推动；外部只读） */
+  readonly location: SurfaceAppLocation
+  /** 最近一次在文档里实测的整幅尺寸；多任务卡等比缩放按它算 */
+  readonly size: SurfaceAppSize | null
+}
+
+/** 注册表内部可写记录（对外只暴露只读形状） */
+interface MutableSurfaceAppRecord {
+  appId: string
+  app: App
+  container: HTMLElement
+  component: Component
+  active: Ref<boolean>
+  location: SurfaceAppLocation
+  size: SurfaceAppSize | null
 }
 
 /** ensure 输入：组件 + 共享运行时安装 + 宿主环境注入（都由壳装配成同一份） */
@@ -91,6 +118,12 @@ export interface SurfaceAppRegistry {
   ensure(appId: string, input: SurfaceAppEnsureInput): Promise<SurfaceAppRecord>
   /** 容器放进运行屏插槽（幂等）；false = 没有该实例（含 dispose 在途） */
   attach(appId: string, outlet: HTMLElement): boolean
+  /** 容器搬进多任务卡缩略区（等比缩放、不改前台语义）；false = 没有该实例 */
+  attachPreview(appId: string, boxEl: HTMLElement): boolean
+  /** 卡片尺寸变化后重算缩放；false = 实例不在预览态 */
+  fitPreview(appId: string): boolean
+  /** 容器从卡片缩略区摘下（回后台、不销毁）；false = 实例不在预览态 */
+  detachPreview(appId: string): boolean
   /** 容器脱离文档（不销毁）；幂等 */
   detach(appId: string): boolean
   /** 真正销毁：先摘记账再 unmount 再移除容器；幂等；能处理创建在途 */
@@ -109,6 +142,60 @@ function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
+/** 预览态写在容器上的内联样式（摘下时逐项清掉，运行屏插槽的 CSS 尺寸规则要能重新生效） */
+const PREVIEW_STYLE_PROPS = [
+  'position',
+  'left',
+  'top',
+  'width',
+  'height',
+  'transform-origin',
+  'transform',
+] as const
+
+/** 在文档里时实测整幅尺寸（脱离文档的节点量不到布局，保留旧值） */
+function measureInDocument(record: MutableSurfaceAppRecord): void {
+  if (!record.container.isConnected) return
+  const width = record.container.clientWidth
+  const height = record.container.clientHeight
+  if (!(width > 0) || !(height > 0)) return
+  record.size = { width, height }
+}
+
+/** 按卡片盒子的可用尺寸等比缩放整幅画面（居中留边；量不到就先不猜） */
+function fitPreviewStyle(record: MutableSurfaceAppRecord, boxEl: HTMLElement): void {
+  const size = record.size
+  if (!size) return
+  const boxWidth = boxEl.clientWidth
+  const boxHeight = boxEl.clientHeight
+  if (!(boxWidth > 0) || !(boxHeight > 0)) return
+  const scale = Math.min(boxWidth / size.width, boxHeight / size.height)
+  const x = (boxWidth - size.width * scale) / 2
+  const y = (boxHeight - size.height * scale) / 2
+  record.container.style.transform = `translate(${x}px, ${y}px) scale(${scale})`
+}
+
+/** 进入预览态：固定整幅尺寸 + 内联缩放 + inert（卡片里的实例不可交互 / 不可聚焦） */
+function applyPreviewStyle(record: MutableSurfaceAppRecord, boxEl: HTMLElement): void {
+  const el = record.container
+  el.style.position = 'absolute'
+  el.style.left = '0'
+  el.style.top = '0'
+  if (record.size) {
+    el.style.width = `${record.size.width}px`
+    el.style.height = `${record.size.height}px`
+    el.style.transformOrigin = '0 0'
+  }
+  el.inert = true
+  fitPreviewStyle(record, boxEl)
+}
+
+/** 离开预览态：清掉预览内联样式，让 `.surface-instance-host` 的 100% 尺寸规则重新生效 */
+function clearPreviewStyle(el: HTMLElement): void {
+  for (const prop of PREVIEW_STYLE_PROPS) el.style.removeProperty(prop)
+  el.inert = false
+}
+
 /** 创建在途的记账：并发 ensure 合并到同一 promise；dispose 置 disposed 位 */
 interface InflightCreate {
   promise: Promise<SurfaceAppRecord>
@@ -120,7 +207,7 @@ export function createSurfaceAppRegistry(options: {
 }): SurfaceAppRegistry {
   const { logger } = options
 
-  const records = new Map<string, SurfaceAppRecord>()
+  const records = new Map<string, MutableSurfaceAppRecord>()
   const inflight = new Map<string, InflightCreate>()
 
   /** 组装日志事件（instanceCount 字段只在组装点取值，保证口径单一） */
@@ -133,8 +220,9 @@ export function createSurfaceAppRegistry(options: {
   }
 
   /** 就地销毁一条已登记记录：先摘记账（并发 attach 立即失效），再 unmount，最后清容器 */
-  async function destroyRecord(record: SurfaceAppRecord): Promise<void> {
+  async function destroyRecord(record: MutableSurfaceAppRecord): Promise<void> {
     records.delete(record.appId)
+    if (record.location === 'preview') clearPreviewStyle(record.container)
     try {
       record.app.unmount()
     } catch (e) {
@@ -215,7 +303,15 @@ export function createSurfaceAppRegistry(options: {
         throw e
       }
 
-      const record: SurfaceAppRecord = { appId, app, container, component: input.component, active }
+      const record: MutableSurfaceAppRecord = {
+        appId,
+        app,
+        container,
+        component: input.component,
+        active,
+        location: 'detached',
+        size: null,
+      }
 
       // 注册边界：创建完成 → 登记前的异步窗口。「创建在途」的 dispose 在这里被
       // 发现——记账已不在就不得重新登记，已创建的实例就地清干净
@@ -284,17 +380,56 @@ export function createSurfaceAppRegistry(options: {
     attach(appId, outlet) {
       const record = records.get(appId)
       if (!record) return false
+      if (record.location === 'preview') clearPreviewStyle(record.container)
       if (record.container.parentElement !== outlet) outlet.appendChild(record.container)
+      record.location = 'outlet'
+      measureInDocument(record)
       // ref 同值赋值幂等：重复 attach 不重复触发下游（应用不会反复恢复轮询）
       record.active.value = true
       logger.info(makeEvent(appId, 'attach'))
       return true
     },
 
+    attachPreview(appId, boxEl) {
+      const record = records.get(appId)
+      if (!record) return false
+      // 前台实例还在插槽里：先量整幅，再改写容器尺寸（否则量到的是卡片盒子）
+      measureInDocument(record)
+      boxEl.appendChild(record.container)
+      record.location = 'preview'
+      applyPreviewStyle(record, boxEl)
+      // 卡片是后台展示，不是可交互前台：前台信号推 false（应用可暂停轮询 / 动画）
+      record.active.value = false
+      logger.info(makeEvent(appId, 'attach', { detail: '多任务卡片预览（非前台）' }))
+      return true
+    },
+
+    fitPreview(appId) {
+      const record = records.get(appId)
+      if (!record || record.location !== 'preview') return false
+      const boxEl = record.container.parentElement
+      if (!boxEl) return false
+      fitPreviewStyle(record, boxEl)
+      return true
+    },
+
+    detachPreview(appId) {
+      const record = records.get(appId)
+      if (!record || record.location !== 'preview') return false
+      clearPreviewStyle(record.container)
+      record.container.remove()
+      record.location = 'detached'
+      logger.info(makeEvent(appId, 'detach', { detail: '离开多任务卡片（后台保留）' }))
+      return true
+    },
+
     detach(appId) {
       const record = records.get(appId)
       if (!record) return false
+      if (record.location === 'preview') clearPreviewStyle(record.container)
+      measureInDocument(record)
       record.container.remove() // 脱文档但整棵子树保留（不销毁、不 unmount）
+      record.location = 'detached'
       record.active.value = false
       logger.info(makeEvent(appId, 'detach'))
       return true
@@ -311,9 +446,7 @@ export function createSurfaceAppRegistry(options: {
       const pending = inflight.get(appId)
       if (pending && !pending.disposed) {
         pending.disposed = true
-        logger.warn(
-          makeEvent(appId, 'dispose', { detail: '创建在途：创建完成后将就地清理' }),
-        )
+        logger.warn(makeEvent(appId, 'dispose', { detail: '创建在途：创建完成后将就地清理' }))
         return true
       }
       return false

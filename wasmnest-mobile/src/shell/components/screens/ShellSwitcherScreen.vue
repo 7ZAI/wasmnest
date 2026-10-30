@@ -8,7 +8,17 @@
         :aria-label="t('shell.switcher.back')"
         @click="nav.back()"
       >
-        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg
+          width="21"
+          height="21"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
           <path d="M15 6l-6 6 6 6" />
         </svg>
       </button>
@@ -33,12 +43,14 @@
     </header>
 
     <!-- ==================== 卡片区（与桌面同形的多行卡片布局） ====================
-         桌面多任务是「信息条在上 + 缩略区在下」的 3/4 竖版卡片，按行居中排布；
-         移动端沿用同一形态与同一信息层级，只把卡片缩到移动端尺寸：每行 2 张
-         （宽屏 3 张），整组上下左右居中，超出时可纵向滚动。
+         桌面多任务是「信息条在上 + 缩略区在下」的卡片，按行居中排布；移动端沿用
+         同一形态与同一信息层级，只把卡片缩到移动端尺寸：每行 2 张（宽屏 3 张），
+         整组上下左右居中，超出时可纵向滚动。
 
-         缩略区仍不伪造应用截图——平台拿不到应用画面，放大应用图标 + 版本 /
-         权限数就是平台掌握的全部事实（AGENTS §5.1 B4）。
+         缩略区（2026-10-30 用户裁决，与桌面同口径）：**运行中的卡片展示真实实例的
+         当前页面**——ShellSurfaceTile 把保活实例搬进卡片、按整幅尺寸等比缩放；
+         未运行的最近使用卡（没有实例）保持图标 + 版本 / 权限数（平台掌握的真实
+         元信息），不伪造应用画面（AGENTS §5.1 B4）。
 
          手势保留：横向拖动切换当前卡（网格轻微跟手后吸附），上滑关闭单张；
          拖拽不是唯一路径——每张卡都可直接点按进入，右上角另有独立关闭键
@@ -77,11 +89,7 @@
               <ShellAppIcon :app="card.app" :size="28" />
               <span class="flex-1 min-w-0">
                 <span class="shell-recents-name">{{ card.app.name }}</span>
-                <span
-                  v-if="stateText(card)"
-                  class="shell-recents-status"
-                  :class="stateClass(card)"
-                >
+                <span v-if="stateText(card)" class="shell-recents-status" :class="stateClass(card)">
                   {{ stateText(card) }}
                 </span>
               </span>
@@ -92,10 +100,8 @@
               :class="{ 'is-running': card.running }"
               aria-hidden="true"
             >
-              <ShellAppIcon :app="card.app" :size="64" />
-              <span v-if="thumbMeta(card)" class="shell-recents-thumb-meta">
-                {{ thumbMeta(card) }}
-              </span>
+              <!-- 运行中 = 真实实例的当前页面（实例缺失回退图标 + 元信息）；未运行 = 品牌卡 -->
+              <ShellSurfaceTile :app="card.app" :live="card.running" />
             </div>
 
             <!-- 唯一打开动作：覆盖整张卡的空按钮（视觉层 pointer-events:none）。
@@ -103,7 +109,11 @@
             <button
               type="button"
               class="shell-recents-open"
-              :aria-label="t(card.running ? 'shell.switcher.enterApp' : 'shell.switcher.launchApp', { name: card.app.name })"
+              :aria-label="
+                t(card.running ? 'shell.switcher.enterApp' : 'shell.switcher.launchApp', {
+                  name: card.app.name,
+                })
+              "
               :aria-current="index === activeIndex ? 'true' : undefined"
               @click.stop="onCardClick(card)"
             ></button>
@@ -117,7 +127,16 @@
               :aria-label="t('shell.switcher.closeCard', { name: card.app.name })"
               @click.stop="dismiss(card.app.id)"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
             </button>
@@ -137,7 +156,16 @@
         :style="{ background: 'var(--mobile-bg-elevated)', color: 'var(--mobile-text-secondary)' }"
         aria-hidden="true"
       >
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="26"
+          height="26"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <rect x="3" y="4" width="18" height="16" rx="3" />
           <path d="M3 9h18" />
         </svg>
@@ -158,8 +186,9 @@
  * `styles/shell.css`（.shell-recents-*），组件只给手势位移与序号。
  *
  * 四条硬约束：
- *   ① 预览位不伪造内容——平台不持有应用内部快照，放大应用图标 + 真实元信息即
- *      平台掌握的全部事实（伪造截图属于 B4 业务投影越线）；
+ *   ① 运行中的卡片展示真实实例（2026-10-30）：宿主把保活容器搬进缩略区、按整幅
+ *      尺寸等比缩放；未运行的最近使用卡只有图标 + 真实元信息——平台不伪造应用画面
+ *      （伪造截图属于 B4 业务投影越线）；
  *   ② 拖拽**不是唯一路径**（WCAG 2.2 Dragging Movements）：每张卡都可直接点按
  *      进入，关闭键常驻卡片右上角，页头返回 / 点非卡片区域负责退出；
  *   ③ 手势不互相抢：pointermove 首次越过轴锁阈值即锁定本次手势方向——横向
@@ -187,6 +216,7 @@ import { isServiceKind } from '../../utils'
 import type { ShellApp } from '../../types'
 import ShellAppIcon from '../ShellAppIcon.vue'
 import ShellChip from '../ShellChip.vue'
+import ShellSurfaceTile from '../ShellSurfaceTile.vue'
 
 const { t } = useI18n()
 const nav = useShellNavigation()
@@ -278,16 +308,6 @@ function stateClass(card: RecentCard): string {
   if (card.app.state === 'approval') return 'is-warn'
   if (card.app.state === 'error') return 'is-danger'
   return ''
-}
-
-/** 缩略区元信息：版本 + 权限数，取不到就不留空行 */
-function thumbMeta(card: RecentCard): string {
-  const parts: string[] = []
-  if (card.app.version) parts.push(`v${card.app.version}`)
-  if (card.app.permissions.length > 0) {
-    parts.push(t('shell.apps.permissionCount', { count: card.app.permissions.length }))
-  }
-  return parts.join(' · ')
 }
 
 // ==================== 手势几何 ====================
@@ -547,8 +567,7 @@ async function dismiss(appId: string): Promise<void> {
   if (index === -1) return
   // 前层移走后落到相邻张（后一张优先，没有则前一张）
   if (activeId.value === appId || index === activeIndex.value) {
-    activeId.value =
-      cards.value[index + 1]?.app.id ?? cards.value[index - 1]?.app.id ?? null
+    activeId.value = cards.value[index + 1]?.app.id ?? cards.value[index - 1]?.app.id ?? null
   }
   const app = cards.value[index]
   if (app?.running) await stop(appId)

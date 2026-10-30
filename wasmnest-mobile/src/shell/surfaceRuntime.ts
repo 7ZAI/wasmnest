@@ -56,6 +56,28 @@ export function getSurfaceAppRegistry(): SurfaceAppRegistry {
 }
 
 /**
+ * 多任务卡（2026-10-30）：把运行面容器搬进卡片缩略区。
+ *
+ * 展示的是**真实实例本身**（按整幅尺寸等比缩放，布局不重排、滚动 / 输入原样），
+ * 不是截图 / 克隆 / 自绘预览；卡片不是可交互前台（前台信号推 false），层收起即
+ * 回后台（容器脱文档不渲染）。实例缺失（未运行 / 未打开过 / 装载失败）→ false，
+ * 卡片回退图标 + 元信息。
+ */
+export function presentSurfaceInPreview(appId: string, boxEl: HTMLElement): boolean {
+  return registry.attachPreview(appId, boxEl)
+}
+
+/** 卡片尺寸变化（旋转 / 分屏 / 卡片数变化）：重算等比缩放 */
+export function fitSurfacePreview(appId: string): boolean {
+  return registry.fitPreview(appId)
+}
+
+/** 卡片卸载：把实例从卡片摘下（回后台保留，不销毁） */
+export function leaveSurfacePreview(appId: string): boolean {
+  return registry.detachPreview(appId)
+}
+
+/**
  * 显式销毁单个应用的运行面实例（停用 / 卸载的用户动作路径）：dispose（幂等、
  * 能处理创建在途）+ 同步清打开记录（下次打开是全新实例）。**调用方必须先于
  * 插件 loader 的 deactivate / uninstall 调用**——组件要在 pluginContext 仍
