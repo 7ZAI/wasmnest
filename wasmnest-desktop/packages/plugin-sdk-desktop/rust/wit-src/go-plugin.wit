@@ -2,6 +2,11 @@ package wasmnest:plugin@0.0.1;
 
 /// Go 后端组件专用 world（issue #21「应用后端 Go 语言支持」Phase 1，SDK Go 壳）
 ///
+/// 包版本行由 `go/tools/assemble-wit.mjs` 组装时按拼装产物（wasmnest.wit）回写
+/// 对齐——本文件不持版本字面量（ADR 0051：版本真源在能力仓 wasmnest-contract，
+/// 契约升版本文件零改动）。注意 package 行上方不可加注释：WIT 把紧贴 item 的
+/// 注释行视为其 doc comment，同包第二个带 doc 的 package 声明会被拒。
+///
 /// 与 `world plugin` 的唯一差异：`include wasi:cli/command@0.2.0`——TinyGo 的
 /// wasip2 目标按 WASI command 形态产出组件（导入 clocks / random / io /
 /// filesystem / sockets / cli 标准面并导出 `wasi:cli/run`），宿主 linker 的

@@ -2,7 +2,7 @@
 
 package command
 
-// Exports represents the caller-defined exports from "wasmnest:plugin/command@0.0.1".
+// Exports represents the caller-defined exports from "wasmnest:plugin/command@0.0.2".
 var Exports struct {
 	// Invoke represents the caller-defined, exported function "invoke".
 	//

@@ -6,34 +6,34 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.1".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
 
-//go:wasmexport wasmnest:plugin/lifecycle@0.0.1#activate
-//export wasmnest:plugin/lifecycle@0.0.1#activate
+//go:wasmexport wasmnest:plugin/lifecycle@0.0.2#activate
+//export wasmnest:plugin/lifecycle@0.0.2#activate
 func wasmexport_Activate() (result *cm.Result[string, struct{}, string]) {
 	result_ := Exports.Activate()
 	result = &result_
 	return
 }
 
-//go:wasmexport wasmnest:plugin/lifecycle@0.0.1#deactivate
-//export wasmnest:plugin/lifecycle@0.0.1#deactivate
+//go:wasmexport wasmnest:plugin/lifecycle@0.0.2#deactivate
+//export wasmnest:plugin/lifecycle@0.0.2#deactivate
 func wasmexport_Deactivate() (result *cm.Result[string, struct{}, string]) {
 	result_ := Exports.Deactivate()
 	result = &result_
 	return
 }
 
-//go:wasmexport wasmnest:plugin/lifecycle@0.0.1#on-startup
-//export wasmnest:plugin/lifecycle@0.0.1#on-startup
+//go:wasmexport wasmnest:plugin/lifecycle@0.0.2#on-startup
+//export wasmnest:plugin/lifecycle@0.0.2#on-startup
 func wasmexport_OnStartup() (result *cm.Result[string, struct{}, string]) {
 	result_ := Exports.OnStartup()
 	result = &result_
 	return
 }
 
-//go:wasmexport wasmnest:plugin/lifecycle@0.0.1#on-shutdown
-//export wasmnest:plugin/lifecycle@0.0.1#on-shutdown
+//go:wasmexport wasmnest:plugin/lifecycle@0.0.2#on-shutdown
+//export wasmnest:plugin/lifecycle@0.0.2#on-shutdown
 func wasmexport_OnShutdown() (result *cm.Result[string, struct{}, string]) {
 	result_ := Exports.OnShutdown()
 	result = &result_

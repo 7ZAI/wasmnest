@@ -6,8 +6,8 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.1".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
 
-//go:wasmimport wasmnest:plugin/host-metrics@0.0.1 snapshot
+//go:wasmimport wasmnest:plugin/host-metrics@0.0.2 snapshot
 //go:noescape
 func wasmimport_Snapshot(result *cm.Result[string, string, string])

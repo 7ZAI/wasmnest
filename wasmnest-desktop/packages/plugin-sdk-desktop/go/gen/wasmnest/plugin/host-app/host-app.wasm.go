@@ -6,24 +6,24 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.1".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
 
-//go:wasmimport wasmnest:plugin/host-app@0.0.1 install-cli
+//go:wasmimport wasmnest:plugin/host-app@0.0.2 install-cli
 //go:noescape
 func wasmimport_InstallCli(payloadJson0 *uint8, payloadJson1 uint32, result *cm.Result[string, string, string])
 
-//go:wasmimport wasmnest:plugin/host-app@0.0.1 uninstall-cli
+//go:wasmimport wasmnest:plugin/host-app@0.0.2 uninstall-cli
 //go:noescape
 func wasmimport_UninstallCli(payloadJson0 *uint8, payloadJson1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport wasmnest:plugin/host-app@0.0.1 plugin-resource-dir
+//go:wasmimport wasmnest:plugin/host-app@0.0.2 plugin-resource-dir
 //go:noescape
 func wasmimport_PluginResourceDir(result *cm.Result[string, string, string])
 
-//go:wasmimport wasmnest:plugin/host-app@0.0.1 register-path
+//go:wasmimport wasmnest:plugin/host-app@0.0.2 register-path
 //go:noescape
 func wasmimport_RegisterPath(payloadJson0 *uint8, payloadJson1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport wasmnest:plugin/host-app@0.0.1 unregister-path
+//go:wasmimport wasmnest:plugin/host-app@0.0.2 unregister-path
 //go:noescape
 func wasmimport_UnregisterPath(payloadJson0 *uint8, payloadJson1 uint32, result *cm.Result[string, struct{}, string])

@@ -23,7 +23,7 @@
  * 用法：node tools/assemble-wit.mjs --out <dir>（幂等，全量重建）
  */
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -78,7 +78,25 @@ export function assembleWit(outDir) {
 
   const goWorld = join(SDK_DIR, "rust", "wit-src", "go-plugin.wit");
   if (!existsSync(goWorld)) throw new Error(`world 真源缺失 ${goWorld}`);
-  cpSync(goWorld, join(out, "go-plugin.wit"));
+  // 包版本对齐（ADR 0051：版本只有一处手写）：world 文件与拼装产物必须同包同版，
+  // `include plugin` 才能解析——同包双版本声明会让 wasm-tools 解析直接失败。
+  // 版本真源在能力仓 wasmnest-contract，此处从拼装产物 wasmnest.wit 读出后回写，
+  // go-plugin.wit 的 package 行是待对齐占位、不持版本字面量（契约升版本文件零改动）。
+  const composedPkg = readFileSync(join(out, "wasmnest.wit"), "utf8").match(
+    /^package\s+(wasmnest:plugin@\d+\.\d+\.\d+);/m,
+  );
+  if (!composedPkg) {
+    throw new Error("wasmnest.wit 缺 `package wasmnest:plugin@x.y.z;` 行（拼装产物形状漂移）");
+  }
+  let goWorldSrc = readFileSync(goWorld, "utf8");
+  if (!/^package\s+wasmnest:plugin@\d+\.\d+\.\d+;/m.test(goWorldSrc)) {
+    throw new Error("go-plugin.wit 缺 `package wasmnest:plugin@x.y.z;` 行（对齐锚点缺失）");
+  }
+  goWorldSrc = goWorldSrc.replace(
+    /^package\s+wasmnest:plugin@\d+\.\d+\.\d+;/m,
+    `package ${composedPkg[1]};`,
+  );
+  writeFileSync(join(out, "go-plugin.wit"), goWorldSrc);
 
   // wasi-cli deps 平铺：包根 → deps/wasi-cli/，deps/<名>/ → deps/<名>/
   const wasiCliWit = join(tinyGoRoot(), "lib", "wasi-cli", "wit");

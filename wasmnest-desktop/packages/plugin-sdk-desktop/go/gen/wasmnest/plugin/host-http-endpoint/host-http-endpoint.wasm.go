@@ -6,12 +6,12 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.1".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
 
-//go:wasmimport wasmnest:plugin/host-http-endpoint@0.0.1 register-endpoint
+//go:wasmimport wasmnest:plugin/host-http-endpoint@0.0.2 register-endpoint
 //go:noescape
 func wasmimport_RegisterEndpoint(configJson0 *uint8, configJson1 uint32, result *cm.Result[string, string, string])
 
-//go:wasmimport wasmnest:plugin/host-http-endpoint@0.0.1 unregister-endpoint
+//go:wasmimport wasmnest:plugin/host-http-endpoint@0.0.2 unregister-endpoint
 //go:noescape
 func wasmimport_UnregisterEndpoint(endpointId0 *uint8, endpointId1 uint32, result *cm.Result[string, bool, string])

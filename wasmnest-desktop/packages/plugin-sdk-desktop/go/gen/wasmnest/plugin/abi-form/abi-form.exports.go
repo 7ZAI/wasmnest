@@ -2,7 +2,7 @@
 
 package abiform
 
-// Exports represents the caller-defined exports from "wasmnest:plugin/abi-form@0.0.1".
+// Exports represents the caller-defined exports from "wasmnest:plugin/abi-form@0.0.2".
 var Exports struct {
 	// Form represents the caller-defined, exported function "form".
 	//

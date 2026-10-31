@@ -6,16 +6,16 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.1".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
 
-//go:wasmimport wasmnest:plugin/host-platform-desktop@0.0.1 wsl-distros
+//go:wasmimport wasmnest:plugin/host-platform-desktop@0.0.2 wsl-distros
 //go:noescape
 func wasmimport_WslDistros(result *cm.Result[string, string, string])
 
-//go:wasmimport wasmnest:plugin/host-platform-desktop@0.0.1 local-ipv4-addresses
+//go:wasmimport wasmnest:plugin/host-platform-desktop@0.0.2 local-ipv4-addresses
 //go:noescape
 func wasmimport_LocalIPv4Addresses(result *cm.Result[string, string, string])
 
-//go:wasmimport wasmnest:plugin/host-platform-desktop@0.0.1 reveal-in-dir
+//go:wasmimport wasmnest:plugin/host-platform-desktop@0.0.2 reveal-in-dir
 //go:noescape
 func wasmimport_RevealInDir(path0 *uint8, path1 uint32, result *cm.Result[string, struct{}, string])

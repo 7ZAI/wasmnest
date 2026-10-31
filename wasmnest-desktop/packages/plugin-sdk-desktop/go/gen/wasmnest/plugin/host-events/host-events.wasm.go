@@ -2,8 +2,8 @@
 
 package hostevents
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.1".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
 
-//go:wasmimport wasmnest:plugin/host-events@0.0.1 emit
+//go:wasmimport wasmnest:plugin/host-events@0.0.2 emit
 //go:noescape
 func wasmimport_Emit(eventName0 *uint8, eventName1 uint32, payloadJson0 *uint8, payloadJson1 uint32)

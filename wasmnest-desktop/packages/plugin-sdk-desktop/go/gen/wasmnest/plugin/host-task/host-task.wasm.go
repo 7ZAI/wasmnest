@@ -6,24 +6,24 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.1".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
 
-//go:wasmimport wasmnest:plugin/host-task@0.0.1 execute-batch
+//go:wasmimport wasmnest:plugin/host-task@0.0.2 execute-batch
 //go:noescape
 func wasmimport_ExecuteBatch(planJson0 *uint8, planJson1 uint32, result *cm.Result[string, string, string])
 
-//go:wasmimport wasmnest:plugin/host-task@0.0.1 submit
+//go:wasmimport wasmnest:plugin/host-task@0.0.2 submit
 //go:noescape
 func wasmimport_Submit(planJson0 *uint8, planJson1 uint32, result *cm.Result[string, string, string])
 
-//go:wasmimport wasmnest:plugin/host-task@0.0.1 status
+//go:wasmimport wasmnest:plugin/host-task@0.0.2 status
 //go:noescape
 func wasmimport_Status(jobId0 *uint8, jobId1 uint32, result *cm.Result[OptionStringShape, cm.Option[string], string])
 
-//go:wasmimport wasmnest:plugin/host-task@0.0.1 cancel
+//go:wasmimport wasmnest:plugin/host-task@0.0.2 cancel
 //go:noescape
 func wasmimport_Cancel(jobId0 *uint8, jobId1 uint32, result *cm.Result[string, bool, string])
 
-//go:wasmimport wasmnest:plugin/host-task@0.0.1 list-jobs
+//go:wasmimport wasmnest:plugin/host-task@0.0.2 list-jobs
 //go:noescape
 func wasmimport_ListJobs(result *cm.Result[string, string, string])

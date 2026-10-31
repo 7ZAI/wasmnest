@@ -6,16 +6,16 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.1".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
 
-//go:wasmimport wasmnest:plugin/host-process@0.0.1 run
+//go:wasmimport wasmnest:plugin/host-process@0.0.2 run
 //go:noescape
 func wasmimport_Run(requestJson0 *uint8, requestJson1 uint32, result *cm.Result[string, string, string])
 
-//go:wasmimport wasmnest:plugin/host-process@0.0.1 kill
+//go:wasmimport wasmnest:plugin/host-process@0.0.2 kill
 //go:noescape
 func wasmimport_Kill(runId0 *uint8, runId1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport wasmnest:plugin/host-process@0.0.1 run-sync
+//go:wasmimport wasmnest:plugin/host-process@0.0.2 run-sync
 //go:noescape
 func wasmimport_RunSync(requestJson0 *uint8, requestJson1 uint32, result *cm.Result[string, string, string])

@@ -6,8 +6,8 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.1".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
 
-//go:wasmimport wasmnest:plugin/host-api-call@0.0.1 call
+//go:wasmimport wasmnest:plugin/host-api-call@0.0.2 call
 //go:noescape
 func wasmimport_Call(requestTopic0 *uint8, requestTopic1 uint32, payloadJson0 *uint8, payloadJson1 uint32, timeoutMs0 uint64, result *cm.Result[string, string, string])
