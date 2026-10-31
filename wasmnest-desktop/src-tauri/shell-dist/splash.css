@@ -21,11 +21,18 @@
  *   走 <link> 在 dev / prod 行为一致，且不被 PostCSS/Tailwind 二次加工（字面值是
  *   style.css token 的手工镜像，保持逐字可控）。
  *
- * 此刻 style.css 的 token 与应用内主题设置（SQLite AppConfig）都还没加载，
- * 只能跟随系统深浅色（与移动端 index.html 静态首屏同源的做法）；
- * 应用内手动选的主题从 SplashLoading.vue 起才生效。
- * 下面的浅色字面值是 style.css 浅色 token 的手工镜像（改 token 需同步这里），
- * 深色分支保持既有 slate 配色不动（与品牌开屏深色的差异属既有状态）。
+ * 此刻 style.css 的 token 与应用内主题设置（AppConfig 的 ui.theme，经 Rust invoke
+ * 异步取回）都还没加载，JS 也一行未执行 —— 本帧只能跟随系统深浅色
+ * （与移动端 index.html 静态首屏同源的做法）。应用内手动选的深浅色从
+ * SplashLoading.vue 起才生效：本帧与品牌开屏之间会有一小段「系统色 → 设置色」的
+ * 交接，这是「不显示窗口 vs 先给一帧」的取舍结果，不是遗漏。
+ *
+ * 两套色值都是手工镜像，改真源需同步这里（C-04 / C-06 锁住）：
+ * - 浅色分支 ← style.css 浅色 token（--bg-page / --bg-sidebar / --border / --text-primary）
+ * - 深色分支 ← SplashLoading.vue 的 `html.dark .splash-root` 品牌 ink 渐变
+ *   （--splash-bg-from #16181c → --splash-bg-to #08090b、ambient #ece8dc）。
+ *   2026-10-29 前这里是退役的 slate 配色（#0f172a + 靛蓝环），与品牌开屏的暖黑
+ *   断层明显 —— 那段是浅色镜像时的遗留，已按品牌真源对齐。
  */
 
 /* 系统减弱动态效果时降级为瞬时（与 src/style.css 同款约定） */
@@ -34,15 +41,20 @@
   height: 100vh;
   align-items: center;
   justify-content: center;
-  background: #0f172a;
+  /* 三层背景与 SplashLoading.vue 深色块逐层对应：中央高光 + 底部 vignette + 品牌 ink 渐变，
+     目的是让「本帧 → 品牌开屏」的交接不跳色（改这里必须同步真源，C-06 会转红） */
+  background:
+    radial-gradient(ellipse 68% 46% at 50% 40%, rgba(236, 232, 220, 0.06), transparent 70%),
+    radial-gradient(ellipse 100% 60% at 50% 110%, rgba(0, 0, 0, 0.6), transparent 60%),
+    linear-gradient(135deg, #16181c, #08090b);
 }
 
 .spinner {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 3px solid #1e293b;
-  border-top-color: #6366f1;
+  border: 3px solid rgba(236, 232, 220, 0.12);
+  border-top-color: rgba(236, 232, 220, 0.72);
   animation: spin 0.8s linear infinite;
 }
 
