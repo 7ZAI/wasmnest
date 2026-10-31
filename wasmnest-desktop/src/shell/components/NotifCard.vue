@@ -90,7 +90,8 @@ const timeText = computed(() => {
 .ntf-ic {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  /* 主题自适应圆角（radius token 随主题档变化，玻璃主题下更圆） */
+  border-radius: var(--radius-button);
   display: flex;
   align-items: center;
   justify-content: center;

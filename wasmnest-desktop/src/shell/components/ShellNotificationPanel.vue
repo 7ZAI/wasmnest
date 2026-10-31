@@ -53,7 +53,8 @@
           />
 
           <div v-if="empty" key="empty" class="empty-note">
-            {{ t('shell.notif.empty') }}
+            <ShellIcon name="bell" :size="18" />
+            <span>{{ t('shell.notif.empty') }}</span>
           </div>
         </TransitionGroup>
       </div>
@@ -224,11 +225,20 @@ function onNotifAction(n: HostNotif, actionId: string) {
   height: 1px;
   background: var(--border);
 }
+/* 空态：静音铃铛 + 一行说明（图标比纯文本少一分「出错」感） */
 .empty-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   text-align: center;
-  padding: 16px 0;
+  padding: 20px 0 16px;
   font-size: calc(12px * var(--ui-scale));
   color: var(--text-secondary);
+}
+.empty-note svg {
+  color: var(--text-tertiary);
+  opacity: 0.75;
 }
 /* ==================== 条目移除 / 清除动效（只动 transform / opacity） ==================== */
 /* 入场 = 新通知从顶部轻微滑入；面板打开不重播（TransitionGroup 未开 appear） */

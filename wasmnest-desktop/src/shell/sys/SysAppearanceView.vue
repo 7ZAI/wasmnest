@@ -43,6 +43,7 @@
           :max="FONT_SIZE_LEVELS.length - 1"
           step="1"
           :value="fontSizeLevel"
+          :style="{ '--ui-range-fill': fontSizeFill }"
           :aria-valuetext="t(currentFontLevel.labelKey)"
           :aria-label="t('shell.settings.ui.fontSize')"
           @input="setFontLevel(Number(($event.target as HTMLInputElement).value))"
@@ -128,6 +129,7 @@
           max="70"
           step="10"
           :value="prefs.wallDim"
+          :style="{ '--ui-range-fill': wallDimFill }"
           :aria-label="t('shell.settings.background.dimLabel', { pct: prefs.wallDim })"
           @input="prefs.wallDim = Number(($event.target as HTMLInputElement).value)"
         />
@@ -252,6 +254,13 @@ const languageOptions = computed(() => [
   { value: 'en', label: 'English' },
 ])
 
+/** 字号档位 → 滑杆填充百分比（档位轨道进度，纯视觉） */
+const fontSizeFill = computed(
+  () => `${(fontSizeLevel.value / (FONT_SIZE_LEVELS.length - 1)) * 100}%`,
+)
+/** 遮罩强度 → 滑杆填充百分比（与 max=70 对应） */
+const wallDimFill = computed(() => `${(prefs.value.wallDim / 70) * 100}%`)
+
 function setTheme(v: string) {
   settingsStore.settings.ui.theme = v
   void settingsStore.saveSettings({ ui: settingsStore.settings.ui })
@@ -307,10 +316,36 @@ function toggleAnimations() {
   align-items: center;
   gap: 12px;
 }
+/* 滑杆：token 化自绘（原生 WebKitGTK 滑杆与壳的设计语言脱节）。
+   轨道 4px 圆角、进度段用主题主色（--ui-range-fill 由模板按当前值写入），
+   旋钮 = 卡面色圆点 + 细边 + 轻投影。accent-color 保留作回退：
+   不支持 ::-webkit-slider-* 的 WebView 仍渲染原生滑杆并吃到主题色。 */
 .size-row input[type='range'] {
   accent-color: var(--color-primary);
+  appearance: none;
   width: 100%;
+  height: 16px;
+  background: transparent;
   cursor: pointer;
+}
+.size-row input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--color-primary) 0 var(--ui-range-fill, 0%),
+    var(--border-strong) var(--ui-range-fill, 0%) 100%
+  );
+}
+.size-row input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text-primary) 25%, transparent);
 }
 .size-row .val {
   font-family: var(--font-mono);

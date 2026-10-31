@@ -189,6 +189,8 @@
     height: 16px;
     border-radius: 50%;
     background: var(--bg-card);
+    /* 轻投影让旋钮「浮」在轨道上（材质深度），色自 text-primary 派生，双主题自适应 */
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 28%, transparent);
     transition: transform var(--motion-duration-base) var(--motion-ease);
     pointer-events: none;
   }
@@ -231,7 +233,9 @@
       background-color var(--motion-duration-fast) var(--motion-ease),
       color var(--motion-duration-fast) var(--motion-ease);
   }
-  .shell-seg button:hover {
+  /* 悬停 = 文字升一档 + 面色轻染（只染未选中项；选中项是实色药丸，不再叠底） */
+  .shell-seg button:hover:not(.on) {
+    background: color-mix(in srgb, var(--text-primary) 7%, transparent);
     color: var(--text-primary);
   }
   /* 选中用固定黑底 + 反白文字：不用白色药丸，也不加勾章，不随明暗主题反转
