@@ -123,10 +123,12 @@ afterEach(() => {
 
 describe('陈旧判定：wasmStaleReason（真实临时目录）', () => {
   const sdkRust = () => join(sdkRoot, 'rust')
+  const sdkGo = () => join(sdkRoot, 'go')
 
   it('产物缺失 → 报缺失原因（不静默当最新）', () => {
     const reason = wasmStaleReason(pluginRoot, join(resourcesBase, 'missing.wasm'), {
       sdkRustRoot: sdkRust(),
+      sdkGoRoot: sdkGo(),
     })
     expect(reason).toContain('产物缺失')
   })
@@ -138,7 +140,7 @@ describe('陈旧判定：wasmStaleReason（真实临时目录）', () => {
     mkdirSync(join(pluginRoot, 'rust', 'src'), { recursive: true })
     touch(join(pluginRoot, 'rust', 'src', 'lib.rs'), FUTURE)
     expect(
-      wasmStaleReason(pluginRoot, wasm, { sdkRustRoot: sdkRust() }),
+      wasmStaleReason(pluginRoot, wasm, { sdkRustRoot: sdkRust(), sdkGoRoot: sdkGo() }),
     ).toBe('Rust 源码比产物新（需重建）')
   })
 
@@ -149,7 +151,7 @@ describe('陈旧判定：wasmStaleReason（真实临时目录）', () => {
     // 端目录无 rust/，crate 收在上一级 apps/demo/rust/（真实布局：{core,plugin}）
     mkdirSync(join(pluginRoot, '..', 'rust', 'core'), { recursive: true })
     touch(join(pluginRoot, '..', 'rust', 'core', 'mod.rs'), FUTURE)
-    expect(wasmStaleReason(pluginRoot, wasm, { sdkRustRoot: sdkRust() })).toContain('需重建')
+    expect(wasmStaleReason(pluginRoot, wasm, { sdkRustRoot: sdkRust(), sdkGoRoot: sdkGo() })).toContain('需重建')
   })
 
   it('SDK rust 面（WIT / 权限表 / HostApp trait）比产物新 → 全量补建判据', () => {
@@ -157,7 +159,16 @@ describe('陈旧判定：wasmStaleReason（真实临时目录）', () => {
     mkdirSync(join(wasm, '..'), { recursive: true })
     touch(wasm, PAST)
     touch(join(sdkRoot, 'rust', 'permissions.wit'), FUTURE)
-    expect(wasmStaleReason(pluginRoot, wasm, { sdkRustRoot: sdkRust() })).toContain('需重建')
+    expect(wasmStaleReason(pluginRoot, wasm, { sdkRustRoot: sdkRust(), sdkGoRoot: sdkGo() })).toContain('需重建')
+  })
+
+  it('Go 后端（issue #21 试点，desktop/go）源码比产物新 → 需重建', () => {
+    const wasm = join(resourcesBase, 'com.example.demo', 'demo_plugin.wasm')
+    mkdirSync(join(wasm, '..'), { recursive: true })
+    touch(wasm, PAST)
+    mkdirSync(join(pluginRoot, 'go'), { recursive: true })
+    touch(join(pluginRoot, 'go', 'main.go'), FUTURE)
+    expect(wasmStaleReason(pluginRoot, wasm, { sdkRustRoot: sdkRust(), sdkGoRoot: sdkGo() })).toContain('需重建')
   })
 
   it('产物最新 → null；target/dist/node_modules 里的新文件不算源码（增量产物不误判）', () => {
@@ -172,7 +183,7 @@ describe('陈旧判定：wasmStaleReason（真实临时目录）', () => {
       mkdirSync(join(pluginRoot, 'rust', skip), { recursive: true })
       touch(join(pluginRoot, 'rust', skip, 'incremental.bin'), FUTURE)
     }
-    expect(wasmStaleReason(pluginRoot, wasm, { sdkRustRoot: sdkRust() })).toBeNull()
+    expect(wasmStaleReason(pluginRoot, wasm, { sdkRustRoot: sdkRust(), sdkGoRoot: sdkGo() })).toBeNull()
   })
 })
 

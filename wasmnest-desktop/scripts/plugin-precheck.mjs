@@ -200,7 +200,7 @@ function fileMtime(path) {
 export function wasmStaleReason(
   pluginRoot,
   wasmDest,
-  { sdkRustRoot = join(DEFAULT_SDK_ROOT, 'rust') } = {},
+  { sdkRustRoot = join(DEFAULT_SDK_ROOT, 'rust'), sdkGoRoot = join(DEFAULT_SDK_ROOT, 'go') } = {},
 ) {
   let wasmStat
   try {
@@ -212,12 +212,16 @@ export function wasmStaleReason(
   // `../rust/`（file-transfer 双端同构：crate 收在 `apps/file-transfer/rust/{core,plugin}`，
   // 端目录只剩前端——只扫端目录会让它的 wasm 陈旧判据静默失效）。
   // 无应用级 rust 层的插件该目录缺失，`latestSourceMtime` 返回 0，不干扰判据。
+  // Go 后端（issue #21 试点，ai-chatbox desktop/go）同判：`go/` 目录缺失 = 非 Go 应用，
+  // 返回 0 不干扰；SDK 侧 go/（绑定生成 + 壳模块）变更同样改变 Go 产物编译面。
   // SDK rust 面：WIT / 权限表 / HostApp trait 任一变更都会改变所有插件的编译面，
   // 必须全量补建（2026-10-23：app:path 加入后旧插件 wasm 缺 path_register 导出）。
   const newestSrc = Math.max(
     latestSourceMtime(join(pluginRoot, 'rust')),
     latestSourceMtime(join(pluginRoot, '..', 'rust')),
+    latestSourceMtime(join(pluginRoot, 'go')),
     latestSourceMtime(sdkRustRoot),
+    latestSourceMtime(sdkGoRoot),
   )
   if (newestSrc > wasmStat.mtimeMs) return 'Rust 源码比产物新（需重建）'
   return null
@@ -303,7 +307,10 @@ export function ensurePluginWasm(deps = {}) {
     if (!wasmFile) continue
     const pluginRoot = appDirOf(slug, group)
     const wasmDest = resolve(resourcesBase, id, basename(wasmFile))
-    const reason = wasmStaleReason(pluginRoot, wasmDest, { sdkRustRoot: join(sdkRoot, 'rust') })
+    const reason = wasmStaleReason(pluginRoot, wasmDest, {
+      sdkRustRoot: join(sdkRoot, 'rust'),
+      sdkGoRoot: join(sdkRoot, 'go'),
+    })
     if (!reason) continue
 
     console.warn(`[plugin-precheck] ⚠ 插件 ${slug} WASM 需要补建：${reason}`)
