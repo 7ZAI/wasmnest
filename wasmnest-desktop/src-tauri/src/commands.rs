@@ -79,6 +79,13 @@ pub async fn save_app_settings(
 
     settings.save(&config_path)?;
 
+    // 深浅色改完立刻生效：窗口主题既驱动开屏首帧的 prefers-color-scheme，也决定
+    // 下次启动的第一帧。切回 system 时必须在这一步把窗口主题复位（None），否则
+    // matchMedia 仍报被强制的主题，前端 isSystemDark 会跟着错——见 system::appearance 头注。
+    if let Some(window) = app_handle.get_webview_window("main") {
+        crate::system::appearance::apply_window_appearance(&window, &settings.ui.theme);
+    }
+
     tracing::info!("App settings saved to {:?}", config_path);
     Ok(())
 }

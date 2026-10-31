@@ -344,6 +344,15 @@ pub fn run() {
             // 初始化全局配置单例
             crate::system::config::AppConfig::init(app_config.clone());
 
+            // 开屏首帧的深浅色：静态首屏（public/splash.css）早于任何 JS，只认
+            // prefers-color-scheme，读不到 AppConfig.ui.theme。这里趁 webview 还没绘制，
+            // 把设置翻译成窗口主题（Linux = GTK prefer-dark-theme）让媒体查询直接对上，
+            // 三段开屏（静态首帧 → SplashLoading → 壳）才是同一套深浅色。
+            // 机制与调用时序见 system::appearance 文件头注。
+            if let Some(window) = app.get_webview_window("main") {
+                system::appearance::apply_window_appearance(&window, &app_config.ui.theme);
+            }
+
             // 同步 PowerManager 开关状态到配置值
             crate::system::power::power_manager().set_enabled(app_config.network.prevent_sleep);
 

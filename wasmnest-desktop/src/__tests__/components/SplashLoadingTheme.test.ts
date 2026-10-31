@@ -14,6 +14,9 @@
  * - C-04 index.html 静态首屏（现为 public/splash.css 外链，见下）有
  *        prefers-color-scheme 浅色分支，且镜像的正是 `style.css` 里 warm 浅色 token
  *        的字面值（token 改了没同步镜像 → 转红）
+ * - C-06 静态首屏深色分支镜像的是 `SplashLoading.vue` 深色块的品牌 ink 渐变
+ *        （2026-10-29 立：此前静态首屏深色还是退役的 slate 配色 #0f172a + 靛蓝环，
+ *        与品牌开屏的暖黑断层明显——「启动先看到蓝色转圈」的直接来源）
  * - C-05 index.html 确实外链了 public/splash.css，且自身不再残留生效的内联 <style>
  *        （样式搬出内联是 CSP 硬约束：Tauri v2 会给内联 <style> 注入 nonce，CSP3 下
  *        style-src 出现 nonce-source 即令 'unsafe-inline' 失效，所有运行时注入的
@@ -138,5 +141,26 @@ describe('静态首屏浅色锁（public/splash.css）', () => {
     expect(stripHtmlComments(readFileSync(INDEX_HTML, 'utf-8'))).toContain('href="/splash.css"')
     // 反例：内联 <style> 回来 = CSP nonce 回来 = release 全站插件样式被拒（见文件头注）
     expect(stripHtmlComments(readFileSync(INDEX_HTML, 'utf-8'))).not.toContain('<style')
+  })
+
+  it('C-06 静态首屏深色底镜像 SplashLoading 的品牌深色 token', () => {
+    const css = staticSplashCss()
+    // 基块（深浅色共用块）里的 background 就是深色底：media query 之后的浅色分支另有覆盖
+    const baseBlock = /\.splash\s*\{([^}]*)\}/.exec(css)?.[1]
+    expect(baseBlock, `${STATIC_SPLASH_CSS} 未找到 .splash 基块`).toBeTruthy()
+
+    const darkBlock = paletteBlock(splashStyleBlock(), DARK_BLOCK)
+    for (const token of ['--splash-bg-from', '--splash-bg-to'] as const) {
+      const value = new RegExp(`${token}:\\s*(#[0-9a-fA-F]{3,8})`).exec(darkBlock)?.[1]
+      // 真源缺 token 时不能静默跳过——否则本用例变成恒真
+      expect(value, `${SPLASH_COMPONENT} 深色块缺少 ${token}`).toBeTruthy()
+      expect(
+        baseBlock as string,
+        `${STATIC_SPLASH_CSS} 深色底须镜像 ${token}=${value}`,
+      ).toContain(value as string)
+    }
+
+    // 反例守卫：退役的 slate 深蓝（旧静态首屏底色）不得回接
+    expect((baseBlock as string).toLowerCase()).not.toContain('#0f172a')
   })
 })

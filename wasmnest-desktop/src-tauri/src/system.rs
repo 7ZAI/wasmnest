@@ -11,6 +11,7 @@
 //! `error_boundary`）原样保留。
 
 pub mod app_context;
+pub mod appearance;
 pub mod constants;
 pub mod error;
 pub mod error_boundary;
