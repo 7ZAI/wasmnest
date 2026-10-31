@@ -189,6 +189,52 @@ pub fn spawn_log_maintenance(setup: &'static LoggingSetup, capacity_bytes: usize
 /// 非阻塞写盘缓冲行数（有界；队列满时 worker 丢弃并计数，见 03 告警）
 const NON_BLOCKING_BUFFER_LINES: usize = 20_000;
 
+/// dev 控制台未给全局指令时的兜底默认级别（见 `console_filter_string`）
+///
+/// 取 `debug` 与文件层的既有 dev 口径一致（`build_logging` 里 dev 强制
+/// `file_level=debug`）：启动完成后真正在跑的是能力仓 / 插件 / 前端中继的 debug 日志，
+/// 只兜 `info` 会让「点开应用后没有日志滚动」的老症状残留一半。
+const DEV_CONSOLE_FALLBACK_LEVEL: &str = "debug";
+
+/// 判断过滤器表达式里是否已有「全局指令」（不带 `=` 的裸级别段，如 `info` / `debug`）
+fn has_global_directive(raw: &str) -> bool {
+    raw.split(',').any(|seg| {
+        let seg = seg.trim();
+        !seg.is_empty() && !seg.contains('=')
+    })
+}
+
+/// 计算控制台 `EnvFilter` 表达式（纯函数，供 build_logging 与单测共用）
+///
+/// **为什么需要它**：`EnvFilter` 的默认指令是 `OFF`（tracing-subscriber 语义，见
+/// `filter::env::directive::Directive::default`）——一旦配置里只有 `crate=level` 这类
+/// target 指令，**未列出的 target 一律被丢弃**。宿主默认配置
+/// （`wasmnest_desktop_lib=debug,actix_web=info,actix_http=info`）正是这个形状，于是
+/// dev 终端里只剩宿主自身日志：**启动完成后**真正干活的能力仓（wasm core / server /
+/// pty / plugin_log）、插件 `[plugin:...]` 日志与前端 relay（target=`frontend`）全部
+/// 静默——控制台停在启动那几行不再滚动，同名事件却照常落盘，表现为「dev 控制台
+/// 日志失效」。
+///
+/// 因此 **dev 且配置无全局指令** 时补全局兜底级别 `debug`（配置里已有的 target 指令
+/// 优先级更高，`actix_web=info` 这类降噪设置继续生效）。release 不改写配置语义：
+/// 控制台默认关闭，显式开启者应拿到自己写的过滤器。需要换级别时用 `RUST_LOG`
+/// （优先级最高，由 `console_env_filter` 处理，不经过本函数）。
+fn console_filter_string(dev: bool, configured: &str) -> String {
+    let configured = configured.trim().trim_end_matches(',').trim();
+    if !dev || has_global_directive(configured) {
+        return configured.to_string();
+    }
+    if configured.is_empty() {
+        return DEV_CONSOLE_FALLBACK_LEVEL.to_string();
+    }
+    format!("{configured},{DEV_CONSOLE_FALLBACK_LEVEL}")
+}
+
+/// 控制台层过滤器：`RUST_LOG` 优先，其次按 `console_filter_string` 展开配置
+fn console_env_filter(dev: bool, configured: &str) -> EnvFilter {
+    EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(console_filter_string(dev, configured)))
+}
+
 /// 构建日志系统（主 seam，纯函数不依赖 Tauri AppHandle）
 ///
 /// 返回 `(LoggingSetup, 订阅器)`：订阅器由调用方安装（`set_global_default`
@@ -254,9 +300,9 @@ pub fn build_logging(
     } else {
         BoxMakeWriter::new(DiscardMakeWriter)
     };
-    // RUST_LOG 环境变量优先级最高，其次使用配置值；关闭时 "off" 全关
+    // RUST_LOG 优先级最高，其次配置值（dev 补全局兜底，见 console_filter_string）；关闭时 "off" 全关
     let console_filter = if console_on {
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&log_config.console_filter))
+        console_env_filter(dev, &log_config.console_filter)
     } else {
         EnvFilter::new("off")
     };

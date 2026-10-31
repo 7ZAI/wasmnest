@@ -24,4 +24,5 @@
 - 统一 `tracing`：运行细节 `debug!` / 关键生命周期 `info!` / 可恢复异常 `warn!` / 影响功能的失败 `error!`。
 - 三条硬规则：① panic hook 内只用 `eprintln!` ② 热路径克制（PTY 输出 / WS 每帧不打逐帧日志，命中 `hot_path_logging_lock`）③ guest 自报的可处理错误不升 `error!`。
 - **结构化字段强制**：`session_id` / `device_id` / `plugin_id` / `request_id` / `batch_id` / `node_id` 一律 `key = %value`，**禁止拼进消息字符串**；错误信息必须带操作上下文。
+- **桌面控制台过滤器（dev 通道）**：优先级 `RUST_LOG` > `log.console_filter` > dev 兜底。`EnvFilter` 的默认指令是 **OFF**——配置里只写 `crate=level`（宿主默认就是这样）时，未列出的 target 全部静默，**启动完成后**能力仓 / 插件 `[plugin:...]` / 前端 relay 的日志一条都进不了终端（看着像"日志失效、不滚动"，而文件层照写）。因此 dev 且配置无全局指令时自动补全局 `debug`（配置里的 target 指令优先，`actix_web=info` 这类降噪继续生效；真源 `system::logging::console_filter_string`，回归锁 `dev_console_filter_lets_engine_plugin_and_frontend_logs_through`）。release 不改写配置语义。
 - 前端落盘差异：**桌面 release 侧 error / warn 仍批量转发落盘**；移动 release 侧整体空实现（差异机制见各自 `frontendLogger.ts` 头注释，勿强行统一）。

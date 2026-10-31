@@ -507,3 +507,97 @@ fn console_formatter_uses_local_time_and_colors_plugin_tag() {
     // 改为断言定位行内容本身）
     assert!(out.contains("tests.rs:"), "location line should be kept, got:\n{out}");
 }
+
+// ==================== 控制台过滤器（dev 兜底） ====================
+
+/// 只记录事件 target 的 layer：验证控制台过滤器「谁能进控制台」，不关心格式
+struct TargetRecorder(Arc<Mutex<Vec<&'static str>>>);
+
+impl<S> tracing_subscriber::Layer<S> for TargetRecorder
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    fn on_event(&self, event: &tracing::Event<'_>, _ctx: tracing_subscriber::layer::Context<'_, S>) {
+        self.0.lock().unwrap().push(event.metadata().target());
+    }
+}
+
+/// 用真实订阅器（target 记录器 + 给定 EnvFilter）跑一遍探针事件，返回被放行的 target
+fn dispatch_through(filter: &str, emit: impl FnOnce()) -> Vec<&'static str> {
+    let hits = Arc::new(Mutex::new(Vec::new()));
+    let subscriber = tracing_subscriber::registry()
+        .with(TargetRecorder(hits.clone()))
+        .with(EnvFilter::new(filter));
+    tracing::subscriber::with_default(subscriber, emit);
+    let recorded = hits.lock().unwrap().clone();
+    recorded
+}
+
+#[test]
+fn console_filter_string_dev_adds_fallback_for_target_only_config() {
+    // 宿主默认配置是纯 target 指令（EnvFilter 的默认指令为 OFF），dev 必须补全局兜底
+    let widened = console_filter_string(true, "wasmnest_desktop_lib=debug,actix_web=info");
+    assert_eq!(
+        widened, "wasmnest_desktop_lib=debug,actix_web=info,debug",
+        "dev 应在 target-only 配置后补全局 debug 兜底"
+    );
+}
+
+#[test]
+fn console_filter_string_keeps_existing_global_directive() {
+    // 配置已含全局级别：尊重开发者意图，不追加（否则会覆盖其全局级别）
+    assert_eq!(
+        console_filter_string(true, "debug,actix_web=info"),
+        "debug,actix_web=info"
+    );
+}
+
+#[test]
+fn console_filter_string_release_keeps_config_verbatim() {
+    assert_eq!(
+        console_filter_string(false, "wasmnest_desktop_lib=debug"),
+        "wasmnest_desktop_lib=debug"
+    );
+    // 空配置在 release 保持空（EnvFilter 空串 = 仅 ERROR），不改写语义
+    assert_eq!(console_filter_string(false, ""), "");
+}
+
+#[test]
+fn console_filter_string_normalizes_separators() {
+    // 尾随逗号 / 空白不应产生 `,,` 空指令
+    assert_eq!(
+        console_filter_string(true, " wasmnest_desktop_lib=debug , "),
+        "wasmnest_desktop_lib=debug,debug"
+    );
+}
+
+/// 回归锁：启动完成后 dev 控制台必须继续滚动——能力仓 / 插件日志 / 前端 relay 此前
+/// 全被 OFF 丢弃（只剩启动那几行宿主日志），表现为「dev 控制台日志失效、不滚动」
+#[test]
+fn dev_console_filter_lets_engine_plugin_and_frontend_logs_through() {
+    let default_console_filter = LogConfig::default().console_filter;
+    let hits = dispatch_through(&console_filter_string(true, &default_console_filter), || {
+        tracing::info!(target: "wasmnest_wasm_core::bus", "engine info");
+        tracing::info!(
+            target: "wasmnest_host_api_core::plugin_log",
+            "[plugin:com.wasmnest.bedcode] plugin info"
+        );
+        tracing::error!(target: "frontend", "frontend error");
+        tracing::debug!(target: "frontend", "frontend debug");
+        tracing::debug!(target: "wasmnest_wasm_core::bus", "engine debug");
+        tracing::debug!(target: "wasmnest_desktop_lib::bootstrap", "host debug");
+    });
+
+    assert_eq!(
+        hits,
+        vec![
+            "wasmnest_wasm_core::bus",
+            "wasmnest_host_api_core::plugin_log",
+            "frontend",
+            "frontend",
+            "wasmnest_wasm_core::bus",
+            "wasmnest_desktop_lib::bootstrap",
+        ],
+        "dev 控制台应放行能力仓 / 插件日志 / 前端 relay（含 debug）与宿主 debug"
+    );
+}
