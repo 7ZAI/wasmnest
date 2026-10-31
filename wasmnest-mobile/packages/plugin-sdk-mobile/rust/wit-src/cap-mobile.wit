@@ -1,4 +1,4 @@
-package wasmnest:plugin@0.0.1;
+package wasmnest:plugin@0.0.2;
 
 // 移动端插件契约——**端扩展分片**（共享核心 interface 在 `wasm-core/wit/core.wit`，
 // 本文件只承载移动独有 / 非等接口；端 `wit/` 目录由 `scripts/compose-wit.mjs` 拼装生成）

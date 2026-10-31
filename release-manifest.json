@@ -7,14 +7,14 @@
   },
   "contract": {
     "package": "wasmnest:plugin",
-    "version": "0.0.1",
-    "witSha256": "c03c72fb29c7775f642d9e165f3c468c6c712ffe0b39d811aa41e4792e87ea1c"
+    "version": "0.0.2",
+    "witSha256": "2e7a3e0dd83db4a156f3510eaaec440c7696658464884ece0e41d6036d031bf0"
   },
   "hostRuntime": {
     "version": "0.0.1",
     "sourceCommit": "21c84dd57fd4900257db9ecb3a2e7ec8968225bb",
     "libTag": "lib-v0.0.1",
-    "witVersion": "0.0.1",
+    "witVersion": "0.0.2",
     "sdkVersion": "0.0.1",
     "mountContract": "1"
   },

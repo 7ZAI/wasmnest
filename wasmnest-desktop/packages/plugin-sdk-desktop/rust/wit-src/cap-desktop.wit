@@ -1,4 +1,4 @@
-package wasmnest:plugin@0.0.1;
+package wasmnest:plugin@0.0.2;
 
 /// WasmNest 插件 Component Model 契约
 ///
