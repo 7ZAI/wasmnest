@@ -135,6 +135,7 @@ const APP_ROUTE_PREFIXES: Readonly<Record<string, string[]>> = {
   [TERMINAL_PLUGIN_ID]: [
     '/pairing',
     '/sessions',
+    '/projects',
     '/tasks',
     '/settings',
     '/server',

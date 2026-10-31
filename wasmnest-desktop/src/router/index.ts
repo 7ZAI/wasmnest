@@ -10,9 +10,10 @@
  * - 未匹配路由 → 显性 not-found（退役面 /plugins 等直达时兜底，不白屏）。
  *
  * 应用路由前缀（bedcode 保持既有路径，深链 /terminal-window/:id 语义不变）：
- * - com.wasmnest.bedcode：/pairing /sessions /tasks /settings(.*)?
- *   /server /history /terminal-window/:id
+ * - com.wasmnest.bedcode：/pairing /sessions /projects(.*)? /tasks
+ *   /settings(.*)? /server /history /terminal-window/:id
  * - com.wasmnest.bedcode 增：/agents（Agent 管理域，并入自 agent-hub）
+ *   /projects（项目容器，issue #23 M2）
  * - com.wasmnest.ai-chatbox：/chat
  * - com.wasmnest.file-transfer：/transfer
  * - com.wasmnest.monitor：/monitor
@@ -64,6 +65,14 @@ const router = createRouter({
       name: 'sessions',
       component: AppMountSlot,
       props: { appId: TERMINAL_PLUGIN_ID, route: '/sessions' },
+    },
+    {
+      // 项目容器（issue #23 M2，应用仓 bedcode 新增内部路由的宿主镜像）：
+      // 项目列表 + 工作台（:id 深链恢复语义，子段经 fullPath 原样透传）
+      path: '/projects/:sub(.*)?',
+      name: 'app-projects',
+      component: AppMountSlot,
+      props: (route) => ({ appId: TERMINAL_PLUGIN_ID, route: route.fullPath }),
     },
     {
       path: '/tasks',

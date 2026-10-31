@@ -176,6 +176,8 @@ describe('应用路由 → 属主 pluginId（faceOfRoute 反向映射）', () =>
     expect(pluginIdOfAppRoute('/sessions')).toBe(TERMINAL_PLUGIN_ID)
     expect(pluginIdOfAppRoute('/sessions/123')).toBe(TERMINAL_PLUGIN_ID)
     expect(pluginIdOfAppRoute('/pairing')).toBe(TERMINAL_PLUGIN_ID)
+    expect(pluginIdOfAppRoute('/projects')).toBe(TERMINAL_PLUGIN_ID)
+    expect(pluginIdOfAppRoute('/projects/abc')).toBe(TERMINAL_PLUGIN_ID)
     expect(pluginIdOfAppRoute('/tasks')).toBe(TERMINAL_PLUGIN_ID)
     expect(pluginIdOfAppRoute('/settings/authorization')).toBe(TERMINAL_PLUGIN_ID)
     expect(pluginIdOfAppRoute('/terminal-window/x')).toBe(TERMINAL_PLUGIN_ID)
