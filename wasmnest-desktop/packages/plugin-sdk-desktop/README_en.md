@@ -65,7 +65,7 @@ A minimal plugin needs just two files:
   "description": "Example plugin",
   "author": "you",
   "main": "index.js",
-  "pluginType": "ts-only",
+  "pluginType": "frontend",
   "permissions": ["storage", "ui:sidebar"],
   "contributes": {
     "commands": [{ "id": "my-plugin.hello", "title": "Hello" }],

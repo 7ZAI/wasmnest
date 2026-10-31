@@ -49,7 +49,7 @@ function errorsForHttpEndpoints(httpEndpoints: unknown): string[] {
         version: '1.0.0',
         platform: 'desktop',
         main: 'index.js',
-        pluginType: 'rust-ts',
+        pluginType: 'full',
         rustLibrary: 'test_plugin',
         permissions: [],
         contributes,
@@ -156,7 +156,7 @@ function errorsForWsEndpoints(wsEndpoints: unknown): string[] {
         version: '1.0.0',
         platform: 'desktop',
         main: 'index.js',
-        pluginType: 'rust-ts',
+        pluginType: 'full',
         rustLibrary: 'test_plugin',
         permissions: [],
         contributes,
@@ -251,7 +251,7 @@ function outcomeForWasmHash(wasmHash: unknown): { errors: string[]; warnings: st
     version: '1.0.0',
     platform: 'desktop',
     main: 'index.js',
-    pluginType: 'rust-ts',
+    pluginType: 'full',
     rustLibrary: 'test_plugin',
     permissions: [],
     contributes: {},
@@ -305,7 +305,7 @@ function errorsForWasiPreopenDirs(dirs: unknown, lifecycle: string | null = 'eph
     version: '1.0.0',
     platform: 'desktop',
     main: 'index.js',
-    pluginType: 'rust-ts',
+    pluginType: 'full',
     rustLibrary: 'test_plugin',
     permissions: [],
     contributes: {},
@@ -414,6 +414,72 @@ describe('wasiPreopenDirs 校验', () => {
 })
 
 /**
+ * pluginType 形态三档词汇校验（2026-10-26 语义重定义，wasmnest-apps#21）
+ *
+ * 行为契约（真源：bin/manifest-validate.js 的 VALID/RETIRED 词汇表 + 宿主
+ * wasm-core manifest.rs 的同形 Deserialize）：
+ * - C-T1 三形态 `frontend | backend | full` 全部合法（词汇只表达形态，不表达语言）；
+ * - C-T2 退役值 `rust / rust-ts / ts-only` 逐一点名拒绝，错误文案含迁移出路
+ *   （新值）与「已退役」说明——不静默、不笼统「允许: …」；
+ * - C-T3 完全未知的值点名值本身并列出合法集；
+ * - C-T4 `full` 必须带 `rustLibrary`（原 rust-ts 规则随形态迁移；键名暂保留
+ *   历史拼写，见 wasmnest-apps#21 键位子决策）。
+ */
+describe('pluginType 形态三档词汇（wasmnest-apps#21）', () => {
+  /** 写一份最小 manifest，只返回 pluginType / rustLibrary 相关错误 */
+  function withType(pluginType: unknown, rustLibrary?: unknown): string[] {
+    const manifest: Record<string, unknown> = {
+      id: 'com.example.test',
+      name: 'Test Plugin',
+      version: '1.0.0',
+      platform: 'desktop',
+      main: 'index.js',
+      permissions: [],
+      contributes: {},
+    }
+    if (pluginType !== undefined) manifest.pluginType = pluginType
+    if (rustLibrary !== undefined) manifest.rustLibrary = rustLibrary
+    writeFileSync(join(cwd, 'plugin.json'), JSON.stringify(manifest, null, 2), 'utf-8')
+    const { errors } = validateManifest(cwd)
+    return errors.filter((e) => e.includes('pluginType'))
+  }
+
+  it('C-T1 三形态全部合法（frontend 无 wasm / backend 无页面 / full 双产物）', () => {
+    for (const pluginType of ['frontend', 'backend', 'full']) {
+      expect(withType(pluginType, 'test_lib'), `pluginType=${pluginType} 必须合法`).toEqual([])
+    }
+  })
+
+  it('C-T2 退役值逐一点名拒绝，文案点名旧值、新值出路与退役事实', () => {
+    for (const [old, next] of [
+      ['ts-only', 'frontend'],
+      ['rust', 'backend'],
+      ['rust-ts', 'full'],
+    ] as const) {
+      const errors = withType(old, 'test_lib')
+      expect(errors, `退役值 ${old} 必须被拒`).toHaveLength(1)
+      expect(errors[0]).toContain(old)
+      expect(errors[0]).toContain(next)
+      expect(errors[0]).toContain('已退役')
+    }
+  })
+
+  it('C-T3 完全未知的值点名值本身并列出合法集', () => {
+    const errors = withType('gopher', 'test_lib')
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toContain('gopher')
+    expect(errors[0]).toContain('frontend / backend / full')
+  })
+
+  it('C-T4 full 必须带 rustLibrary（wasm 模块名，构建链按它注入 wasmHash）', () => {
+    expect(withType('full')).toHaveLength(1)
+    expect(withType('full', 'test_lib')).toEqual([])
+    // 纯前端无 wasm 产物，rustLibrary 不是必填
+    expect(withType('frontend')).toEqual([])
+  })
+})
+
+/**
  * 分类字段（`type` / `lifecycle`，ADR 0032）校验
  *
  * 行为契约（真源：bin/manifest-validate.js 分支 + SDK rust/src/types.rs 的
@@ -428,7 +494,7 @@ describe('wasiPreopenDirs 校验', () => {
  * - C-R5 `ephemeral` 本期只预留类型：宿主一次性实例机制与调度框架未落地，
  *   声明即在**构建期与宿主加载期双侧显性拒绝**——不静默当常驻处理
  *   （那会让作者以为 worker 生效，而常驻恰是 worker 存在理由的反面）；
- * - C-R6 `ephemeral` 必须配 `pluginType: rust`（无页面的即用即弃形态）。
+ * - C-R6 `ephemeral` 必须配 `pluginType: backend`（无页面的即用即弃形态）。
  */
 describe('分类字段 type / lifecycle 校验（ADR 0032）', () => {
   /** 写一份最小 manifest，返回与分类字段相关的错误 / 告警 */
@@ -442,7 +508,7 @@ describe('分类字段 type / lifecycle 校验（ADR 0032）', () => {
           version: '1.0.0',
           platform: 'desktop',
           main: 'index.js',
-          pluginType: 'rust',
+          pluginType: 'backend',
           rustLibrary: 'test_plugin',
           permissions: [],
           contributes: {},
@@ -498,11 +564,11 @@ describe('分类字段 type / lifecycle 校验（ADR 0032）', () => {
     expect(errors[0]).toContain('调度')
   })
 
-  it('C-R6 ephemeral 配非 rust 形态时先报形态错（无页面的即用即弃形态）', () => {
-    for (const pluginType of ['rust-ts', 'ts-only']) {
+  it('C-R6 ephemeral 配非 backend 形态时先报形态错（无页面的即用即弃形态）', () => {
+    for (const pluginType of ['frontend', 'full']) {
       const { errors } = classify({ pluginType, lifecycle: 'ephemeral' })
       expect(errors.length, `pluginType=${pluginType} + ephemeral 必须被拒`).toBe(1)
-      expect(errors[0]).toContain('rust')
+      expect(errors[0]).toContain('backend')
     }
   })
 
@@ -531,7 +597,7 @@ describe('platform 校验（必填适配平台）', () => {
       name: 'Test Plugin',
       version: '1.0.0',
       main: 'index.js',
-      pluginType: 'rust-ts',
+      pluginType: 'full',
       rustLibrary: 'test_plugin',
       permissions: [],
       contributes: {},
@@ -584,7 +650,7 @@ describe('backgroundTransport（运行期传输租约 opt-in）', () => {
       version: '1.0.0',
       platform: 'desktop',
       main: 'index.js',
-      pluginType: 'rust-ts',
+      pluginType: 'full',
       rustLibrary: 'test_plugin',
       permissions,
       contributes: {},

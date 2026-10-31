@@ -7,7 +7,7 @@
   "author": "WasmNest",
   "main": "index.js",
   "sandbox": "inline",
-  "pluginType": "rust-ts",
+  "pluginType": "full",
   "rustLibrary": "wasmnest_plugin_pty_test",
   "permissions": [
     "storage",

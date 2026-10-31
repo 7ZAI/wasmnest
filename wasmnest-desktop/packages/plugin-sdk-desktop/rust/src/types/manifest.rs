@@ -48,11 +48,11 @@ pub struct PluginManifest {
     /// 扩展点声明
     #[serde(default)]
     pub contributes: PluginContributes,
-    /// 插件类型：rust / rust-ts / ts-only
+    /// 插件产物形态：frontend / backend / full（语言无关三档，wasmnest-apps#21）
     #[serde(default = "default_plugin_type")]
     pub plugin_type: PluginType,
     /// WASM 库文件名（不含路径，相对于插件目录）
-    /// 仅 rust-ts 类型插件使用，宿主根据平台自动添加后缀
+    /// 携带 wasm 后端的形态使用（backend / full），宿主根据平台自动添加后缀
     #[serde(default)]
     pub rust_library: String,
     /// WASM 模块内容 SHA-256（小写十六进制；缺省空串 = 不校验）

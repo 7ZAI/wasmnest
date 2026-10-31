@@ -9,7 +9,7 @@
 ```bash
 pnpm install        # 安装依赖（含 SDK、vite、vue）
 pnpm run dev        # 浏览器开发环境（Dev Shell：空壳宿主 + 桌面端骨架，HMR）
-pnpm run build      # 构建：vite（前端）+ cargo（WASM，仅 rust-ts 插件）
+pnpm run build      # 构建：vite（前端）+ cargo（WASM，仅 full 形态插件）
 pnpm run manifest   # 按源码自动填充 plugin.json 的 contributes/permissions
 ```
 
@@ -23,7 +23,7 @@ pnpm run manifest   # 按源码自动填充 plugin.json 的 contributes/permissi
 ├── src/
 │   ├── index.ts       # 前端入口：activate(context) / deactivate()
 │   └── env.d.ts       # 环境类型声明
-└── rust/              # WASM 后端（--rust 创建；ts-only 应用无此目录）
+└── rust/              # WASM 后端（--rust 创建；纯前端应用无此目录）
     ├── Cargo.toml
     └── src/lib.rs     # WasmPlugin 实现（含 manifest 声明）
 ```

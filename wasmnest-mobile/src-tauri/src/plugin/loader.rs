@@ -83,9 +83,10 @@ impl PluginLoader {
 
     /// 扫描插件目录并加载所有 plugin.json
     ///
-    /// 对 pluginType: "wasm" 的插件，编译 + 实例化 WASM 组件（Component Model，
+    /// 对携带 wasm 后端的形态（pluginType: "backend" / "full"）的插件，编译 +
+    /// 实例化 WASM 组件（Component Model，
     /// 一次性切割无共存：产物必须为组件，core module 加载报错即检查员）
-    /// 对 pluginType: "ts-only" 的插件，仅注册 manifest
+    /// 对纯前端（pluginType: "frontend"）插件，仅注册 manifest
     pub(crate) fn load_all(
         plugins_dir: &Path,
         wasm_runtime: &WasmRuntime,
@@ -181,7 +182,7 @@ impl PluginLoader {
 
                     // WASM 插件：编译 + 实例化（组件路径；core module 在此编译失败，
                     // 报错信息明确——旧 ABI 产物残留在切换期即暴露）
-                    if manifest.plugin_type == PluginType::Wasm && !manifest.rust_library.is_empty() {
+                    if manifest.plugin_type.has_backend() && !manifest.rust_library.is_empty() {
                         let wasm_file = path.join(format!("{}{}", manifest.rust_library, WASM_FILE_EXT));
                         if wasm_file.exists() {
                             match wasm_runtime.compile_component_from_file(&wasm_file) {
@@ -305,17 +306,17 @@ impl PluginLoader {
             )));
         }
 
-        // TS-only 插件必须有 main 字段
-        if manifest.plugin_type == PluginType::TsOnly && manifest.main.is_empty() {
+        // 纯前端插件必须有 main 字段（前端入口）
+        if manifest.plugin_type == PluginType::Frontend && manifest.main.is_empty() {
             return Err(crate::AppError::Plugin(
-                "TS-only plugin.json missing main field".to_string(),
+                "frontend plugin.json missing main field".to_string(),
             ));
         }
 
-        // WASM 插件必须有 rustLibrary 字段
-        if manifest.plugin_type == PluginType::Wasm && manifest.rust_library.is_empty() {
+        // 携带 wasm 后端的形态必须有 rustLibrary 字段（wasm 模块名）
+        if manifest.plugin_type.has_backend() && manifest.rust_library.is_empty() {
             return Err(crate::AppError::Plugin(
-                "WASM plugin.json missing rustLibrary field".to_string(),
+                "backend/full plugin.json missing rustLibrary field".to_string(),
             ));
         }
 
@@ -365,7 +366,7 @@ mod tests {
                     "name": "BedCode",
                     "version": "1.0.0-beta",
                     "platform": "mobile",
-                    "pluginType": "wasm",
+                    "pluginType": "full",
                     "rustLibrary": "bedcode_plugin_terminal_session",
                     "permissions": ["auth", "bus", "network:http", "session:read", "storage", "terminal:output", "ui:route", "ws:client"]
                 }"#,
@@ -423,7 +424,7 @@ mod tests {
     fn test_load_manifest_rejects_non_mobile_platform() {
         let tmp = tempfile::tempdir().expect("tempdir");
 
-        // 每次覆写同一份最小清单（ts-only 形态免 wasm 产物即可过必填校验）
+        // 每次覆写同一份最小清单（frontend 形态免 wasm 产物即可过必填校验）
         let write_manifest = |platform_line: &str| -> std::path::PathBuf {
             let path = tmp.path().join("plugin.json");
             std::fs::write(
@@ -434,7 +435,7 @@ mod tests {
                         "name": "Platform Probe",
                         "version": "1.0.0",
                         {platform_line}
-                        "pluginType": "ts-only",
+                        "pluginType": "frontend",
                         "main": "index.js",
                         "permissions": [],
                         "contributes": {{}}

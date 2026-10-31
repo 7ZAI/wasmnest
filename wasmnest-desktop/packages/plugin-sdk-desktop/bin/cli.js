@@ -10,9 +10,9 @@
  *   wasmnest-plugin-desktop validate [--dir <dir>]
  *   wasmnest-plugin-desktop doctor
  *
- * create  从 SDK 内置模板生成插件工程（默认 ts-only；--rust 附带 WASM 后端脚手架）；
+ * create  从 SDK 内置模板生成插件工程（默认纯前端 frontend；--rust 附带 WASM 后端脚手架出 full）；
  *          --registry 时引用已发布的 SDK 版本，否则引用本地 SDK 相对路径
- * build   串联 vite build → cargo wasm32（rust-ts 插件）；--resources-dir 时复制产物到宿主资源目录，
+ * build   串联 vite build → cargo wasm32（full 形态插件）；--resources-dir 时复制产物到宿主资源目录，
  *          并把 wasm 字节的 SHA-256 注入**产物** plugin.json 的 wasmHash（源清单不带该键，见 bin/wasm-hash.js）
  * dev     启动浏览器开发环境（dev-shell）：vite dev server + HMR；加载应用的挂载包入口
  *          （src/entry.ts，导出 mountApp）源码，Rust 后端不在浏览器运行
@@ -185,9 +185,9 @@ function cmdCreate(positional, flags) {
   // crate 名 / 结构体名是内部实现标识符，保持 wasmnest_plugin_* / *Plugin 不变
   const pkgName = `@wasmnest/wasm-app-${last}`
 
-  // 插件类型：默认 ts-only；--rust 附带 WASM 后端
+  // 产物形态（语言无关三档，wasmnest-apps#21）：默认纯前端；--rust 附带 WASM 后端
   const withRust = flags.rust === true
-  const pluginType = withRust ? 'rust-ts' : 'ts-only'
+  const pluginType = withRust ? 'full' : 'frontend'
   const rustLibraryLine = withRust ? `  "rustLibrary": "${crate}",\n` : ''
 
   // SDK 依赖标识：--registry 引用已发布版本（npm + crates.io），默认引用本地 SDK 相对路径
@@ -279,7 +279,7 @@ function cmdBuild(flags) {
     }
   }
 
-  // 2. WASM 构建（rust-ts 插件）
+  // 2. WASM 构建（full 形态插件）
   if (hasWasm && !frontendOnly) {
     console.log('\n[wasmnest-plugin-desktop] ====== 构建 WASM (cargo) ======')
     run(

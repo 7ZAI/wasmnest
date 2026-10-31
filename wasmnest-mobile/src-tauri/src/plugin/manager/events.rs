@@ -21,7 +21,7 @@ impl PluginManager {
                         .values()
                         .filter(|p| {
                             matches!(p.state, PluginState::Activated | PluginState::Degraded { .. })
-                                && p.manifest.plugin_type == PluginType::Wasm
+                                && p.manifest.plugin_type.has_backend()
                                 && p.manifest
                                     .contributes
                                     .lifecycle

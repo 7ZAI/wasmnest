@@ -27,7 +27,7 @@ const BASE_MANIFEST = JSON.stringify(
     description: 'test',
     author: 'me',
     main: 'index.js',
-    pluginType: 'wasm',
+    pluginType: 'full',
     rustLibrary: 'test_plugin',
     permissions: [],
     contributes: {},

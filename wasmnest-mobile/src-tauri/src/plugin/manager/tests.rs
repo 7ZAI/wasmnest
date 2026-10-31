@@ -76,7 +76,7 @@ async fn seed_plugin(manager: &PluginManager, pid: &str, state: PluginState) {
         description: String::new(),
         author: String::new(),
         main: String::new(),
-        plugin_type: crate::plugin::types::PluginType::Wasm,
+        plugin_type: crate::plugin::types::PluginType::Full,
         permissions: vec![],
         contributes: crate::plugin::types::PluginContributes {
             lifecycle: Some(crate::plugin::types::LifecycleContribution {
@@ -382,7 +382,7 @@ async fn test_activate_user_plugin_without_approval_rejected() {
         pid,
         &ext_dir,
         vec![],
-        crate::plugin::types::PluginType::TsOnly,
+        crate::plugin::types::PluginType::Frontend,
     )
     .await;
 
@@ -462,7 +462,7 @@ async fn test_activate_approved_plugin_grants_effective_permissions() {
             "session:read".to_string(),
             "terminal:output".to_string(),
         ],
-        crate::plugin::types::PluginType::TsOnly,
+        crate::plugin::types::PluginType::Frontend,
     )
     .await;
 
@@ -493,7 +493,7 @@ async fn test_activate_trusted_plugin_grants_manifest_permissions() {
             "fs:read".to_string(),
             "not-a-permission".to_string(),
         ],
-        crate::plugin::types::PluginType::TsOnly,
+        crate::plugin::types::PluginType::Frontend,
     )
     .await;
 
@@ -523,7 +523,7 @@ async fn test_deactivate_revokes_all_permissions() {
         &manager,
         pid,
         vec!["storage".to_string()],
-        crate::plugin::types::PluginType::TsOnly,
+        crate::plugin::types::PluginType::Frontend,
     )
     .await;
     manager.activate(pid).await.expect("activate");
@@ -617,7 +617,7 @@ async fn test_uninstall_removes_records_and_dir() {
         pid,
         &ext_dir,
         vec![],
-        crate::plugin::types::PluginType::TsOnly,
+        crate::plugin::types::PluginType::Frontend,
     )
     .await;
 
@@ -795,7 +795,7 @@ async fn test_uninstall_removes_autostart_preference() {
         pid,
         &ext_dir,
         vec![],
-        crate::plugin::types::PluginType::TsOnly,
+        crate::plugin::types::PluginType::Frontend,
     )
     .await;
     manager.set_autostart(pid, true).await.expect("set autostart");
@@ -851,7 +851,7 @@ async fn test_service_leases_released_on_deactivate_activation_failure_and_error
         &manager,
         pid,
         vec!["storage".to_string()],
-        crate::plugin::types::PluginType::TsOnly,
+        crate::plugin::types::PluginType::Frontend,
     )
     .await;
     manager.activate(pid).await.expect("activate");

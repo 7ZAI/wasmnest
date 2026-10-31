@@ -41,9 +41,8 @@ function cmdCreate(positional, flags) {
     .join('')}Plugin`
   const pkgName = `@wasmnest/plugin-${last}`
 
-  // 插件类型：默认 wasm（前端 + WASM 后端）；--ts-only 生成纯前端插件
-  const tsOnly = flags['ts-only'] === true
-  const pluginType = tsOnly ? 'ts-only' : 'wasm'
+  // 产物形态（语言无关三档，wasmnest-apps#21）：默认 full（前端 + wasm 后端，
+  // 移动端原 `wasm` 形态的归属）；--ts-only 生成纯前端 frontend
   // 注意：值内直接嵌入实际 crate 名（fillPlaceholders 按序替换，不能引用占位符本身）
   const rustLibraryLine = tsOnly ? '' : `  "rustLibrary": "${crate}",\n`
 
@@ -136,7 +135,14 @@ const VALID_PERMISSIONS = new Set([
   'metrics:read',
 ])
 
-const VALID_PLUGIN_TYPES = new Set(['wasm', 'ts-only', 'rust', 'rust-ts'])
+const VALID_PLUGIN_TYPES = new Set(['frontend', 'backend', 'full'])
+// 退役 pluginType → 迁移出路（fail-visible：点名旧值并给出新值，不静默拒绝）
+const RETIRED_PLUGIN_TYPES = new Map([
+  ['ts-only', 'frontend'],
+  ['rust', 'backend'],
+  ['rust-ts', 'full'],
+  ['wasm', 'full'],
+])
 // 装配角色（manifest `type`，ADR 0032）：真源 = wasm-core `PluginKind`。
 // `system` / `application` 是历史拼写，宿主反序列化仍按别名接受，这里只告警。
 const VALID_PLUGIN_KINDS = new Set(['basic-service', 'internal-business', 'business-app'])
@@ -194,9 +200,14 @@ function cmdValidate(flags) {
   }
 
   // pluginType / rustLibrary / wasmHash
+  // 形态三档（frontend / backend / full，2026-10-26 语义重定义，wasmnest-apps#21）；
+  // 旧值（含移动端原 wasm）退役——点名拒绝并给出迁移出路
   if (manifest.pluginType && !VALID_PLUGIN_TYPES.has(manifest.pluginType)) {
+    const retired = RETIRED_PLUGIN_TYPES.get(manifest.pluginType)
     errors.push(
-      `pluginType 非法: "${manifest.pluginType}"（允许: ${[...VALID_PLUGIN_TYPES].join(' / ')}）`,
+      retired
+        ? `pluginType "${manifest.pluginType}" 已退役（形态三档重定义，2026-10-26，wasmnest-apps#21）：改用 "${retired}"——词汇只表达形态，不表达后端语言`
+        : `pluginType 非法: "${manifest.pluginType}"（允许: ${[...VALID_PLUGIN_TYPES].join(' / ')}）`,
     )
   }
   // type（装配角色）：非法取值构建期拒；历史拼写只告警（宿主仍按别名接受）
@@ -211,8 +222,8 @@ function cmdValidate(flags) {
       )
     }
   }
-  if (manifest.pluginType === 'wasm' && !manifest.rustLibrary) {
-    errors.push('pluginType=wasm 时必须提供 rustLibrary（与 Cargo.toml 包名一致）')
+  if (manifest.pluginType === 'full' && !manifest.rustLibrary) {
+    errors.push('pluginType=full 时必须提供 rustLibrary（与 Cargo.toml 包名一致）')
   }
   if (manifest.wasmHash !== undefined && !WASM_HASH_RE.test(manifest.wasmHash)) {
     errors.push(`wasmHash 格式非法: "${manifest.wasmHash}"（应为 sha256-<64位hex>）`)

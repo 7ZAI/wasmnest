@@ -51,7 +51,7 @@ describe('PluginManifest 结构', () => {
   })
 
   it('pluginType 仅允许三种取值', () => {
-    expectTypeOf<PluginType>().toEqualTypeOf<'rust' | 'rust-ts' | 'ts-only'>()
+    expectTypeOf<PluginType>().toEqualTypeOf<'frontend' | 'backend' | 'full'>()
   })
 
   it('platform 仅允许三个 wire 值且必填', () => {

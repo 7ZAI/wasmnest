@@ -19,7 +19,8 @@ function cmdPackage(flags) {
   }
   const manifest = readJson(manifestPath, 'plugin.json')
   const { id, main, rustLibrary, pluginType } = manifest
-  const hasWasm = pluginType === 'wasm' && rustLibrary
+  // 形态三档（wasmnest-apps#21）：backend / full 都携带 wasm 后端
+  const hasWasm = (pluginType === 'full' || pluginType === 'backend') && rustLibrary
 
   // 打包前自动填充，保证 zip 内 plugin.json 与源码一致
   try {

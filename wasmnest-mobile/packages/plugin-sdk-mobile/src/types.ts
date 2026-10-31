@@ -12,7 +12,13 @@ export interface Disposable {
 }
 
 /** 插件类型 */
-export type PluginType = 'rust' | 'rust-ts' | 'ts-only' | 'wasm'
+/**
+ * 插件产物形态（语言无关三形态，2026-10-26 语义重定义，wasmnest-apps#21）
+ *
+ * 词汇只表达形态（是否携带 wasm 后端 / 前端产物），不表达后端语言。
+ * 旧值 rust / rust-ts / ts-only / wasm 已退役：scaffold 校验点名拒绝并给出迁移出路。
+ */
+export type PluginType = 'frontend' | 'backend' | 'full'
 
 /** 插件运行时状态
  *

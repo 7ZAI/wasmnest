@@ -114,7 +114,7 @@ cd wasmnest-mobile && pnpm run plugins:build -- --plugin com.wasmnest.bedcode
 
 ### 创建纯前端插件
 
-默认模板为 wasm（前端 + WASM 后端）；`--ts-only` 生成纯前端插件（无 `rust/` 目录，`pluginType: ts-only`）：
+默认模板为 full（前端 + WASM 后端，移动端原 `wasm` 形态的归属）；`--ts-only` 生成纯前端插件（无 `rust/` 目录，`pluginType: frontend`）：
 
 ```bash
 wasmnest-plugin create com.example.ui-only "UI Only" --ts-only
@@ -140,7 +140,7 @@ wasmnest-plugin create com.example.ui-only "UI Only" --ts-only
   "description": "",
   "author": "you",
   "main": "index.js",
-  "pluginType": "wasm",
+  "pluginType": "full",
   "rustLibrary": "wasmnest_plugin_my_plugin",
   "permissions": ["storage"],
   "contributes": {}
@@ -153,7 +153,7 @@ wasmnest-plugin create com.example.ui-only "UI Only" --ts-only
 | `name` / `version` | ✅ | 展示名 / 版本 |
 | `platform` | ✅ | 适配平台，三值：`desktop`（仅桌面）/ `mobile`（仅移动）/ `both`（双端适配）。按工程所在端取值（移动工程写 `mobile`）；宿主加载 / zip 安装时按本端校验，移动拒 `desktop`，不匹配即显性拒绝 |
 | `main` | ✅ | 前端入口（产物文件名，通常 `index.js`） |
-| `pluginType` | ✅ | 产物形态，四值（真源 `packages/plugin-sdk-mobile/rust/src/types.rs::PluginType`）：`wasm`（前端 + WASM 后端，内置应用一律用它）/ `rust-ts` / `rust` / `ts-only`（纯前端） |
+| `pluginType` | ✅ | 产物形态三档（语言无关，2026-10-26 重定义；真源 `packages/plugin-sdk-mobile/rust/src/types.rs::PluginType`）：`frontend`（纯前端）/ `backend`（纯后端 worker）/ `full`（前端 + wasm 后端，内置应用一律用它）——旧值 wasm / rust-ts / rust / ts-only 已退役 |
 | `rustLibrary` | wasm 必填 | Rust crate 名（与 `Cargo.toml` 一致） |
 | `icon` | | 列表图标（SVG path 字符串或图标文件路径） |
 | `permissions` | | 权限声明，`storage` 默认授予且不可关闭（`src/shell/permissions.ts::SHELL_LOCKED_PERMISSIONS`） |
