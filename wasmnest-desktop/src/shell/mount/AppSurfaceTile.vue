@@ -3,9 +3,12 @@
        实例容器由宿主挂载层搬进来（等比缩放），首帧就是完整品牌卡；
        实例在场才淡入真实画面，缺失（装载失败 / 已停用）则停在 fallback。 -->
   <div class="app-live" :data-live-state="phase">
+    <!-- 不能挂 tone-* 类：tone 类带 1px 边框，渐变背景会在边框环里按
+         background-origin（padding-box）重绘，卡片底部会露出渐变起点色的细线。
+         品牌渐变统一走 fallbackStyle 的 inline background。 -->
     <div
       class="app-live-fallback"
-      :class="[{ 'is-hidden': phase === 'live' }, 'tone-' + tone]"
+      :class="{ 'is-hidden': phase === 'live' }"
       :style="fallbackStyle"
     >
       <ShellAppTile :icon="icon" :plugin-id="appId" :icon-file="iconFile" :tone="tone" :size="92" />

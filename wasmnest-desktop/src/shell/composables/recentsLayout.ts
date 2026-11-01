@@ -1,14 +1,15 @@
 /**
  * 多任务卡片带尺寸解算（`ShellTaskSwitcher` 专用；纯函数，不碰 DOM）
  *
- * 产品口径（2026-10-23 用户裁决，修正上一版的反方向；2026-10-30 卡片改横版）：
- * - 卡片越少越大：只有 1 张时取卡片带里的**最大**尺寸（居中显示）；
+ * 产品口径（2026-10-23 用户裁决，修正上一版的反方向；2026-11-01 卡片改竖版）：
+ * - 卡片越少越大：只有 1 张时取卡片带里的**最大**尺寸（居中显示），但不得超过
+ *   「两张卡时的格宽」（2026-11-01 用户裁决，见 `recentsCardMaxWidth`）；
  * - 卡片越多越小，但**最小**只缩到「2 行 × 3 列」网格排布时的自适应格；
  * - 第 7 张起（超过 2 行）不再继续缩小，改为整带纵向滚动。
  *
- * 卡片保持横版 16/10（与 `.ts-card` 的 `aspect-ratio` 同一常量）：缩略区展示的是
- * 真实实例的全屏横向画面，竖卡只能上下留大片空带。所以「最大尺寸」= 带内能放下的
- * 最大 16:10 矩形：宽受带高限制时以高度为准（单卡 = 1.6 × 带高）。
+ * 卡片是竖版 3/4（与 `.ts-card` 的 `aspect-ratio` 同一常量；2026-11-01 用户裁决
+ * 「高比宽长才好看」，替换之前的 16:10 横版）。带高是竖卡的天然瓶颈：单卡通常由
+ * 「带高 × 3/4」决定宽度，再由「两张卡格宽」封顶——两个上限取小。
  *
  * 带尺寸由调用方实测后传入（内边距 / 滚动条已由调用方扣掉）：**不能**改成 CSS
  * 容器查询——WebKitGTK 下 `container-type: size` 的高度解析为 0，卡片会塌成不可见
@@ -19,10 +20,25 @@
 export const RECENTS_MAX_COLS = 3
 /** 视野内最多几行；超出的行改为纵向滚动（不再缩小） */
 export const RECENTS_MAX_VISIBLE_ROWS = 2
-/** 卡片宽高比（宽 / 高）；与 `.ts-card` 的 `aspect-ratio` 同源，改一处必须改另一处 */
-export const RECENTS_CARD_ASPECT = 16 / 10
+/** 卡片宽高比（宽 / 高 = 3/4 竖版，与移动端 recents 同形）；与 `.ts-card` 的 aspect-ratio 同源 */
+export const RECENTS_CARD_ASPECT = 3 / 4
 /** 网格轨道数上限：三列拆成 6 个半列轨道，每张卡跨 2 轨 */
 export const RECENTS_GRID_TRACKS = 6
+
+/**
+ * 单卡尺寸上限 = 同一带内「两张卡」时的格宽（宽 / 高都由它派生）
+ *
+ * 2026-11-01 用户裁决（第二轮）：上一版给了固定 880×550 上限，用户仍觉得「单卡非常大」；
+ * 产品口径改为——**1 张卡不得比 2 张卡更大**。两张卡时本来就要横向均分带宽，
+ * 这个尺寸也是用户认可过的可读尺寸，所以直接把它作为上限，不再另立固定像素值。
+ *
+ * 取「按宽度均分的两列宽」与「按带高反推的 3:4 宽」的较小值：带宽不够时按宽度，
+ * 带高不够时按高度，与 `recentsCardWidth(2, band)` 同一公式。
+ */
+export function recentsCardMaxWidth(band: RecentsBand): number {
+  if (!(band.width > 0) || !(band.height > 0)) return 0
+  return Math.min((band.width - band.gap) / 2, band.height * RECENTS_CARD_ASPECT)
+}
 
 /**
  * 本次排布用几轨（半列）：三列 = 6 轨，1 / 2 张卡收窄到 2 / 4 轨。
@@ -69,9 +85,11 @@ export function recentsGridShape(count: number): RecentsGridShape {
 /**
  * 单张卡宽度（px，向下取整：亚像素会把最后一张挤出换行、白赚一条滚动条）
  *
- * 取「按宽度均分的列宽」与「按高度均分的行高反推的 16:10 宽度」的较小值：
- * - 宽窗口（16:9）：高度是瓶颈 → 1 张 = 1.6 × 带高，2 张与 1 张同高；
- * - 窄窗口：宽度是瓶颈 → 按列数均分。
+ * 取「按宽度均分的列宽」与「按高度均分的行高反推的 3:4 宽度」的较小值，再受
+ * 「两张卡格宽」封顶（`recentsCardMaxWidth`）：
+ * - 竖版卡（3:4）：带高通常是瓶颈 → 单卡 = 带高 × 3/4，但不超过两张卡的格宽；
+ * - 窄窗口：宽度是瓶颈 → 按列数均分；
+ * - 1 张卡与 2 张卡同尺寸（2026-11-01 用户裁决：单卡不得比两张卡大）。
  *
  * @returns 0 = 还量不到带尺寸（首帧测量前 / 无布局的测试环境）：调用方保留 CSS 兜底宽度
  */
@@ -80,7 +98,8 @@ export function recentsCardWidth(count: number, band: RecentsBand): number {
   const { cols, rows } = recentsGridShape(count)
   const byWidth = (band.width - band.gap * (cols - 1)) / cols
   const byHeight = ((band.height - band.gap * (rows - 1)) / rows) * RECENTS_CARD_ASPECT
-  return Math.max(0, Math.floor(Math.min(byWidth, byHeight)))
+  // 上限对任何张数都生效；3 张起本来就更窄，实际只在单卡时起作用
+  return Math.max(0, Math.floor(Math.min(byWidth, byHeight, recentsCardMaxWidth(band))))
 }
 
 /**

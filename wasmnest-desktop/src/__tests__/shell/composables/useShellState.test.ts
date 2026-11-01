@@ -258,6 +258,61 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
     })
   })
 
+  describe('自启动 / 运行中应用补卡（2026-11-01 用户裁决）', () => {
+    it('运行中但本次会话没打开过的应用（自启动）也要有卡', () => {
+      seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
+      const s = useShellState()
+      expect(s.cards.value).toEqual([])
+
+      s.syncRunningCards()
+
+      expect(s.cards.value, '自启动应用必须出现在多任务里').toEqual([
+        `app:${TERMINAL_PLUGIN_ID}`,
+      ])
+      expect(s.hasAppSession(TERMINAL_PLUGIN_ID)).toBe(true)
+    })
+
+    it('服务型应用不补卡（§3.3：关闭唯一入口 = 应用管理页停用）', () => {
+      seedApp('com.wasmnest.monitor', 'Monitor', '/monitor', 'internal-business')
+      const s = useShellState()
+
+      s.syncRunningCards()
+
+      expect(s.cards.value).toEqual([])
+    })
+
+    it('幂等 + 不重复：已有卡顺序不变，只追加缺的；未运行 / 待审批不补', () => {
+      const s = useShellState()
+      s.openSys('settings')
+      apps.plugins.value = [
+        { id: TERMINAL_PLUGIN_ID, name: 'BedCode', route: '/sessions', state: 'running' },
+        { id: 'com.wasmnest.pending', name: 'Pending', route: '/chat', state: 'approval' },
+        { id: 'com.wasmnest.sleeping', name: 'Sleeping', route: '/transfer', state: 'dormant' },
+      ]
+
+      s.syncRunningCards()
+      s.syncRunningCards()
+
+      expect(s.cards.value).toEqual(['sys:settings', `app:${TERMINAL_PLUGIN_ID}`])
+    })
+
+    it('已打开的应用不重复产卡；降级态也算运行中', () => {
+      const s = useShellState()
+      apps.plugins.value = [
+        { id: TERMINAL_PLUGIN_ID, name: 'BedCode', route: '/sessions', state: 'running' },
+        { id: 'com.wasmnest.degraded', name: 'Degraded', route: '/chat', state: 'degraded' },
+      ]
+
+      s.syncRunningCards()
+      s.syncRunningCards()
+
+      expect(s.cards.value).toEqual([
+        `app:${TERMINAL_PLUGIN_ID}`,
+        `app:com.wasmnest.degraded`,
+      ])
+    })
+  })
+
   describe('卡片 MRU 与关闭（真停用）', () => {
     it('activateCard（多任务层点卡）：MRU 置顶 + 切到对应路由', () => {
       const s = useShellState()

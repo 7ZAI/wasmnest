@@ -97,7 +97,14 @@ function measureInDocument(surface: AppSurfaceRecord): void {
 }
 
 /**
- * 按卡片盒子的可用尺寸等比缩放实例的整幅画面（居中留边）。
+ * 按卡片盒子的可用尺寸等比缩放实例的整幅画面（**铺满**缩略区，多出的部分裁切）。
+ *
+ * 用 `Math.max` 而不是 `Math.min`（2026-11-01 用户裁决）：卡片比例跟实例整幅比例
+ * 不一致时，contain 会在缩略区两侧 / 上下留出空白边带，看起来像「应用界面没铺满卡片」。
+ * cover 取较大比例放大到盖住整块缩略区，多出的部分由容器 overflow:hidden 裁掉。
+ *
+ * 裁切定位：**左上对齐**（x = 0, y = 0）——竖版卡片裁掉的是应用横向溢出，
+ * 优先保留应用自己的侧栏 / 顶栏（最强的识别线索），右 / 下被裁。
  *
  * 尺寸没量到（首次布局前 / 测试环境）时保持上次的 transform：卡片尺寸变化会由
  * 调用方（ResizeObserver）再调一次，不在这里猜。
@@ -108,10 +115,8 @@ function fitPreviewStyle(surface: AppSurfaceRecord, boxEl: HTMLElement): void {
   const boxWidth = boxEl.clientWidth
   const boxHeight = boxEl.clientHeight
   if (!(boxWidth > 0) || !(boxHeight > 0)) return
-  const scale = Math.min(boxWidth / size.width, boxHeight / size.height)
-  const x = (boxWidth - size.width * scale) / 2
-  const y = (boxHeight - size.height * scale) / 2
-  surface.host.style.transform = `translate(${x}px, ${y}px) scale(${scale})`
+  const scale = Math.max(boxWidth / size.width, boxHeight / size.height)
+  surface.host.style.transform = `translate(0px, 0px) scale(${scale})`
 }
 
 /** 进入预览态：固定整幅尺寸 + 内联缩放 + inert（卡片里的实例不可交互 / 不可聚焦） */

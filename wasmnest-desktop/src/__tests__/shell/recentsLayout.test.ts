@@ -1,13 +1,19 @@
 /**
- * 多任务卡片尺寸方向（2026-10-23 用户裁决的回归锁）
+ * 多任务卡片尺寸方向（2026-10-23 用户裁决的回归锁；2026-11-01 两轮上限修正）
  *
  * 需求原话：只有一个卡片时卡片居中且取最大宽高；有多个卡片时应当**缩小**，
  * 最小缩到「两行三列」网格排布时的自适应大小；超过两行改为滚动查看。
  * 上一版实现方向恰好相反（卡宽固定三等分 + 420px 上限 → 单卡最小），本文件锁死方向。
  *
+ * 2026-11-01 用户裁决：单卡要有**上限**（桌面单卡曾达到 ~1250×780，几乎整屏）；
+ * 第二轮进一步定为「**不得比两张卡大**」——上限 = 同一带内两张卡的格宽；
+ * 同日第三轮把卡片改成**竖版 3:4**（「高比宽长才好看」，横卡太扁）。
+ * 本文件同时锁中「方向」「上限 = 两张卡」「竖版比例」三边。
+ *
  * 三层断言：
  * 1. 方向：卡片数增加时卡宽单调不增，第 7 张起与第 6 张同尺寸（不再缩，改滚动）；
- * 2. 几何：解算出的卡宽在带内既不溢宽也不溢高（2 行恰好放下，3 行必然溢出 → 滚动）；
+ * 2. 几何：解算出的卡宽在带内既不溢宽也不溢高（2 行恰好放下，3 行必然溢出 → 滚动），
+ *    且任何带尺寸下单卡都不超过两张卡的尺寸；
  * 3. 常量同源：`.ts-card` 的 aspect-ratio 与 RECENTS_CARD_ASPECT 必须一致。
  */
 import { describe, it, expect } from 'vitest'
@@ -19,6 +25,7 @@ import {
   RECENTS_MAX_COLS,
   RECENTS_MAX_VISIBLE_ROWS,
   recentsCardHeight,
+  recentsCardMaxWidth,
   recentsCardPlacement,
   recentsCardWidth,
   recentsGridShape,
@@ -54,20 +61,40 @@ describe('卡片数 → 网格形状（最多 3 列，尺寸行数封顶 2 行�
     expect(recentsGridShape(40)).toEqual(recentsGridShape(6))
   })
 
-  it('常量口径：最多 3 列、可视 2 行', () => {
+  it('常量口径：最多 3 列、可视 2 行、竖版 3:4', () => {
     expect(RECENTS_MAX_COLS).toBe(3)
     expect(RECENTS_MAX_VISIBLE_ROWS).toBe(2)
-    expect(RECENTS_CARD_ASPECT).toBeCloseTo(16 / 10)
+    // 2026-11-01 用户裁决：卡片竖版（高 > 宽），与移动端 recents 同形
+    expect(RECENTS_CARD_ASPECT).toBeCloseTo(3 / 4)
+    expect(RECENTS_CARD_ASPECT).toBeLessThan(1)
   })
 })
 
 describe('方向：卡片越少越大，第 6 张起封底', () => {
-  it('单卡取带内最大 16:10 卡（宽度受带高限制，且明显大于旧的 420px 上限）', () => {
+  it('单卡上限 = 两张卡的格宽：1 张不再比 2 张大', () => {
     const width = recentsCardWidth(1, BAND_16_9)
-    // 宽窗口下高度是瓶颈：宽 = 1.6 × 带高（不是三等分，也不是 420）
+    // 竖版卡：两张卡 = min(横向均分 690, 带高 × 3/4 = 597) = 597 → 由带高封顶
+    expect(width, '单卡必须与两张卡同尺寸').toBe(recentsCardWidth(2, BAND_16_9))
+    expect(width).toBe(Math.floor(recentsCardMaxWidth(BAND_16_9)))
+    expect(recentsCardMaxWidth(BAND_16_9)).toBeCloseTo(
+      Math.min((BAND_16_9.width - BAND_16_9.gap) / 2, BAND_16_9.height * RECENTS_CARD_ASPECT),
+    )
     expect(width).toBe(Math.floor(BAND_16_9.height * RECENTS_CARD_ASPECT))
-    expect(width).toBeGreaterThan(420)
     expect(cardHeight(width)).toBeLessThanOrEqual(BAND_16_9.height)
+  })
+
+  it('大窗口同上：上限由带宽派生，不随窗口无限放大（1 张 = 2 张）', () => {
+    const band: RecentsBand = { width: 3000, height: 2000, gap: 16 }
+    expect(recentsCardWidth(1, band)).toBe(recentsCardWidth(2, band))
+    expect(recentsCardWidth(1, band)).toBe(Math.floor((band.width - band.gap) / 2))
+  })
+
+  it('带高不够时按高度封顶：1 张 = 2 张，不溢高', () => {
+    const band: RecentsBand = { width: 3000, height: 300, gap: 16 }
+    const width = recentsCardWidth(1, band)
+    expect(width).toBe(recentsCardWidth(2, band))
+    expect(width).toBe(Math.floor(band.height * RECENTS_CARD_ASPECT))
+    expect(cardHeight(width)).toBeLessThanOrEqual(band.height)
   })
 
   it('卡片数增加时卡宽单调不增（上一版方向相反的回归点）', () => {
@@ -87,8 +114,8 @@ describe('方向：卡片越少越大，第 6 张起封底', () => {
     }
   })
 
-  it('窄窗口按列均分：1 张仍最大，2 张立刻小于 1 张', () => {
-    expect(recentsCardWidth(1, BAND_MIN)).toBeGreaterThan(recentsCardWidth(2, BAND_MIN))
+  it('窄窗口：1 张与 2 张同尺寸（上限生效），2 张仍大于 3 张', () => {
+    expect(recentsCardWidth(1, BAND_MIN)).toBe(recentsCardWidth(2, BAND_MIN))
     expect(recentsCardWidth(2, BAND_MIN)).toBeGreaterThan(recentsCardWidth(3, BAND_MIN))
     // 3 列时宽度是瓶颈：卡宽 = (带宽 - 两个 gap) / 3 向下取整
     expect(recentsCardWidth(3, BAND_MIN)).toBe(Math.floor((BAND_MIN.width - 2 * BAND_MIN.gap) / 3))
@@ -111,11 +138,19 @@ describe('几何：解算结果在带内不溢宽，两行放得下、三行必�
     expect(height * 3 + BAND_16_9.gap * 2).toBeGreaterThan(BAND_16_9.height)
   })
 
-  it('卡高 = 卡宽 / 16:10（行高与 aspect-ratio 同一公式，不另立一套比例）', () => {
+  it('卡高 = 卡宽 / 3:4（行高与 aspect-ratio 同一公式，不另立一套比例）', () => {
     const width = recentsCardWidth(3, BAND_16_9)
     expect(recentsCardHeight(width)).toBeCloseTo(width / RECENTS_CARD_ASPECT)
     expect(recentsCardHeight(0)).toBe(0)
     expect(recentsCardHeight(-10)).toBe(0)
+  })
+
+  it('单卡与两张卡同高（高度由同一卡宽按 16:10 派生，不另立上限）', () => {
+    const w1 = recentsCardWidth(1, BAND_16_9)
+    const w2 = recentsCardWidth(2, BAND_16_9)
+    expect(w1).toBe(w2)
+    expect(recentsCardHeight(w1)).toBeCloseTo(w1 / RECENTS_CARD_ASPECT)
+    expect(recentsCardHeight(w2)).toBeCloseTo(w2 / RECENTS_CARD_ASPECT)
   })
 
   it('带尺寸没量到（0 / 负数）或没有卡片 → 0，调用方保留 CSS 兜底宽度', () => {

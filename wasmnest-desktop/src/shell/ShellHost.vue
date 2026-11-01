@@ -261,6 +261,17 @@ watch(
   },
 )
 
+/**
+ * 自启动 / 后台运行的应用补多任务卡（2026-11-01 用户裁决）：
+ * 清单落地或变化时调用——自启动应用在首拉里出现，但不经过 openApp，不会自己产卡。
+ * 只增不删（停用走 closeCard / stopAllCards 自己的移除路径）。
+ */
+watch(
+  () => appsStore.plugins.value.map((p) => `${p.id}:${p.state}`).join('|'),
+  () => state.syncRunningCards(),
+  { immediate: true },
+)
+
 /** 壳覆层是否开着（Esc 先收覆层的判据；应用态下也生效——覆层属壳 chrome） */
 const hasOverlay = computed(
   () =>

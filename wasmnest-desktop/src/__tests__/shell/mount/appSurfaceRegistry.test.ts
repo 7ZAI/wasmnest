@@ -218,13 +218,14 @@ describe('多任务卡预览态：真实实例搬运（2026-10-30）', () => {
     expect(host.inert, '卡片里的实例不可交互 / 不可聚焦').toBe(true)
   })
 
-  it('卡片尺寸变化：fitPreview 重算缩放并居中留边', () => {
+  it('卡片尺寸变化：fitPreview 重算缩放并铺满缩略区（左上对齐裁切）', () => {
     registry.attachPreview(APP, box)
-    fakeSize(box, 640, 200)
+    // 640×500 比整幅（1.6）更高：contain 会取 0.5 留上下边，cover 取较大比例 0.625；
+    // 左上对齐（先保应用自己的侧栏 / 顶栏，右侧溢出被裁）
+    fakeSize(box, 640, 500)
 
     expect(registry.fitPreview(APP)).toBe(true)
-    // 等比取小（0.25），宽度方向居中：(640 - 320) / 2 = 160
-    expect(host.style.transform).toBe('translate(160px, 0px) scale(0.25)')
+    expect(host.style.transform).toBe('translate(0px, 0px) scale(0.625)')
   })
 
   it('detachPreview 摘回后台：清掉缩放内联样式，实例与记账保留', () => {

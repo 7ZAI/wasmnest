@@ -3,8 +3,8 @@
  *
  * 2026-10-17 lifecycle-sync 改造后：
  * - 路由是唯一事实源：'/' = 主屏；'/sys/*' = 系统页全屏；app 路由 = 应用界面全屏；
- * - cards = 打开过的面清单（MRU，路由驱动；主屏不展示，工具栏多任务面板消费；
- *   服务型应用 L1/L2 不产卡，见 isServiceFace）；
+ * - cards = 打开过的面清单 ∪ 运行中的应用（MRU；打开/切面驱动 + 清单 watcher 补自启动卡；
+ *   主屏不展示，工具栏多任务面板消费；服务型应用 L1/L2 不产卡，见 isServiceFace）；
  * - **打开 / 关闭走真实生命周期**：openApp = preauthorize → activate（真激活，
  *   仅当前会话，不写启动复活快照）+ 挂载运行面；closeCard / stopApp = deactivate
  *   （**真停用**）成功后才摘面
@@ -29,7 +29,7 @@ const t = i18n.global.t
 // ==================== 主屏 + 面 ====================
 
 const screen = ref<ShellScreen>('home')
-/** 打开过的面清单（MRU 最新在前；工具栏多任务面板与「全部关闭」消费） */
+/** 面清单（MRU 最新在前；打开过 ∪ 运行中（自启动补卡）；工具栏多任务面板与「全部关闭」消费） */
 const cards = ref<CardKey[]>([])
 /** 当前全屏面（screen === 'card' 时非空；由路由同步） */
 const activeCard = ref<CardKey | null>(null)
@@ -149,6 +149,33 @@ function isServiceFace(key: CardKey | null): key is CardKey {
  */
 function hasAppSession(appId: string): boolean {
   return cards.value.some((key) => cardKind(key) === 'app' && cardId(key) === appId)
+}
+
+/**
+ * 运行中应用补齐多任务卡（2026-11-01 用户裁决）
+ *
+ * 自启动应用（宿主启动即 activated）在本次前端会话里从未「打开过」，`cards` 里没有它
+ * → 多任务切换器看不到。卡片的语义从「打开过的面」扩为「打开过的面 ∪ 运行中的应用」
+ * （服务型应用仍不产卡，§3.3；系统页卡不受影响）。
+ *
+ * - **只增不删**：停用由 closeCard / stopAllCards / 应用管理页自己的刷新路径负责；
+ * - 追加到 MRU 末尾（不打断用户最近打开的面顺序）；幂等（已有卡不重复）；
+ * - 由 `ShellHost` 的清单 watcher 调用：自启动应用在清单首拉后才出现，与路由无关。
+ */
+function syncRunningCards(): void {
+  const apps = useShellApps()
+  const carded = new Set(
+    cards.value.filter((key) => cardKind(key) === 'app').map((key) => cardId(key)),
+  )
+  const additions = apps.plugins.value
+    .filter(
+      (app) =>
+        !carded.has(app.id) &&
+        (app.state === 'running' || app.state === 'degraded') &&
+        !isServiceKind(app.kind),
+    )
+    .map((app) => appCardKey(app.id))
+  if (additions.length > 0) cards.value = [...cards.value, ...additions]
 }
 
 /** 进入一个面（MRU 置顶 + 切 card 屏；幂等：重复进入只重排不重复产卡） */
@@ -526,6 +553,7 @@ export function useShellState() {
     screen,
     cards,
     activeCard,
+    syncRunningCards,
     hasAppSession,
     panelOpen,
     quickSettingsOpen,
