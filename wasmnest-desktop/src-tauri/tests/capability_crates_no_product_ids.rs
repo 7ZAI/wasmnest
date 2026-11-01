@@ -77,11 +77,9 @@ const SCANNED_CRATES: &[&str] = &[
     // 通知域轻量契约房（2026-10-13 domain-owned-contracts 票 04）：只持 WIT 契约
     // （实现按端住宿主），零产品语义；抽根即入扫描面。
     "wasmnest-notify-engine",
-    // libp2p 机制引擎（`wasmnest-p2p-engine`）：**当前不在登记表内**——该 crate 只在能力仓
-    // `feat/p2p-engine` 分支存在，dev / uat 线尚未合并，平台线也不消费它。登记一个两条
-    // 测试线都找不到的目录会让 `crate_dir` fail-visible 直接 panic（本锁最危险的失守
-    // 形态），故随检测到的漂移撤下；能力仓把它合回 dev/uat 时，**同一次提交**把它加回
-    // 这里（新建即入面的规矩不变）。
+    // libp2p 机制引擎（P1 传输栈换轨引入：身份桥 / swarm 生命周期 / 准入闸门 /
+    // 具名流协议；纯机制、零产品语义，新建即入扫描面）。
+    "wasmnest-p2p-engine",
     // 机制内核（ADR 0035 D1：组件状态 / 能力模块契约 / 自动注册表 / 自报面）
     // ——2026-10-14 自 PENDING_SCAN_CRATES 转正：本锁过去因它“不是能力域 crate”
     // 而暂缓，但机制面同样不得持产品身份：描述符词段锁（词段判据）管词汇归属，
