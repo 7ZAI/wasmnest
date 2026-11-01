@@ -119,8 +119,10 @@ splashGuardTimer = setTimeout(hideSplash, SPLASH_GUARD_MS)
 
 // apps 任务闸门：壳应用清单非空（后端扫描完成、首页宫格数据就位）即打点——
 // 开屏收起与应用显示的关联点。壳不感知开屏时序（L7 壳内自足锁），宿主在
-// 这儿观察壳清单事实；返回的停止函数随卸载摘除
-const stopAppsListWatch = bindAppsTaskToListReady(() => useShellApps().apps.value.length)
+// 这儿观察壳清单事实；返回的停止函数随卸载摘除。
+// 视图模型只取一次：getter 每次求值都会新建 computed，取值处传已存在的视图模型。
+const shellApps = useShellApps()
+const stopAppsListWatch = bindAppsTaskToListReady(() => shellApps.apps.value.length)
 
 // mDNS 广播暂时禁用
 // const { startAdvertise, stopAdvertise } = useMdnsAdvertiser()
