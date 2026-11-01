@@ -76,12 +76,12 @@ pub fn purge_for_plugin(host_ctx: &wasmnest_wasm_core::host_api::WasmHostContext
 pub const MODULE_NAME: &str = "mobile-host-core";
 
 /// 本模块提供的 WIT 接口（移动独有 / 端差异能力域；契约真源在各能力域 crate 的 wit 分片，
-/// 接口名与拼装 package 内定义逐字一致）
+/// 接口名与拼装 package 内定义逐字一致；版本随契约 0.0.2，落后会让跨端回退判据失配）
 pub const MODULE_INTERFACES: &[&str] = &[
-    "wasmnest:plugin@0.0.1/host-http",
-    "wasmnest:plugin@0.0.1/host-peer",
-    "wasmnest:plugin@0.0.1/host-mdns",
-    "wasmnest:plugin@0.0.1/host-websocket",
+    "wasmnest:plugin@0.0.2/host-http",
+    "wasmnest:plugin@0.0.2/host-peer",
+    "wasmnest:plugin@0.0.2/host-mdns",
+    "wasmnest:plugin@0.0.2/host-websocket",
 ];
 
 /// 本模块读写的权限位（各域权限门的并集；装载期一致性核对用）
