@@ -29,8 +29,12 @@ html.platform-linux {
  * 新增色板 = 加一组 [data-palette='xxx'] 变量覆盖 + 设置页选项，无需改其他代码。
  */
 
-/* 浅色模式 · 默认色板 warm（暖调工作台） */
-:root {
+/* 浅色模式 · 默认色板 warm（暖调工作台）
+   `.theme-base` 与 `:root` 共用这一份基础档：设置页「默认主题」的预览块挂这个类，
+   以免它继承当前主题（<html data-theme>）的 token——否则「默认」那张预览会长成
+   当前主题的样子，用户看不见默认长什么样。 */
+:root,
+.theme-base {
   color-scheme: light;
 
   /* 基础排版：拉丁字形在前、CJK 字形在后（逐字回退）——不写 CJK 家族时，
@@ -269,8 +273,11 @@ html.platform-linux {
   --action-button-size: 32px;
 }
 
-/* 深色模式 · 默认色板 warm */
-:root.dark {
+/* 深色模式 · 默认色板 warm
+   深色预览块也走这份基础档：`:root.dark .theme-base` 让默认主题的预览跟着壳的明暗走
+   （比让 JS 给预览块另挂一个 dark 类更稳——<html> 上的 dark 类是明暗的唯一真源）。 */
+:root.dark,
+:root.dark .theme-base {
   color-scheme: dark;
 
   --bg-page: #15130f;
@@ -352,6 +359,14 @@ html.platform-linux {
       color-mix(in srgb, var(--color-primary) 6%, var(--bg-page)) 60%,
       var(--bg-page) 100%
     );
+}
+
+/* 默认档的中性化：主题专属的三枚 token（环境光 / 图标外框 / 图标投影）不属于默认档，
+   显式归零——否则它们会从当前主题的 <html> 继承下来，默认预览就带上了别人的语汇。 */
+.theme-base {
+  --theme-ambient: none;
+  --theme-icon-shadow: none;
+  --theme-icon-radius: var(--radius-app-icon);
 }
 
 /* ==================== 色板：cool（冷灰调） ==================== */
