@@ -90,43 +90,14 @@ export interface AppMountHandle {
 }
 
 /**
- * 应用预览环境（宿主注入；只读面）
- *
- * 与 {@link AppMountEnv} 的差异是**收窄**而非放行：不提供宿主面 `invoke`、写 / 删
- * 存储、事件出口（navigate / route）。预览是卡片里的旁路展示，不能请求宿主导航、
- * 不能写存储、不能上报路由；安全边界仍由 Rust 权限仲裁（预览没有新增权限）。
- */
-export interface AppPreviewEnv {
-  /** 插件 id（= 应用 id） */
-  appId: string
-  /** 应用上次自报的内部路径；无记录 = undefined（应用自行回落落地页） */
-  lastRoute?: string
-  /** 本 app 插件面命令（与主界面同一令牌 / 权限；预览侧只读使用） */
-  appInvoke: <T = unknown>(command: string, ...args: unknown[]) => Promise<T>
-  /** 本 app 插件 KV 只读访问 */
-  appStorageGet: <T = unknown>(key: string) => Promise<T | undefined>
-  locale: string
-  theme: string
-  platform?: string
-}
-
-/** 应用预览句柄（卸载卡片时宿主调用；预览实例不登记到主应用 mounted 表） */
-export interface AppPreviewHandle {
-  unmount(): Promise<void>
-}
-
-/** entry.ts 可选导出；未导出 = 不支持预览（缺失不是错误，是能力声明） */
-export type MountPreview = (root: HTMLElement, env: AppPreviewEnv) => Promise<AppPreviewHandle>
-
-/**
  * app 挂载包模块面（dev-shell 侧）
  *
- * `mountApp` 必有（否则契约不匹配，dev-shell 显性报错）；`mountPreview` 可选。
- * 与宿主 `useAppMount.ts` 的 `AppBundleModule` 同形。
+ * `mountApp` 必有（否则契约不匹配，dev-shell 显性报错）。
+ * 与宿主 `useAppMount.ts` 的 `AppBundleModule` 同形。自绘预览面（mountPreview）
+ * 已随宿主退役（2026-10-30：多任务卡改挂载保活实例的真实页面，应用不再自报预览）。
  */
 export interface AppBundleModule {
   mountContract?: string
   mountApp?: (root: HTMLElement, env: AppMountEnv) => Promise<AppMountHandle>
-  mountPreview?: MountPreview
   mountMonitorPanel?: MountMonitorPanel
 }

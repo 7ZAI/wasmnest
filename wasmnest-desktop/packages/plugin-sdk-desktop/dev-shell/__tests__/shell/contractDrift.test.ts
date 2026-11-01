@@ -12,8 +12,9 @@
  * 不同的行为（某个字段静默 undefined），而这恰恰是 dev-shell 唯一不该发生的事。
  *
  * 比对对象：
- *   · AppMountEnv / AppMountHandle / AppPreviewEnv / AppPreviewHandle 字段集
- *   · AppBundleModule 字段集（挂载包模块面：mountApp 必有 / mountPreview 可选）
+ *   · AppMountEnv / AppMountHandle / AppBundleModule 字段集
+ *     （AppPreviewEnv / AppPreviewHandle 已随宿主退役——2026-10-30 多任务卡改展示
+ *     保活实例的真实页面、自绘预览面整体下线，宿主 useAppMount.ts 不再声明，见 8243799）
  *
  * 宿主源码不在场时（npm 包内的 dev-shell）整组跳过：没有可比对象，跳过比
  * 「假装通过」诚实——真正的门禁在 monorepo 内跑。
@@ -69,8 +70,6 @@ describeIfHostPresent('挂载契约与宿主一致', () => {
   it.each([
     'AppMountEnv',
     'AppMountHandle',
-    'AppPreviewEnv',
-    'AppPreviewHandle',
     'AppBundleModule',
   ])('should_matchHostFields_when_%sCompared', (name) => {
     const host = fieldsOf(hostSource, name)
