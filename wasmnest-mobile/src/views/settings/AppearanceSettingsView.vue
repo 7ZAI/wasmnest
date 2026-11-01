@@ -83,6 +83,11 @@
               <span v-if="item.dynamic" class="theme-swatch-badge">
                 {{ t('settings.appearance.themeDynamic') }}
               </span>
+              <span v-if="item.id === activeTheme.id" class="theme-picker-check" aria-hidden="true">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 12.5l5.2 5.2L20 7" />
+                </svg>
+              </span>
             </button>
           </div>
           <p class="theme-note">{{ t('settings.appearance.themeHint') }}</p>
@@ -144,6 +149,11 @@
             >
               <span class="wallpaper-swatch shell-wall-swatch" :class="wall.swatchClass" aria-hidden="true" />
               <span class="min-w-0 truncate">{{ wall.label }}</span>
+              <span v-if="wallpaper === wall.id" class="wallpaper-picker-check" aria-hidden="true">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 12.5l5.2 5.2L20 7" />
+                </svg>
+              </span>
             </button>
 
             <!-- 自定义图档位：未选过时是「＋」入口，选过后是图片缩略图 -->
@@ -164,6 +174,11 @@
                 </svg>
               </span>
               <span class="min-w-0 truncate">{{ t('settings.appearance.wallCustom') }}</span>
+              <span v-if="wallpaper === WALLPAPER_CUSTOM" class="wallpaper-picker-check" aria-hidden="true">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 12.5l5.2 5.2L20 7" />
+                </svg>
+              </span>
             </button>
           </div>
 
@@ -415,11 +430,14 @@ function onDimInput(event: Event): void {
   opacity: 0.8;
 }
 
+/* 选中 = 凸起式（与 shell.css .shell-segmented 同一套语汇）：底卡 + 投影浮起。
+   不用 accent 描边/填充表达选中——默认浅色档 accent 是近黑，边框选中会读成
+   「黑框」，2026-10-31 起全宿主禁用。 */
 .settings-segment-btn.active {
-  background: var(--mobile-accent);
-  color: var(--mobile-text-on-accent);
+  background: var(--mobile-bg-card);
+  color: var(--mobile-text-primary);
   font-weight: 500;
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--mobile-accent) 40%, transparent);
+  box-shadow: var(--mobile-card-shadow);
 }
 
 /* ==================== 字体大小滑块（3 档，自绘外观） ==================== */
@@ -518,6 +536,7 @@ function onDimInput(event: Event): void {
 }
 
 .theme-picker-btn {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
@@ -530,16 +549,35 @@ function onDimInput(event: Event): void {
   text-align: left;
   transition:
     background 0.15s ease,
-    border-color 0.15s ease;
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .theme-picker-btn:active {
   background: var(--mobile-bg-tertiary);
 }
 
+/* 选中 = 色调洗染 + 投影浮起 + 右上角勾标，不换描边（浅色档 accent 近黑，
+   accent 描边 = 黑边框选中，2026-10-31 起全宿主禁用） */
 .theme-picker-btn.active {
-  border-color: var(--mobile-accent);
-  background: var(--mobile-bg-elevated);
+  border-color: transparent;
+  background: var(--mobile-accent-muted);
+  box-shadow: var(--mobile-card-shadow);
+}
+
+.theme-picker-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--mobile-accent);
+  color: var(--mobile-text-on-accent);
+  box-shadow: 0 0 0 2px var(--mobile-bg-card);
 }
 
 /* 预览块：挂上主题属性即吃到 theme-presets.css 的真实配色 */

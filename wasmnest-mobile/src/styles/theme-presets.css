@@ -54,19 +54,28 @@
   --mobile-card-shadow: 0 10px 30px rgb(0 0 0 / 42%);
   --mobile-card-shadow-hover: 0 16px 44px rgb(0 0 0 / 52%);
 
-  /* 玻璃表面（分组卡 / 面板共用）：比 bg-card 薄，但不参与决策面 */
+  /* 玻璃表面（分组卡 / 面板共用）：比 bg-card 薄，但不参与决策面。
+     弥散 = 磨砂奶玻璃：面比 liquid 更实（遮得多）、模糊更深、饱和更低，
+     与 liquid（更透更清脆）形成同族两档。 */
   --theme-surface-glass: color-mix(in srgb, var(--mobile-text-primary) 9%, transparent);
-  --theme-glass-blur: 24px;
+  --theme-glass-blur: 28px;
+  --theme-glass-sat: 165%;
+  --theme-specular: color-mix(in srgb, var(--mobile-text-primary) 35%, transparent);
 
   --theme-ambient: radial-gradient(
-      90% 70% at 10% -8%,
+      95% 72% at 10% -10%,
       color-mix(in srgb, var(--mobile-accent) 22%, transparent) 0%,
       transparent 60%
     ),
     radial-gradient(
-      85% 65% at 94% 4%,
-      color-mix(in srgb, var(--mobile-success) 14%, transparent) 0%,
+      85% 66% at 96% 4%,
+      color-mix(in srgb, var(--mobile-success) 16%, transparent) 0%,
       transparent 60%
+    ),
+    radial-gradient(
+      110% 80% at 50% 112%,
+      color-mix(in srgb, var(--mobile-warning) 13%, transparent) 0%,
+      transparent 62%
     ),
     linear-gradient(160deg, #191712 0%, #15130f 100%);
 
@@ -97,17 +106,27 @@ html:not(.dark) [data-theme='diffuse'] {
   --mobile-card-shadow-hover: 0 14px 36px
     color-mix(in srgb, var(--mobile-text-primary) 14%, transparent);
 
-  --theme-surface-glass: color-mix(in srgb, var(--mobile-bg-primary) 26%, rgb(253 252 250 / 78%));
+  /* 磨砂奶玻璃（Vision Pro 口径：重模糊 + 高遮罩 + 柔棱线）：原 78% 白太实，
+     blur 全被盖死——2026-10-31 adb 审查与 liquid 同病。70% 白 = 比 liquid
+     （62%）更「奶」，同族两档才立得住。 */
+  --theme-surface-glass: color-mix(in srgb, var(--mobile-bg-primary) 10%, rgb(253 252 250 / 70%));
+  --theme-glass-sat: 165%;
+  --theme-specular: color-mix(in srgb, #fdfcfa 55%, transparent);
 
   --theme-ambient: radial-gradient(
-      90% 70% at 10% -10%,
-      color-mix(in srgb, var(--mobile-accent) 10%, transparent) 0%,
+      95% 72% at 10% -12%,
+      color-mix(in srgb, var(--mobile-accent) 12%, transparent) 0%,
       transparent 62%
     ),
     radial-gradient(
-      85% 65% at 94% 2%,
-      color-mix(in srgb, var(--mobile-success) 10%, transparent) 0%,
+      85% 66% at 96% 2%,
+      color-mix(in srgb, var(--mobile-success) 13%, transparent) 0%,
       transparent 60%
+    ),
+    radial-gradient(
+      110% 80% at 50% 114%,
+      color-mix(in srgb, var(--mobile-warning) 10%, transparent) 0%,
+      transparent 62%
     ),
     linear-gradient(160deg, #f5f4f0 0%, color-mix(in srgb, var(--mobile-accent) 5%, #f5f4f0) 100%);
 
@@ -139,17 +158,26 @@ html:not(.dark) [data-theme='diffuse'] {
 
   --theme-surface-glass: color-mix(in srgb, var(--mobile-text-primary) 11%, transparent);
   --theme-glass-blur: 30px;
+  --theme-glass-sat: 175%;
   --theme-specular: color-mix(in srgb, var(--mobile-text-primary) 60%, transparent);
 
+  /* 环境光要给玻璃「可折射的东西」：底色越匀，blur+saturate 越没东西可采样，
+     表面就只剩一片闷灰（2026-10-31 adb 截图审查结论）。三枚 blob 分别沉在
+     左上 / 右上 / 底部，亮度与色相各占一角，模糊后才有色彩起伏。 */
   --theme-ambient: radial-gradient(
       110% 85% at 6% -12%,
-      color-mix(in srgb, var(--mobile-accent) 26%, transparent) 0%,
+      color-mix(in srgb, var(--mobile-accent) 30%, transparent) 0%,
       transparent 58%
     ),
     radial-gradient(
       95% 78% at 98% 2%,
-      color-mix(in srgb, var(--mobile-error) 14%, transparent) 0%,
+      color-mix(in srgb, var(--mobile-error) 16%, transparent) 0%,
       transparent 56%
+    ),
+    radial-gradient(
+      120% 85% at 50% 110%,
+      color-mix(in srgb, var(--mobile-warning) 14%, transparent) 0%,
+      transparent 60%
     ),
     linear-gradient(150deg, #191712 0%, #15130f 100%);
 
@@ -180,7 +208,11 @@ html:not(.dark) [data-theme='liquid'] {
   --mobile-card-shadow-hover: 0 18px 44px
     color-mix(in srgb, var(--mobile-text-primary) 16%, transparent);
 
-  --theme-surface-glass: color-mix(in srgb, var(--mobile-bg-primary) 20%, rgb(253 252 250 / 76%));
+  /* 表面比默认主题薄一档（62% ≈ 桌面 liquid glass 同档）：玻璃感 = 薄面 +
+     blur + 高饱和采样共同成立，面太实（原 76%+）时后两者全被盖死。
+     可读性由 blur 补偿：环境光是低对比 pastel blob，透出也不扰文字。 */
+  --theme-surface-glass: color-mix(in srgb, var(--mobile-bg-primary) 6%, rgb(253 252 250 / 62%));
+  --theme-glass-sat: 185%;
   --theme-specular: color-mix(in srgb, #fdfcfa 78%, transparent);
 
   --theme-ambient: radial-gradient(
@@ -190,8 +222,18 @@ html:not(.dark) [data-theme='liquid'] {
     ),
     radial-gradient(
       95% 78% at 98% 2%,
-      color-mix(in srgb, var(--mobile-error) 8%, transparent) 0%,
+      color-mix(in srgb, var(--mobile-error) 12%, transparent) 0%,
       transparent 56%
+    ),
+    radial-gradient(
+      120% 85% at 50% 112%,
+      color-mix(in srgb, var(--mobile-warning) 14%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      80% 60% at 92% 96%,
+      color-mix(in srgb, var(--mobile-success) 10%, transparent) 0%,
+      transparent 55%
     ),
     linear-gradient(150deg, #f5f4f0 0%, color-mix(in srgb, var(--mobile-accent) 6%, #f5f4f0) 100%);
 
@@ -218,15 +260,32 @@ html:not(.dark) [data-theme='liquid'] {
   --mobile-input-bg: #1d1a15;
   --mobile-overlay: rgb(21 19 15 / 82%);
 
-  --mobile-card-shadow: 3px 3px 0 color-mix(in srgb, var(--mobile-text-primary) 70%, transparent);
-  --mobile-card-shadow-hover: 5px 5px 0
+  /* 硬偏移投影 4px（neobrutalism 标准档，ekmas/neobrutalism-components 同款） */
+  --mobile-card-shadow: 4px 4px 0 color-mix(in srgb, var(--mobile-text-primary) 70%, transparent);
+  --mobile-card-shadow-hover: 6px 6px 0
     color-mix(in srgb, var(--mobile-text-primary) 78%, transparent);
 
   --theme-surface-glass: #1d1a15;
   --theme-glass-blur: 0px;
 
+  /* 超色彩的身份是「色场」不是「光晕」：硬边色带（warning/error 大块压顶），
+     非 glass 主题的柔光 radial——blur 0 + 硬边才跟 2px 描边同一语汇 */
+  --theme-ambient: linear-gradient(
+      172deg,
+      color-mix(in srgb, var(--mobile-warning) 26%, transparent) 0%,
+      color-mix(in srgb, var(--mobile-warning) 10%, transparent) 20%,
+      transparent 40%
+    ),
+    linear-gradient(
+      350deg,
+      color-mix(in srgb, var(--mobile-error) 20%, transparent) 0%,
+      color-mix(in srgb, var(--mobile-error) 8%, transparent) 16%,
+      transparent 36%
+    ),
+    linear-gradient(150deg, #191712 0%, #15130f 100%);
+
   --theme-icon-radius: 16%;
-  --theme-icon-shadow: 3px 3px 0 color-mix(in srgb, var(--mobile-text-primary) 70%, transparent);
+  --theme-icon-shadow: 4px 4px 0 color-mix(in srgb, var(--mobile-text-primary) 70%, transparent);
 }
 
 html:not(.dark)[data-theme='hyper'],
@@ -248,29 +307,76 @@ html:not(.dark) [data-theme='hyper'] {
   --mobile-input-bg: #fdfcfa;
   --mobile-overlay: rgb(38 35 27 / 46%);
 
-  --mobile-card-shadow: 3px 3px 0 var(--mobile-text-primary);
-  --mobile-card-shadow-hover: 5px 5px 0 var(--mobile-text-primary);
+  --mobile-card-shadow: 4px 4px 0 var(--mobile-text-primary);
+  --mobile-card-shadow-hover: 6px 6px 0 var(--mobile-text-primary);
 
   --theme-surface-glass: #fdfcfa;
-  --theme-icon-shadow: 3px 3px 0 var(--mobile-text-primary);
+  --theme-icon-shadow: 4px 4px 0 var(--mobile-text-primary);
+
+  /* 浅色档色场：暖琥珀顶 + 红角，饱和档位比暗色更高（超色彩主义的名头） */
+  --theme-ambient: linear-gradient(
+      172deg,
+      color-mix(in srgb, var(--mobile-warning) 28%, transparent) 0%,
+      color-mix(in srgb, var(--mobile-warning) 12%, transparent) 20%,
+      transparent 42%
+    ),
+    linear-gradient(
+      350deg,
+      color-mix(in srgb, var(--mobile-error) 22%, transparent) 0%,
+      color-mix(in srgb, var(--mobile-error) 9%, transparent) 16%,
+      transparent 36%
+    ),
+    linear-gradient(150deg, #f5f4f0 0%, color-mix(in srgb, var(--mobile-accent) 6%, #f5f4f0) 100%);
 }
 
 /* ==================== 结构性规则 ==================== */
 
-/* 玻璃主题：分组卡与面板改用更薄的一层 + 背景模糊（决策面不在命中范围） */
+/* 玻璃主题：分组卡与面板改用更薄的一层 + 背景模糊（决策面不在命中范围）。
+   饱和提升走 --theme-glass-sat：玻璃材质要靠「透出的色彩被提纯」才读得出来，
+   默认 150% 是 diffuse 档，liquid 自带更高一档。 */
 [data-theme='diffuse'] .settings-group,
 [data-theme='liquid'] .settings-group,
 [data-theme='diffuse'] .shell-group-card,
 [data-theme='liquid'] .shell-group-card {
   background: var(--theme-surface-glass);
-  -webkit-backdrop-filter: blur(var(--theme-glass-blur)) saturate(150%);
-  backdrop-filter: blur(var(--theme-glass-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--theme-glass-blur)) saturate(var(--theme-glass-sat, 150%));
+  backdrop-filter: blur(var(--theme-glass-blur)) saturate(var(--theme-glass-sat, 150%));
 }
 
-/* 液态玻璃：顶部 1px 镜面棱线（与桌面同一支语汇） */
+/* 液态玻璃：顶部 1px 镜面棱线 + 底部一道更弱的内影（厚度靠两道，与桌面同一支语汇） */
 [data-theme='liquid'] .settings-group,
 [data-theme='liquid'] .shell-group-card {
-  box-shadow: inset 0 1px 0 var(--theme-specular, transparent), var(--mobile-card-shadow);
+  box-shadow:
+    inset 0 1px 0 var(--theme-specular, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--mobile-text-primary) 6%, transparent),
+    var(--mobile-card-shadow);
+}
+
+/* 弥散玻璃：同一支棱线但更弱（磨砂面反光本来就柔，桌面 diffuse 55%/10% 同档） */
+[data-theme='diffuse'] .settings-group,
+[data-theme='diffuse'] .shell-group-card {
+  box-shadow:
+    inset 0 1px 0 var(--theme-specular, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--mobile-text-primary) 4%, transparent),
+    var(--mobile-card-shadow);
+}
+
+/* 玻璃主题：通知栏面板同吃玻璃材质——它是壁纸前最大的一块覆盖面，
+   保持实心 bg-card 时整屏只有分组卡在「演」玻璃。模糊比分组卡深一档。 */
+[data-theme='diffuse'] .shell-shade-panel,
+[data-theme='liquid'] .shell-shade-panel {
+  background: var(--theme-surface-glass);
+  -webkit-backdrop-filter: blur(calc(var(--theme-glass-blur) + 6px)) saturate(var(--theme-glass-sat, 150%));
+  backdrop-filter: blur(calc(var(--theme-glass-blur) + 6px)) saturate(var(--theme-glass-sat, 150%));
+}
+
+/* 玻璃主题：主屏系统宫格瓦片改玻璃井（小面积元素模糊浅一档，图标线稿对比度
+   由背后的壁纸透光提供，实心 bg-card 在玻璃主题下反而像贴纸） */
+[data-theme='diffuse'] .shell-sys-tile,
+[data-theme='liquid'] .shell-sys-tile {
+  background: var(--theme-surface-glass);
+  -webkit-backdrop-filter: blur(calc(var(--theme-glass-blur) - 8px)) saturate(var(--theme-glass-sat, 150%));
+  backdrop-filter: blur(calc(var(--theme-glass-blur) - 8px)) saturate(var(--theme-glass-sat, 150%));
 }
 
 /* 超色彩主义：硬边 + 无模糊投影（层级靠位移） */
@@ -286,9 +392,11 @@ html:not(.dark) [data-theme='hyper'] {
   box-shadow: var(--theme-icon-shadow, none);
 }
 
-/* 无壁纸时铺主题自带环境光（用户显式选了壁纸就以壁纸为准） */
+/* 无壁纸时铺主题自带环境光（用户显式选了壁纸就以壁纸为准）；
+   hyper 不走 blur 光晕，走自己的硬边色场 */
 [data-theme='diffuse'] .shell-ui,
-[data-theme='liquid'] .shell-ui {
+[data-theme='liquid'] .shell-ui,
+[data-theme='hyper'] .shell-ui {
   background-image: var(--theme-ambient);
 }
 
