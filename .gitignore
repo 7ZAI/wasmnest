@@ -161,6 +161,9 @@ temp/
 # CodeBuddy 工具配置目录（memory/rules，非项目文件）
 .codebuddy/
 
+# WorkBuddy 工具配置目录（memory，非项目文件）
+.workbuddy/
+
 # Android/iOS signing keys (NEVER commit these!)
 *.keystore
 *.jks

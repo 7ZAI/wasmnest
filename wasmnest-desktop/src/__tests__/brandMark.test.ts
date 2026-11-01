@@ -6,7 +6,7 @@
  * 启动语义（等应用清单就绪）并入 SplashLoading 绘画动画版，不再有第三个品牌位。
  *
  * 品牌两档（icon.svg 真源三档降级的宿主侧两档）：
- *   · SplashLoading（启动面大尺寸位）＝ 真源高档：icon.svg 镂空线框（124 条描边曲线，
+ *   · SplashLoading（启动面大尺寸位）＝ 真源高档：icon.svg 镂空线框（120 条描边曲线，
  *     四根圆柱螺旋编织），与图标逐字同源——L1b 钉住 g 变换 + 每条 points ∈ icon.svg。
  *   · ShellToolbar（工具栏小尺寸位）＝ 实心态降级档：编织 W 四根棒料——L1a 钉住。
  * wasm-app 不再有自绘标题栏，故 app 侧没有品牌位（原

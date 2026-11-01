@@ -49,7 +49,7 @@ function info(state: PluginState, patch: Partial<PluginInfo> = {}): PluginInfo {
     description: '',
     author: '',
     main: 'index.js',
-    pluginType: 'rust-ts',
+    pluginType: 'full',
     permissions: [],
     contributes: {},
     state,
@@ -166,15 +166,15 @@ describe('启动与停止', () => {
     expect(cmds.pluginActivate).not.toHaveBeenCalled()
   })
 
-  it('should_activateBackendOnly_when_pluginIsRustOnly', async () => {
+  it('should_activateBackendOnly_when_pluginIsBackendForm', async () => {
     vi.mocked(cmds.pluginGetInfo).mockResolvedValueOnce(
-      info({ state: 'loaded' }, { pluginType: 'rust' }),
+      info({ state: 'loaded' }, { pluginType: 'backend' }),
     )
     const source = createPluginAppSource()
 
     await source.launch('com.test.app')
 
-    // rust-only 没有前端入口，loader 会尝试 import 不存在的入口而失败
+    // backend 形态没有前端入口，loader 会尝试 import 不存在的入口而失败
     expect(cmds.pluginActivate).toHaveBeenCalledWith('com.test.app')
     expect(pluginLoader.activate).not.toHaveBeenCalled()
   })

@@ -60,5 +60,11 @@ export const SPLASH_CONFIG = {
     { id: 'plugins', labelKey: 'mobile.splash.linePlugins' },
     { id: 'connection', labelKey: 'mobile.splash.lineConnection' },
     { id: 'ui', labelKey: 'mobile.splash.lineUi' },
+    // 应用清单就绪:后端扫描(解压 → WASM 运行时 → 扫描加载)晚于前端就绪,首次
+    // plugin_list_loaded 查询多半为空——plugins 打点只代表前端初始化完成,不代表
+    // 清单可显示。此行是开屏收起的最后闸门,由宿主侧闸门(App.vue 经
+    // bindAppsTaskToListReady 观察壳清单非空)打点,保证开屏收起时首页应用已在;
+    // 零应用等异常由 App.vue 的兜底时长接管
+    { id: 'apps', labelKey: 'mobile.splash.lineApps' },
   ] as SplashLineConfig[],
 } as const

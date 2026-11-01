@@ -3,7 +3,7 @@
  *
  * 被测：
  *   · `src/shell/composables/useShellNotifications.ts`（平台通知的存储与生命周期）
- *   · `src/shell/components/ShellNotificationShade.vue`（独立通知面：待处理 + 通知 + 清除）
+ *   · `src/shell/components/ShellNotificationShade.vue`（独立通知面：待处理 + 通知 + 头部扫除图标清除）
  *
  * | 契约 | 来源 | 规则 | 预期 |
  * |---|---|---|---|
@@ -18,6 +18,7 @@
  * | C-N9 | 通知栏动作 | 单条关闭 / 清除全部 / 去审批 / 打开应用 | 分别落到 dismiss / clear / openDetail / openShellApp |
  * | C-N10 | 滑动删除 | 水平滑超阈值删除（带滑出动画）；短滑回弹；垂直滚动让位；驻留项豁免 | 超阈值→移除；短/垂直/sticky→保留 |
  * | C-N11 | 滑动指示层 | 卡片滑开露出的删除层不用破坏色实心大块（太抢眼），底色由 token 混色派生 | 层挂 .notify-swipe-reveal；shell.css 里该类用 color-mix + --mobile-error |
+ * | C-N12 | 清除全部入口 | 面板右上角扫除图标（无可见文字 / aria-label 可访问）；只剩驻留项不渲染 | 无底部动作栏；图标落在 header；sticky-only 无入口 |
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -225,11 +226,15 @@ describe('C-N7/C-N8 通知栏内容与计数', () => {
 
   it('should_showEmptyState_when_nothingToShow', () => {
     shadeOpen.value = true
-    const text = mountShade().text()
+    const wrapper = mountShade()
+    const text = wrapper.text()
 
     expect(text).toContain('shell.notify.empty')
     expect(text).toContain('shell.notify.emptyHint')
-    expect(text, '无内容时不渲染「清除全部」').not.toContain('shell.notify.clearAll')
+    expect(
+      wrapper.find('button[aria-label="shell.notify.clearAll"]').exists(),
+      '无内容时不渲染「清除全部」',
+    ).toBe(false)
   })
 
   it('should_renderNothing_when_shadeClosed', () => {
@@ -281,11 +286,16 @@ describe('C-N9 通知栏动作', () => {
     shadeOpen.value = true
     const wrapper = mountShade()
 
+    // 2026-11-01 用户裁决：底部整行「清除全部」按钮退役，改为面板右上角的扫除图标。
+    // 图标按钮没有可见文字，按 aria-label 找（可访问名保留原 key）。
     const clearBtn = wrapper
       .findAll('button')
-      .find((b) => b.text().includes('shell.notify.clearAll'))!
+      .find((b) => b.attributes('aria-label') === 'shell.notify.clearAll')
     expect(clearBtn, '有非驻留条目时应提供「清除全部」').toBeTruthy()
-    await clearBtn.trigger('click')
+    expect(clearBtn!.text(), '清除全部只留图标，不带可见文字').toBe('')
+    expect(clearBtn!.element.closest('header'), '入口在面板头部（右上角）').toBeTruthy()
+    expect(wrapper.find('.shell-btn-danger-outline').exists(), '底部动作栏已退役').toBe(false)
+    await clearBtn!.trigger('click')
 
     // 2026-10-15：清除全部改为级联飞离动画（等差逐张右飞）——点击后非立即清空，
     // 末张飞完（360ms + 等差步长）才真正落库；动画期间非驻留卡仍在
@@ -300,6 +310,24 @@ describe('C-N9 通知栏动作', () => {
       { timeout: 2000, interval: 50 },
     )
     wrapper.unmount()
+  })
+
+  it('should_hideClearAll_when_onlyStickyEntriesRemain', () => {
+    notifications.pushNotification({
+      kind: 'event',
+      icon: 'i',
+      source: 's',
+      title: 'needs-action',
+      sticky: true,
+    })
+    shadeOpen.value = true
+
+    const wrapper = mountShade()
+    expect(wrapper.text(), '驻留项仍在列表里').toContain('needs-action')
+    expect(
+      wrapper.find('button[aria-label="shell.notify.clearAll"]').exists(),
+      '只剩驻留项时清除全部是 no-op，不渲染入口',
+    ).toBe(false)
   })
 
   it('should_openDetailAndCloseShade_when_pendingCardTapped', async () => {

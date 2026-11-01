@@ -22,7 +22,7 @@ vi.mock('@/shell/components/splashTiming', async (importOriginal) => {
  *
  * 钉住：
  * - 无文字 / 无进度条，加载进度 = 绘画动画
- * - 线框与 icon.svg 逐字同源（124 条、双色、无实心态填充层）
+ * - 线框与 icon.svg 逐字同源（120 条、双色、无实心态填充层）
  * - 两条完成路径：SVG 可测量 → rAF 逐笔描边；不可测量 / reduced-motion → complete
  * - 品牌位尺寸与描边偏移公式来自 splashTiming.ts（纯函数真源）
  * - 不自绘 CSS 动画回退（两端统一 rAF 驱动）
@@ -105,7 +105,7 @@ describe('SplashLoading (mobile)', () => {
     expect(svg.querySelector('.logo-base')).toBeTruthy()
     const lines = svg.querySelectorAll('.logo-line')
     expect(lines.length).toBe(ICON_POLY_COUNT)
-    expect(ICON_POLY_COUNT).toBe(124)
+    expect(ICON_POLY_COUNT).toBe(120)
 
     const iconPoints = new Set(
       [...ICON_SVG.matchAll(/<polyline points="([^"]+)"/g)].map((m) => m[1]),

@@ -101,11 +101,12 @@ app 在 `src/index.ts` 导出 `devMock`（各 app 自持演示数据）时，dev
 **没有导出的 app**（如 ai-chatbox / bedcode / monitor）只校验壳与布局：其命令会在
 日志面板里报「未注册 mock」，这是预期状态，不是 dev-shell 的故障。
 
-### 预览面（mountPreview）
+### 预览面（已退役）
 
-宿主的多任务卡片预览面（`mountPreview`）在 dev-shell **不复刻**（dev-shell 没有多任务
-卡片层）。契约类型在 dev-shell 侧与宿主对齐，但预览路径未被 dev-shell 覆盖——
-预览相关的行为需在真机验证。
+宿主的多任务卡片预览面（`mountPreview` / `AppPreviewEnv`）已于 2026-10-30 整体退役：
+卡片改为挂载保活实例的真实页面，应用不再自报预览。dev-shell 侧的契约类型同步删除
+（`src/shell/types.ts`），`contractDrift` 漂移锁不再比对 `AppPreview*`——应用若仍导出
+`mountPreview`，宿主与 dev-shell 都不再消费。
 
 ## 常见问题
 
