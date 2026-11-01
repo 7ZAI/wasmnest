@@ -94,6 +94,7 @@ export default {
       linePlugins: '装配插件面板',
       lineConnection: '向局域网喊话 · 搜索主机',
       lineUi: '校准显示与安全区',
+      lineApps: '清点 WASM 应用',
     },
   },
 }

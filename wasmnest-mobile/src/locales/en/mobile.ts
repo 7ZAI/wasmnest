@@ -100,6 +100,7 @@ export default {
       linePlugins: 'Assembling plugin panels',
       lineConnection: 'Calling LAN · Seeking host',
       lineUi: 'Calibrating display & safe area',
+      lineApps: 'Indexing wasm apps',
     },
   },
 }
