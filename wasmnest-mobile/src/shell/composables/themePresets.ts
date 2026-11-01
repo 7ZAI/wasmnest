@@ -19,7 +19,7 @@ export interface BuiltinThemeDescriptor {
   /** 一行说明 i18n key */
   descKey: string
   order: number
-  /** 主题自带缓慢动效（背景漂移），受 .anim-disabled 与 reduced-motion 抑制 */
+  /** 主题自带缓慢动效（背景漂移），受 prefers-reduced-motion 抑制 */
   dynamic: boolean
   glyphStyle?: ShellThemeGlyphStyle
 }
@@ -39,18 +39,11 @@ export const BUILTIN_THEMES: readonly BuiltinThemeDescriptor[] = [
     dynamic: false,
   },
   {
-    id: 'diffuse',
-    labelKey: 'settings.appearance.themeDiffuse',
-    descKey: 'settings.appearance.themeDiffuseDesc',
+    // glassmorphism + liquid glass 合并为一套（原 diffuse / liquid 两个 id 退役）
+    id: 'glass',
+    labelKey: 'settings.appearance.themeGlass',
+    descKey: 'settings.appearance.themeGlassDesc',
     order: 10,
-    dynamic: true,
-    glyphStyle: { strokeWidth: 1.6 },
-  },
-  {
-    id: 'liquid',
-    labelKey: 'settings.appearance.themeLiquid',
-    descKey: 'settings.appearance.themeLiquidDesc',
-    order: 20,
     dynamic: true,
     glyphStyle: { strokeWidth: 2 },
   },
@@ -64,6 +57,22 @@ export const BUILTIN_THEMES: readonly BuiltinThemeDescriptor[] = [
     glyphStyle: { strokeWidth: 2.6 },
   },
 ]
+
+/**
+ * 退役主题 id 的读档别名表（与桌面 state.ts 同口径）：
+ * diffuse / liquid → glass。未知 id 仍原样保留，交给扩展注册表。
+ */
+export const RETIRED_THEME_ALIASES: Readonly<Record<string, string>> = {
+  diffuse: 'glass',
+  liquid: 'glass',
+}
+
+/** 主题 id 读档归一：空值返回 null，退役 id 折算到新 id，其余原样 */
+export function normalizeStoredThemeId(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const id = value.trim()
+  return RETIRED_THEME_ALIASES[id] ?? id
+}
 
 export const BUILTIN_THEME_IDS: ReadonlySet<string> = new Set(BUILTIN_THEMES.map((t) => t.id))
 

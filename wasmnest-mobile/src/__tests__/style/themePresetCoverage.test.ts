@@ -63,10 +63,36 @@ describe('主题预设覆盖（移动端）', () => {
     }
   })
 
+  it('玻璃主题重绘核心表面，而不是只换边框 / 圆角 / 阴影', () => {
+    // 与桌面同口径：主题要换整套材质。移动端最少覆盖设置分组、列表卡、
+    // 通知、多任务、应用胶囊、图标井与悬浮导航。
+    const rules = CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(rules, '玻璃主题缺少结构规则').toContain(":root[data-theme='glass']")
+    for (const surface of [
+      '.settings-group',
+      '.shell-group-card',
+      '.group-card',
+      '.notify-card',
+      '.shell-sys-tile',
+      '.shell-capsule',
+      '.shell-recents-card',
+      '.settings-segment',
+      '.shell-segmented',
+      '.shell-icon-action',
+      '.shell-shade-panel',
+      '.shell-floatnav',
+    ]) {
+      expect(rules, `玻璃主题未覆盖 ${surface}`).toContain(surface)
+    }
+    expect(rules).toContain('backdrop-filter')
+    expect(rules).toContain('mask-composite')
+    expect(rules).toContain('feTurbulence')
+  })
+
   it('动效主题真的挂了动画，且 reduced-motion 守卫在位', () => {
     for (const id of BUILTIN_THEMES.filter((theme) => theme.dynamic).map((theme) => theme.id)) {
       expect(CSS, `${id} 声明了 dynamic 但没有挂 animation`).toContain(
-        `[data-theme='${id}'] .shell-ui:not(.wall-custom)`,
+        `[data-theme='${id}'] .shell-host:not(.wall-custom)`,
       )
     }
     expect(CSS).toContain('@keyframes theme-drift')

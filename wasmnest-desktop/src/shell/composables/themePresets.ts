@@ -36,7 +36,7 @@ export interface BuiltinThemeDescriptor {
 }
 
 /**
- * 内置主题（2026 三套流行风格 + 现状默认）
+ * 内置主题（2026 两套流行风格 + 现状默认）
  *
  * 每个 id 必须在 `theme-presets.css` 有对应选择器块，否则切过去只是「无变化」——
  * `themePresetCoverage.test.ts` 逐 id 校验两边一一对应，防止加了目录项忘写样式。
@@ -50,18 +50,12 @@ export const BUILTIN_THEMES: readonly BuiltinThemeDescriptor[] = [
     dynamic: false,
   },
   {
-    id: 'diffuse',
-    labelKey: 'shell.settings.themes.diffuse',
-    descKey: 'shell.settings.themes.diffuseDesc',
+    // glassmorphism + liquid glass 合并为一套：双层折射、镜面棱线、整屏玻璃语汇。
+    // 原 diffuse / liquid 两个 id 已退役，读档时折算到 glass（见 state.ts 的别名表）。
+    id: 'glass',
+    labelKey: 'shell.settings.themes.glass',
+    descKey: 'shell.settings.themes.glassDesc',
     order: 10,
-    dynamic: true,
-    glyphStyle: { strokeWidth: 1.6 },
-  },
-  {
-    id: 'liquid',
-    labelKey: 'shell.settings.themes.liquid',
-    descKey: 'shell.settings.themes.liquidDesc',
-    order: 20,
     dynamic: true,
     glyphStyle: { strokeWidth: 2 },
   },

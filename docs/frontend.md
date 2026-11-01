@@ -76,10 +76,11 @@
 - **注册表只做注册 / 撤销 / 排序 / 查询**：不感知贡献者是谁，不解释 `label` / `hint` / `onSelect` 的业务语义，不替扩展决定默认值。设置项**没有独立「扩展设置」分组**（用户 2026-10-22 裁决）：别的应用对系统设置的动态扩展，有注册才在「系统设置」卡内渲染，无固定占位；状态栏只显示宿主机制事实。
 - **状态栏是宿主 chrome**：常驻应用面与系统页底部（`bareWindow` 独立窗口除外），只展示宿主机制事实（运行时就绪 / 应用数 / 待审批）与注册项；扩展动作失败只进日志，不拖垮壳。
 - **主题是「token 表 + 图标语汇」，作用于文档根**（ADR 0059）：`<html data-theme="<id>">` 由 `useShellTheme` 唯一写入，`themePresets.applyThemePresetDom` 是唯一 DOM 出口。键必须是 `--` 开头的 CSS 自定义属性，浅色 `tokens` / 深色 `darkTokens` 合并生效；`glyphs` 逐名替换图标路径、`glyphStyle` 调整描边/填充。
-  - **内置主题的 token 住 CSS**（`src/styles/theme-presets.css`，移动端同名文件）：结构规则（卡片磨砂、图标外框、硬阴影、背景漂移）只有 CSS 能写，且 `data-theme` 静态生效、首帧零闪变。选择器**不写 `:root`**，设置页预览块挂同一属性即渲染真配色。
-  - **预览保真两条口径**（2026-10-27 效果审查定）：① **默认主题的预览挂 `.theme-base`**（`style.css` 的基础档与 `:root` 共用），不挂 `data-theme`——它就是基线本身，不该继承当前主题的 token，否则「默认」那张预览会长成当前主题的样子；主题专属的三枚 token（`--theme-ambient` / `--theme-icon-shadow` / `--theme-icon-radius`）在 `.theme-base` 上显式归零。② **主题的结构规则只作用于「代表自己的那张预览」**：预览卡的选择器锚在 `.theme-preview[data-theme='x']`，不写 `[data-theme='x'] .pv-card`——后者会顺着 `<html data-theme>` 漏进默认预览，且与组件 scoped 样式同特异性时会被组件样式盖掉。
-  - **扩展主题只能换 token 与 glyph**，加不了结构规则——契约边界，不是疏漏。内置全部 id（`default` / `diffuse` / `liquid` / `hyper`）保留，扩展占用即抛。
-  - **持久化走 localStorage**（`wasmnest.shell-ui-prefs.v1` 的 `theme` 字段，与壁纸同层），不进 AppConfig；旧 `skin` 字段读取时折算后丢弃。
+  - **内置主题的 token 住 CSS**（`src/styles/theme-presets.css`，移动端同名文件）：结构规则（玻璃材质、图标外框、硬阴影、背景漂移）只有 CSS 能写，且 `data-theme` 静态生效、首帧零闪变。**token 块**选择器不写 `:root`，设置页预览块挂同一属性即渲染真配色；**结构规则**可用 `:root[data-theme]` 抬特异性压过组件 scoped 样式，但预览专属规则必须锚在预览块自身（见下条）。
+  - **预览保真两条口径**（2026-10-27 效果审查定）：① **默认主题的预览挂 `.theme-base`**（`style.css` 的基础档与 `:root` 共用），不挂 `data-theme`——它就是基线本身，不该继承当前主题的 token，否则「默认」那张预览会长成当前主题的样子；主题专属 token（`--theme-ambient` / `--theme-icon-*` / 玻璃材质 `--theme-glass-*`）在 `.theme-base` 上显式归零。② **主题的结构规则只作用于「代表自己的那张预览」**：预览卡的选择器锚在 `.theme-preview[data-theme='x']`，不写 `[data-theme='x'] .pv-card`——后者会顺着 `<html data-theme>` 漏进默认预览，且与组件 scoped 样式同特异性时会被组件样式盖掉。
+  - **扩展主题只能换 token 与 glyph**，加不了结构规则——契约边界，不是疏漏。内置全部 id（`default` / `glass` / `hyper`）保留，扩展占用即抛。`diffuse` / `liquid` 已退役，旧 localStorage 读档时折算到 `glass`。
+  - **持久化走 localStorage**（`wasmnest.shell-ui-prefs.v1` 的 `theme` 字段，与壁纸同层），不进 AppConfig；旧 `skin` / `diffuse` / `liquid` 读取时折算后丢弃（退役 id 会落到 `glass`，不静默回默认）。
+  - **玻璃主题是整屏材质替换，不是只换 token**：`glass` 在 `theme-presets.css` 里用结构规则重绘 chrome（工具栏 / 状态栏）、内容卡、浮层、按钮 / 分段 / 开关、主屏图块、多任务、通知、移动端分组与悬浮导航。光学层按公开玻璃实现归纳为六层：背景采样（blur + saturate + brightness）、上亮下暗体色、1px 渐变镜面棱线（mask 挖空）、左上 sheen / 右下 caustic、内壁亮线与底部内阴影、悬浮投影 + 环境光晕，另叠 `feTurbulence` 微噪点消 banding。**不用 SVG `backdrop-filter: url()`**（Chromium-only，桌面 WebKitGTK 会退成平坦 blur）。`themePresetCoverage.test.ts`（双端各一）除 id / 决策面 / 动效外，还锁住「最少覆盖哪些核心表面」，防止主题退化成只改边框圆角。
   - **应用配色仍归应用**：主题只承诺宿主域，应用根容器自己声明的 token 优先；`data-palette` 归应用，宿主任何路径都不写（`themePresetBeforeMount.test.ts` 反面锁）。
 - **跨主题不变量：决策面永远实心**（ADR 0059）：授权列表 / 授权弹窗 / 确认弹窗 / 壳弹窗层在任何主题下不得使用半透明表面或 `backdrop-filter`；`--bg-card` 不得被主题改成半透明。内容面与浮层由主题决定是否玻璃化。锁在 `themePresetCoverage.test.ts`（双端各一）+ `surfaceLadder.test.ts`。
 - **设置页顺序是产品裁决**：界面 → 背景 → 主题 → 系统 → 日志 → 授权入口 → 恢复初始设置 → **关于（固定最后）**；`settingsOrderLock.test.ts` 钉住，插入新分组时不得把关于挤回中间。

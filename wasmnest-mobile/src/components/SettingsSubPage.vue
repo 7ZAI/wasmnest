@@ -1,11 +1,11 @@
 <template>
-  <div class="h-full flex flex-col bg-[var(--mobile-bg-primary)]">
+  <div class="settings-subpage h-full flex flex-col bg-[var(--mobile-bg-primary)]">
     <!-- Header：顶部内边距叠加状态栏安全区。
          这些二级页是 standalone 路由（不经壳的 ShellView，拿不到壳的容器内边距），
          不补安全区就会把标题栏顶到系统状态栏上（2026-10-14 用户反馈）。
          间距与权限总览页头取齐：页头自身留 10px。 -->
     <header
-      class="flex-shrink-0 bg-[color:color-mix(in_srgb,var(--mobile-bg-secondary)_90%,transparent)] backdrop-blur-xl border-b border-[var(--mobile-border)] px-4 pb-3 flex items-center gap-3"
+      class="settings-subpage-header flex-shrink-0 bg-[color:color-mix(in_srgb,var(--mobile-bg-secondary)_90%,transparent)] backdrop-blur-xl border-b border-[var(--mobile-border)] px-4 pb-3 flex items-center gap-3"
       :style="{ paddingTop: `calc(10px + ${topInset}px)` }"
     >
       <button

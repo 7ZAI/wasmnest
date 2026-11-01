@@ -109,9 +109,9 @@ describe('壳主题', () => {
     const { setTheme } = useShellTheme()
     const root = document.documentElement
 
-    setTheme('liquid')
+    setTheme('glass')
     await nextTick()
-    expect(root.dataset.theme).toBe('liquid')
+    expect(root.dataset.theme).toBe('glass')
 
     setTheme('default')
     await nextTick()
@@ -127,10 +127,10 @@ describe('壳主题', () => {
     await nextTick()
     expect(inlineStyle(root)).toContain('--bg-page: #111113')
 
-    setTheme('liquid')
+    setTheme('glass')
     await nextTick()
     expect(inlineStyle(root)).not.toContain('--bg-page')
-    expect(root.dataset.theme).toBe('liquid')
+    expect(root.dataset.theme).toBe('glass')
   })
 
   it('内置主题透出 glyph 语汇，扩展主题透出 glyph 覆盖', async () => {

@@ -69,3 +69,18 @@
   且首帧必须等 JS 求值。
 - **主题存 Rust AppConfig**：跨仓改契约（能力仓 + 双端 Rust + 默认值），
   而主题没有业务真值，收益只是「多端同步」——当前无此需求。
+
+---
+
+## 修订记录
+
+- **2026-11-01**：内置玻璃主题收口。`diffuse`（弥散玻璃）与 `liquid`（液态玻璃）
+  合并为单一 `glass`（玻璃拟态 · 液态玻璃）：两者本属同一材质家族，拆成两档只让
+  「选哪块玻璃」变成没有语义的差别。新主题按公开玻璃实现的分层光学模型重做
+  （背景采样 / 体色 / 镜面棱线 / sheen + caustic / 内壁厚度 / 悬浮投影 / 噪点），
+  并把结构规则扩到整套宿主 UI（chrome、卡片、控件、主屏图块、多任务、通知、
+  移动端分组与悬浮导航），不再只是改 token、圆角与阴影。旧持久化 id 读档折算到
+  `glass`；决策面实心不变量不变。光学层参考了公开实现的可跨 WebView 部分
+  （iart-ai/web-animation-skills 的 glass recipes、TurtIeSocks/agent-skills 的
+  liquid-glass-css 分层模型、rdev/liquid-glass-react 的组件边界与降级做法），
+  未引入其运行时依赖；SVG `backdrop-filter: url()` 因 WebKitGTK 不支持而不用。

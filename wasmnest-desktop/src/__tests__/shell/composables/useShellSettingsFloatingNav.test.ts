@@ -111,3 +111,25 @@ describe('floatingNav 写穿', () => {
     expect(stored.floatingNavPos).toEqual({ x: 0.9, y: 0.1 })
   })
 })
+
+describe('theme 读档归一（diffuse / liquid → glass）', () => {
+  it.each(['diffuse', 'liquid'])('should_migrateRetiredTheme_%s', async (retired) => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ wallpaper: 'aurora', wallDim: 16, wallpaperImage: '', theme: retired }),
+    )
+    const prefs = await loadPrefs()
+
+    expect(prefs.value.theme).toBe('glass')
+  })
+
+  it('should_keepUnknownThemeId_forLateExtensionRegistration', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ wallpaper: 'aurora', wallDim: 16, wallpaperImage: '', theme: 'dusk' }),
+    )
+    const prefs = await loadPrefs()
+
+    expect(prefs.value.theme).toBe('dusk')
+  })
+})

@@ -1,7 +1,6 @@
 <template>
   <div
-    class="overflow-hidden rounded-[12px] border border-[var(--mobile-group-border)] bg-[var(--mobile-bg-card)] divide-y divide-[var(--mobile-group-divider)]"
-    :style="{ boxShadow: 'var(--mobile-card-shadow)' }"
+    class="shell-group-card overflow-hidden rounded-[12px] border border-[var(--mobile-group-border)] bg-[var(--mobile-bg-card)] divide-y divide-[var(--mobile-group-divider)]"
   >
     <slot />
   </div>

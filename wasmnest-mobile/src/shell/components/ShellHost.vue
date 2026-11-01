@@ -2,7 +2,7 @@
   <!-- 高度用 h-full 而非 100dvh：壳挂在 ShellView 的 100dvh 容器内（该容器已承担
        顶部安全区），再用 100dvh 会多出一段安全区高度的溢出 -->
   <div
-    class="shell-ui relative isolate flex flex-col h-full overflow-hidden bg-[var(--mobile-bg-primary)] text-[var(--mobile-text-primary)]"
+    class="shell-ui shell-host relative isolate flex flex-col h-full overflow-hidden bg-[var(--mobile-bg-primary)] text-[var(--mobile-text-primary)]"
     :class="wallRootClass"
     :style="{ '--wall-dim': String(wallDim), paddingTop: 'var(--shell-safe-top, 0px)' }"
   >

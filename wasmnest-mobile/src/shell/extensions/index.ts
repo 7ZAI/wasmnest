@@ -49,7 +49,7 @@ export interface ShellTheme {
   glyphs?: Record<string, string[]>
   /** glyph 绘制语汇 */
   glyphStyle?: ShellThemeGlyphStyle
-  /** 主题自带缓慢动效；`.anim-disabled` 与 `prefers-reduced-motion` 下自动停 */
+  /** 主题自带缓慢动效；`prefers-reduced-motion` 下自动停 */
   dynamic?: boolean
 }
 

@@ -51,7 +51,7 @@ describe('设置页 — 主题', () => {
     mocks.isDark.value = false
   })
 
-  it('内置四套主题 + 注册主题都渲染，默认选中；点击写入壳偏好', async () => {
+  it('内置三套主题 + 注册主题都渲染，默认选中；点击写入壳偏好', async () => {
     registerTheme({
       id: 'dusk',
       label: 'Dusk',
@@ -63,18 +63,17 @@ describe('设置页 — 主题', () => {
     const cards = wrapper.findAll('[data-theme-id]')
     expect(cards.map((card) => card.attributes('data-theme-id'))).toEqual([
       'default',
-      'diffuse',
-      'liquid',
+      'glass',
       'hyper',
       'dusk',
     ])
     expect(cards[0].attributes('aria-pressed')).toBe('true')
 
-    await cards[2].trigger('click')
+    await cards[1].trigger('click')
     await nextTick()
 
-    expect(mocks.prefs.value.theme).toBe('liquid')
-    expect(wrapper.find('[data-theme-id="liquid"]').attributes('aria-pressed')).toBe('true')
+    expect(mocks.prefs.value.theme).toBe('glass')
+    expect(wrapper.find('[data-theme-id="glass"]').attributes('aria-pressed')).toBe('true')
   })
 
   it('预览块挂主题属性（默认主题不挂，靠基础档渲染）', () => {
@@ -83,8 +82,7 @@ describe('设置页 — 主题', () => {
       wrapper.find(`[data-theme-id="${id}"] .theme-preview`).attributes('data-theme')
 
     expect(preview('default')).toBeUndefined()
-    expect(preview('diffuse')).toBe('diffuse')
-    expect(preview('liquid')).toBe('liquid')
+    expect(preview('glass')).toBe('glass')
     expect(preview('hyper')).toBe('hyper')
   })
 
@@ -96,8 +94,7 @@ describe('设置页 — 主题', () => {
     // 默认档不复用当前主题的变量：不挂 theme-base 时，预览会继承 <html data-theme>
     // 的 token 而长成当前主题的样子（「默认」与「弥散玻璃」两张预览长得一样）
     expect(classes('default')).toContain('theme-base')
-    expect(classes('diffuse')).not.toContain('theme-base')
-    expect(classes('liquid')).not.toContain('theme-base')
+    expect(classes('glass')).not.toContain('theme-base')
     expect(classes('hyper')).not.toContain('theme-base')
   })
 
@@ -106,8 +103,7 @@ describe('设置页 — 主题', () => {
     const badge = (id: string) => wrapper.find(`[data-theme-id="${id}"] .theme-badge`).exists()
 
     expect(badge('default')).toBe(false)
-    expect(badge('diffuse')).toBe(true)
-    expect(badge('liquid')).toBe(true)
+    expect(badge('glass')).toBe(true)
     // 超色彩主义不做漂移：层级靠硬阴影位移，动起来是抖
     expect(badge('hyper')).toBe(false)
   })

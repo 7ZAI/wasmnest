@@ -78,6 +78,33 @@ describe('主题预设覆盖', () => {
     }
   })
 
+  it('玻璃主题重绘核心表面，而不是只换边框 / 圆角 / 阴影', () => {
+    // 2026-11-01 用户裁决：主题切换要换整套 UI 语汇。玻璃主题必须命中壳的
+    // chrome 与内容面，而不只是 token 表——这里锁住「最少覆盖哪些表面」。
+    const rules = CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(rules, '玻璃主题缺少结构规则').toContain(":root[data-theme='glass']")
+    for (const surface of [
+      '.shell-toolbar',
+      '.shell-statusbar',
+      '.shell-card',
+      '.shell-btn',
+      '.shell-mini',
+      '.shell-seg',
+      '.shell-sw',
+      '.shell-glass',
+      '.shell-floatnav',
+      '.appicon',
+      '.ts-card',
+      '.theme-card',
+    ]) {
+      expect(rules, `玻璃主题未覆盖 ${surface}`).toContain(surface)
+    }
+    // 光学层：至少要有背景采样、镜面棱线（伪元素 + mask）和噪点
+    expect(rules).toContain('backdrop-filter')
+    expect(rules).toContain('mask-composite')
+    expect(rules).toContain('feTurbulence')
+  })
+
   it('带漂移动效的主题引用了 keyframes，且 reduced-motion 守卫在位', () => {
     const dynamicThemes = BUILTIN_THEMES.filter((theme) => theme.dynamic).map((theme) => theme.id)
     // 目录里声明 dynamic 的必须真的挂了动画（否则设置页的「动态」标记是假的）

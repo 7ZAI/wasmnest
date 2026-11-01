@@ -367,6 +367,28 @@ html.platform-linux {
   --theme-ambient: none;
   --theme-icon-shadow: none;
   --theme-icon-radius: var(--radius-app-icon);
+  /* 玻璃材质 token 也归零：默认预览不挂 data-theme，若这些值从当前主题
+     继承下来，任何引用它们的预览规则都会偷偷长成玻璃。 */
+  --theme-glass-tint: var(--bg-card);
+  --theme-glass-fill-top: var(--bg-card);
+  --theme-glass-fill-bottom: var(--bg-card);
+  --theme-glass-control: var(--bg-card);
+  --theme-glass-control-hover: var(--bg-card);
+  --theme-glass-rim-hi: transparent;
+  --theme-glass-rim-lo: transparent;
+  --theme-glass-inner: transparent;
+  --theme-glass-edge: var(--border);
+  --theme-glass-sheen: transparent;
+  --theme-glass-caustic: transparent;
+  --theme-glass-glow: transparent;
+  --theme-glass-blur: 0px;
+  --theme-glass-sat: 100%;
+  --theme-glass-brightness: 1;
+  --theme-glass-grain: none;
+  --theme-glass-grain-opacity: 0;
+  --theme-glass-selected: var(--bg-card);
+  --theme-glass-radius-card: var(--radius-card);
+  --theme-glass-radius-control: var(--radius-button);
 }
 
 /* ==================== 色板：cool（冷灰调） ==================== */

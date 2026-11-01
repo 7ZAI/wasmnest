@@ -14,7 +14,12 @@
  * 深色模式 / 色板 / 语言 / 字号 / 动画仍走既有 settings store（已是线上真值）。
  */
 import { ref, watch } from 'vue'
-import { SHELL_THEME_DEFAULT, WALL_DIM_DEFAULT, WALLPAPER_DEFAULT } from './state'
+import {
+  SHELL_THEME_DEFAULT,
+  WALL_DIM_DEFAULT,
+  WALLPAPER_DEFAULT,
+  normalizeStoredThemeId,
+} from './state'
 import { isCustomWallpaperFile } from './wallpaperFile'
 import { SHORTCUT_ACTION_IDS, comboIsBindable } from './shortcutsModel'
 import type { FloatingNavPosition, ShellUiPrefs } from '../types'
@@ -83,14 +88,14 @@ function load(): ShellUiPrefs {
 }
 
 /**
- * 主题 id 读取（含 skin → theme 迁移）。
+ * 主题 id 读取（含 skin → theme 迁移、diffuse/liquid → glass 归一）。
  *
  * 未知 id 也原样保留：主题可能来自尚未加载的扩展，渲染侧负责回落默认——
- * 在这里抹掉会让「扩展晚注册」永久丢失用户选择。
+ * 在这里抹掉会让「扩展晚注册」永久丢失用户选择。只有已退役的内置 id 会被折算。
  */
 function readThemeId(parsed: LegacyPrefs): string | null {
   const candidate = typeof parsed.theme === 'string' ? parsed.theme : parsed.skin
-  return typeof candidate === 'string' && candidate.trim() !== '' ? candidate : null
+  return normalizeStoredThemeId(candidate)
 }
 
 /**

@@ -94,8 +94,8 @@ describe('桌面壳扩展点注册表', () => {
     expect(() => registerTheme({ id: SHELL_THEME_DEFAULT, label: 'Fake default' })).toThrow(
       /reserved/,
     )
-    // 三套内置风格 id 同样保留（扩展不能顶掉它们）
-    expect(() => registerTheme({ id: 'liquid', label: 'Fake liquid' })).toThrow(/reserved/)
+    // 两套内置风格 id 同样保留（扩展不能顶掉它们）
+    expect(() => registerTheme({ id: 'glass', label: 'Fake glass' })).toThrow(/reserved/)
   })
 
   it('主题 token 必须是 CSS 自定义属性（-- 前缀）', () => {

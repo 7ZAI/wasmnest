@@ -16,7 +16,7 @@
 
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { logger } from '@/utils/frontendLogger'
-import { SHELL_THEME_DEFAULT } from './themePresets'
+import { SHELL_THEME_DEFAULT, normalizeStoredThemeId } from './themePresets'
 
 /** 壁纸档位（前四档与 shell.css 的 --wall-* 一一对应；custom = 用户选的自定义图） */
 export const SHELL_WALLPAPERS = ['none', 'aurora', 'dune', 'reef', 'custom'] as const
@@ -116,11 +116,8 @@ function load(): ShellUiPrefs {
         typeof parsed.wallDim === 'number' && parsed.wallDim >= 0 && parsed.wallDim <= WALL_DIM_MAX
           ? Math.round(parsed.wallDim)
           : fallback.wallDim,
-      // 未知 id 原样保留：主题可能来自尚未注册的扩展，渲染侧负责回落默认
-      theme:
-        typeof parsed.theme === 'string' && parsed.theme.trim() !== ''
-          ? parsed.theme
-          : fallback.theme,
+      // 退役 id（diffuse / liquid → glass）读档折算；未知 id 原样保留给扩展主题
+      theme: normalizeStoredThemeId(parsed.theme) ?? fallback.theme,
       floatingNav:
         typeof parsed.floatingNav === 'boolean' ? parsed.floatingNav : fallback.floatingNav,
       floatingNavPos: normalizeFloatingNavPos(parsed.floatingNavPos),

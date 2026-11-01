@@ -116,10 +116,10 @@ describe('presetThemeBeforeMount 首帧主题预应用', () => {
 
   it('主题预设在首帧应用：选了内置主题即挂到 html', () => {
     const prefs = useShellPreferences()
-    prefs.setTheme('liquid')
+    prefs.setTheme('glass')
     setTheme('dark')
     presetThemeBeforeMount()
-    expect(document.documentElement.getAttribute('data-theme')).toBe('liquid')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('glass')
     prefs.setTheme('default')
   })
 })

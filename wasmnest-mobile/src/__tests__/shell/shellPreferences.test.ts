@@ -255,3 +255,21 @@ describe('C-P11..C-P13 悬浮导航偏好', () => {
     expect(prefs.floatingNavPos.value).toEqual({ x: 0.3, y: 1 })
   })
 })
+
+describe('C-T1..C-T3 主题读档归一', () => {
+  it.each(['diffuse', 'liquid'])('should_migrateRetiredTheme_%s', async (retired) => {
+    const { useShellPreferences } = await loadPrefsWith(
+      JSON.stringify({ wallpaper: 'aurora', wallDim: 16, theme: retired }),
+    )
+
+    expect(useShellPreferences().theme.value).toBe('glass')
+  })
+
+  it('should_keepUnknownThemeId_forLateExtensionRegistration', async () => {
+    const { useShellPreferences } = await loadPrefsWith(
+      JSON.stringify({ wallpaper: 'aurora', wallDim: 16, theme: 'dusk' }),
+    )
+
+    expect(useShellPreferences().theme.value).toBe('dusk')
+  })
+})

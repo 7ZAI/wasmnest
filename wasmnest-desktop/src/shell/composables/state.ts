@@ -184,3 +184,22 @@ export const WALL_DIM_MAX = 70
  * 否则模块初始化期就会踩 TDZ（`load()` 在模块顶层执行）。
  */
 export const SHELL_THEME_DEFAULT = 'default'
+
+/**
+ * 退役主题 id 的读档别名表。
+ *
+ * `diffuse`（弥散玻璃）与 `liquid`（液态玻璃）在 2026-11-01 合并为 `glass`
+ * （玻璃拟态 · 液态玻璃）。旧 localStorage 里仍可能存着这两个 id；读档时折算，
+ * 避免用户升级后主题静默回落到默认。未知 id 不在此表里，仍原样保留给扩展主题。
+ */
+export const RETIRED_THEME_ALIASES: Readonly<Record<string, string>> = {
+  diffuse: 'glass',
+  liquid: 'glass',
+}
+
+/** 主题 id 读档归一：空值返回 null，退役 id 折算到新 id，其余原样 */
+export function normalizeStoredThemeId(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const id = value.trim()
+  return RETIRED_THEME_ALIASES[id] ?? id
+}

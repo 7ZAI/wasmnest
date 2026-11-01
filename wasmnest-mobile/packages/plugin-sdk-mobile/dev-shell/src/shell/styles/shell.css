@@ -318,6 +318,12 @@
 .shell-avatar-g4 { background: linear-gradient(135deg, #ec4899, #8b5cf6); }
 .shell-avatar-g5 { background: linear-gradient(135deg, #06b6d4, #3b82f6); }
 
+/* 分组卡片的默认悬浮影：ShellGroupCard 只给形状与分隔线，投影属于壳的
+   材质语汇（主题可整条覆盖；写进组件 inline style 会压过主题规则）。 */
+.shell-group-card {
+  box-shadow: var(--mobile-card-shadow);
+}
+
 /* ============================================================================
    系统宫格图标瓦片（与桌面壳同口径，.shell-sys-tile）
    ----------------------------------------------------------------------------
