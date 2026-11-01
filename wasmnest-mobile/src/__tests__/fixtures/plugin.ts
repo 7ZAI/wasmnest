@@ -7,7 +7,7 @@
  * 字段形态（camelCase / kebab-case 与 Rust serde rename_all 一致）：
  * - state: 联合类型（PluginState = Loaded | Activating | Activated | Degraded{error} |
  *   NeedsApproval | Deactivated | Error{error}）— 7 变体
- * - pluginType: PluginType = 'rust' | 'rust-ts' | 'ts-only' | 'wasm' (kebab-case)
+ * - pluginType: PluginType = 'frontend' | 'backend' | 'full'（语言无关三形态，2026-10-26 词汇）
  * - contributes: 命令/视图/导航/设置/终端/配置/生命周期 7 类（多数可为 null）
  *
  * 注：移动端 PluginInfo 比桌面端多 `source: string` / `extensionPath` /

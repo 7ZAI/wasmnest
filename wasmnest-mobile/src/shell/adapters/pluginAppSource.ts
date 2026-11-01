@@ -133,10 +133,10 @@ export function createPluginAppSource(): ShellAppSource {
       // 不能压在 loading 之下），用户拒绝即抛出、启动失败
       await pluginPreauthorize(appId)
 
-      // rust-only 插件没有前端模块入口，loader 会尝试 import 不存在的入口而失败，
-      // 因此这类插件只做后端激活
+      // backend 形态（语言无关三形态，2026-10-26 词汇）没有前端模块入口，
+      // loader 会尝试 import 不存在的入口而失败，因此这类插件只做后端激活
       const info = await pluginGetInfo(appId)
-      if (info?.pluginType === 'rust') {
+      if (info?.pluginType === 'backend') {
         await pluginActivate(appId)
         return
       }

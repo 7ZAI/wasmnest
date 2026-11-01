@@ -8,7 +8,7 @@
  * plugin_mark_error）+ convertFileSrc 返回不可解析路径（前端模块动态 import
  * 必然失败 → 优雅降级路径可测）。
  *
- * 覆盖：loadAll 清单过滤（rust-only 跳过 / 未开自启动跳过）；空清单扫描轮询
+ * 覆盖：loadAll 清单过滤（backend 形态跳过 / 未开自启动跳过）；空清单扫描轮询
  * 补载（fake timers 压缩 250ms 轮询）；前端模块加载失败 → plugin_mark_error
  * + registry 清理（半激活状态摘除）。
  */
@@ -98,9 +98,9 @@ afterEach(() => {
 })
 
 describe('插件流：pluginLoader × registry', () => {
-  it('loadAll 清单过滤：rust-only 插件跳过、未开自启动前端插件不加载', async () => {
+  it('loadAll 清单过滤：backend 形态插件跳过、未开自启动前端插件不加载', async () => {
     const manifests = [
-      makePluginInfo({ id: 'rust-only', pluginType: 'rust' }),
+      makePluginInfo({ id: 'backend-only', pluginType: 'backend' }),
       makePluginInfo({ id: 'frontend-disabled', pluginType: 'frontend' }),
     ]
     installInvokeMock(() => manifests)
@@ -109,7 +109,7 @@ describe('插件流：pluginLoader × registry', () => {
     await pluginLoader.loadAll()
     await flushAsync()
 
-    // rust-only：不查询自启动状态、不加载前端模块
+    // backend 形态：不查询自启动状态、不加载前端模块
     // frontend 未开自启动：只查询自启动状态，跳过加载
     expect(invokeCalls('plugin_is_autostart')).toEqual([[{ pluginId: 'frontend-disabled' }]])
     expect(invokeCalls('plugin_mark_error')).toHaveLength(0)
@@ -128,13 +128,13 @@ describe('插件流：pluginLoader × registry', () => {
     await loadPromise
     expect(invokeCalls('plugin_list_loaded')).toHaveLength(1)
 
-    // 扫描完成（第二次查询返回 rust-only 插件）→ 补载完成，不再轮询
-    manifests.push(makePluginInfo({ id: 'rust-only', pluginType: 'rust' }))
+    // 扫描完成（第二次查询返回 backend 形态插件）→ 补载完成，不再轮询
+    manifests.push(makePluginInfo({ id: 'backend-only', pluginType: 'backend' }))
     await vi.advanceTimersByTimeAsync(250)
     await flushAsync()
 
     expect(invokeCalls('plugin_list_loaded')).toHaveLength(2)
-    // rust-only 补载不触发前端加载
+    // backend 形态补载不触发前端加载
     expect(invokeCalls('plugin_is_autostart')).toHaveLength(0)
   })
 

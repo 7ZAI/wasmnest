@@ -4,7 +4,7 @@
  * 被测行为（loader.ts 实际实现）：
  * - isAutostart（持久化自启动偏好，缺省关）= false → 跳过（移动端启动不启动应用）
  * - Activating 中间态 → 跳过（等最终态轮询兜底）
- * - pluginType: 'rust' → 跳过（后端自管）
+ * - pluginType: 'backend' → 跳过（无前端产物，后端自管）
  * - 其余状态（Activated / Degraded / Loaded / Error / NeedsApproval / Deactivated）
  *   + isAutostart=true → 放行调 loadFrontend（vitest 内动态 import 必失败 → 走
  *   markError 失败恢复路径作为「已尝试加载」探针）
@@ -88,7 +88,7 @@ afterEach(async () => {
     'com.wasmnest.gate-error',
     'com.wasmnest.gate-approval',
     'com.wasmnest.gate-off',
-    'com.wasmnest.gate-rust',
+    'com.wasmnest.gate-backend',
   ]) {
     await pluginLoader.deactivate(id).catch(() => {})
   }
@@ -98,7 +98,7 @@ afterEach(async () => {
 })
 
 describe('pluginLoader.loadAll 启动加载门禁', () => {
-  it('自启动放行：6 态放行 + Activating/rust 跳过，Degraded 标注降级原因', async () => {
+  it('自启动放行：6 态放行 + Activating/backend 跳过，Degraded 标注降级原因', async () => {
     const DEGRADED_REASON = 'startup init failed: db migration error'
 
     mockInvoke.mockImplementation((cmd: string) => {
@@ -138,11 +138,11 @@ describe('pluginLoader.loadAll 启动加载门禁', () => {
             name: 'Gate Off',
             state: { state: 'deactivated' },
           }),
-          // rust 类型：后端自管，跳过（loader.ts:82-86）
+          // backend 形态：无前端产物，后端自管，跳过（loader.ts 自启动门禁）
           makePluginInfo({
-            id: 'com.wasmnest.gate-rust',
-            name: 'Gate Rust',
-            pluginType: 'rust',
+            id: 'com.wasmnest.gate-backend',
+            name: 'Gate Backend',
+            pluginType: 'backend',
             state: { state: 'activated' },
           }),
         ])
@@ -167,9 +167,9 @@ describe('pluginLoader.loadAll 启动加载门禁', () => {
     expect(markErrorCount('com.wasmnest.gate-error')).toBe(1)
     expect(markErrorCount('com.wasmnest.gate-approval')).toBe(1)
     expect(markErrorCount('com.wasmnest.gate-off')).toBe(1)
-    // 跳过：Activating 中间态 + pluginType: 'rust'
+    // 跳过：Activating 中间态 + backend 形态
     expect(markErrorCount('com.wasmnest.gate-activating')).toBe(0)
-    expect(markErrorCount('com.wasmnest.gate-rust')).toBe(0)
+    expect(markErrorCount('com.wasmnest.gate-backend')).toBe(0)
 
     // Degraded 的降级原因经 console.warn 标注（含插件 id 与原始错误串）
     const warns = consoleWarnSpy.mock.calls.map((args) => String(args[0]))
