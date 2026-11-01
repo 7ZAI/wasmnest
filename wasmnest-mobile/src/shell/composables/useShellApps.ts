@@ -31,6 +31,22 @@ const APP_EVENT_ICONS = {
   failed: 'M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01',
 } as const
 
+/** 启动失败原因压成可读正文：Error 取 message，带 message 字段的 reject 对象取字段，
+ *  其余 JSON 化——Tauri/SDK reject 出非 Error 时 String(e) 会把通知体打成
+ *  「[object Object]」（2026-10-31 adb 审查实测），fail-visible 要求至少能读。 */
+function describeLaunchError(e: unknown): string {
+  if (typeof e === 'string') return e
+  if (e instanceof Error) return e.message
+  const message = (e as { message?: unknown } | null)?.message
+  if (typeof message === 'string' && message.trim().length > 0) return message
+  try {
+    return JSON.stringify(e) ?? String(e)
+  } catch (err) {
+    logger.debug('[Shell] launch error object is not JSON-serializable', err)
+    return String(e)
+  }
+}
+
 /**
  * 推送一条应用生命周期通知
  *
@@ -174,7 +190,7 @@ async function launch(appId: string): Promise<boolean> {
     await refresh()
     return true
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
+    const message = describeLaunchError(e)
     logger.error(`[Shell] launch failed: appId=${appId}`, e)
     registry.patchApp(appId, { state: 'error', error: message })
     lastError.value = message
