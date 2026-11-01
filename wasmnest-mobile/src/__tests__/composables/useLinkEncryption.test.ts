@@ -8,7 +8,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { appPath } from '../support/appPaths'
 import {
   isChannelEncryptionActive,
@@ -18,6 +19,25 @@ import {
   syncLinkCryptoContextToNative,
   useLinkEncryptionSettings,
 } from '@/composables/useLinkEncryption'
+
+/** 递归收集应用侧运行时源码（.ts / .vue，跳过测试目录与 *.test.ts） */
+function collectRuntimeSources(root: string): Array<{ path: string; text: string }> {
+  const files: Array<{ path: string; text: string }> = []
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (entry.name === '__tests__' || entry.name === 'node_modules') continue
+        walk(full)
+        continue
+      }
+      if (!/\.(ts|vue)$/.test(entry.name) || /\.test\.ts$/.test(entry.name)) continue
+      files.push({ path: relative(root, full), text: readFileSync(full, 'utf-8') })
+    }
+  }
+  walk(root)
+  return files
+}
 
 // 动态 import @tauri-apps/api/core（sync 桥），mock invoke 捕获推送参数
 const mockInvoke = vi.fn()
@@ -181,21 +201,28 @@ describe('结构锁：WS 帧级加密与 waiting_input 漂移零残留（票 06�
   })
 
   // 旧宿主 SessionsView / SessionCard 随阶段 B 退役：会话状态展示面已迁
-  // bedcode 应用宿主页域（host/utils.ts 的状态键表 + host/components/SessionsSection.vue）
+  // bedcode 应用侧（host/utils.ts 的状态键表 + 建面组件）。应用侧组件随应用仓
+  // 重构搬过家（2026-11-01：host/components/SessionsSection.vue 已不在原位），
+  // 点名单个组件会让这条锁跟着应用仓内部改名假红——改扫应用侧全部运行时源码：
+  // 覆盖更全，且不绑具体路径。测试文件不计（写在测试里的反例字面量不算回归）。
   it('会话状态比较统一到桌面 wire 字面量 waitingInput（snake_case 漂移零残留）', async () => {
     // 宿主连接域 2026-10-25 拆分为 mobile-connection/：状态字面量真源在
     // sessions.ts（比较键表）与 connection.ts（事件回调里的状态判断）两处
-    const [mcSessions, mcConnection, utils, section] = await Promise.all([
+    const [mcSessions, mcConnection, utils] = await Promise.all([
       readFile('src/composables/mobile-connection/sessions.ts', 'utf-8'),
       readFile('src/composables/mobile-connection/connection.ts', 'utf-8'),
       readFile(appPath('bedcode', 'mobile', 'src/host/utils.ts'), 'utf-8'),
-      readFile(appPath('bedcode', 'mobile', 'src/host/components/SessionsSection.vue'), 'utf-8'),
     ])
-    // 反例（多方一致）：任何一面都不允许出现已退役的 snake_case 字面量
-    for (const src of [mcSessions, mcConnection, utils, section]) {
+    // 反例（多方一致）：宿主三处 + 应用侧全部运行时源码都不允许出现已退役的 snake_case
+    const appSources = collectRuntimeSources(appPath('bedcode', 'mobile', 'src'))
+    expect(appSources.length, '应用侧源码扫不到东西 = 路径失效，锁不能空转').toBeGreaterThan(100)
+    for (const src of [mcSessions, mcConnection, utils]) {
       expect(src).not.toContain("'waiting_input'")
     }
-    // 正例：状态键真源（宿主连接域 + 插件宿主页域的键表）必须用 wire 字面量 waitingInput
+    for (const file of appSources) {
+      expect(file.text, `${file.path} 仍用 snake_case waiting_input`).not.toContain("'waiting_input'")
+    }
+    // 正例：状态键真源（宿主连接域 + 应用侧宿主页域键表）必须用 wire 字面量 waitingInput
     for (const src of [mcSessions, mcConnection, utils]) {
       expect(src).toContain('waitingInput')
     }
