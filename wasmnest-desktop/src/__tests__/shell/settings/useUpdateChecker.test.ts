@@ -66,8 +66,9 @@ beforeEach(() => {
   mockUnlisten.mockReset()
   progressHandlers = []
   // 单例 ref 跨用例共享：复位状态，避免上一例的 status 渗进下一例
-  const { status, downloadProgress } = useUpdateChecker()
+  const { status, availableVersion, downloadProgress } = useUpdateChecker()
   status.value = 'idle'
+  availableVersion.value = null
   downloadProgress.value = { downloaded: 0, contentLength: 0 }
 })
 
@@ -77,14 +78,15 @@ afterEach(() => {
 })
 
 describe('checkForUpdate', () => {
-  it('成功发现有更新 → status=available', async () => {
+  it('成功发现有更新 → status=available，并暴露可更新版本号', async () => {
     mockInvoke.mockResolvedValueOnce({ available: true, version: '1.2.3', date: '2026-01-01' })
-    const { status, checkForUpdate } = useUpdateChecker()
+    const { status, availableVersion, checkForUpdate } = useUpdateChecker()
 
     const update = await checkForUpdate()
 
     expect(update).toEqual({ available: true, version: '1.2.3', date: '2026-01-01' })
     expect(status.value).toBe('available')
+    expect(availableVersion.value).toBe('1.2.3')
     expect(errorSpy).not.toHaveBeenCalled()
   })
 
@@ -97,24 +99,28 @@ describe('checkForUpdate', () => {
 
   it('成功但无更新 → status=latest 且返回 null（调用方靠 null + status 弹「已是最新版本」）', async () => {
     mockInvoke.mockResolvedValueOnce({ available: false, version: null, date: null })
-    const { status, checkForUpdate } = useUpdateChecker()
+    const { status, availableVersion, checkForUpdate } = useUpdateChecker()
 
     const update = await checkForUpdate()
 
     // 返回真值对象会让 `!update && status==='latest'` 永不成立，toast 静默失效
     expect(update).toBeNull()
     expect(status.value).toBe('latest')
+    expect(availableVersion.value).toBeNull()
   })
 
   it('失败 → status=failed 且原始错误只进日志（不暴露给调用方 UI）', async () => {
     const raw = new Error('tls error: certificate expired at 2026-09-27')
     mockInvoke.mockRejectedValueOnce(raw)
     const checker = useUpdateChecker()
+    // 上一轮发现的版本号不得残留到失败态
+    checker.availableVersion.value = '1.2.3'
 
     const update = await checker.checkForUpdate()
 
     expect(update).toBeNull()
     expect(checker.status.value).toBe('failed')
+    expect(checker.availableVersion.value).toBeNull()
     // 组件不再对外暴露可渲染的裸错误字段（曾：errorMessage = e.message）
     expect('errorMessage' in checker).toBe(false)
     // 技术详情唯一落点 = logger.error
