@@ -134,6 +134,15 @@ impl PluginManager {
         ));
         // 运行监控出口（WIT `host-metrics`）：快照源 = 本运行时注册表。
         // 与桌面 `PluginHost::new` 同一条装配路径（两阶段注入，实例化前写入）。
+        //
+        // `process` 段（宿主进程）与 `plugins` 段（wasm 线性内存）**分开**：前者是
+        // OS 账，后者是单实例运行时账。移动端只覆盖本进程——Android WebView 渲染进程
+        // 在 `webview_zygote` 下、不属于本进程树且跨 uid 不可读，故该段以
+        // `webview.present = false` 显式声明「不可归属」（见 system/process_metrics.rs）。
+        runtime.monitor().register_source(
+            "process",
+            Box::new(crate::system::process_metrics::ProcessMetricsSource::new()),
+        );
         host_ctx.set_metrics_snapshot_source(runtime.monitor());
 
         // 宿主端事实（平台标识 = "mobile" / 无入站服务器）：单形态收口后从 wasm-core
