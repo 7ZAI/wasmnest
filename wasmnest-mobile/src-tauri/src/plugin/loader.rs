@@ -66,8 +66,18 @@ impl PluginLoader {
             }
             let dest = plugins_data_dir.join(&id);
             let marker = dest.join(PLUGIN_SOURCE_MARKER);
-            if marker.exists() && fs::read_to_string(&marker).unwrap_or_default().trim() == expected {
-                continue;
+            if marker.exists() {
+                let source = fs::read_to_string(&marker).unwrap_or_default();
+                let source = source.trim();
+                // 用户经应用更新安装的副本优先于内置产物：dev 重启也不覆盖；
+                // 卸载后目录移除，下次启动才重新复制内置版本。
+                if !source.is_empty() && !source.starts_with(SOURCE_APK_ASSET) {
+                    tracing::info!("[PluginLoader] Keeping user-updated plugin: {}", id);
+                    continue;
+                }
+                if source == expected {
+                    continue;
+                }
             }
             if dest.exists() {
                 fs::remove_dir_all(&dest)?;

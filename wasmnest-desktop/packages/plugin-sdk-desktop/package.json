@@ -65,6 +65,10 @@
       "types": "./src/ui/markdown-editor.d.ts",
       "import": "./src/ui/MarkdownEditor.vue"
     },
+    "./ui/app-update": {
+      "types": "./src/ui/AppUpdateSection.d.ts",
+      "import": "./src/ui/AppUpdateSection.vue"
+    },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"

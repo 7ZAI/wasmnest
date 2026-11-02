@@ -52,6 +52,10 @@
       "types": "./src/ui/QuickCard.d.ts",
       "import": "./src/ui/QuickCard.vue"
     },
+    "./ui/app-update": {
+      "types": "./src/ui/AppUpdateSection.d.ts",
+      "import": "./src/ui/AppUpdateSection.vue"
+    },
     "./ui/plugin-global-dialog": {
       "types": "./src/ui/plugin-global-dialog.d.ts",
       "import": "./src/ui/PluginGlobalDialog.vue"

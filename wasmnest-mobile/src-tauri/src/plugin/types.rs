@@ -59,6 +59,9 @@ pub struct MobilePluginInfo {
     pub contributes: PluginContributes,
     /// 插件来源
     pub source: String,
+    /// manifest `update` 段（缺省 = 不参与更新检查）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update: Option<wasmnest_wasm_core::app_update::PluginUpdateDecl>,
     /// 插件目录路径（含 plugin.json 的目录），前端经 asset protocol 加载前端模块
     pub extension_path: String,
     /// 插件图标：emoji 或相对插件目录的图片路径，缺省时前端生成字母头像回退
@@ -121,6 +124,7 @@ impl From<&LoadedPlugin> for MobilePluginInfo {
             state: p.state.clone(),
             contributes: p.manifest.contributes.clone(),
             source: source_str.to_string(),
+            update: p.manifest.update.clone(),
             extension_path: p.extension_path.clone(),
             icon: p.manifest.icon.clone(),
             size_bytes: dir_size(std::path::Path::new(&p.extension_path)),

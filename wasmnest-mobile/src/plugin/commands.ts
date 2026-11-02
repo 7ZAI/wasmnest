@@ -124,10 +124,46 @@ export async function pluginInvoke(
   return await invoke('plugin_invoke', { pluginId, command, args, credential })
 }
 
-/** 从本地 zip 插件包安装（宿主面凭证已绑定，ADR 0058） */
-export async function pluginInstallFromFile(path: string): Promise<string> {
+/** 应用更新检查返回（宿主 `plugin_check_app_update`，与 Rust camelCase 对齐） */
+export interface AppUpdateCheckInfo {
+  pluginId: string
+  currentVersion: string
+  latestVersion: string
+  tag: string
+  zipAsset: string
+  sha256: string
+  bytes: number
+  compat: {
+    hostRuntime: string
+    mountContract: string
+    sdkVersion: string
+    witVersion: string
+  } | null
+  compatible: boolean
+  compatReason?: { key: string; params?: Record<string, string> }
+}
+
+/** 检查应用更新（应用管理页；宿主面凭证） */
+export async function pluginCheckAppUpdate(pluginId: string): Promise<AppUpdateCheckInfo> {
   const credential = await ensureHostCredential()
-  return await invoke('plugin_install_from_file', { path, credential })
+  return await invoke('plugin_check_app_update', { pluginId, credential })
+}
+
+/** 下载更新包到本地（sha256 由 Rust 复算；安装走 `pluginInstallFromFile(path, true)`） */
+export async function pluginDownloadUpdate(args: {
+  pluginId: string
+  tag: string
+  zipAsset: string
+  sha256: string
+}): Promise<string> {
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_download_update', { ...args, credential })
+}
+
+/** 从本地 zip 插件包安装（宿主面凭证已绑定，ADR 0058） */
+export async function pluginInstallFromFile(path: string, upgrade = false): Promise<string> {
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_install_from_file', { path, credential, upgrade })
 }
 
 /** 卸载插件（仅用户安装的插件；宿主面凭证已绑定，ADR 0058） */

@@ -33,6 +33,7 @@
  */
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { join } from '@tauri-apps/api/path'
+import type { AppUpdateCheckResult } from '@binblink/wasmnest-plugin-sdk-desktop'
 import { logger } from '@/utils/frontendLogger'
 import { invoke } from '@/utils/invoke'
 import { appSurfaces, type AppSurfaceHandle } from './appSurfaceRegistry'
@@ -56,6 +57,16 @@ export interface AppMountEnv {
   mountContract: string
   /** 宿主面命令（白名单代理，ADR 0058 方案 A）：plugin_list_loaded / get_app_settings 等；白名单真源在桌面 src-tauri APP_FRONTEND_INVOKE_WHITELIST */
   invoke: <T = unknown>(command: string, args?: Record<string, unknown>) => Promise<T>
+  /**
+   * 应用更新检查（宿主统一默认实现；appId 与宿主面凭证已绑定在本环境）
+   *
+   * 检查结果已由宿主完成「取 Release → 身份/完整性校验 → 平台兼容裁决」；
+   * 应用设置页的 SDK 默认卡片直接消费。更新动作不在应用内执行：统一收口在
+   * 宿主应用管理页（需先停用应用、替换目录并重新审批）。
+   */
+  appUpdate?: {
+    check: () => Promise<AppUpdateCheckResult>
+  }
   /** 插件面命令（plugin_invoke，本 app 通道令牌已绑定） */
   appInvoke: <T = unknown>(command: string, ...args: unknown[]) => Promise<T>
   /** 本 app 插件 KV 存储（plugin_storage_*，宿主面凭证已绑定） */

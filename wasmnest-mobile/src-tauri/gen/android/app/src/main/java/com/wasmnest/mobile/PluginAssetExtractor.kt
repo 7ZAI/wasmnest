@@ -91,6 +91,16 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
             // 会一直加载旧产物 —— debug 下始终重新解压保证 dev 看到最新构建。
             val marker = File(destDir, MARKER_FILE)
             val manifestOk = File(destDir, PLUGIN_MANIFEST_FILE).isFile
+            // 用户经应用更新安装的副本（file-install / remote-download）优先于
+            // APK 内置版本：保留目录，不用内置产物覆盖。卸载该应用后目录被移除，
+            // 下次启动才会重新解压内置版本（回退路径）。
+            if (marker.exists()) {
+                val source = marker.readText().trim()
+                if (source.isNotEmpty() && !source.startsWith("$SOURCE_APK_ASSET:")) {
+                    Log.i(TAG, "Keeping user-updated plugin: $id ($source)")
+                    continue
+                }
+            }
             if (!BuildConfig.DEBUG &&
                 manifestOk &&
                 marker.exists() &&

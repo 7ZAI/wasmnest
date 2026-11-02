@@ -58,6 +58,7 @@ import {
   type MonitorPanelEnv,
 } from '@/shell/mount/useAppMount'
 import { MONITOR_PLUGIN_ID } from '@/shell/composables/useShellApps'
+import { useAppUpdates } from '@/shell/composables/useAppUpdates'
 import { rememberAppRoute } from '@/shell/mount/appSession'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlatform } from '@/composables/usePlatform'
@@ -102,6 +103,20 @@ async function buildEnv(initialRoute: string, appId: string): Promise<AppMountEn
     appId,
     mountContract: MOUNT_CONTRACT,
     invoke: (command, args) => whitelistedHostInvoke(command, args),
+    appUpdate: {
+      check: async () => {
+        const updates = useAppUpdates()
+        await updates.check(appId)
+        const state = updates.states.value[appId]
+        if (!state) return { status: 'error' }
+        return {
+          status: state.status === 'updating' ? 'checking' : state.status,
+          latestVersion: state.latestVersion,
+          currentVersion: state.currentVersion,
+          reason: state.reason,
+        }
+      },
+    },
     appInvoke: (command, ...args) => appInvoke(appId, command, ...args),
     appStorageGet: (key) => appStorageGet(appId, key),
     appStorageSet: (key, value) => appStorageSet(appId, key, value),

@@ -49,6 +49,9 @@ export type {
   MonitorPanelHandle,
   MountMonitorPanel,
   SystemAPI,
+  AppUpdateAPI,
+  AppUpdateCheckResult,
+  AppUpdateReason,
 } from '@binblink/wasmnest-plugin-sdk-mobile'
 
 /** 插件信息（从后端获取，含 source 字段） */
@@ -74,4 +77,6 @@ export interface PluginInfo {
   sizeBytes: number
   /** 安装时间（unix 毫秒），内置插件可能为 null */
   installedAt?: number
+  /** manifest `update` 段（缺省 = 不参与更新检查） */
+  update?: import('@binblink/wasmnest-plugin-sdk-mobile').PluginUpdateDecl
 }

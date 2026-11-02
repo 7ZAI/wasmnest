@@ -687,3 +687,73 @@ describe('backgroundTransport（运行期传输租约 opt-in）', () => {
     }
   })
 })
+
+/**
+ * `update`（应用更新源声明，2026-11-02 应用版本更新全链路）
+ *
+ * 行为契约（与能力仓 `app_update::resolve_update_source` 同判据）：
+ * - U-V1 缺省 / null 合法（不参与更新检查）；
+ * - U-V2 `provider` 只认 `github-release`；
+ * - U-V3 `repo` 必须是 GitHub `owner/name`，含 URL / `..` 即拒；
+ * - U-V4 `slug` 小写字母数字 + `-`，不能以 `-` 开头/结尾（用于拼资产名）；
+ * - U-V5 `tagPrefix` 非空、不含 `/` / `..` / 空白（拼进下载 URL 路径段）；
+ * - U-V6 未知字段即拒（防止作者以为某个拼写生效）。
+ */
+describe('manifest update 声明', () => {
+  beforeEach(() => {
+    cwd = mkdtempSync(join(tmpdir(), 'wasmnest-update-decl-'))
+  })
+  afterEach(() => {
+    rmSync(cwd, { recursive: true, force: true })
+  })
+
+  function errorsForUpdate(update: unknown): string[] {
+    const manifest: Record<string, unknown> = {
+      id: 'com.example.test',
+      name: 'Test Plugin',
+      version: '1.0.0',
+      platform: 'desktop',
+      main: 'index.js',
+      pluginType: 'full',
+      rustLibrary: 'test_plugin',
+      permissions: [],
+      contributes: {},
+    }
+    if (update !== undefined) manifest.update = update
+    writeFileSync(join(cwd, 'plugin.json'), JSON.stringify(manifest, null, 2), 'utf-8')
+    return validateManifest(cwd).errors.filter((e) => e.includes('update'))
+  }
+
+  it('U-V1 缺省 / null 合法', () => {
+    expect(errorsForUpdate(undefined)).toEqual([])
+    expect(errorsForUpdate(null)).toEqual([])
+  })
+
+  it('U-V2 官方缺省形态合法（provider 省略 / github-release）', () => {
+    expect(errorsForUpdate({})).toEqual([])
+    expect(errorsForUpdate({ provider: 'github-release' })).toEqual([])
+    expect(errorsForUpdate({ provider: 'rss' })).toHaveLength(1)
+  })
+
+  it('U-V3 repo 只认 owner/name', () => {
+    expect(errorsForUpdate({ repo: '7ZAI/wasmnest-apps' })).toEqual([])
+    for (const repo of ['https://evil.example/x', 'owner/../name', 'owner', 'owner/name/extra']) {
+      expect(errorsForUpdate({ repo }), `repo=${repo} 应被拒`).toHaveLength(1)
+    }
+  })
+
+  it('U-V4 slug / U-V5 tagPrefix 形态', () => {
+    expect(errorsForUpdate({ slug: 'file-transfer' })).toEqual([])
+    expect(errorsForUpdate({ tagPrefix: 'file-transfer-' })).toEqual([])
+    for (const slug of ['../evil', 'Bad Slug', '-edge', 'edge-']) {
+      expect(errorsForUpdate({ slug }), `slug=${slug} 应被拒`).toHaveLength(1)
+    }
+    for (const tagPrefix of ['', 'a/b', 'a..b', 'a b']) {
+      expect(errorsForUpdate({ tagPrefix }), `tagPrefix=${tagPrefix} 应被拒`).toHaveLength(1)
+    }
+  })
+
+  it('U-V6 未知字段即拒', () => {
+    expect(errorsForUpdate({ repository: 'owner/name' })).toHaveLength(1)
+  })
+})

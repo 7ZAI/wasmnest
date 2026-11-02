@@ -92,6 +92,13 @@ export interface ShellApp {
   sizeBytes?: number
   /** 上一次失败的简短原因（state === 'error' 时展示） */
   error?: string
+  /** manifest `update` 段（缺省 = 不参与更新检查；与宿主 ShellApp 契约逐字一致） */
+  update?: {
+    provider?: 'github-release'
+    repo?: string
+    tagPrefix?: string
+    slug?: string
+  }
   contributions: ShellAppContributions
 }
 

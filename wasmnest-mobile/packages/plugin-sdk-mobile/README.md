@@ -115,6 +115,7 @@ export async function deactivate(): Promise<void> {
 | `context.status` | 生命周期状态上报（`reportReady` / `reportError`） | 默认授予 |
 | `context.logger` | 分级日志（`info` / `debug` / `warn` / `error`） | 默认授予 |
 | `context.i18n` | 注册应用翻译、`t()` 快捷翻译 | 默认授予 |
+| `context.appUpdate` | 应用更新检查（宿主统一 GitHub Release 判定；失败归一化为 `status: 'error'`） | 默认授予 |
 | `context.system` | 系统级操作（`openFile` / `revealInDir` / `revealReceivedFileLocation` / `requestAllFilesAccess` / `openDownloadDir`） | `system:open` |
 | `context._disposables` | 宿主在注销时统一回收的 Disposable 列表（内部使用） | — |
 
@@ -335,6 +336,23 @@ const options = [
 </template>
 ```
 
+### 应用更新检查（AppUpdateSection）
+
+manifest 声明 `update`（缺省 = 不参与检查）后，应用设置页直接嵌入 SDK 默认卡片：
+
+```vue
+<script setup lang="ts">
+import AppUpdateSection from '@binblink/wasmnest-plugin-sdk-mobile/ui/app-update'
+</script>
+
+<template>
+  <AppUpdateSection />
+</template>
+```
+
+- 数据面 = `context.appUpdate.check`（宿主注入；令牌只能查自己）；应用可给 `check` 传自实现，或只用 `useAppUpdate()` 自己画 UI。
+- 更新安装统一在宿主应用管理页执行（需先停用、替换目录并重新审批）。
+
 ### 首页快捷卡片（QuickCard）
 
 宿主壳首页的快捷卡片 = **SDK 公共外观 + 应用内容 + 宿主跳转**：应用只实现卡片内容，
@@ -387,6 +405,7 @@ context.ui.registerSlot({ id: 'sessions', component: SessionCard, order: 10 })
 | `@binblink/wasmnest-plugin-sdk-mobile/types` | 纯类型导出（仅类型，无运行时） |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui` | 共享 Vue 组件：`Select` |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card` | `QuickCard` 首页快捷卡片 |
+| `@binblink/wasmnest-plugin-sdk-mobile/ui/app-update` | `AppUpdateSection`（应用更新检查） |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui/plugin-global-dialog` | `PluginGlobalDialog` |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui/swipe-tabs` | `useSwipeTabs` |
 | `@binblink/wasmnest-plugin-sdk-mobile/global-dialog` | 全局弹窗控制器 |

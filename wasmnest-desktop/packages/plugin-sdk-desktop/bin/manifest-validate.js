@@ -442,5 +442,53 @@ export function validateManifest(dir) {
     }
   }
 
+  // update（应用更新源声明，2026-11-02 应用版本更新全链路）：缺省 = 不参与
+  // 更新检查；声明后 repo / slug / tagPrefix 会成为宿主拼 URL 与资产名的输入，
+  // 形态非法在构建期拦下（与内核 `app_update::resolve_update_source` 同判据）。
+  if (manifest.update !== undefined && manifest.update !== null) {
+    const update = manifest.update
+    if (typeof update !== 'object' || Array.isArray(update)) {
+      errors.push(`update 必须是对象: ${JSON.stringify(update)}`)
+    } else {
+      if (update.provider !== undefined && update.provider !== 'github-release') {
+        errors.push(`update.provider 非法: "${update.provider}"（当前只支持 github-release）`)
+      }
+      if (update.repo !== undefined) {
+        const repo = update.repo
+        if (
+          typeof repo !== 'string' ||
+          !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo) ||
+          repo.split('/').some((part) => part === '.' || part === '..')
+        ) {
+          errors.push(`update.repo 非法: ${JSON.stringify(repo)}（须为 GitHub 的 owner/name）`)
+        }
+      }
+      if (update.slug !== undefined) {
+        const slug = update.slug
+        if (typeof slug !== 'string' || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(slug)) {
+          errors.push(`update.slug 非法: ${JSON.stringify(slug)}（小写字母数字与 '-'，不能以 '-' 开头/结尾）`)
+        }
+      }
+      if (update.tagPrefix !== undefined) {
+        const prefix = update.tagPrefix
+        if (
+          typeof prefix !== 'string' ||
+          prefix.trim() === '' ||
+          prefix.includes('/') ||
+          prefix.includes('..') ||
+          /\s/.test(prefix)
+        ) {
+          errors.push(`update.tagPrefix 非法: ${JSON.stringify(prefix)}（非空，不含 '/'、'..' 或空白）`)
+        }
+      }
+      const extraKeys = Object.keys(update).filter(
+        (k) => !['provider', 'repo', 'tagPrefix', 'slug'].includes(k),
+      )
+      if (extraKeys.length) {
+        errors.push(`update 含未知字段: ${extraKeys.join(', ')}（只允许 provider / repo / tagPrefix / slug）`)
+      }
+    }
+  }
+
   return { manifest, errors, warnings }
 }

@@ -9,6 +9,7 @@ export type {
   Disposable,
   PluginType,
   PluginManifest,
+  PluginUpdateDecl,
   PluginConfiguration,
   ConfigProperty,
   PluginContributes,
@@ -47,6 +48,9 @@ export type {
   PluginDevMock,
   PluginState,
   PluginInfo,
+  AppUpdateReason,
+  AppUpdateCheckResult,
+  AppUpdateAPI,
 } from './types'
 
 // 运行时代理导出
@@ -78,3 +82,7 @@ export type {
 
 // 配置约定导出
 export { PLUGIN_CONFIG_STORAGE_KEY, defineConfiguration } from './config'
+
+// 应用更新检查（SDK 默认实现；宿主统一 GitHub Release 判定）
+export { useAppUpdate } from './update'
+export type { AppUpdateStatus, UseAppUpdate, UseAppUpdateOptions } from './update'

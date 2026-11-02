@@ -28,6 +28,8 @@ import type {
   ShellSlotContribution,
   ShellCapsuleItem,
   MonitorPanelHandle,
+  AppUpdateAPI,
+  AppUpdateCheckResult,
 } from './types'
 import { hasPermissionForApi } from './permission'
 import * as pluginCmds from './commands'
@@ -470,6 +472,22 @@ export function createPluginContext(
     },
   }
 
+  // ==================== AppUpdateAPI ====================
+  // 宿主统一更新检查（GitHub Release 判定）：令牌只能查自己；失败归一化为
+  // status='error'（检查是被动动作，不把技术错误抛给设置页）。
+  const appUpdate: AppUpdateAPI = {
+    async check(): Promise<AppUpdateCheckResult> {
+      try {
+        return await invoke<AppUpdateCheckResult>('plugin_check_self_update', {
+          credential: await channelToken(),
+        })
+      } catch (e) {
+        frontendLogger.warn('[PluginContext] app update check failed:', e)
+        return { status: 'error' }
+      }
+    },
+  }
+
   context = {
     id: info.id,
     commands,
@@ -484,6 +502,7 @@ export function createPluginContext(
     notifications,
     system,
     status,
+    appUpdate,
     _disposables: disposables,
   }
   return context!

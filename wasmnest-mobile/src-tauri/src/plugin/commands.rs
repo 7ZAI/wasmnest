@@ -463,12 +463,17 @@ pub async fn plugin_download(
 }
 
 /// 从本地 zip 插件包安装
+///
+/// `upgrade = true`（应用版本更新链路）：同 id 就地升级——只允许可更新应用
+/// （manifest 声明 `update`），运行中 / 系统服务一律拒绝；插件 KV 保留，目录内容
+/// 换新后审批哈希失配 → 下次激活需要重新批准（升级保数据，不保信任）。
 #[tauri::command]
 pub async fn plugin_install_from_file(
     app_handle: tauri::AppHandle,
     webview: tauri::Webview,
     path: String,
     credential: String,
+    upgrade: Option<bool>,
 ) -> Result<String> {
     require_host_surface(
         &app_handle.state::<Arc<FrontendChannelRegistry>>(),
@@ -479,10 +484,51 @@ pub async fn plugin_install_from_file(
     )?;
     let manager = app_handle.state::<Arc<PluginManager>>();
     let plugins_dir = manager.plugins_dir().clone();
+    let upgrade = upgrade.unwrap_or(false);
 
-    let plugin_id = crate::plugin::downloader::PluginDownloader::install_from_file(&path, &plugins_dir).await?;
+    if upgrade {
+        // 先解出目标 id（任何落盘动作之前），再按真实状态裁决。
+        let plugin_id = crate::plugin::downloader::PluginDownloader::peek_plugin_id(std::path::Path::new(&path))?;
+        let info = manager.get_info(&plugin_id).await.ok_or_else(|| {
+            crate::AppError::Plugin(format!(
+                "Plugin '{}' is not installed; use install instead of upgrade.",
+                plugin_id
+            ))
+        })?;
+        if matches!(
+            info.kind,
+            crate::plugin::types::PluginKind::BasicService | crate::plugin::types::PluginKind::InternalBusiness
+        ) {
+            return Err(crate::AppError::Plugin(format!(
+                "Plugin '{}' is a system service; system services are updated with the host release.",
+                plugin_id
+            )));
+        }
+        if matches!(
+            &info.state,
+            crate::plugin::types::PluginState::Activated
+                | crate::plugin::types::PluginState::Activating
+                | crate::plugin::types::PluginState::Degraded { .. }
+        ) {
+            return Err(crate::AppError::Plugin(format!(
+                "Plugin '{}' is running, deactivate it before upgrading.",
+                plugin_id
+            )));
+        }
+        // 随包内置的 APK asset 插件只有声明了更新源才允许被用户副本覆盖；
+        // 用户安装（file-install / remote-download）本就是可替换面。
+        if info.source == "apk-asset" && info.update.is_none() {
+            return Err(crate::AppError::Plugin(format!(
+                "Plugin '{}' (source: apk-asset) does not declare an update source; builtin apps are updated with the host release.",
+                plugin_id
+            )));
+        }
+    }
 
-    // 重新扫描并加载
+    let plugin_id =
+        crate::plugin::downloader::PluginDownloader::install_from_file(&path, &plugins_dir, upgrade).await?;
+
+    // 重新扫描并加载（新目录 / 新版本进入注册表）
     manager.scan_and_load().await;
 
     Ok(plugin_id)

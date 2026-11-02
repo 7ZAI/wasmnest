@@ -43,6 +43,8 @@ pub mod saf_io;
 pub mod saf_path;
 pub mod terminal_stream;
 pub mod types;
+// 应用版本更新链路（GitHub Release 检查 / 校验下载；应用管理页与 SDK 默认实现共用）
+pub mod updates;
 
 // ==================== 机制面垫片（真源 = wasmnest-wasm-core，单形态） ====================
 

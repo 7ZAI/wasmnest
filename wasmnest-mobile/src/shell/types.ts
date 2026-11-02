@@ -16,6 +16,7 @@
  */
 
 import type { Component } from 'vue'
+import type { PluginUpdateDecl } from '@binblink/wasmnest-plugin-sdk-mobile'
 
 /** 可释放句柄：注册扩展点的返回值，dispose 即摘除该注册 */
 export interface Disposable {
@@ -116,6 +117,8 @@ export interface ShellApp {
   sizeBytes?: number
   /** 上一次失败的简短原因（state === 'error' 时展示） */
   error?: string
+  /** manifest `update` 段（缺省 = 不参与更新检查） */
+  update?: PluginUpdateDecl
   contributions: ShellAppContributions
 }
 

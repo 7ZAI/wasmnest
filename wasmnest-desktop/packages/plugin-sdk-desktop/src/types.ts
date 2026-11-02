@@ -53,6 +53,18 @@ export type InstanceLifecycle = 'persistent' | 'ephemeral'
  */
 export type PluginPlatform = 'desktop' | 'mobile' | 'both'
 
+/** manifest `update` 段：应用更新源声明（缺省 = 不参与更新检查） */
+export interface PluginUpdateDecl {
+  /** 更新来源类型；当前只支持 `github-release` */
+  provider?: 'github-release'
+  /** GitHub 仓库 `owner/name`；缺省 = 官方应用仓 `7ZAI/wasmnest-apps` */
+  repo?: string
+  /** Release tag 前缀（完整形态 `<tagPrefix>v<X.Y.Z>`）；缺省 `<slug>-` */
+  tagPrefix?: string
+  /** Release 资产前缀（`<slug>-<end>-v<version>.zip`）；缺省 = 插件 id 末段 */
+  slug?: string
+}
+
 /** 插件描述文件 (plugin.json) 结构 */
 export interface PluginManifest {
   id: string
@@ -99,6 +111,13 @@ export interface PluginManifest {
    * 缺省 `false` = 既有行为：界面打开才 acquire，关闭最后一个界面即停播。
    */
   backgroundTransport?: boolean
+  /**
+   * 应用更新源声明（manifest `update`；缺省 = 不参与更新检查）
+   *
+   * 宿主按本段解析 GitHub 发布仓 / tag 前缀 / 资产 slug；缺省字段收敛到官方
+   * 应用仓命名约定。第三方应用可声明自己的 repo / tagPrefix / slug。
+   */
+  update?: PluginUpdateDecl
   /**
    * 能力依赖声明（应用插件消费的能力名，WIT host-* 接口名）
    *
@@ -555,6 +574,31 @@ export interface I18nAPI {
   t(key: string, params?: Record<string, unknown>): string
 }
 
+/** 应用更新检查的拒绝 / 失败原因（展示层按 key 翻译；params 只承载版本号等非技术值） */
+export interface AppUpdateReason {
+  key: string
+  params?: Record<string, string>
+}
+
+/**
+ * 应用更新检查结果（宿主默认实现返回；SDK 默认设置卡直接展示）
+ *
+ * 宿主侧已经完成「取 Release → 校验身份/完整性 → 兼容性判定」，插件只消费状态。
+ * `available` 表示有新版本且兼容；`incompatible` 只给原因，绝不提供更新动作。
+ */
+export interface AppUpdateCheckResult {
+  status: 'idle' | 'checking' | 'up-to-date' | 'available' | 'incompatible' | 'error'
+  latestVersion?: string
+  currentVersion?: string
+  reason?: AppUpdateReason
+}
+
+/** 应用更新能力（宿主默认实现；appId 与凭据已由宿主绑定） */
+export interface AppUpdateAPI {
+  /** 检查本应用更新；失败已由宿主归一化为 `status: 'error'`，不抛技术错误 */
+  check(): Promise<AppUpdateCheckResult>
+}
+
 /** 插件上下文 — 插件访问宿主能力的唯一通道 */
 export interface PluginContext {
   readonly id: string
@@ -568,6 +612,8 @@ export interface PluginContext {
   readonly http: HttpAPI
   /** 国际化 API */
   readonly i18n: I18nAPI
+  /** 应用更新检查（宿主统一默认实现；可选——旧宿主 / dev-shell 可不提供） */
+  readonly appUpdate?: AppUpdateAPI
   /** 内部：所有 Disposable 收集器 */
   readonly _disposables: Disposable[]
 }

@@ -106,6 +106,7 @@ export function toShellApp(info: PluginInfo): ShellApp {
     permissions: mapPermissions(info),
     sizeBytes: typeof info.sizeBytes === 'number' ? info.sizeBytes : undefined,
     error: info.state.state === 'error' ? info.state.error : undefined,
+    update: info.update,
     // 运行面不从清单下发：插件的 UI 入口在激活后才注册进插件注册表，
     // 因此在 resolveSurface 里按需解析（见下）
     contributions: {},

@@ -62,7 +62,7 @@ impl PluginDownloader {
     /// 3. wasm_hash 校验（manifest 声明时）
     /// 4. 写来源标记（file-install）
     /// 5. 移动到 app_data_dir/plugins/{plugin_id}/
-    pub async fn install_from_file(zip_path: &str, plugins_dir: &Path) -> Result<String> {
+    pub async fn install_from_file(zip_path: &str, plugins_dir: &Path, upgrade: bool) -> Result<String> {
         let zip_path = Path::new(zip_path);
         if !zip_path.exists() {
             return Err(crate::AppError::Plugin(format!(
@@ -70,7 +70,32 @@ impl PluginDownloader {
                 zip_path.display()
             )));
         }
-        Self::install_zip(zip_path, plugins_dir, SOURCE_FILE_INSTALL).await
+        Self::install_zip(zip_path, plugins_dir, SOURCE_FILE_INSTALL, upgrade).await
+    }
+
+    /// 读取 zip 内 `plugin.json` 的插件 id（升级前置裁决用；不解压落盘）
+    ///
+    /// 与安装共用同一份 manifest 解析 / id 校验，避免「先装后判」造成半成品目录。
+    pub fn peek_plugin_id(zip_path: &Path) -> Result<String> {
+        let file = std::fs::File::open(zip_path)
+            .map_err(|e| crate::AppError::Plugin(format!("Failed to open plugin package: {}", e)))?;
+        let mut archive = zip::ZipArchive::new(file)
+            .map_err(|e| crate::AppError::Plugin(format!("Invalid plugin package: {}", e)))?;
+        let mut manifest_str = String::new();
+        archive
+            .by_name(PLUGIN_MANIFEST_FILE)
+            .map_err(|e| crate::AppError::Plugin(format!("Plugin package missing plugin.json: {}", e)))?
+            .read_to_string(&mut manifest_str)
+            .map_err(|e| crate::AppError::Plugin(format!("Failed to read plugin.json: {}", e)))?;
+        let manifest: crate::plugin::types::PluginManifest = serde_json::from_str(&manifest_str)
+            .map_err(|e| crate::AppError::Plugin(format!("Failed to parse plugin.json: {}", e)))?;
+        if !validate_plugin_id(&manifest.id) {
+            return Err(crate::AppError::Plugin(format!(
+                "plugin.json id {:?} is invalid: must be a reverse-domain name like com.example.plugin",
+                manifest.id
+            )));
+        }
+        Ok(manifest.id)
     }
 
     /// 下载并安装远程 zip 插件包
@@ -122,13 +147,17 @@ impl PluginDownloader {
         file.write_all(&bytes).await?;
         drop(file);
 
-        let result = Self::install_zip(&temp_zip, plugins_dir, SOURCE_REMOTE_DOWNLOAD).await;
+        let result = Self::install_zip(&temp_zip, plugins_dir, SOURCE_REMOTE_DOWNLOAD, false).await;
         let _ = tokio::fs::remove_file(&temp_zip).await;
         result
     }
 
     /// zip 解压安装（file-install / remote-download 共用）
-    async fn install_zip(zip_path: &Path, plugins_dir: &Path, source: &str) -> Result<String> {
+    ///
+    /// `upgrade = true`：同 id 就地升级（替换插件目录；插件 KV 在独立 DB，不受影响）。
+    /// 运行态 / 系统服务 / 非可更新来源的裁决在命令面（需要 PluginManager 才能读到
+    /// 真实状态）；本函数只负责「目录换新 + 写来源标记」。
+    async fn install_zip(zip_path: &Path, plugins_dir: &Path, source: &str, upgrade: bool) -> Result<String> {
         // 1. 打开 zip
         let file = std::fs::File::open(zip_path)
             .map_err(|e| crate::AppError::Plugin(format!("Failed to open plugin package: {}", e)))?;
@@ -218,16 +247,21 @@ impl PluginDownloader {
 
         // 6. 移动到最终目录
         //
-        // 拒绝覆盖已存在的同 id 插件：无签名链时无法区分「同作者更新」与
-        // 「冒名顶替替换」，静默替换会让既有审批（哈希钉扎）与权限继续
-        // 作用于被替换后的新代码，是审批门禁的旁路。升级需先卸载旧版本。
+        // 非升级：拒绝覆盖已存在的同 id 插件（无签名链时无法区分「同作者更新」与
+        // 「冒名顶替替换」，静默替换会让既有审批（哈希钉扎）与权限继续作用于被替换
+        // 后的新代码，是审批门禁的旁路）。
+        // 升级：显式替换目录内容（调用方已裁决来源 / 运行态），插件 KV 不动；
+        // 目录哈希变化使审批失效，新代码下次激活必须重新批准。
         let final_dir = plugins_dir.join(&plugin_id);
         if final_dir.exists() {
-            tokio::fs::remove_dir_all(&temp_dir).await?;
-            return Err(crate::AppError::Plugin(format!(
-                "Plugin '{}' is already installed. Uninstall it first to install a new version.",
-                plugin_id
-            )));
+            if !upgrade {
+                tokio::fs::remove_dir_all(&temp_dir).await?;
+                return Err(crate::AppError::Plugin(format!(
+                    "Plugin '{}' is already installed. Uninstall it first to install a new version.",
+                    plugin_id
+                )));
+            }
+            tokio::fs::remove_dir_all(&final_dir).await?;
         }
         tokio::fs::rename(&temp_dir, &final_dir).await?;
 
@@ -292,13 +326,18 @@ mod tests {
 
     /// 构造一个合法插件 zip（frontend 形态免 wasm 产物，platform 可指定）
     fn build_zip(dir: &Path, id: &str, platform: &str) -> std::path::PathBuf {
-        let zip_path = dir.join(format!("{}.zip", id));
+        build_zip_version(dir, id, platform, "1.0.0")
+    }
+
+    /// 同 [`build_zip`]，版本可控（升级测试用）
+    fn build_zip_version(dir: &Path, id: &str, platform: &str, version: &str) -> std::path::PathBuf {
+        let zip_path = dir.join(format!("{}-{}.zip", id, version));
         let file = std::fs::File::create(&zip_path).unwrap();
         let mut writer = zip::ZipWriter::new(file);
         let manifest = serde_json::json!({
             "id": id,
             "name": "Test Plugin",
-            "version": "1.0.0",
+            "version": version,
             "platform": platform,
             "pluginType": "frontend",
             "main": "index.js",
@@ -318,6 +357,39 @@ mod tests {
         zip_path
     }
 
+    /// 升级安装：非 upgrade 拒绝覆盖；upgrade=true 替换目录并更新版本（插件 KV 在独立 DB，不动）
+    #[test]
+    fn install_upgrade_replaces_existing_plugin_only_when_flag_set() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let tmp = tempfile::tempdir().unwrap();
+            let plugins_dir = tmp.path().join("plugins");
+            let id = "com.test.upgrade";
+
+            let v1 = build_zip_version(tmp.path(), id, "mobile", "1.0.0");
+            PluginDownloader::install_from_file(v1.to_str().unwrap(), &plugins_dir, false)
+                .await
+                .expect("首个版本安装成功");
+
+            let v2 = build_zip_version(tmp.path(), id, "mobile", "1.0.1");
+            let err = PluginDownloader::install_from_file(v2.to_str().unwrap(), &plugins_dir, false)
+                .await
+                .expect_err("非升级模式不得覆盖已安装应用");
+            assert!(err.to_string().contains("already installed"), "err: {err}");
+
+            PluginDownloader::install_from_file(v2.to_str().unwrap(), &plugins_dir, true)
+                .await
+                .expect("升级模式必须替换目录");
+            let manifest = std::fs::read_to_string(plugins_dir.join(id).join(PLUGIN_MANIFEST_FILE)).unwrap();
+            let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+            assert_eq!(manifest["version"], "1.0.1", "manifest: {manifest}");
+            assert_eq!(
+                std::fs::read_to_string(plugins_dir.join(id).join(PLUGIN_SOURCE_MARKER)).unwrap(),
+                SOURCE_FILE_INSTALL
+            );
+        });
+    }
+
     /// 平台适配门禁（安装路径）：desktop 专属分发包必须 fail-visible 拒装
     ///
     /// 与目录扫描侧 `loader.rs::load_manifest` 同判据；拒绝必须发生在任何落盘
@@ -331,7 +403,7 @@ mod tests {
 
             // desktop 专属：拒绝，且错误信息点名 platform / desktop / both
             let desktop_zip = build_zip(tmp.path(), "com.test.desktop-only", "desktop");
-            let err = PluginDownloader::install_from_file(desktop_zip.to_str().unwrap(), &plugins_dir)
+            let err = PluginDownloader::install_from_file(desktop_zip.to_str().unwrap(), &plugins_dir, false)
                 .await
                 .expect_err("desktop 专属分发包在移动端必须被拒");
             let msg = err.to_string();
@@ -349,7 +421,7 @@ mod tests {
 
             // mobile：放行并完成安装（来源标记 file-install）
             let mobile_zip = build_zip(tmp.path(), "com.test.mobile-ok", "mobile");
-            let id = PluginDownloader::install_from_file(mobile_zip.to_str().unwrap(), &plugins_dir)
+            let id = PluginDownloader::install_from_file(mobile_zip.to_str().unwrap(), &plugins_dir, false)
                 .await
                 .expect("mobile 分发包必须放行");
             assert_eq!(id, "com.test.mobile-ok");

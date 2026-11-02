@@ -63,12 +63,20 @@
 - `wasmHash` 由桌面构建链注入**产物目录**的 `plugin.json`（按 `<rustLibrary>.wasm` 现算 SHA-256）；**源清单不写该键**。
 - **移动端清单扩展**：`preauthDirs`（预授权目录，支持 `${downloads}` 等占位）/ `preauthUrls`（出站 URL 白名单 glob），宿主在 preauthorize 阶段收齐后一次弹窗；**桌面上这两个键无效**。
 - **桌面端清单扩展**：`backgroundTransport`（布尔，缺省 false）——服务端型应用在**运行期**（启动成功 → 停用 / Error）持有 `net.transport`（WS + HTTP + mDNS），界面挂载 / 卸载不决定其生死；代价是整段运行期对外可达，故必须同时声明 `ws:server` / `network:http` 至少一个（构建期 `manifest-validate.js` + 加载期 `wasm-core/manager/validation.rs` 双侧拒绝）。只在界面打开时供服的应用不要声明。
+- **双端清单扩展：应用更新源** `update`（缺省 = 不参与更新检查）：
+  ```json
+  "update": { "provider": "github-release", "repo": "7ZAI/wasmnest-apps", "tagPrefix": "bedcode-", "slug": "bedcode" }
+  ```
+  - `provider` 当前只支持 `github-release`；`repo` / `tagPrefix` / `slug` 均可省略——缺省 `repo` = `7ZAI/wasmnest-apps`，`slug` = 插件 id 末段，`tagPrefix` = `<slug>-`（tag `<slug>-v<X.Y.Z>`，资产 `<slug>-<end>-v<X.Y.Z>.zip` + 同名 `.json` 元数据）。
+  - 声明即参与宿主应用管理页与 SDK 默认设置卡的「检查更新」；纯判定真源 = 能力仓 `wasmnest-wasm-core::app_update`，双端宿主共用。
+  - **内置应用的就地升级口径（2026-11-02 用户裁决）**：`wasm-core` 的加载去重只在「同 id 用户副本声明了同一更新源且版本严格更新」时允许其覆盖内置条目；升级后的副本仍标 `UserInstalled` / `file-install`，目录哈希变化使旧审批失效，必须重新批准（升级保数据，不保信任）。未声明 `update` 的随包应用仍只能随宿主发布更新。
 
 ### 5.2 SDK（端内包，随端走）
 
 - 桌面：`@binblink/wasmnest-plugin-sdk-desktop`（bin `wasmnest-plugin-desktop`；crate `wasmnest-plugin-api` + 宏 crate `rust-macros`）+ manifest / wasm-hash 工具面（`bin/manifest-gen.js` / `manifest-validate.js` / `wasm-hash.js`）。
 - 移动：`@binblink/wasmnest-plugin-sdk-mobile`（bin `wasmnest-plugin`；crate `wasmnest-plugin-api-mobile`；含 `UIRegistry` 类型真源（`src/types.ts`）与 dev-shell）。
 - SDK 版本一致性：npm `package.json` 与 `Cargo.toml` 必须一致（`scripts/package-sdks.mjs` 校验）；发布产物 = npm tarball + crates + zip + SHA256 清单。
+- **应用更新默认实现（2026-11-02）**：双端 SDK 导出 `useAppUpdate()`（状态机）与 `ui/app-update`（`<AppUpdateSection />` 默认设置卡）。应用设置页直接嵌入即用宿主统一判定（manifest `update` 段 → GitHub Release），也可给 `check` 传入自己的检查器或完全不用本组件。更新**安装动作不在应用内**：统一收口在宿主应用管理页（需先停用、替换目录并重新审批）。
 - **桌面 dev-shell（2026-10-21 已对齐宿主）**：dev-shell 走**与宿主同一条装载路径**——加载 app 的 `src/entry.ts` 源码并调用 `mountApp(root, env)`，外围复刻宿主 chrome（标题栏 / 状态栏 / 挂载槽）。设计 token 走单一真源（alias 指向宿主 `src/style.css` + `src/shell/styles/shell.css`；npm 包内用自带副本，由 `dev-shell/__tests__/visualParity.test.ts` 钉住），挂载契约由 `dev-shell/__tests__/shell/contractDrift.test.ts` 与宿主 `src/shell/mount/useAppMount.ts` 逐字段比对。**改宿主挂载契约时必须同步改 dev-shell 侧声明，否则该锁测红**。
 - **已知漂移（写明责任）**：桌面 SDK 的 `README.md` / `template/` 仍是旧贡献面形态（`activate(context)` + `__WASMNEST_SHARED__` 外置），与 ADR 0057 后的挂载包形态（`mountApp` + 自足打包）不一致——写新代码以应用仓现有 app 为准；该漂移的修复在**平台仓侧**（docs/codemap.md §6 任务路由「改 SDK」行）。
 

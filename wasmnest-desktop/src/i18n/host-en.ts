@@ -342,6 +342,7 @@ export default {
         incompatible: 'New version v{version} found, but it is incompatible with this platform',
         updating: 'Downloading and updating…',
         failed: 'Update check failed, try again later',
+        stopFirst: 'Stop the app before updating (the update replaces the plugin directory)',
         reason: {
           noCompat: 'The release lacks a compatibility declaration (legacy release format); compatibility cannot be confirmed',
           mountContract: 'Requires mount contract {required}; this platform is {current}',

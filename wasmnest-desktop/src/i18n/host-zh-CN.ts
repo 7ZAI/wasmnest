@@ -331,6 +331,7 @@ export default {
         incompatible: '发现新版本 v{version}，但与当前平台不兼容',
         updating: '正在下载并更新…',
         failed: '更新检查失败，请稍后重试',
+        stopFirst: '请先停用应用后再更新（更新需替换插件目录）',
         reason: {
           noCompat: '该发布物缺少兼容声明（旧版发布格式），无法确认与当前平台兼容',
           mountContract: '要求挂载契约 {required}，当前平台为 {current}',

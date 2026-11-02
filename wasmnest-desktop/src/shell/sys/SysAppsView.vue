@@ -119,8 +119,8 @@
         </button>
       </div>
 
-      <!-- 更新面（应用版本更新全链路）：仅 user-installed 业务应用（与卸载同门槛，
-           builtin/scanned 的更新走宿主发布装配）。兼容判断在 useAppUpdates（壳持有
+      <!-- 更新面（应用版本更新全链路）：声明 manifest `update` 的业务应用（含随包
+           文件应用；静态注册应用无目录可换）。兼容判断在 useAppUpdates（壳持有
            MOUNT_CONTRACT 与宿主版本）：不兼容只给原因、绝不出现更新按钮。 -->
       <div
         v-if="isUpdatable(app)"
@@ -146,7 +146,7 @@
           class="shell-btn"
           :data-testid="`sys-apps-update-apply-${app.pluginId}`"
           :disabled="updateBusy(app.id) || app.state === 'running' || app.state === 'degraded'"
-          :title="t('shell.apps.uninstallDisabled')"
+          :title="t('shell.apps.update.stopFirst')"
           @click="onApplyUpdate(app)"
         >
           <ShellIcon name="transfer" :size="13" />
@@ -287,9 +287,9 @@ const updates = useAppUpdates()
 /** script setup 顶层 ref：模板里自动解包（`updateStates[app.id]` 直取状态） */
 const updateStates = updates.states
 
-/** 更新面只对 user-installed 业务应用开放（与卸载同门槛；builtin 走宿主发布装配） */
+/** 更新面只对声明了更新源、且不是静态注册（无目录可换）的应用开放；系统服务不参与 */
 function isUpdatable(app: ShellAppEntry): boolean {
-  return app.source === 'user-installed' && !isServiceKind(app.kind)
+  return Boolean(app.update) && app.source !== 'builtin' && !isServiceKind(app.kind)
 }
 
 function updateBusy(appId: string): boolean {

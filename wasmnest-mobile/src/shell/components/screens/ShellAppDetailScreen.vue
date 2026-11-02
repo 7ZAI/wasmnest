@@ -105,6 +105,60 @@
         </div>
       </template>
 
+      <!-- ==================== 版本更新 ====================
+           仅声明 manifest `update` 的业务应用出现；检查走宿主统一实现，
+           更新动作在本页执行（需先停用；升级会替换目录并要求重新审批）。 -->
+      <template v-if="isUpdatable">
+        <ShellSection :title="t('shell.apps.update.title')" />
+        <div class="px-4 pb-1">
+          <ShellGroupCard>
+            <div class="px-3 py-3 flex flex-col gap-2">
+              <div class="flex items-center gap-3">
+                <span class="flex-1 shell-type-label text-[var(--mobile-text-primary)] tabular-nums">
+                  v{{ app?.version }}
+                </span>
+                <button
+                  type="button"
+                  class="rounded-[8px] border border-[var(--mobile-border)] px-3 py-1.5 shell-type-micro text-[var(--mobile-accent)] transition-opacity duration-200 active:opacity-70 disabled:opacity-40"
+                  :disabled="updateBusy"
+                  data-testid="mobile-app-update-check"
+                  @click="onCheckUpdate"
+                >
+                  {{ updateBusy ? t('shell.apps.update.checking') : t('shell.apps.update.check') }}
+                </button>
+              </div>
+              <p
+                v-if="updateStatusText"
+                class="shell-type-caption"
+                :style="{ color: updateIsBad ? 'var(--mobile-error)' : 'var(--mobile-text-secondary)' }"
+                data-testid="mobile-app-update-status"
+              >
+                {{ updateStatusText }}
+              </p>
+              <p
+                v-if="updateReasonText"
+                class="shell-type-caption"
+                :style="{ color: 'var(--mobile-error)' }"
+              >
+                {{ updateReasonText }}
+              </p>
+              <button
+                v-if="updateState?.status === 'available'"
+                type="button"
+                class="w-full rounded-[10px] px-4 py-2.5 shell-type-label transition-opacity duration-200 active:opacity-80 min-h-[var(--mobile-touch-target-min)] disabled:opacity-40 disabled:cursor-not-allowed"
+                :style="{ background: 'var(--mobile-accent)', color: 'var(--mobile-text-on-accent)' }"
+                :disabled="app?.state === 'running'"
+                :title="t('shell.apps.update.stopFirst')"
+                data-testid="mobile-app-update-apply"
+                @click="onApplyUpdate"
+              >
+                {{ t('shell.apps.update.apply', { version: updateState?.latestVersion }) }}
+              </button>
+            </div>
+          </ShellGroupCard>
+        </div>
+      </template>
+
       <!-- ==================== 权限 ====================
            系统服务（L1/L2）的权限随包固定、不经用户授权：保留只读清单，
            但不渲染任何逐项开关（2026-10-23 用户裁决；同一裁决已把服务移出权限总览）。 -->
@@ -271,6 +325,7 @@ import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import Toggle from '../ui/Toggle.vue'
 import { useToast } from '../../composables/useToast'
+import { useAppUpdates, type AppUpdateState } from '../../composables/useAppUpdates'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
 import { groupPermissions, permissionDescKey, permissionTitleKey } from '../../permissions'
@@ -295,6 +350,7 @@ const {
   stop,
   approveApp,
   launch,
+  refresh,
 } = useShellApps()
 
 /** 应用 id 来自导航参数（壳内导航不落 URL） */
@@ -321,6 +377,53 @@ const canStop = computed(
 )
 const autostart = ref(false)
 const autostartBusy = ref(false)
+
+// ==================== 版本更新 ====================
+
+const updates = useAppUpdates()
+const isUpdatable = computed(() => Boolean(app.value?.update) && !isService.value)
+const updateState = computed<AppUpdateState | undefined>(() =>
+  app.value ? updates.states.value[app.value.id] : undefined,
+)
+const updateBusy = computed(
+  () => updateState.value?.status === 'checking' || updateState.value?.status === 'updating',
+)
+const updateIsBad = computed(
+  () => updateState.value?.status === 'error' || updateState.value?.status === 'incompatible',
+)
+const updateStatusText = computed(() => {
+  const st = updateState.value
+  if (!st) return ''
+  switch (st.status) {
+    case 'checking':
+      return t('shell.apps.update.checking')
+    case 'up-to-date':
+      return t('shell.apps.update.upToDate', { version: st.currentVersion ?? '' })
+    case 'available':
+      return t('shell.apps.update.available', { version: st.latestVersion ?? '' })
+    case 'incompatible':
+      return t('shell.apps.update.incompatible', { version: st.latestVersion ?? '' })
+    case 'updating':
+      return t('shell.apps.update.updating')
+    case 'error':
+      return t('shell.apps.update.failed')
+    default:
+      return ''
+  }
+})
+const updateReasonText = computed(() => {
+  const reason = updateState.value?.reason
+  if (!reason) return ''
+  return t(reason.key, reason.params ?? {})
+})
+async function onCheckUpdate(): Promise<void> {
+  if (app.value) await updates.check(app.value.id)
+}
+async function onApplyUpdate(): Promise<void> {
+  if (!app.value) return
+  const ok = await updates.applyUpdate(app.value.id)
+  if (ok) await refresh()
+}
 
 /** 权限按能力域分组；未归类的新权限进「其他」组，保证不会因未归类而消失 */
 const permissionGroups = computed(() =>

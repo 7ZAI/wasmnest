@@ -50,6 +50,16 @@ export interface HostPluginInfo {
   source: string
   sizeBytes?: number
   installedAt?: number | null
+  /** manifest `update` 段（缺省 = 不参与更新检查） */
+  update?: PluginUpdateDecl
+}
+
+/** manifest `update` 段（应用更新源声明；与 wasm-core `PluginUpdateDecl` 同形） */
+export interface PluginUpdateDecl {
+  provider?: 'github-release'
+  repo?: string
+  tagPrefix?: string
+  slug?: string
 }
 
 /** 壳主屏的业务应用条目（注册表投影；id = pluginId，宿主 manifest 单一事实源） */
@@ -83,6 +93,8 @@ export interface ShellAppEntry {
   error?: string
   /** 来源：builtin / scanned / wasm / user-installed */
   source: string
+  /** manifest `update` 段（缺省 = 不参与更新检查） */
+  update?: PluginUpdateDecl
   sizeBytes?: number
   permissions: string[]
   /** 主屏入口可见性偏好（缺省 true；false = 用户停用 → 主屏 / 搜索隐藏入口，真源 = 宿主 lifecycle.rs） */
@@ -213,6 +225,7 @@ function toEntry(info: HostPluginInfo, enabled: boolean, autostart: boolean): Sh
     kind: info.kind,
     error: info.state.error,
     source: info.source,
+    update: info.update,
     sizeBytes: typeof info.sizeBytes === 'number' ? info.sizeBytes : undefined,
     permissions: info.permissions ?? [],
     enabled,

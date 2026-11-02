@@ -382,6 +382,11 @@ pub fn run() {
             crate::plugin::commands::plugin_storage_delete,
             crate::plugin::commands::plugin_download,
             crate::plugin::commands::plugin_install_from_file,
+            // 应用版本更新链路（GitHub Release 检查 / 校验下载；应用管理页与
+            // SDK 默认设置卡共用同一套判定）
+            crate::plugin::updates::plugin_check_app_update,
+            crate::plugin::updates::plugin_check_self_update,
+            crate::plugin::updates::plugin_download_update,
             crate::plugin::commands::plugin_uninstall,
             crate::plugin::commands::reload_wasm_plugin,
             // File System Auth Commands（白名单管理命令随移动自实现退役，只剩弹窗回执）
