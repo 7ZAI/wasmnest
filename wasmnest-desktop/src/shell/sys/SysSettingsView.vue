@@ -41,7 +41,9 @@
       <label class="shell-sw">
         <input
           type="checkbox"
+          role="switch"
           :checked="prefs.floatingNav === true"
+          :aria-checked="prefs.floatingNav === true"
           :aria-label="t('shell.settings.nav.label')"
           @change="prefs.floatingNav = ($event.target as HTMLInputElement).checked"
         />

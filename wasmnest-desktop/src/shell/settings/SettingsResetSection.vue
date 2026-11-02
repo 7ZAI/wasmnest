@@ -2,7 +2,7 @@
   <!-- ==================== RESET（恢复初始设置） ==================== -->
   <section>
     <h3 class="wb-section-title">{{ t('settings.reset.title') }}</h3>
-    <div class="bg-[var(--bg-card)] border border-[var(--border)] rounded-[10px] px-5 py-4">
+    <div class="shell-panel px-5 py-4">
       <div class="flex items-center justify-between gap-4">
         <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
           t('settings.reset.desc')

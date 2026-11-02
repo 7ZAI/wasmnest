@@ -215,7 +215,16 @@
 /* 玻璃主题的卡片级表面：工具条 / 状态栏 / 内容卡 / 多任务卡 / 主题预览卡。
    一次规则覆盖全部，避免「只有卡片换了、工具栏还是实心」的半套主题。 */
 :root[data-theme='glass']
-  :is(.shell-toolbar, .shell-statusbar, .shell-card, .ts-card, .theme-card, .shell-rec, .qhint),
+  :is(
+    .shell-toolbar,
+    .shell-statusbar,
+    .shell-card,
+    .shell-panel,
+    .ts-card,
+    .theme-card,
+    .shell-rec,
+    .qhint
+  ),
 .theme-preview[data-theme='glass'] .pv-card {
   background:
     radial-gradient(120% 90% at 12% -18%, var(--theme-glass-sheen) 0%, transparent 54%),
@@ -259,11 +268,20 @@
    已定位的面（工具条 / 状态栏 / 多任务卡 / 主题卡 / 悬浮提示）保持原定位不动；
    只有静态的内容卡与记录行需要补 position:relative 给伪元素当锚。 */
 :root[data-theme='glass']
-  :is(.shell-toolbar, .shell-statusbar, .shell-card, .ts-card, .theme-card, .shell-rec, .qhint),
+  :is(
+    .shell-toolbar,
+    .shell-statusbar,
+    .shell-card,
+    .shell-panel,
+    .ts-card,
+    .theme-card,
+    .shell-rec,
+    .qhint
+  ),
 .theme-preview[data-theme='glass'] .pv-card {
   isolation: isolate;
 }
-:root[data-theme='glass'] :is(.shell-card, .shell-rec),
+:root[data-theme='glass'] :is(.shell-card, .shell-panel, .shell-rec),
 .theme-preview[data-theme='glass'] .pv-card {
   position: relative;
 }
@@ -276,6 +294,7 @@
     .shell-toolbar,
     .shell-statusbar,
     .shell-card,
+    .shell-panel,
     .ts-card,
     .theme-card,
     .shell-rec,
@@ -313,6 +332,7 @@
     .shell-toolbar,
     .shell-statusbar,
     .shell-card,
+    .shell-panel,
     .ts-card,
     .theme-card,
     .shell-rec,
@@ -783,6 +803,7 @@
       .shell-toolbar,
       .shell-statusbar,
       .shell-card,
+      .shell-panel,
       .ts-card,
       .theme-card,
       .shell-rec,
@@ -800,6 +821,7 @@
       .shell-toolbar,
       .shell-statusbar,
       .shell-card,
+      .shell-panel,
       .ts-card,
       .theme-card,
       .shell-rec,

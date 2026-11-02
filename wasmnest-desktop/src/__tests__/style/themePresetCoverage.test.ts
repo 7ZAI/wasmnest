@@ -87,6 +87,7 @@ describe('主题预设覆盖', () => {
       '.shell-toolbar',
       '.shell-statusbar',
       '.shell-card',
+      '.shell-panel',
       '.shell-btn',
       '.shell-mini',
       '.shell-seg',

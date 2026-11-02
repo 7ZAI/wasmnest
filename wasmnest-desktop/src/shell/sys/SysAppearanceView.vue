@@ -68,7 +68,9 @@
       <label class="shell-sw">
         <input
           type="checkbox"
+          role="switch"
           :checked="settingsStore.settings.ui.animations_enabled !== false"
+          :aria-checked="settingsStore.settings.ui.animations_enabled !== false"
           :aria-label="t('shell.settings.ui.animations')"
           @change="toggleAnimations"
         />

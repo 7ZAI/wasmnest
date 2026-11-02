@@ -251,6 +251,44 @@
     box-shadow: none;
   }
 
+  /* ==================== 分组卡面（系统页设置分组） ====================
+     与 `.shell-card` 同一档「内容面」，差别只在标题：`.shell-card` 的标题在卡内
+     （ShellCard 组件），`.shell-panel` 的标题由分组平铺在卡外（`.wb-section-title`）。
+     之前这四处分组用裸 Tailwind `bg-[var(--bg-card)] border rounded-[10px]`，玻璃主题的
+     结构规则只认 `.shell-card`，于是设置页一半卡片是玻璃、一半是实心平面。
+     `overflow: hidden` 让 `divide-y` 行分隔线跟随圆角裁切（10px 硬编码圆角正是裁不齐
+     的根源之一，圆角统一走 `--radius-card`）。 */
+  .shell-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  /* ==================== 文本框（壳内设置项输入） ====================
+     壳里唯一的文本输入控件：原生 `input[type=number]` 的步进器不可 token 化、
+     属禁止的系统原生 UI，数字输入用 `type=text` + `inputmode=numeric` + 这个类。
+     颜色全走 token（`--bg-input` / `--border-input` / `--radius-input`），
+     玻璃主题的 `--bg-input` 已是 84% 半透明体色，无需额外规则。 */
+  .shell-input {
+    height: 28px;
+    padding: 0 10px;
+    border-radius: var(--radius-input);
+    background: var(--bg-input);
+    border: 1px solid var(--border-input);
+    color: var(--text-primary);
+    font-size: calc(12.5px * var(--ui-scale));
+    outline: none;
+    transition: border-color var(--motion-duration-fast) var(--motion-ease);
+  }
+  .shell-input:focus {
+    border-color: var(--color-primary);
+  }
+  .shell-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   /* ==================== 按钮（壳内 mini / ghost / danger 形态） ==================== */
   .shell-btn {
     height: 28px;

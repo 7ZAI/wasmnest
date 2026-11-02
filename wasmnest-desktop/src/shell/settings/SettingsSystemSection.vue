@@ -1,37 +1,29 @@
 <template>
-  <!-- ==================== SYSTEM ==================== -->
+  <!-- ==================== SYSTEM ====================
+       卡面走 `.shell-panel`、开关走 `.shell-sw`：这两个是壳共享表面/控件，主题（含玻璃）
+       的结构规则才能命中——此前这里是裸 `bg-[var(--bg-card)]` 与自绘方角开关，切到玻璃主题
+       时卡面仍是实心平面，开关和同页的「导航」开关也不成一套语言。 -->
   <section>
     <h3 class="wb-section-title">{{ t('settings.system.title') }}</h3>
-    <div
-      class="bg-[var(--bg-card)] border border-[var(--border)] rounded-[10px] divide-y divide-[var(--border)]"
-    >
-      <!-- 防止休眠：方角开关 -->
+    <div class="shell-panel divide-y divide-[var(--border)]">
+      <!-- 防止休眠：壳开关（胶囊轨道 + 玻璃珠旋钮），与导航开关同形同语义 -->
       <div class="px-5 py-3.5 flex items-center justify-between gap-4">
         <div>
           <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
             t('settings.system.preventSleep')
           }}</span>
         </div>
-        <button
-          class="relative w-10 h-5 rounded-[4px] border transition-colors flex-shrink-0"
-          :class="
-            preventSleep
-              ? 'bg-[var(--color-primary)] border-[var(--color-primary)]'
-              : 'bg-[var(--bg-page)] border-[var(--border-strong)]'
-          "
-          role="switch"
-          :aria-checked="preventSleep"
-          @click="preventSleep = !preventSleep"
-        >
-          <span
-            class="absolute top-[3px] w-3 h-3 rounded-[2px] transition-all"
-            :class="
-              preventSleep
-                ? 'left-[22px] bg-[var(--color-primary-contrast)]'
-                : 'left-[3px] bg-[var(--border-strong)]'
-            "
+        <label class="shell-sw">
+          <input
+            type="checkbox"
+            role="switch"
+            :checked="preventSleep"
+            :aria-checked="preventSleep"
+            :aria-label="t('settings.system.preventSleep')"
+            @change="preventSleep = ($event.target as HTMLInputElement).checked"
           />
-        </button>
+          <span class="track"></span><span class="knob"></span>
+        </label>
       </div>
 
       <!-- 应用贡献的动态扩展设置项：别的应用对系统设置的动态扩展（用户 2026-10-22

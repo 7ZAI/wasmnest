@@ -2,59 +2,35 @@
   <!-- ==================== LOGGING（仅 dev 构建显示；正式版隐藏，后端功能保留） ==================== -->
   <section v-if="isDev">
     <h3 class="wb-section-title">{{ t('settings.log.title') }}</h3>
-    <div
-      class="bg-[var(--bg-card)] border border-[var(--border)] rounded-[10px] divide-y divide-[var(--border)]"
-    >
-      <!-- 日志级别：分段控件，点击即时热调（不重启） -->
+    <div class="shell-panel divide-y divide-[var(--border)]">
+      <!-- 日志级别：分段控件（壳共享 .shell-seg），点击即时热调（不重启） -->
       <div class="px-5 py-3.5 flex items-center justify-between gap-4">
         <div>
           <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
             t('settings.log.level')
           }}</span>
         </div>
-        <div
-          class="flex border border-[var(--border-strong)] rounded-md overflow-hidden flex-shrink-0"
-        >
-          <button
-            v-for="opt in logLevelOptions"
-            :key="opt.value"
-            class="h-8 px-3 text-xs font-medium transition-colors"
-            :class="
-              logFileLevel === opt.value
-                ? 'bg-[var(--color-primary)] text-[var(--color-primary-contrast)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
-            "
-            @click="onLogLevelClick(opt.value)"
-          >
-            {{ t(opt.label) }}
-          </button>
-        </div>
+        <ShellSeg
+          class="flex-shrink-0"
+          :options="logLevelOptions"
+          :model-value="logFileLevel"
+          @update:model-value="onLogLevelClick"
+        />
       </div>
 
-      <!-- 日志格式：text/json，保存后重启生效 -->
+      <!-- 日志格式：text/json（壳共享 .shell-seg），保存后重启生效 -->
       <div class="px-5 py-3.5 flex items-center justify-between gap-4">
         <div>
           <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
             t('settings.log.format')
           }}</span>
         </div>
-        <div
-          class="flex border border-[var(--border-strong)] rounded-md overflow-hidden flex-shrink-0"
-        >
-          <button
-            v-for="opt in logFormatOptions"
-            :key="opt.value"
-            class="h-8 px-3 text-xs font-medium transition-colors"
-            :class="
-              logFormat === opt.value
-                ? 'bg-[var(--color-primary)] text-[var(--color-primary-contrast)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
-            "
-            @click="logFormat = opt.value"
-          >
-            {{ t(opt.label) }}
-          </button>
-        </div>
+        <ShellSeg
+          class="flex-shrink-0"
+          :options="logFormatOptions"
+          :model-value="logFormat"
+          @update:model-value="logFormat = $event"
+        />
       </div>
 
       <!-- 保留文件数：按天轮转保留数量，保存后重启生效 -->
@@ -65,10 +41,12 @@
           }}</span>
         </div>
         <input
-          type="number"
+          class="shell-input wb-mono w-28 text-right"
+          type="text"
+          inputmode="numeric"
           :value="logMaxFiles"
-          class="h-8 w-28 px-2.5 rounded-[6px] wb-mono text-right bg-[var(--bg-page)] border border-[var(--border-strong)] text-[var(--text-primary)] outline-none focus:border-[var(--color-primary)]"
-          @input="logMaxFiles = Number(($event.target as HTMLInputElement).value)"
+          :aria-label="t('settings.log.maxFiles')"
+          @input="logMaxFiles = onIntInput($event, 1, logMaxFiles)"
         />
       </div>
 
@@ -80,10 +58,12 @@
           }}</span>
         </div>
         <input
-          type="number"
+          class="shell-input wb-mono w-28 text-right"
+          type="text"
+          inputmode="numeric"
           :value="logCapacityMb"
-          class="h-8 w-28 px-2.5 rounded-[6px] wb-mono text-right bg-[var(--bg-page)] border border-[var(--border-strong)] text-[var(--text-primary)] outline-none focus:border-[var(--color-primary)]"
-          @input="logCapacityMb = Number(($event.target as HTMLInputElement).value)"
+          :aria-label="t('settings.log.capacityMb')"
+          @input="logCapacityMb = onIntInput($event, 1, logCapacityMb)"
         />
       </div>
 
@@ -95,10 +75,10 @@
           }}</span>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
-          <button class="wb-btn-ghost" @click="onOpenLogDir">
+          <button class="shell-btn ghost" @click="onOpenLogDir">
             {{ t('settings.log.openDir') }}
           </button>
-          <button class="wb-btn-primary" :disabled="logSaving" @click="onSaveLogConfig">
+          <button class="shell-btn" :disabled="logSaving" @click="onSaveLogConfig">
             {{ t('settings.log.save') }}
           </button>
         </div>
@@ -114,10 +94,11 @@
  * 仅 dev 构建展示（正式版隐藏，后端功能保留）。日志级别即时热调，
  * format / rotation / max_files / capacity 保存后重启生效。
  */
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '@/composables/useToast'
 import { useLogSettings } from '@/shell/settings/useLogSettings'
+import ShellSeg from '@/shell/components/ShellSeg.vue'
 import { logger } from '@/utils/frontendLogger'
 import { invoke } from '@/utils/invoke'
 import i18n from '@/i18n'
@@ -130,21 +111,40 @@ const toast = useToast()
 const isDev = import.meta.env.DEV
 const { setLogLevel, openLogDir, saveLogSettings } = useLogSettings()
 
-const logLevelOptions = [
-  { value: 'debug', label: 'settings.log.levelDebug' },
-  { value: 'info', label: 'settings.log.levelInfo' },
-  { value: 'warn', label: 'settings.log.levelWarn' },
-  { value: 'error', label: 'settings.log.levelError' },
-]
-const logFormatOptions = [
-  { value: 'text', label: 'settings.log.formatText' },
-  { value: 'json', label: 'settings.log.formatJson' },
-]
+// 分段控件（ShellSeg）直接渲染 label，所以这里先把 i18n key 解成文案；
+// computed 随 locale 切换重算（t 是响应式的）。
+const logLevelOptions = computed(() => [
+  { value: 'debug', label: t('settings.log.levelDebug') },
+  { value: 'info', label: t('settings.log.levelInfo') },
+  { value: 'warn', label: t('settings.log.levelWarn') },
+  { value: 'error', label: t('settings.log.levelError') },
+])
+const logFormatOptions = computed(() => [
+  { value: 'text', label: t('settings.log.formatText') },
+  { value: 'json', label: t('settings.log.formatJson') },
+])
 const logFileLevel = ref('info')
 const logFormat = ref('text')
 const logMaxFiles = ref(7)
 const logCapacityMb = ref(512)
 const logSaving = ref(false)
+
+/**
+ * 整数输入：`type="text"` + `inputmode="numeric"`，因为原生 `input[type=number]` 的步进器
+ * 不可 token 化、属禁止的系统原生 UI。非数字字符过滤；空串 / 低于下限时不写入并⑯回
+ * 输入框显示（保留上一个有效值），避免把 NaN 带进保存链路。
+ */
+function onIntInput(e: Event, min: number, current: number): number {
+  const el = e.target as HTMLInputElement
+  const digits = el.value.replace(/\D/g, '')
+  const n = Number(digits)
+  if (digits === '' || !Number.isFinite(n) || n < min) {
+    el.value = String(current)
+    return current
+  }
+  if (el.value !== digits) el.value = digits
+  return n
+}
 
 /** 从现有 AppConfig 的 log 段初始化（与 store 分离：store 的 Settings 类型不含 log 层） */
 async function loadLogSettings() {
