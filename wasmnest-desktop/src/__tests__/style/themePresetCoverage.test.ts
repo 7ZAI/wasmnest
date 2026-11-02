@@ -13,7 +13,7 @@ import { BUILTIN_THEMES, SHELL_THEME_DEFAULT } from '@/shell/composables/themePr
  *   2. 除默认主题外，每个主题都有深色档（浅色值直接套深底会掉对比度）；
  *   3. 决策面不变量：授权 / 弹窗组件不得被主题选择器命中（任何主题都必须实心）；
  *   4. 内容面 token `--bg-card` 不得被主题改成半透明（它是决策面的实心底）；
- *   5. 动效主题必须真的有 keyframes 引用，且 reduced-motion 守卫在位。
+ *   5. 主题样式表不挂常驻动画（背景漂移已按性能裁决移除，不得加回）。
  */
 
 const CSS = readFileSync('src/styles/theme-presets.css', 'utf-8')
@@ -105,16 +105,23 @@ describe('主题预设覆盖', () => {
     expect(rules).toContain('feTurbulence')
   })
 
-  it('带漂移动效的主题引用了 keyframes，且 reduced-motion 守卫在位', () => {
+  it('主题样式表不挂常驻动画：壳根背景漂移已按性能裁决移除', () => {
+    // 2026-11-02 性能裁决：玻璃主题的 44s `theme-drift`（动 background-position）在
+    // WebKitGTK 上把 62fps 拖到 11fps——每帧整屏重绘 + 屏上每个 backdrop-filter 面
+    // 重新采样重算模糊。这条锁防止它（或同形态的背景动画）被无声加回来。
+    const rules = CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(rules, 'theme-drift 又被加回来了').not.toMatch(/@keyframes\s+theme-drift/)
+    const shellRootAnimated = /\[data-theme[^\]]*\][^{]*\.shell-root[^{]*\{[^}]*animation:/.test(
+      rules,
+    )
+    // 目录里的 dynamic 标记与 CSS 必须双向一致
     const dynamicThemes = BUILTIN_THEMES.filter((theme) => theme.dynamic).map((theme) => theme.id)
-    // 目录里声明 dynamic 的必须真的挂了动画（否则设置页的「动态」标记是假的）
     for (const id of dynamicThemes) {
-      expect(CSS, `${id} 声明了 dynamic 但没有挂 animation`).toContain(
-        `[data-theme='${id}'] .shell-root:not(.wall-custom)`,
-      )
+      expect(CSS, `${id} 声明了 dynamic 但没有挂动画`).toContain(`[data-theme='${id}'] .shell-root`)
     }
-    expect(CSS).toContain('@keyframes theme-drift')
-    expect(CSS).toContain('@media (prefers-reduced-motion: reduce)')
+    if (dynamicThemes.length === 0) {
+      expect(shellRootAnimated, '没有主题声明 dynamic，壳根却挂了动画').toBe(false)
+    }
   })
 
   it('默认主题的预览块挂 theme-base，隔离当前主题的 token', () => {

@@ -3,7 +3,7 @@
  *
  * 为什么主题落在这里而不是 JS 里：
  * - 主题要表达的不只是颜色，还有结构性规则（玻璃光学层、控件材质、图标外框、
- *   硬阴影、背景漂移）；选择器只有 CSS 能表达，而 CSP 禁止内联 `<style>`
+ *   硬阴影）；选择器只有 CSS 能表达，而 CSP 禁止内联 `<style>`
  *   （Tauri 会注入 nonce，令 `'unsafe-inline'` 失效，运行时注入的插件样式全挂）。
  * - `<html data-theme="x">` 在 app.mount 之前就能生效（main.ts 的
  *   presetThemeBeforeMount），内置主题首帧零闪变。
@@ -20,8 +20,10 @@
  * 2. **零新增 hex**：除既有 token 值（#f5f4f0 / #fdfcfa / #15130f / #1d1a15）外，
  *    颜色一律 `color-mix` 自语义 token 派生，深浅两档各自定义，不靠滤镜翻转。
  *
- * 动效纪律：主题自带的漂移必须能被用户关掉——`html.anim-disabled *` 已覆盖壳根
- * 及其后代（style.css），本文件再补 `prefers-reduced-motion` 的显式守卫。
+ * 动效纪律：**本文件不挂任何常驻动画**（2026-11-02 性能裁决）。此前的 44s 背景漂移
+ * 让玻璃主题在 WebKitGTK 上从 62fps 掉到 11fps——`background-position` 不是合成属性，
+ * 每帧整屏重绘，且令屏上每个 `backdrop-filter` 面重新采样重算模糊。要恢复动效只能用
+ * 合成属性（transform / opacity）承载在独立图层上，并先在双端实测帧率。
  *
  * ==================== 玻璃主题的光学模型（2026-11-01） ====================
  * 参考公开玻璃实现的分层做法（Apple Liquid Glass 的 Web 复刻与 glassmorphism
@@ -42,25 +44,6 @@
  *   · TurtIeSocks/agent-skills · liquid-glass-css（六层光学模型 / L1–L3 分级）
  *   · rdev/liquid-glass-react · z4kettan/ios_liquid_glass（组件边界与降级做法）
  */
-
-/* ==================== 动效：背景缓慢漂移 ==================== */
-
-@keyframes theme-drift {
-  from {
-    background-position:
-      0% 0%,
-      100% 0%,
-      50% 100%,
-      0% 0%;
-  }
-  to {
-    background-position:
-      100% 100%,
-      0% 100%,
-      50% 0%,
-      100% 100%;
-  }
-}
 
 /* ==================== glass · 玻璃拟态 / 液态玻璃 ====================
  * 两套 2026 玻璃语言合并为一套：
@@ -784,14 +767,13 @@
   background-image: var(--theme-ambient);
 }
 
-/* ==================== 动态主题：背景缓慢漂移 ====================
- * 自定义壁纸除外：cover 会被 background-size 覆盖，图会变形。
- * `html.anim-disabled *`（style.css）已能关掉它（壳根是 html 的后代）。 */
-
-:root[data-theme='glass'] .shell-root:not(.wall-custom) {
-  background-size: 150% 150%;
-  animation: theme-drift 44s ease-in-out infinite alternate;
-}
+/* ==================== 已移除：背景缓慢漂移（2026-11-02） ====================
+ * 这里曾挂 `animation: theme-drift`（动 `background-position` 的 44s 漂移），它同时是
+ * 玻璃主题卡顿的全部主因。实测（WebKitGTK 2.52.5 / 1300×900 / 6 卡 + 一条工具条，
+ * 同一套材质）：全开 11.2fps；只去掉漂移 62.1fps；只开漂移（无模糊/棱线/噪点）15.5fps；
+ * 把漂移换成 transform 合成层 62.1fps。44s alternate 下漂移几乎不可辨，收益为零，
+ * 故直接删掉而不再换实现。要重加「动态」感：只许由 transform / opacity 承载的独立
+ * 合成层，并先双端实测帧率（桌面 WebKitGTK + 移动 Chromium）。 */
 
 /* 不支持背景模糊的 WebView：玻璃退化为实心内容面（文字对比不变）。
    这是 fail-safe，不是主题的另一种外观。 */
@@ -828,16 +810,5 @@
     background: var(--bg-card);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :root[data-theme] .shell-root,
-  :root[data-theme] .shell-root:not(.wall-custom) {
-    animation: none !important;
-    background-size: auto;
-  }
-  :root[data-theme='glass'] .shell-root:not(.shell-wall) {
-    background-size: cover;
   }
 }

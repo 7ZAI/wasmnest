@@ -98,13 +98,15 @@ describe('设置页 — 主题', () => {
     expect(classes('hyper')).not.toContain('theme-base')
   })
 
-  it('只有带缓慢动效的主题显示「动态」标记', () => {
+  it('内置主题都不显示「动态」标记（常驻动效已按性能裁决移除）', () => {
     const wrapper = mount(SettingsThemeSection)
     const badge = (id: string) => wrapper.find(`[data-theme-id="${id}"] .theme-badge`).exists()
 
+    // 玻璃主题曾是唯一带 44s 背景漂移的内置主题，漂移动 background-position 让
+    // 每次重绘都整屏重画 + 所有 backdrop-filter 面重新采样（实测 62fps → 11fps），
+    // 已删除；徽标只剩扩展主题声明 dynamic 时才出现。
     expect(badge('default')).toBe(false)
-    expect(badge('glass')).toBe(true)
-    // 超色彩主义不做漂移：层级靠硬阴影位移，动起来是抖
+    expect(badge('glass')).toBe(false)
     expect(badge('hyper')).toBe(false)
   })
 })

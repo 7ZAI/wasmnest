@@ -3,7 +3,7 @@
  *
  * 分工（为什么不把 token 表写在这里）：
  * - **token 表住 CSS**（`src/styles/theme-presets.css`）。主题要表达的不只是颜色，
- *   还有结构性规则（卡片模糊、图标外框、硬阴影、背景漂移动效）——这些只有 CSS 能写，
+ *   还有结构性规则（卡片模糊、图标外框、硬阴影）——这些只有 CSS 能写，
  *   而 CSP 禁止内联 `<style>`，运行时 `setProperty` 也表达不了选择器。副作用是
  *   `<html data-theme>` 一挂即生效，无需等 JS 求值。
  * - **图标语汇与动效开关是 TS 事实**，住这里（CSS 无法描述路径表）。
@@ -29,7 +29,8 @@ export interface BuiltinThemeDescriptor {
   descKey: string
   /** 排序权重，小者靠前 */
   order: number
-  /** 主题自带缓慢动效（背景漂移 / 光泽流动），受 .anim-disabled 与 reduced-motion 抑制 */
+  /** 主题自带缓慢动效；只许由合成属性（transform / opacity）承载在独立图层上，
+   *  受 .anim-disabled 与 reduced-motion 抑制。内置主题当前全为 false（见 glass 处的性能裁决）。 */
   dynamic: boolean
   /** glyph 绘制语汇（容器语汇由 CSS 承担） */
   glyphStyle?: ShellThemeGlyphStyle
@@ -56,7 +57,10 @@ export const BUILTIN_THEMES: readonly BuiltinThemeDescriptor[] = [
     labelKey: 'shell.settings.themes.glass',
     descKey: 'shell.settings.themes.glassDesc',
     order: 10,
-    dynamic: true,
+    // 不挂常驻动效（2026-11-02 性能裁决）。原 44s 背景漂移动的是 background-position：
+    // 每帧整屏重绘，且令屏上每个 backdrop-filter 面重新采样重算模糊——实测把玻璃主题
+    // 从 62fps 拖到 11fps。设置页的「动态」徽标因此不再出现（留待合成属性实现后重启）。
+    dynamic: false,
     glyphStyle: { strokeWidth: 2 },
   },
   {
