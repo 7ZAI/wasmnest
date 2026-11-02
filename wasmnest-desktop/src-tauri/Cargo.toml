@@ -130,6 +130,11 @@ mdns-sd = "0.20"
 # Network utilities
 local-ip-address = "0.6"
 
+# 宿主进程 / WebView 进程指标（system/process_metrics.rs）：进程树 RSS + CPU 与
+# 进程名（角色判定）。0.33 与能力仓 wasmnest-server-core 同版本（已在本依赖图内，
+# 不新增传递树）；`Process::memory()` 自 0.30 起单位为字节。
+sysinfo = "0.33"
+
 
 # Plugin API 依赖已摘除（批 2，issue #36）：权限词汇 / FORM_COMPONENT / 事件 topic
 # 词汇真源已上提 wasm-core（permission / manager::runtime / host_api::topics），

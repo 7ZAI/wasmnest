@@ -20,6 +20,9 @@ pub mod lifecycle;
 pub mod logging;
 pub mod power;
 pub mod power_wake;
+// 宿主进程 / WebView 进程指标（`host-metrics.snapshot` 的 `process` 段）——
+// 「整个 wasmnest 占多少内存 / CPU」只能按 OS 进程树算，见文件头归属判据
+pub mod process_metrics;
 // WSL 发行版列举（host-platform-desktop.wsl-distros 的支撑；v36 交集接口切片自
 // wasm-core `system/wsl.rs` 迁入，票 02 批次 06——桌面平台语义，内核不再持有）
 pub mod wsl;

@@ -634,6 +634,18 @@ pub fn run() {
                 crate::plugin::guest_events::DesktopGuestEvents,
             ));
 
+            // ==================== 宿主进程 / WebView 指标段（`process`） ====================
+            //
+            // 与 `plugins` 段**分开**：`plugins` 是 wasm 线性内存（且只在 limiter 批准增长
+            // 时记账），而「整个 wasmnest（宿主 + WebKitGTK 子进程）占多少」是 OS 账。
+            // 归属只按**本进程的后代**算——同机上另一个 Tauri 应用有它自己的进程树，
+            // 永远进不了本树（判据与单测见 system/process_metrics.rs）。
+            // 注册在这里（装配期）而非内核：进程事实属宿主机，内核不认识「宿主进程」。
+            plugin_host.wasm_runtime().monitor().register_source(
+                "process",
+                Box::new(crate::system::process_metrics::ProcessMetricsSource::new()),
+            );
+
             // ==================== 注册到 AppContext 全局容器 ====================
 
             let _ctx = system::app_context::AppContextBuilder::new()
