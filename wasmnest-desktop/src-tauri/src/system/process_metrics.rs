@@ -244,17 +244,40 @@ fn now_unix_ms() -> u64 {
 /// `smaps_rollup` / 进程刚退出）返回 `None`，不拿 RSS 顶替。
 #[cfg(target_os = "linux")]
 fn pss_bytes(pid: u32) -> Option<u64> {
-    let raw = std::fs::read_to_string(format!("/proc/{pid}/smaps_rollup")).ok()?;
-    raw.lines().find_map(|line| {
-        let rest = line.strip_prefix("Pss:")?;
-        let kb: u64 = rest.split_whitespace().next()?.parse().ok()?;
-        Some(kb * 1024)
-    })
+    smaps_rss_pss(pid).and_then(|(_, pss)| pss)
 }
 
 #[cfg(not(target_os = "linux"))]
 fn pss_bytes(_pid: u32) -> Option<u64> {
     None
+}
+
+#[cfg(not(target_os = "linux"))]
+fn smaps_rss_pss(_pid: u32) -> Option<(u64, Option<u64>)> {
+    None
+}
+
+/// 同一次 `smaps_rollup` 读取里取 `(Rss, Pss)`
+///
+/// 为什么不是「sysinfo 的 RSS + /proc 的 PSS」：两次读取之间进程还在长，会出现
+/// 自相矛盾的一组（移动端真机实测过 PSS 241 MiB > RSS 192 MiB）。同一份文件里的
+/// 两个字段是同一时刻的账。`Rss` 缺失（字段不存在的极老内核）→ 外层回退 sysinfo。
+#[cfg(target_os = "linux")]
+fn smaps_rss_pss(pid: u32) -> Option<(u64, Option<u64>)> {
+    fn kb(rest: &str) -> Option<u64> {
+        rest.split_whitespace().next()?.parse::<u64>().ok().map(|kb| kb * 1024)
+    }
+    let raw = std::fs::read_to_string(format!("/proc/{pid}/smaps_rollup")).ok()?;
+    let mut rss = None;
+    let mut pss = None;
+    for line in raw.lines() {
+        if let Some(rest) = line.strip_prefix("Rss:") {
+            rss = kb(rest);
+        } else if let Some(rest) = line.strip_prefix("Pss:") {
+            pss = kb(rest);
+        }
+    }
+    Some((rss?, pss))
 }
 
 /// 跨两次采样的状态（CPU 需要「上次刷新点」做差分窗口）
@@ -349,11 +372,16 @@ impl MetricsSource for ProcessMetricsSource {
                 } else {
                     role_of(&name)
                 };
+                // Linux：RSS / PSS 取同一份 smaps_rollup（同刻自洽）；其它端只有
+                // sysinfo 的 RSS，PSS 为 None（不拿 RSS 冒充 PSS）
+                let (rss_bytes, pss_bytes) = match smaps_rss_pss(*pid) {
+                    Some((rss, pss)) => (rss, pss),
+                    None => (process.memory(), pss_bytes(*pid)),
+                };
                 Some(Sample {
                     pid: *pid,
-                    rss_bytes: process.memory(),
-                    // 名字留着给 UI 区分（角色之外仍显示进程名，便于排查）
-                    pss_bytes: pss_bytes(*pid),
+                    rss_bytes,
+                    pss_bytes,
                     cpu_percent: cpu_valid.then(|| process.cpu_usage()),
                     role,
                     name,
@@ -488,13 +516,14 @@ mod tests {
             "宿主自身 RSS 必须 > 0：{}",
             snap["self"]
         );
-        // PSS 是「真占多少」的口径（Linux）；读不到时是 null，不得用 RSS 顶替
+        // PSS 是「真占多少」的口径（Linux）；读不到时是 null，不得用 RSS 顶替。
+        // RSS / PSS 同读一份 smaps_rollup ⇒ PSS 数学上不会大于 RSS（分开读会出现
+        // 自相矛盾的一组，移动端真机曾出现 PSS 241 MiB > RSS 192 MiB）。
         if cfg!(target_os = "linux") {
-            assert!(
-                snap["self"]["pssBytes"].as_u64().unwrap_or(0) > 0,
-                "Linux 上自身 PSS 必须可读：{}",
-                snap["self"]
-            );
+            let rss = snap["self"]["rssBytes"].as_u64().unwrap_or(0);
+            let pss = snap["self"]["pssBytes"].as_u64().unwrap_or(0);
+            assert!(pss > 0, "Linux 上自身 PSS 必须可读：{}", snap["self"]);
+            assert!(pss <= rss, "PSS({pss}) 不得大于 RSS({rss})：{}", snap["self"]);
         } else {
             assert_eq!(snap["self"]["pssBytes"], Value::Null);
         }
