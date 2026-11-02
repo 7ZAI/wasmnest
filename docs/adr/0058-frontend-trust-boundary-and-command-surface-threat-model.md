@@ -1,7 +1,8 @@
 # ADR 0058：前端信任边界与命令面威胁模型（后端按应用沙箱，前端同可信域）
 
 - 状态：**已裁决（2026-10-24，用户按 spec §13 Q1 推荐项裁决）；A 命令门禁已落地
-  （2026-10-24，issue #21）**——实施记录见文末「实施记录」。Phase 2 拆票见
+  （2026-10-24，issue #21）；移动插件面身份绑定已收口（2026-11-02，issue #28）**
+  ——实施记录见文末「实施记录」。Phase 2 拆票见
   issue #19 / #27（质量收口协调）。
 - 日期：2026-10-24
 - 相关：`docs/security.md` §1.1（前端信任边界，本文档的链接落点）、
@@ -155,6 +156,7 @@ Tauri 命令都必须按任意前端 JS 可调用设防」，实施盘点发现�
    （任何前端可驱动任意应用命令）、`plugin_storage_*`（跨应用读写）、偏好命令
    （set_enabled / set_autostart）。收敛需移动全命令面接入通道令牌（SDK 面联动），
    与 #25（connection/auth 引擎收敛）对移动 manager 的拆解有交叠，单独裁决。
+   → **已于 2026-11-02 收口（issue #28），见下第 6 条。**
 5. **首占顺序（凭证门的实际保证，2026-10-24 复核补记）**：loader 会话「域内首个
    调用者生效」，两侧赢法不同但结论一致——
    - **移动**：`loader.ts loadAll()` 首行显式 `ensureHostCredential()`，先于任何
@@ -165,3 +167,53 @@ Tauri 命令都必须按任意前端 JS 可调用设防」，实施盘点发现�
      `loadAppModule` 头注释，新增不经 activate 的 import 路径即破坏本门禁。
    移动侧无 `AppMountEnv` / `env.invoke` 面，故第 3 条白名单代理只落桌面（移动由
    命令门禁本体覆盖），不属于「双端漏做」。
+
+## 实施记录续（2026-11-02，issue #28：移动插件面身份绑定收口）
+
+第 4 条遗留面收敛，判据不变（同 `FrontendChannelRegistry`，不另起炉灶），与桌面
+`api_bridge` 逐段同口径：
+
+1. **令牌签发面**：移动新增 `plugin_channel_token`（桌面同型命令 L48–L86 的移动版）。
+   签发前置 = 同窗口 loader 会话 + 目标**运行态**（`is_running`，Activated / Degraded）；
+   未运行拒签（未激活插件没有 granted 集，令牌无意义）。前端 `credentials.ts`
+   `ensureChannelToken` 懒签发 + 按 appId 缓存 + 并发 single-flight（宿主重签会作废旧
+   令牌，各自重签会互踩——与桌面 2026-10-20 同款缺陷的收敛）。
+2. **插件面命令接门**（`plugin/commands.rs`）：`plugin_invoke` 走 `authorize`
+   （令牌决定身份，`plugin_id` 只作目标；宿主凭证可作用于任意目标，跨插件驱动被拒）；
+   `plugin_report_ready` / `plugin_mark_error` 是插件自报面（桌面同型命令亦无宿主门），
+   同样走 `authorize`——插件只能自报自己，宿主可代报。
+3. **存储面三段校验**：`plugin_storage_{get,set,delete}` 补上桌面已有的后两段——目标
+   运行态（`is_running`，与移动 `plugin_invoke` 下游同一道闸；桌面取严格 `is_activated`，
+   移动语义见 `invoke_command` 头注，不把降级实例的 KV 一并禁掉）+ 目标 `storage` 权限。
+   复测发现移动此前**连权限都不查**（未声明 storage 的应用同样可被读写），缺口比
+   「无令牌」还宽一层，本次一并补齐；三段收敛在单一 `require_storage_access`
+   （防两处实现漂移）。
+4. **偏好写面归宿主门**：`plugin_set_enabled` / `plugin_set_autostart` 与生命周期管理
+   命令同级——自启动是设备级配置，应用不得自行决定「重启后自动运行」。
+5. **令牌回收随状态机**：`PluginManager` 持有与命令面**同一个** `FrontendChannelRegistry`
+   （`attach_frontend_channel` 注入），`deactivate` 成功即 `revoke_plugin`——与桌面
+   `PluginHost::deactivate_plugin` 同位，覆盖 uninstall 内部拆解与重激活前 teardown，
+   不依赖「每条命令都记得收一次」。前端 `pluginDeactivate` 包装同步作废本地缓存
+   （否则同页面「停用再启用」的首批命令全打成凭证错误）。
+6. **防回接锁**：`src-tauri/tests/mobile_plugin_command_identity_lock.rs`——变更类命令
+   必须带 `credential: String` 且门禁调用先于首个副作用；`plugin_channel_token` 必须
+   校验 loader 会话 + 运行态；存储三段校验必须在单一 helper 内；`commands.rs` 的
+   **每一条** `#[tauri::command]` 都必须显式归类（凭证门 / 只读 / 已知缺口），新增裸
+   命令直接失败。
+7. **SDK 契约未破坏**：插件 `PluginContext` 由宿主 loader 构造（桌面也是宿主注入），
+   令牌持在 context 闭包里、不进插件可见字段——应用侧与 SDK 零改动，**无需全 app 重建**
+   （#28 正文预估的破坏性变更由该装配事实消解）。
+8. **同判据补收两面（同一轮，用户裁决「一起修」）**：
+   - `plugin_fs_auth_respond` —— ADR F3 点名的六条授权管理面之一，桌面早已过宿主门，
+     移动此前无门。询问事件 `plugin:fs-auth-request` 是**广播**的，同 webview 任一应用
+     前端都能拿到 `request_id` 后自行回执 = 替用户批准自己的文件访问。现归宿主门
+     （`FsAuthDialog.vue` 带 loader 会话回执）。
+   - `terminal_page_{subscribe,unsubscribe}` —— 按 `session_id` 键控的页面通道登记面。
+     裸命令可调时，任一应用前端能抢登记他人会话输出（表按会话键控，**后登记覆盖前
+     登记**：既窃听又静默顶掉正常页面）。通道归属是宿主（Tauri `Channel` 由宿主创建），
+     故归宿主门；插件的合法路径是宿主注入的窄 API `mobileApi.openTerminalStream`
+     （`plugin/terminal-stream.ts`），凭证由宿主层补，插件看不到命令。
+9. **仍登记的已知缺口（不在本轮）**：`plugin_log`（只写宿主 tracing，风险为伪造日志）、
+   system:open 三条（`plugin_reveal_received_file` / `plugin_open_all_files_access` /
+   `plugin_open_download_dir`，前端自查权限在前、宿主不复核）、`ws_*` 认证凭据命令
+   （相邻票 #42）。名单写进锁表 `KNOWN_UNGATED`，新面孔必须先归类。

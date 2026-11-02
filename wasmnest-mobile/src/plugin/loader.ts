@@ -16,7 +16,7 @@ import { nextTick } from 'vue'
 import i18n from '@/locales'
 import { logger } from '@/utils/frontendLogger'
 import * as pluginCmds from './commands'
-import { ensureHostCredential } from './credentials'
+import { ensureHostCredential, ensureChannelToken } from './credentials'
 import { toPluginAssetUrl } from './assets'
 import { createPluginContext } from './context'
 import { clearPluginEvents } from './events'
@@ -162,7 +162,12 @@ class PluginLoaderClass {
       await pluginCmds.pluginActivate(pluginId)
     } catch (e: any) {
       logger.error(`[PluginLoader] Failed to activate ${pluginId}:`, e)
-      await pluginCmds.pluginMarkError(pluginId, e.message || 'Activation failed')
+      // 自报面身份（issue #28）：宿主代报用 loader 会话（可作用于任意目标）
+      await pluginCmds.pluginMarkError(
+        pluginId,
+        e.message || 'Activation failed',
+        await ensureHostCredential(),
+      )
       return
     }
     await this.loadFrontend(info)
@@ -258,8 +263,12 @@ class PluginLoaderClass {
     const env: MonitorPanelEnv = {
       appId,
       panelId,
-      appInvoke: (command, ...args) => pluginCmds.pluginInvoke(appId, command, args[0] ?? null),
-      appStorageGet: (key) => pluginCmds.pluginStorageGet(appId, key),
+      // 面板代码属于提供方应用本身 ⇒ 用**该应用**的通道令牌（issue #28）；
+      // 应用未运行时宿主拒签，面板自行显示「应用未运行」（与 mountMonitorPanel
+      // 不激活后端的既有契约一致）
+      appInvoke: async (command, ...args) =>
+        pluginCmds.pluginInvoke(appId, command, args[0] ?? null, await ensureChannelToken(appId)),
+      appStorageGet: async (key) => pluginCmds.pluginStorageGet(appId, key, await ensureChannelToken(appId)),
       locale: i18n.global.locale.value,
       theme:
         typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -347,7 +356,11 @@ class PluginLoaderClass {
       } catch (deactivateErr) {
         logger.error(`[PluginLoader] Error tearing down backend for ${manifest.id}:`, deactivateErr)
       }
-      await pluginCmds.pluginMarkError(manifest.id, e.message || 'Frontend load failed')
+      await pluginCmds.pluginMarkError(
+        manifest.id,
+        e.message || 'Frontend load failed',
+        await ensureHostCredential(),
+      )
     }
   }
 

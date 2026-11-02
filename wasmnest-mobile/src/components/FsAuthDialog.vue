@@ -105,11 +105,16 @@
  * 监听 plugin:fs-auth-request 事件，展示插件目录授权请求（含批量路径），
  * 用户选择后经 plugin_fs_auth_respond Tauri command 回调宿主。
  * 由 App.vue 全局挂载一次（与 PluginDialogHost 并列）。
+ *
+ * 回执只认宿主门（ADR 0058 / 2026-11-02）：询问事件是广播的（同 webview 内任一
+ * 应用前端都能监听并拿到 requestId），因此回执必须由宿主前端带 loader 会话签名，
+ * 否则插件可以自己应答自己的授权询问。
  */
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
+import { ensureHostCredential } from '@/plugin/credentials'
 import Toggle from '@/components/Toggle.vue'
 
 const { t } = useI18n()
@@ -158,10 +163,12 @@ async function allow() {
   if (!request.value) return
   const { requestId } = request.value
   request.value = null
+  const credential = await ensureHostCredential()
   await invoke('plugin_fs_auth_respond', {
     requestId,
     allowed: true,
     remember: remember.value,
+    credential,
   })
 }
 
@@ -169,10 +176,12 @@ async function deny() {
   if (!request.value) return
   const { requestId } = request.value
   request.value = null
+  const credential = await ensureHostCredential()
   await invoke('plugin_fs_auth_respond', {
     requestId,
     allowed: false,
     remember: false,
+    credential,
   })
 }
 </script>

@@ -29,6 +29,14 @@ vi.mock('@/plugin/app-run-scope', () => ({
   disposeAppRunScope: (...args: unknown[]) => mocks.disposeAppRunScope(...args),
 }))
 
+// 凭证面替身（issue #28）：面板 env 的两条通道都要带**提供方自己**的令牌，
+// 令牌签发本身不是本测试的被测面（宿主侧签发改由 credentials.test.ts 覆盖）
+vi.mock('@/plugin/credentials', () => ({
+  ensureHostCredential: async () => 'test-host-credential',
+  ensureChannelToken: async (pluginId: string) => `test-channel-token:${pluginId}`,
+  invalidateChannelToken: () => {},
+}))
+
 import i18n from '@/locales'
 import { pluginLoader } from '@/plugin/loader'
 import type { MonitorPanelEnv } from '@/plugin/types'
@@ -80,11 +88,16 @@ describe('PluginLoader.mountMonitorPanel（宿主中介）', () => {
     expect(observed!.locale).toBe(i18n.global.locale.value)
     expect(['dark', 'light']).toContain(observed!.theme)
 
-    // 面板命令 / 只读存储走提供方自己的通道（不是 monitor 的）
+    // 面板命令 / 只读存储走提供方自己的通道（不是 monitor 的）：令牌 = 提供方身份
     await observed!.appInvoke('usage.get', { limit: 10 })
-    expect(mocks.pluginInvoke).toHaveBeenCalledWith(APP_ID, 'usage.get', { limit: 10 })
+    expect(mocks.pluginInvoke).toHaveBeenCalledWith(
+      APP_ID,
+      'usage.get',
+      { limit: 10 },
+      `test-channel-token:${APP_ID}`,
+    )
     await observed!.appStorageGet('cache')
-    expect(mocks.pluginStorageGet).toHaveBeenCalledWith(APP_ID, 'cache')
+    expect(mocks.pluginStorageGet).toHaveBeenCalledWith(APP_ID, 'cache', `test-channel-token:${APP_ID}`)
 
     await handle.unmount()
     expect(unmount).toHaveBeenCalledTimes(1)

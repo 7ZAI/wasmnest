@@ -4,6 +4,8 @@
 
 import { invoke, type Channel } from '@tauri-apps/api/core'
 import { logger } from '@/utils/frontendLogger'
+import { ensureHostCredential } from '@/plugin/credentials'
+import { pluginInvoke } from '@/plugin/commands'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 // ==================== Types ====================
@@ -128,25 +130,35 @@ export async function wsGetAuthCredentials(): Promise<AuthCredentials | null> {
 }
 
 /**
+ * 宿主驱动内置终端插件（`com.wasmnest.bedcode`）的命令
+ *
+ * 身份（ADR 0058 / issue #28）：调用方是宿主壳，传宿主面凭证（loader 会话）——
+ * 宿主可驱动任意插件的命令；插件自身的命令面走各自 context 的通道令牌。
+ */
+async function invokeTerminalPlugin<T = void>(
+  command: string,
+  args: Record<string, unknown> = {},
+): Promise<T> {
+  return (await pluginInvoke(
+    TERMINAL_PLUGIN_ID,
+    command,
+    args,
+    await ensureHostCredential(),
+  )) as T
+}
+
+/**
  * 请求配对（桌面端生成一次性配对码并展示）
  */
 export async function wsRequestPairing(): Promise<void> {
-  await invoke('plugin_invoke', {
-    pluginId: TERMINAL_PLUGIN_ID,
-    command: 'bedcode.request-pairing',
-    args: {},
-  })
+  await invokeTerminalPlugin('bedcode.request-pairing')
 }
 
 /**
  * 验证配对码，成功后返回凭据（含 JWT token，宿主引擎窄读）
  */
 export async function wsVerifyPairingCode(code: string): Promise<AuthCredentials | null> {
-  const outcome = await invoke<PluginAuthOutcome>('plugin_invoke', {
-    pluginId: TERMINAL_PLUGIN_ID,
-    command: 'bedcode.verify-pairing-code',
-    args: { code },
-  })
+  const outcome = await invokeTerminalPlugin<PluginAuthOutcome>('bedcode.verify-pairing-code', { code })
   return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
 }
 
@@ -154,11 +166,7 @@ export async function wsVerifyPairingCode(code: string): Promise<AuthCredentials
  * 使用 QR token 认证，成功后返回凭据（含 JWT token，宿主引擎窄读）
  */
 export async function wsAuthenticateWithQr(token: string): Promise<AuthCredentials | null> {
-  const outcome = await invoke<PluginAuthOutcome>('plugin_invoke', {
-    pluginId: TERMINAL_PLUGIN_ID,
-    command: 'bedcode.authenticate-with-qr',
-    args: { token },
-  })
+  const outcome = await invokeTerminalPlugin<PluginAuthOutcome>('bedcode.authenticate-with-qr', { token })
   return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
 }
 
@@ -166,11 +174,7 @@ export async function wsAuthenticateWithQr(token: string): Promise<AuthCredentia
  * 生物认证登录（挑战-应答握手，弹系统生物识别），成功后返回凭据（宿主引擎窄读）
  */
 export async function wsAuthenticateWithBiometric(): Promise<AuthCredentials | null> {
-  const outcome = await invoke<PluginAuthOutcome>('plugin_invoke', {
-    pluginId: TERMINAL_PLUGIN_ID,
-    command: 'bedcode.authenticate-with-biometric',
-    args: {},
-  })
+  const outcome = await invokeTerminalPlugin<PluginAuthOutcome>('bedcode.authenticate-with-biometric')
   return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
 }
 
@@ -494,6 +498,10 @@ export function clearAuthCredentials() {
 // 宿主只保留**页面 Channel 传输机制**——`terminal_page_subscribe/unsubscribe`
 // 是 Tauri 传输登记面，由宿主 `plugin/terminal-stream.ts`
 // （mobileApi.openTerminalStream）封装给插件消费。
+//
+// 两条命令只认宿主门（2026-11-02）：Channel 归属是宿主，裸 invoke 若能调，任一
+// 应用前端即可按 session_id 抢登记他人会话输出（后登记覆盖前登记 → 窃听 + 顶掉
+// 正常页面）。凭证由本层补——插件看到的是 `openTerminalStream`，看不到命令。
 
 /** 终端能力所在插件的命令 id（D6 选项 A：与桌面同名，职责不同；票 14 认证编排亦经此插件） */
 const TERMINAL_PLUGIN_ID = 'com.wasmnest.bedcode'
@@ -509,10 +517,12 @@ export async function terminalPageSubscribe(
   sessionId: string,
   channel: Channel<ArrayBuffer>,
 ): Promise<void> {
-  return invoke('terminal_page_subscribe', { sessionId, channel })
+  const credential = await ensureHostCredential()
+  return invoke('terminal_page_subscribe', { sessionId, channel, credential })
 }
 
 /** 段2：取消登记（退出终端页）— 清空推送通道 */
 export async function terminalPageUnsubscribe(sessionId: string): Promise<void> {
-  return invoke('terminal_page_unsubscribe', { sessionId })
+  const credential = await ensureHostCredential()
+  return invoke('terminal_page_unsubscribe', { sessionId, credential })
 }

@@ -31,6 +31,7 @@ import type {
 } from './types'
 import { hasPermissionForApi } from './permission'
 import * as pluginCmds from './commands'
+import { ensureChannelToken } from './credentials'
 import * as pluginEvents from './events'
 import { defineComponent, h } from 'vue'
 import { getPluginRegistry } from './registry'
@@ -102,6 +103,17 @@ export function createPluginContext(
     }
   }
 
+  /**
+   * 本插件的通道令牌（ADR 0058 / issue #28）
+   *
+   * 插件面命令（命令派发 / 存储 / 自报面）的身份来源：令牌决定调用方身份，
+   * 宿主拒签（插件未运行）时显性抛错——绝不落回「无凭证」调用。
+   * 懒签发：插件代码首次走到这些 API 时取，装载路径不依赖凭证。
+   */
+  function channelToken(): Promise<string> {
+    return ensureChannelToken(info.id)
+  }
+
   // ==================== CommandRegistry ====================
   const commandHandlers = new Map<string, (...args: any[]) => any>()
 
@@ -121,7 +133,12 @@ export function createPluginContext(
       // 保留底层错误信息，避免把真实失败原因（如 WASM trap、插件未激活、无活跃对端）
       // 统一掩盖成 Command not found。信封形态经 extractInvokeErrorMessage 取 code + request_id。
       try {
-        return await pluginCmds.pluginInvoke(info.id, id, args.length === 1 ? args[0] : args)
+        return await pluginCmds.pluginInvoke(
+          info.id,
+          id,
+          args.length === 1 ? args[0] : args,
+          await channelToken(),
+        )
       } catch (e) {
         // 原始拒绝值全量落盘（dev 控制台 + 攒批转发，release 也转发 error 级）：
         // 信封只有 code/request_id，细节在宿主日志，此处留形状供关联排查
@@ -266,16 +283,17 @@ export function createPluginContext(
   }
 
   // ==================== StorageAPI ====================
+  // 宿主侧三段校验：身份（本插件令牌）→ 目标激活态 → 目标 storage 权限（issue #28）
   const storage: StorageAPI = {
     async get<T = any>(key: string): Promise<T | undefined> {
-      const val = await pluginCmds.pluginStorageGet(info.id, key)
+      const val = await pluginCmds.pluginStorageGet(info.id, key, await channelToken())
       return val as T | undefined
     },
     async set(key: string, value: any): Promise<void> {
-      return pluginCmds.pluginStorageSet(info.id, key, value)
+      return pluginCmds.pluginStorageSet(info.id, key, value, await channelToken())
     },
     async delete(key: string): Promise<void> {
-      return pluginCmds.pluginStorageDelete(info.id, key)
+      return pluginCmds.pluginStorageDelete(info.id, key, await channelToken())
     },
   }
 
@@ -442,12 +460,13 @@ export function createPluginContext(
   }
 
   // ==================== StatusAPI ====================
+  // 自报面（issue #28）：令牌只能自报自己，宿主可代报任意目标
   const status: StatusAPI = {
     async reportReady() {
-      return pluginCmds.pluginReportReady(info.id)
+      return pluginCmds.pluginReportReady(info.id, await channelToken())
     },
     async reportError(error) {
-      return pluginCmds.pluginMarkError(info.id, error)
+      return pluginCmds.pluginMarkError(info.id, error, await channelToken())
     },
   }
 

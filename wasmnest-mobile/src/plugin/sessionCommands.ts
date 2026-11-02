@@ -15,6 +15,7 @@
  */
 
 import { pluginInvoke } from '@/plugin/commands'
+import { ensureHostCredential } from '@/plugin/credentials'
 import { logger } from '@/utils/frontendLogger'
 import type { ApiResult } from '@/composables/useHttpApi'
 
@@ -26,10 +27,18 @@ const TERMINAL_PLUGIN_ID = 'com.wasmnest.bedcode'
  *
  * 插件命令失败（插件未激活 / 未连接 / 网络故障 / 权限门拒绝）与退役前
  * `useHttpApi` 的 catch 一致 → `{code: -1, message}`（不抛，调用点按 code 分支）。
+ *
+ * 身份（ADR 0058 / issue #28）：调用方是**宿主壳**（会话页 / 终端页），传宿主面
+ * 凭证（loader 会话）——宿主可驱动任意插件的命令；插件自身的命令走各自 context。
  */
 async function invokeSessionCommand<T>(command: string, args: Record<string, unknown> = {}): Promise<ApiResult<T>> {
   try {
-    return (await pluginInvoke(TERMINAL_PLUGIN_ID, command, args)) as ApiResult<T>
+    return (await pluginInvoke(
+      TERMINAL_PLUGIN_ID,
+      command,
+      args,
+      await ensureHostCredential(),
+    )) as ApiResult<T>
   } catch (e: unknown) {
     // Rust AppError 经 Tauri IPC 以纯字符串 reject（无 .message），需按类型提取
     const message = typeof e === 'string' ? e : ((e as Error)?.message ?? String(e))

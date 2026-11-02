@@ -278,6 +278,11 @@ impl PluginManager {
         let result = self.deactivate_inner(plugin_id).await;
         if result.is_ok() {
             self.release_services_for(plugin_id, "plugin deactivated").await;
+            // 前端通道令牌随停用回收（ADR 0058 / issue #28）：令牌是「该插件当前这次
+            // 激活」的凭证，停用后旧令牌不得继续解析出身份。未运行态（Loaded / Error）
+            // 也走这里——Error 残留的令牌同样不能活到下一轮。下次激活由 loader 重新签发。
+            // 与桌面 `PluginHost::deactivate_plugin` 的 revoke_plugin 同位同义。
+            self.revoke_frontend_tokens(plugin_id);
         }
         result
     }

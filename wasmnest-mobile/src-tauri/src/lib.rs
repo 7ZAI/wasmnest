@@ -180,15 +180,20 @@ pub fn run() {
             let plugin_manager = crate::state::init_plugin_manager(Arc::new(plugin_manager));
             app.manage(plugin_manager.clone());
 
-            // 移动宿主面凭证域（ADR 0058 方案 A：移动半场，issue #21）：管理类命令
-            // （plugin_preauthorize / activate / deactivate / approve / install /
-            // uninstall / download / reload）只认宿主前端 loader 会话凭证。与桌面
-            // lib PluginHost 的 channel 同机制（wasm-core FrontendChannelRegistry），
-            // 但移动命令面（plugin/commands.rs）独立持有自己的实例——移动不经
-            // 桌面的 api_bridge 装配链，registry 随 lib.rs setup 显式装配。
-            app.manage(Arc::new(
-                wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry::new(),
-            ));
+            // 移动宿主面凭证域（ADR 0058：移动半场 issue #21 + 命令面身份绑定 issue #28）。
+            // 管理类命令只认宿主前端 loader 会话凭证；插件面命令（plugin_invoke /
+            // plugin_storage_* / 自报面）认 `plugin_channel_token` 签发的通道令牌。
+            // 与桌面 lib PluginHost 的 channel 同机制（wasm-core FrontendChannelRegistry），
+            // 移动不经桌面的 api_bridge 装配链，registry 随 lib.rs setup 显式装配。
+            //
+            // **同一实例两处持有**：命令面经 Tauri state 取、manager 经
+            // `attach_frontend_channel` 注入（停用 / 卸载 / 热重载时由 manager 回收令牌，
+            // 与桌面 `PluginHost::deactivate_plugin` 同位）。两份必须是同一个 Arc，
+            // 否则会签在一张表、收在另一张表。
+            let frontend_channel =
+                Arc::new(wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry::new());
+            plugin_manager.attach_frontend_channel(frontend_channel.clone());
+            app.manage(frontend_channel);
 
             // 应用作用域服务注册表：`net.peer-node` 服务经管理器的注册表注册
             // （管理器在 init_wasm_runtime 时把同一份注入 wasm 宿主上下文；
@@ -356,8 +361,10 @@ pub fn run() {
             //    共享根镜像 / 浏览 / 拉取）与 host-platform 选源原语。
             // 防回接锁：tests/retired_mobile_peer_transfer_command_face_lock.rs
             // Plugin Commands
-            // 宿主面凭证签发（ADR 0058 方案 A：前端 bootstrap 首个调用，先于插件模块 import）
+            // 宿主面凭证签发（ADR 0058：前端 bootstrap 首个调用，先于插件模块 import）
             crate::plugin::commands::plugin_frontend_loader_session,
+            // 插件面通道令牌签发（issue #28：loader 会话 + 运行态 → 插件身份令牌）
+            crate::plugin::commands::plugin_channel_token,
             crate::plugin::commands::plugin_list_loaded,
             crate::plugin::commands::plugin_get_info,
             crate::plugin::commands::plugin_preauthorize,

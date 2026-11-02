@@ -24,6 +24,12 @@ vi.mock('@/plugin/commands', () => ({
   pluginInvoke: (...args: unknown[]) => mockPluginInvoke(...args),
 }))
 
+// 通道令牌面替身（issue #28）：本测试的被测对象是**拒绝值提取**，身份签发不是
+// 被测面——固定返回一张令牌，命令派发按既有路径进 mockPluginInvoke。
+vi.mock('@/plugin/credentials', () => ({
+  ensureChannelToken: async () => 'test-channel-token',
+}))
+
 const mockLoggerError = vi.fn()
 vi.mock('@/utils/frontendLogger', () => ({
   logger: {
@@ -86,8 +92,8 @@ describe('PluginContext 命令面拒绝值提取', () => {
 
     const err = await rejectionOf(ctx.commands.execute(COMMAND, { path: '', dirId: '' }))
 
-    // 参数经单参直传（既有契约）
-    expect(mockPluginInvoke).toHaveBeenCalledWith(PLUGIN_ID, COMMAND, { path: '', dirId: '' })
+    // 参数经单参直传（既有契约）+ 第 4 参为本插件通道令牌（issue #28：身份绑定）
+    expect(mockPluginInvoke).toHaveBeenCalledWith(PLUGIN_ID, COMMAND, { path: '', dirId: '' }, 'test-channel-token')
     // 完整消息：code + request_id；params 不展开（用户面文案归前端 i18n，此处只要排查标识）
     expect(err.message).toBe(`Command not found: ${COMMAND} (host.plugin.trap, request_id=abc12345)`)
   })

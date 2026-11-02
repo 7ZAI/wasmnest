@@ -156,6 +156,14 @@ pub struct PluginManager {
     /// 应用作用域共享服务注册表（与桌面同一机制）：boot 注册 `net.peer-node`
     /// 服务并注入 wasm 宿主上下文；插件离开运行态时按 holder 回收。
     service_registry: Arc<wasmnest_server_base::service::ServiceRegistry>,
+    /// 前端通道凭证域（ADR 0058 / issue #28）：与宿主命令面**共用同一实例**
+    /// （lib.rs setup 装配后经 [`Self::attach_frontend_channel`] 注入）。
+    ///
+    /// 为什么放在 manager 而不是只在命令面：令牌是「该插件当前这次激活」的凭证，
+    /// 停用 / 卸载 / 热重载的回收必须与状态机同一步，不能依赖「每个命令都记得调一次
+    /// revoke」——内部拆解路径（uninstall 内部 deactivate、重激活前 teardown）同样要收。
+    /// 与桌面 `PluginHost::frontend_channel` 的位置与语义一致。
+    frontend_channel: OnceLock<Arc<wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry>>,
 }
 
 impl PluginManager {
@@ -216,6 +224,28 @@ impl PluginManager {
             fs_auth,
             message_bus,
             service_registry,
+            frontend_channel: OnceLock::new(),
+        }
+    }
+
+    /// 注入前端通道凭证域（lib.rs setup：与命令面 state 是**同一个** Arc 实例）
+    ///
+    /// 幂等：重复注入只保留首次（OnceLock 语义）——测试与生产共用同一装配路径时
+    /// 不会出现「命令面签发在 A 表、manager 回收的是 B 表」这种两表错位。
+    pub fn attach_frontend_channel(
+        &self,
+        channel: Arc<wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry>,
+    ) {
+        let _ = self.frontend_channel.set(channel);
+    }
+
+    /// 回收某插件的全部前端通道令牌（停用 / 卸载 / 热重载；未注入时为空操作）
+    ///
+    /// 未注入（无头测试 / setup 早于本调用）时静默跳过：命令面签不出令牌，
+    /// 也就没有令牌可回收。
+    pub fn revoke_frontend_tokens(&self, plugin_id: &str) {
+        if let Some(channel) = self.frontend_channel.get() {
+            channel.revoke_plugin(plugin_id);
         }
     }
 

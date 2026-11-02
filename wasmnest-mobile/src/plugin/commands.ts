@@ -6,7 +6,7 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import type { PluginInfo } from './types'
-import { ensureHostCredential } from './credentials'
+import { ensureHostCredential, invalidateChannelToken } from './credentials'
 
 /** 获取所有已加载插件信息 */
 export async function pluginListLoaded(): Promise<PluginInfo[]> {
@@ -40,7 +40,14 @@ export async function pluginActivate(pluginId: string): Promise<void> {
 /** 停用插件（宿主面凭证已绑定，ADR 0058） */
 export async function pluginDeactivate(pluginId: string): Promise<void> {
   const credential = await ensureHostCredential()
-  return await invoke('plugin_deactivate', { pluginId, credential })
+  try {
+    await invoke('plugin_deactivate', { pluginId, credential })
+  } finally {
+    // 宿主在停用路径上回收该插件的通道令牌（issue #28）：本地缓存必须同步作废，
+    // 否则同一页面内「停用再启用」会拿死令牌把首批命令全打成凭证错误。
+    // 放 finally：即使停用请求失败（如插件已不存在），旧令牌也不应继续被当作有效。
+    invalidateChannelToken(pluginId)
+  }
 }
 
 /** 查询插件「启动时自动激活」偏好（缺省 false = 不自动启动） */
@@ -48,19 +55,26 @@ export async function pluginIsAutostart(pluginId: string): Promise<boolean> {
   return await invoke('plugin_is_autostart', { pluginId })
 }
 
-/** 设置插件「启动时自动激活」偏好（只改偏好，下次启动生效） */
+/** 设置插件「启动时自动激活」偏好（只改偏好，下次启动生效；宿主门，ADR 0058） */
 export async function pluginSetAutostart(pluginId: string, autostart: boolean): Promise<void> {
-  return await invoke('plugin_set_autostart', { pluginId, autostart })
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_set_autostart', { pluginId, autostart, credential })
 }
 
-/** 标记插件错误 */
-export async function pluginMarkError(pluginId: string, error: string): Promise<void> {
-  return await invoke('plugin_mark_error', { pluginId, error })
+/**
+ * 标记插件错误（插件自报面 + 宿主代报面）
+ *
+ * `credential` 决定调用方身份（issue #28）：插件用自己的通道令牌只能报自己的错，
+ * 宿主持 loader 会话可代报任意目标。宿主路径（loader）用 `ensureHostCredential()`，
+ * 插件路径用 `ensureChannelToken(自己的 id)`——由调用方决定，本函数不做猜测。
+ */
+export async function pluginMarkError(pluginId: string, error: string, credential: string): Promise<void> {
+  return await invoke('plugin_mark_error', { pluginId, error, credential })
 }
 
-/** 插件显式上报启动成功（Error → Activated 自愈） */
-export async function pluginReportReady(pluginId: string): Promise<void> {
-  return await invoke('plugin_report_ready', { pluginId })
+/** 插件显式上报启动成功（Error → Activated 自愈；插件自报面，令牌只能是自己） */
+export async function pluginReportReady(pluginId: string, credential: string): Promise<void> {
+  return await invoke('plugin_report_ready', { pluginId, credential })
 }
 
 /** 批准插件权限（人工审批：记录权限清单 + 目录内容哈希钉扎；宿主面凭证已绑定，ADR 0058） */
@@ -69,19 +83,30 @@ export async function pluginApprove(pluginId: string): Promise<void> {
   return await invoke('plugin_approve', { pluginId, credential })
 }
 
+// ==================== 插件存储 / 命令派发（身份 = credential，ADR 0058 / issue #28） ====================
+//
+// 三者都要求显式 `credential`：令牌决定调用方身份，`pluginId` 只作目标。宿主路径传
+// `ensureHostCredential()`（可作用于任意目标），插件路径传 `ensureChannelToken(自己)`。
+// 宿主侧另有运行态 + `storage` 权限两段校验（未声明 storage 的应用同样被拒）。
+
 /** 获取插件存储值 */
-export async function pluginStorageGet(pluginId: string, key: string): Promise<any> {
-  return await invoke('plugin_storage_get', { pluginId, key })
+export async function pluginStorageGet(pluginId: string, key: string, credential: string): Promise<any> {
+  return await invoke('plugin_storage_get', { pluginId, key, credential })
 }
 
 /** 设置插件存储值 */
-export async function pluginStorageSet(pluginId: string, key: string, value: any): Promise<void> {
-  return await invoke('plugin_storage_set', { pluginId, key, value })
+export async function pluginStorageSet(
+  pluginId: string,
+  key: string,
+  value: any,
+  credential: string,
+): Promise<void> {
+  return await invoke('plugin_storage_set', { pluginId, key, value, credential })
 }
 
 /** 删除插件存储值 */
-export async function pluginStorageDelete(pluginId: string, key: string): Promise<void> {
-  return await invoke('plugin_storage_delete', { pluginId, key })
+export async function pluginStorageDelete(pluginId: string, key: string, credential: string): Promise<void> {
+  return await invoke('plugin_storage_delete', { pluginId, key, credential })
 }
 
 /** 插件日志输出 */
@@ -89,9 +114,14 @@ export async function pluginLog(pluginId: string, level: string, message: string
   return await invoke('plugin_log', { pluginId, level, message })
 }
 
-/** 调用 WASM 插件命令 */
-export async function pluginInvoke(pluginId: string, command: string, args: any = null): Promise<any> {
-  return await invoke('plugin_invoke', { pluginId, command, args })
+/** 调用 WASM 插件命令（令牌只能驱动自己；宿主凭证可驱动任意目标） */
+export async function pluginInvoke(
+  pluginId: string,
+  command: string,
+  args: any,
+  credential: string,
+): Promise<any> {
+  return await invoke('plugin_invoke', { pluginId, command, args, credential })
 }
 
 /** 从本地 zip 插件包安装（宿主面凭证已绑定，ADR 0058） */
