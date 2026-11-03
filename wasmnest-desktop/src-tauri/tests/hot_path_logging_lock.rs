@@ -17,9 +17,22 @@
 //! | `MessageBus::dispatch_publish` 投递留痕 | PTY 输出通知 ≥50ms/句柄（≈16/s） | 9 585 行 / 11 分钟 | 51.7% |
 //! | `fs_auth::check` 免弹窗放行 | 每次文件读写（一次全盘用量扫描 = 一个文件一行） | 单分钟 1 121 行 | 12.2% |
 //! | `record_dropped_frame` 非首次丢帧 | 每帧 | 当日 0 行（休眠路径，但形状相同） | — |
+//! | `run_traffic_filter` 请求完成事件 | 每请求（应用轮询 / 事件推送） | 2026-11-04 复现：控制台成片 `HTTP request completed, status: 200` | 见下 |
+//!
+//! 2026-11-04 补充：请求完成事件原为 `debug!`（成功分支），dev 控制台兜底 `debug`、
+//! runtime 文件层 dev 强制 `debug`，于是每条 200 都落一行「status + 耗时」——级别没错，
+//! 形状错了（按请求触发）。现改 `trace!` + `http_stats` 秒级聚合，本锁覆盖该函数体。
 //!
 //! 三者内容全是零信息重复（`enqueued=1/1 rejected=0`、`allowed`、`dropped`），
 //! 逐条留痕没有任何诊断价值。
+//!
+//! ## 锁的两种形态
+//!
+//! - **函数体锁**（[`LOCKED_SITES`] 前 `BODY_SCOPED_SITES` 条）：以 `fn <name>(` 字面
+//!   定位函数体，适用于**非泛型**函数；
+//! - **行窗口锁**（[`LOCKED_FILE_WINDOWS`]）：`run_traffic_filter` 这类**泛型**函数
+//!   签名是 `fn f<S, B>(`，函数名与 `(` 之间隔着泛型参数，函数体抽取的定位会失败；
+//!   改用「起点函数行 ~ 终点函数行」的行段窗口，两端行号都经泛型感知的签名解析校验。
 //!
 //! ## 锁的口径与边界
 //!
@@ -165,6 +178,68 @@ fn debug_log_lines(body: &str) -> Vec<usize> {
     hits
 }
 
+/// 定位 `fn <name>` 的定义行（1-based）；返回 `(行号, 该行文本)`
+///
+/// 只认「含 `fn` 关键字且紧跟函数名的定义行」：`name(` 出现在注释 / 调用处都不算，
+/// 避免把文档注释里的示例当成函数起点。泛型函数（`fn f<S, B>(`）由
+/// [`fn_definition_line_multiline`] 处理——签名可跨行，需要看后续几行。
+fn fn_definition_line<'a>(src: &'a str, name: &str) -> Option<(usize, &'a str)> {
+    let needle = format!("{name}(");
+    let is_def = |line: &str| line.contains("fn ") && line.contains(&needle);
+    src.lines()
+        .enumerate()
+        .find_map(|(i, line)| is_def(line).then_some((i + 1, line)))
+}
+
+/// 定位 `fn <name>` 的定义行，容忍**跨行 / 泛型签名**（`fn f<S, B>(` 后换行再写参数）
+///
+/// 判据：某行同时含 `fn ` 与函数名，且从**函数名出现位置**起的签名片段满足
+/// 「`name` → 可选 `<...>` 泛型 → 左括号」的形态（允许换行与空白）。这覆盖：
+/// 1. 普通签名 `fn f(a: u32) {`（函数名后紧跟 `(`）；
+/// 2. 泛型签名 `fn f<S, B>(`（`<...>` 之后才是 `(`）；
+/// 3. 跨行签名 `fn f<S, B>\n(...)`（片段取 512 字符，跨行也能看到 `(`）。
+///
+/// 为什么不能用「该行含 `name(`」：泛型函数签名里函数名与左括号之间隔着 `<S, B>`，
+/// 字面匹配会**永远找不到**该站点——锁因此静默失效（曾经踩过）。
+fn fn_definition_line_multiline(src: &str, name: &str) -> Option<usize> {
+    src.lines().enumerate().find_map(|(i, line)| {
+        if !(line.contains("fn ") && line.contains(name)) {
+            return None;
+        }
+        let start = line.find(name)?;
+        let sig: String = line[start..].chars().take(512).collect();
+        let rest = sig.strip_prefix(name)?;
+        // 跳过可选泛型参数 `<...>`，其后的第一个 `(` 即参数列表起点
+        let mut angle_depth = 0usize;
+        let mut seen_angle = false;
+        for ch in rest.chars() {
+            match ch {
+                '<' => {
+                    angle_depth += 1;
+                    seen_angle = true;
+                }
+                '>' if angle_depth > 0 => angle_depth -= 1,
+                '(' if angle_depth == 0 => return Some(i + 1),
+                // 非泛型场景下允许函数名与 `(` 之间只有空白
+                ' ' | '\n' | '\t' | '\r' if !seen_angle => {}
+                _ => {}
+            }
+        }
+        None
+    })
+}
+
+/// 取 `[start_fn, end_fn)` 行窗口的源码文本；任一端定位失败返回 `None`
+fn window_between(src: &str, start_fn: &str, end_fn: &str) -> Option<String> {
+    let start = fn_definition_line_multiline(src, start_fn)?;
+    let end = fn_definition_line_multiline(src, end_fn)?;
+    if end <= start {
+        return None;
+    }
+    let lines: Vec<&str> = src.lines().collect();
+    Some(lines[start - 1..end - 1].join("\n"))
+}
+
 // ==================== 站点登记（宿主热路径，逐条附触发形状） ====================
 
 /// 被锁函数：`src-relative-path` + 函数名 + 为什么它是热路径
@@ -197,6 +272,30 @@ const LOCKED_SITES: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// 「按整个函数体」锁的站点数：`LOCKED_SITES` 的前 N 个条目按函数体扫描
+///
+/// 函数体扫描依赖 `fn <name>(` 字面定位，对**泛型函数**（`fn f<S, B>(`）无效——
+/// 那类站点（如 `run_traffic_filter`）改走 [`LOCKED_FILE_WINDOWS`] 的按行锁：
+/// 在指定函数行号与 `fn` 前缀双重校验下，只扫其行号窗口内的 `tracing::debug!`。
+const BODY_SCOPED_SITES: usize = 3;
+
+/// 按行窗口锁的站点：`src-relative-path` + 窗口起点函数名 + 窗口终点函数名 + 理由
+///
+/// 起点 / 终点都是**函数定义行**（含 `fn` 的行），窗口 = `[起点行, 终点行)`——即
+/// 「该函数体所在行段」。两端行号都必须命中含该函数名的 `fn` 定义行，否则判红
+/// （改名 / 移动即失效，不会静默退化成「什么都没扫到」）。
+const LOCKED_FILE_WINDOWS: &[(&str, &str, &str, &str)] = &[(
+    // 2026-11-04 桌面端日志风暴：请求完成事件原为 `debug!`，dev 控制台兜底 debug +
+    // runtime 层 dev 强制 debug 时，应用轮询 / 事件推送把每次 200 都逐条落盘
+    // （控制台成片 "HTTP request completed, status: 200"）。现降为 `trace!`
+    // 并由 `http_stats` 秒级聚合计数兜可见性——本锁钉住该函数体内不得再出现
+    // `debug!`（成功必须是 trace；4xx warn / 5xx error 不受限）。
+    "../../../wasmnest-lib/wasmnest-server-http/src/middleware/http_filter.rs",
+    "run_traffic_filter",
+    "to_bytes_owned",
+    "按请求触发：每个非 HEAD/WS 请求过一次，成功分支逐条留痕即日志风暴",
+)];
+
 /// 宿主根目录（`wasmnest-desktop/src-tauri`）
 fn desktop_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -214,7 +313,7 @@ fn read_source(rel: &str) -> String {
 fn hot_path_functions_do_not_log_per_operation() {
     let mut violations: Vec<String> = Vec::new();
 
-    for (rel, func, why) in LOCKED_SITES {
+    for (rel, func, why) in LOCKED_SITES.iter().take(BODY_SCOPED_SITES) {
         let path = desktop_root().join(rel);
         assert!(
             path.is_file(),
@@ -238,6 +337,25 @@ fn hot_path_functions_do_not_log_per_operation() {
             violations.push(format!(
                 "{rel}:{}（fn {func} 内第 {rel_line} 行）—— {why}",
                 abs_start + rel_line - 1
+            ));
+        }
+    }
+
+    // ---- 按行窗口锁（泛型函数等「函数体抽取」失效的站点）----
+    for (rel, start_fn, end_fn, why) in LOCKED_FILE_WINDOWS {
+        let raw = read_source(rel);
+        let masked = blank_out_comments_and_strings(&raw);
+        let Some(window) = window_between(&masked, start_fn, end_fn) else {
+            violations.push(format!(
+                "{rel}::{start_fn}..{end_fn} —— 行窗口定位失败（改名 / 移动后本锁失效，必须同步更新 LOCKED_FILE_WINDOWS）"
+            ));
+            continue;
+        };
+        let start_line = fn_definition_line_multiline(&masked, start_fn).unwrap_or(0);
+        for rel_line in debug_log_lines(&window) {
+            violations.push(format!(
+                "{rel}:{}（fn {start_fn} 行窗口内第 {rel_line} 行）—— {why}",
+                start_line + rel_line - 1
             ));
         }
     }
@@ -318,6 +436,27 @@ fn scanner_detects_planted_and_real_violations() {
         debug_log_lines(&clean_body).is_empty(),
         "{clean_func} 当前仍有 tracing::debug! —— C-004 的正反对照同时失效，先修站点再谈锁"
     );
+
+    // --- 3b. 按行窗口锁的防空转：定位成功 + 当前干净 + 扫描器真能看到窗口内的日志 ---
+    let (http_rel, http_start, http_end, _) = LOCKED_FILE_WINDOWS[0];
+    let http_masked = blank_out_comments_and_strings(&read_source(http_rel));
+    let http_window = window_between(&http_masked, http_start, http_end)
+        .expect("http_filter 行窗口必须能定位（改名 / 移动后本锁失效，必须同步更新 LOCKED_FILE_WINDOWS）");
+    assert!(
+        debug_log_lines(&http_window).is_empty(),
+        "{http_start} 行窗口内仍有 tracing::debug! —— 每个请求一行，重演 2026-11-04 桌面端日志风暴"
+    );
+    // 正对照：窗口内确实有完成事件日志语句（否则「干净」可能只是窗口扫偏了）
+    assert!(
+        http_window.contains("HTTP request completed")
+            || http_window.contains("emit_completion")
+            || http_window.contains("HTTP request failed"),
+        "扫描的 {http_start} 行窗口里连完成事件日志都没有 —— 站点已改形，本锁需同步"
+    );
+    // 反例：把同一文件里的另一个函数当窗口起点（其体内确实没 debug，但要证明扫描器
+    // 定位与命中在真实文件上有效）——用 completion_level 起点 + 自身终点取一个必然
+    // 含 `completion_level(status)` 调用链的窗口，断言能抽出非空文本
+    assert!(!http_window.is_empty(), "行窗口不得为空（空窗口 = 什么都没扫到的假绿）");
 }
 // ==================== 解析原语的边界用例（C-005） ====================
 
