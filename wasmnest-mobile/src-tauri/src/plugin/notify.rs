@@ -38,8 +38,8 @@ pub const MODULE_NAME: &str = "mobile-notify";
 /// 本域提供的 WIT 接口（必须与生成物 `cap-notify.wit` + `cap-mobile.wit` 逐字一致；
 /// 改错即 guest import 失配）
 pub const MODULE_INTERFACES: &[&str] = &[
-    "wasmnest:plugin@0.0.1/host-notify",
-    "wasmnest:plugin@0.0.1/host-notify-mobile",
+    "wasmnest:plugin@0.0.2/host-notify",
+    "wasmnest:plugin@0.0.2/host-notify-mobile",
 ];
 
 /// 本域的权限位（两个 interface 同门；必须与 WIT / SDK 权限表逐字一致）

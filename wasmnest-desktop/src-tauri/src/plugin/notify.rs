@@ -7,10 +7,10 @@
 //! 直接消费）。本文件是桌面端的实现：经 Tauri 事件发前端 toast（`plugin:notify`
 //! 事件，payload 与迁移前逐字一致）。
 //!
-//! 权限：`notify` **无权限门**（与迁移前 `host-events-desktop.notify` /
-//! 宿主命令面 `plugin_notify` 口径逐字一致——弹提示是插件常规能力，不构成资源面）；
-//! 移动端同契约的实现在其 `plugin/notify.rs`，那边有 `notify` 权限门（ADR 0018
-//! 移动独立契约），门在各端实现内，契约面不规定。
+//! 权限：`notify` **有权限门**（双端同一口径，2026-11-02 安全审查 #46 补齐）。
+//! 通知是「用户打扰面」——高频弹通知 / 冒充系统提示属能力滥用，且用户必须能在
+//! 应用详情页撤销它；因此与移动端 `plugin/notify.rs` 的 `require_notify` 逐字对齐，
+//! 域函数入口先过 `PermissionManager` 的 `notify` 位，未声明即 fail-visible 拒绝。
 //!
 //! options-json 与移动端同口径**严格解析**（非法 JSON / 字段类型错误 → Err，禁静默
 //! 降级成默认值），但取值在桌面**静默忽略**（无震动 / 提示音通道）——契约文档已声明
@@ -20,6 +20,7 @@ use tauri::Emitter;
 use wasmnest_host_kit::ports::downcast_host;
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
 use wasmnest_wasm_core::host_api::context::WasmHostContext;
+use wasmnest_wasm_core::permission::PERMISSION_NOTIFY;
 
 use crate::plugin::bindings::wasmnest;
 
@@ -31,10 +32,10 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "notify";
 
 /// 本域提供的 WIT 接口（必须与 `cap-notify.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-notify"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-notify"];
 
-/// 本域的权限位（`notify` 无权限门 ⇒ 空清单）
-pub const MODULE_PERMISSIONS: &[&str] = &[];
+/// 本域的权限位（`notify` 域函数的门禁落点；与移动端同名同判据）
+pub const MODULE_PERMISSIONS: &[&str] = &[PERMISSION_NOTIFY];
 
 /// 能力模块描述符（机制面：接口路径 / 权限位 / ABI 下界；**禁带产品名词**）
 ///
@@ -75,10 +76,25 @@ inventory::submit! {
 
 impl wasmnest::plugin::host_notify::Host for WasmPluginState {
     fn notify(&mut self, title: String, body: String, options_json: String) -> Result<(), String> {
+        // 权限门先于一切副作用（含载荷解析）：未声明 `notify` 的插件连「参数是否合法」
+        // 都不该被告知——错误面只留一条，避免用报错文案探测域契约
+        require_notify(ctx_of(self), &self.plugin_id)?;
         // 严格解析先于投递：非法 options 与「忽略取值」是两件事——前者是调用方
         // 编程错误（必须可见），后者是平台差异（静默忽略，契约已声明）。
         parse_notify_options(&options_json)?;
         notify_desktop(ctx_of(self), &self.plugin_id, &title, &body)
+    }
+}
+
+/// 权限门：未声明 `notify` 即拒（与移动端 `require_notify` 逐字同判据）
+///
+/// 取上下文而非 state：门禁判据只依赖 `PermissionManager` 与插件 id，与运行面无关，
+/// 这样单测可以直接用无头上下文验「未声明 → 拒 / 已授予 → 放行」。
+fn require_notify(ctx: &WasmHostContext, plugin_id: &str) -> Result<(), String> {
+    if wasmnest_wasm_core::host_api::check_permission(ctx, plugin_id, PERMISSION_NOTIFY, "host_notify") {
+        Ok(())
+    } else {
+        Err("permission denied: notify".to_string())
     }
 }
 
@@ -134,6 +150,9 @@ fn notify_desktop(app: &WasmHostContext, plugin_id: &str, title: &str, body: &st
 #[cfg(test)]
 mod tests {
     use super::*;
+    // `permission()` 是 `PermissionScope` 的 trait 方法（生产路径经 `check_permission` 取用，
+    // 测试直接查授予集，故只在测试模块引入，避免 lib 构建的 unused import）
+    use wasmnest_wasm_core::host_api::context::PermissionScope;
     use wasmnest_wasm_core::test_support::build_host_ctx_at;
 
     /// 无头上下文（AppHandle=None）：notify 显性报错（与 emit 的幂等约定不同，
@@ -179,12 +198,39 @@ mod tests {
         assert_eq!(MODULE_NAME, "notify", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-notify"],
+            &["wasmnest:plugin@0.0.2/host-notify"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
-        assert_eq!(MODULE_PERMISSIONS, &[] as &[&str], "notify 无权限门 ⇒ 空清单");
+        assert_eq!(
+            MODULE_PERMISSIONS,
+            &[PERMISSION_NOTIFY],
+            "notify 有权限门 ⇒ 本域必须自报该位（与移动端同名）"
+        );
         assert_eq!(DESC.name, MODULE_NAME);
         assert_eq!(DESC.interfaces, MODULE_INTERFACES);
         assert_eq!(DESC.permissions, MODULE_PERMISSIONS);
+    }
+
+    /// #46 回归锁：未声明 `notify` 的插件调用必被拒，授予后放行
+    ///
+    /// 旧实现桌面侧无门（`permission.rs` 自述的遗留）：任意应用无需声明即可弹系统
+    /// 通知。判据落在域函数入口，这里直接验门口本身。
+    #[test]
+    fn notify_requires_declared_permission() {
+        let ctx = build_host_ctx_at(None);
+        let plugin = "com.wasmnest.unprivileged";
+
+        let err = require_notify(ctx.as_ref(), plugin).unwrap_err();
+        assert_eq!(err, "permission denied: notify", "未声明必须被拒（fail-visible）");
+
+        ctx.permission()
+            .grant_permissions(plugin, &[PERMISSION_NOTIFY.to_string()]);
+        require_notify(ctx.as_ref(), plugin).expect("授予 notify 后必须放行");
+
+        // 别的插件不受影响：授予是按 plugin_id 记账的
+        assert!(
+            require_notify(ctx.as_ref(), "com.wasmnest.other").is_err(),
+            "授权不得跨插件串号"
+        );
     }
 }
