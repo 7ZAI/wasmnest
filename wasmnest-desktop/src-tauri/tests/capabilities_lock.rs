@@ -27,11 +27,131 @@ use std::path::{Path, PathBuf};
 ///
 /// 注：`dialog:*` 刻意不在禁列——它是**用户点击后弹出的系统选择器**，只回传用户选定的
 /// 路径，前端读不到文件内容，真正的读取发生在 Rust 侧并过权限闸门；禁掉它等于禁用
-/// 「选择安装包 / 日志目录」这类正常 UI 能力。
+/// 「选择安装包 / 日志目录」这类正常 UI 能力。具体开哪几条由
+/// [`WASM_EQUIVALENT_PERMISSION_DECISIONS`] 逐条裁决（见该常量）。
 const NETWORK_CAPABLE_PERMISSION_PREFIXES: [&str; 6] = ["shell:", "updater:", "http:", "fs:", "deep-link:", "opener:"];
 
 /// 逐条禁止的进程类权限（`process:default` 只含 exit/restart，不在禁列）
 const FORBIDDEN_EXACT_PERMISSIONS: [&str; 1] = ["process:allow-spawn"];
+
+/// **与 wasm 权限位语义重叠**的能力位：出现即要求逐条裁决（安全审查 #47，2026-11-02）
+///
+/// 这些能力不是「网络 / 文件」类，但同样绕过 `PermissionManager`：前端一份、审计一份，
+/// 用户在应用详情页撤销的是 wasm 权限位，而能力位不受它约束。允许的条目必须在本表里
+/// **写明理由与门禁落点**，新增条目会在锁里直接跑红——防的是「不知不觉多开一条」而不是
+/// 「一条都不允许」（能力位与权限位的收敛需要应用仓同步，跨仓节奏不可在本仓单方面关闭）。
+///
+/// 裁决口径（`docs/frontend.md` §1 对照表）：
+/// - `keep`：保留，但写明谁在用、为什么不能现在撤、收敛入口在哪；
+/// - `host-command`：走宿主命令代替（发起权归 Rust）；
+/// - 未列出 = 禁止（锁红）。
+const WASM_EQUIVALENT_PERMISSION_DECISIONS: &[(&str, &str)] = &[
+    (
+        "dialog:allow-open",
+        "keep：`bedcode` 桌面前端的目录选择器（SessionConfigForm / useLaunchSession）直接调 \
+         `@tauri-apps/plugin-dialog`。收敛入口 = 宿主 `plugin.platform_picker` 已端口化的选择器原语 \
+         （wasm 侧可用）；应用仓迁走后此项应撤。只回传用户选定路径，内容读取仍在 Rust 且过 fs 授权链。",
+    ),
+    (
+        "dialog:default",
+        "keep（移动段）：宿主壳设置页的 `confirm` / 插件安装的 `open` 仍在用。\
+         桌面段已收窄到 `dialog:allow-open` 单条；移动段收敛后同样收窄。",
+    ),
+    (
+        "notification:default",
+        "keep：`file-transfer` 桌面前端只用 `sendNotification` 发本机进度提示。\
+         收敛入口 = 共享域契约 `host-notify`（已有 `notify` 权限位与双端门禁，桌面 #46 已补）。\
+         应用仓迁走后应撤此能力，否则「通知权限未授予」的用户预期与实际行为不一致。",
+    ),
+    (
+        "task-notification:default",
+        "keep（移动段）：宿主壳的连接 / 任务状态通知（`useNotification`）走 Kotlin 插件命令。\
+         它是一组自定义命令而非 `notification:*`，但同样可被应用前端裸 invoke。\
+         收敛入口 = 宿主命令封装（发起权归 Rust）+ 应用面走 `host-notify`。",
+    ),
+    (
+        "foreground-service:default",
+        "keep（移动段）：宿主连接保活的前台服务，属宿主机制而非产品语义。\
+         应用前端无消费者；后续由锁正向白名单固定命令面。",
+    ),
+    (
+        "os:allow-platform",
+        "keep：平台判定唯一入口（`usePlatform`，双端同形）。只暴露平台名，不含主机名 / locale。",
+    ),
+    ("os:allow-arch", "keep：`PlatformInfo.arch`（宿主壳展示与终端初始尺寸）。"),
+    ("os:allow-version", "keep：`PlatformInfo.osVersion`（关于页）。"),
+    ("os:allow-os-type", "keep：`PlatformInfo.osType`（关于页）。"),
+    (
+        "process:allow-restart",
+        "keep：宿主设置页「检查更新 → 安装后重启」需要（`useUpdateChecker`）。\
+         只放 restart（`relaunch()` 的 ACL 名，不放 exit / spawn）；应用前端不消费。",
+    ),
+];
+
+/// 逐条扫描「与 wasm 权限位语义重叠」的能力（未裁决即锁红）
+#[test]
+fn wasm_equivalent_capabilities_are_explicitly_adjudicated() {
+    let mut undocumented: Vec<String> = Vec::new();
+    let mut scanned = 0usize;
+
+    for (end, dir) in capability_dirs() {
+        assert!(dir.is_dir(), "{end} capability 目录缺失：{}", dir.display());
+        for file in fs::read_dir(&dir)
+            .unwrap_or_else(|e| panic!("读取 {} 失败：{e}", dir.display()))
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|ext| ext == "json"))
+        {
+            let raw = fs::read_to_string(&file).unwrap_or_else(|e| panic!("读取 {} 失败：{e}", file.display()));
+            for permission in extract_permission_strings(&raw, &file.display().to_string()) {
+                if !is_wasm_equivalent_capability(&permission) {
+                    continue;
+                }
+                scanned += 1;
+                if !WASM_EQUIVALENT_PERMISSION_DECISIONS
+                    .iter()
+                    .any(|(allowed, _)| *allowed == permission)
+                {
+                    undocumented.push(format!(
+                        "{end}:{permission}（{}）",
+                        file.file_name().unwrap_or_default().to_string_lossy()
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        scanned > 0,
+        "锁定全空转：两端 capability 里一条与 wasm 权限位重叠的能力都没扫到——\
+         扫描面（目录 / 字段名 / 前缀表）失效。取消注释或修正 collect 面，不许删锁。"
+    );
+    assert!(
+        undocumented.is_empty(),
+        "能力位绕过 wasm 权限语义且未裁决：{undocumented:?}\n\
+         这些权限让前端直接触达 OS 能力，而用户在应用详情页看到 / 撤销的是 wasm 权限位——两套账。\n\
+         处置：① 优先把发起权收归 Rust（宿主命令 / host-* 原语），撤掉能力；\n\
+         ② 确实当前不能撤（应用仓依赖）→ 在 `WASM_EQUIVALENT_PERMISSION_DECISIONS` 里\
+         追加条目并写明用户、不能撤的原因、收敛入口；\n\
+         ③ 同步 `docs/frontend.md` §1 的「能力位 ↔ 权限位」对照表。"
+    );
+}
+
+/// 判定某能力是否与 wasm 权限位语义重叠（`notify` / `fs:pick` / OS 信息面 / 进程面）
+fn is_wasm_equivalent_capability(permission: &str) -> bool {
+    // 前缀匹配：`os:*`（主机名 / locale 等平台信息面）与 `notification:*` / `task-notification:*`
+    if permission.starts_with("notification:")
+        || permission.starts_with("task-notification:")
+        || permission.starts_with("os:")
+        || permission.starts_with("process:")
+        || permission.starts_with("machine-uid:")
+        || permission.starts_with("foreground-service:")
+    {
+        return true;
+    }
+    // 文件选择器：`fs:pick` 的等价面（只回路径，但直接把路径塞给了前端）
+    permission == "dialog:default" || permission.starts_with("dialog:allow-")
+}
 
 /// 宿主根目录（`wasmnest-desktop/src-tauri`）
 fn desktop_root() -> PathBuf {
@@ -49,25 +169,37 @@ fn capability_dirs() -> Vec<(&'static str, PathBuf)> {
     vec![("desktop", desktop), ("mobile", mobile)]
 }
 
-/// 极简 JSON 字符串数组提取：取 `"permissions"` 后的 `[...]` 里每个 `"..."` 字面量。
+/// 读 capability 的 `permissions` 数组（结构化解析，2026-11-03 审核 P3-1 修正）
 ///
-/// 不引入 serde_json 依赖的理由：本锁只需读 capability 的 permissions 字段，
-/// 而 capability 的形状由 Tauri schema 强约束（写错会在 `tauri build` 期报 schema 错）。
-fn extract_permission_strings(json: &str) -> Vec<String> {
-    let Some(start) = json.find("\"permissions\"") else {
+/// **为什么不再用字符串切割**：旧实现是 `json.find("\"permissions\"")` + `find('[')` +
+/// `split(',')` + 手工剥引号。三个失效场景让锁本身变得不可信：
+/// 1. 其它字段的值里出现 `"permissions"` 字样（如描述文案）→ 切在错误位置；
+/// 2. `permissions` 数组里出现对象形态（Tauri 2 支持 `{"identifier": ...}`）→ 手工剥引号取到空；
+/// 3. 数组内含嵌套数组（作用域限定）→ `find(']')` 取到内层闭合，后续全丢。
+///
+/// 锁的价值在于「断言不空转」，用字符串切割等于把锁的可靠性交给字段顺序与格式细节。
+/// `serde_json` 是宿主的生产依赖，测试里用不增加任何负担。
+///
+/// 非字符串元素（对象形态 / 嵌套数组）**显性 panic** 而非跳过——静默跳过等于缩小断言范围，
+/// 正是 docs/testing.md 禁止的「缩窄 glob / 掏空断言」。真要用到对象形态时，让这里红一次，
+/// 迫使改成按 `identifier` 字段取值。
+fn extract_permission_strings(json: &str, origin: &str) -> Vec<String> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(json).unwrap_or_else(|e| panic!("{origin} 不是合法 JSON：{e}"));
+    let Some(list) = parsed.get("permissions") else {
         return Vec::new();
     };
-    let Some(open) = json[start..].find('[') else {
-        return Vec::new();
+    let Some(items) = list.as_array() else {
+        panic!("{origin} 的 permissions 不是数组：{list}");
     };
-    let body = &json[start + open + 1..];
-    let close = body.find(']').unwrap_or(body.len());
-    body[..close]
-        .split(',')
-        .filter_map(|chunk| {
-            let chunk = chunk.trim();
-            let inner = chunk.strip_prefix('"')?.strip_suffix('"')?;
-            (!inner.is_empty()).then(|| inner.to_string())
+    items
+        .iter()
+        .map(|item| match item.as_str() {
+            Some(s) => s.to_string(),
+            None => panic!(
+                "{origin} 的 permissions 里出现非字符串元素 {item} —— 本锁只认字符串权限位；\
+                 若 Tauri 升级为对象形态，请改按 identifier 字段取值后再放开"
+            ),
         })
         .collect()
 }
@@ -98,7 +230,7 @@ fn network_capable_plugin_permissions_are_not_reintroduced() {
 
         for file in entries {
             let raw = fs::read_to_string(&file).unwrap_or_else(|e| panic!("读取 {} 失败：{e}", file.display()));
-            for permission in extract_permission_strings(&raw) {
+            for permission in extract_permission_strings(&raw, &file.display().to_string()) {
                 let forbidden_prefix = NETWORK_CAPABLE_PERMISSION_PREFIXES
                     .iter()
                     .find(|p| permission.starts_with(**p));
@@ -227,6 +359,98 @@ fn csp_blocks_frontend_connect_sources() {
     }
 }
 
+/// CSP 层配套：两端 `script-src` 不得保留 `'unsafe-eval'`
+///
+/// 运行 wasm 只需要 `'wasm-unsafe-eval'`；`'unsafe-eval'` 额外放开 `eval` /
+/// `Function` / 字符串转代码，会让任何字符串注入点从「内容注入」升级为「代码执行」。
+///
+/// 这项能成立的前提是**前端 i18n 消息已在构建期预编译**（`scripts/i18n-precompile.mjs`
+/// + `vue-i18n` 运行时构建），运行期不再有消息编译器。若哪天有人为了图省事把
+/// `'unsafe-eval'` 加回来，本锁先红；反之若预编译链路被拆掉，i18n 会在运行期
+/// 直接报错（fail-visible），不会静默降级。
+#[test]
+fn csp_forbids_unsafe_eval() {
+    for (end, manifest) in [
+        ("desktop", desktop_root().join("tauri.conf.json")),
+        (
+            "mobile",
+            desktop_root()
+                .parent()
+                .and_then(|p| p.parent())
+                .map(|repo| repo.join("wasmnest-mobile/src-tauri/tauri.conf.json"))
+                .expect("src-tauri 的两级上级应是仓库根"),
+        ),
+    ] {
+        let raw = fs::read_to_string(&manifest).unwrap_or_else(|e| panic!("读取 {end} tauri.conf.json 失败：{e}"));
+
+        // 结构化取值（2026-11-03 审核 P3-1）：旧实现按 `split("\"csp\"")` /
+        // `split("\"devCsp\"")` 切文本块，字段顺序一变（`devCsp` 排在 `csp` 前）
+        // 或出现任何含 "csp" 字样的键都会**静默取错片段**——锁看着绿，
+        // 实际校验的可能是别的字符串。这里按 Tauri schema 的路径取值。
+        let conf: serde_json::Value =
+            serde_json::from_str(&raw).unwrap_or_else(|e| panic!("{end} tauri.conf.json 不是合法 JSON：{e}"));
+
+        // Tauri 2 的 `app.security.csp` 可以是**字符串**（整条策略）或**对象**
+        // （按指令名分段，如 `{"script-src": "...", "connect-src": "'none'"}`）。
+        // 两端当前都是对象形态——这里把两种形态都归一成「一条可校验的文本」，
+        // 否则 `as_str()` 在对象形态下直接 None，锁会因为取值失败而误红/误绿。
+        let csp_text = csp_to_text(
+            conf.pointer("/app/security/csp")
+                .unwrap_or_else(|| panic!("{end} tauri.conf.json 里找不到 app.security.csp")),
+            end,
+            "csp",
+        );
+
+        // `devCsp` 是独立字段，不参与本锁；但要确认它**没有**趁开发模式把
+        // `'unsafe-eval'` 带回来——它同样会进产物判定路径
+        if let Some(dev) = conf.pointer("/app/security/devCsp") {
+            let dev_text = csp_to_text(dev, end, "devCsp");
+            assert!(
+                !dev_text.contains("'unsafe-eval'"),
+                "{end} 的 devCsp 仍保留 'unsafe-eval'——开发态会诱导把运行期编译当成可行方案：\n{dev_text}"
+            );
+        }
+
+        assert!(
+            !csp_text.contains("'unsafe-eval'"),
+            "{end} 的 csp 仍保留 'unsafe-eval'：\n{csp_text}\n\
+             wasm 只需 'wasm-unsafe-eval'。i18n 消息已构建期预编译（安全审查 #50），\n\
+             不要用「运行期编译消息」换回这条豁免。"
+        );
+        assert!(
+            csp_text.contains("'wasm-unsafe-eval'"),
+            "{end} 的 csp 丢了 'wasm-unsafe-eval'：WebAssembly 无法实例化（wasm 应用起不来）"
+        );
+    }
+}
+
+/// 把 `app.security.csp` 的两种合法形态归一成可校验文本（字符串 / 对象）
+///
+/// 对象形态把 `指令名: 值` 逐条拼回去，等价于一条完整策略字符串——这样「含
+/// `'unsafe-eval'`」的判定对两种形态都成立，不会因为形态不同而漏检。
+fn csp_to_text(value: &serde_json::Value, end: &str, field: &str) -> String {
+    if let Some(s) = value.as_str() {
+        return s.to_string();
+    }
+    if let Some(map) = value.as_object() {
+        assert!(
+            !map.is_empty(),
+            "{end} 的 {field} 是空对象——等于没写策略，锁会空转通过"
+        );
+        return map
+            .iter()
+            .map(|(directive, val)| {
+                let body = val
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{end} 的 {field}.{directive} 不是字符串：{val}"));
+                format!("{directive} {body}")
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+    }
+    panic!("{end} 的 {field} 既不是字符串也不是对象：{value}");
+}
+
 /// CSP 层配套：两端 index.html 都不得有**生效的**内联 `<style>` / 内联 `<script>`
 ///
 /// 机制（2026-10-07 实测定位，release 专有故障）：
@@ -346,15 +570,28 @@ fn permission_extractor_only_reads_the_permissions_array() {
       "permissions": ["core:event:default", "os:default"]
     }"#;
 
-    let extracted = extract_permission_strings(json);
+    let extracted = extract_permission_strings(json, "边界用例");
     assert_eq!(
         extracted,
         vec!["core:event:default".to_string(), "os:default".to_string()],
         "描述字段里的 'shell:allow-open' 不该被当成已授予权限"
     );
     assert!(
-        extract_permission_strings(r#"{"identifier":"x"}"#).is_empty(),
+        extract_permission_strings(r#"{"identifier":"x"}"#, "无 permissions 用例").is_empty(),
         "没有 permissions 字段时应返回空 vec（不 panic、不误判）"
+    );
+}
+
+/// 负例：permissions 里出现非字符串元素必须显性 panic，不许静默跳过
+///
+/// 静默跳过 = 缩小断言范围，等于给锁开了后门。这里断言 panic 本身，
+/// 确保「对象形态」出现时会被强制处理，而不是被无声吞掉。
+#[test]
+#[should_panic(expected = "非字符串元素")]
+fn permission_extractor_rejects_non_string_entries() {
+    let _ = extract_permission_strings(
+        r#"{"permissions": ["core:event:default", {"identifier": "shell:allow-open"}]}"#,
+        "对象形态用例",
     );
 }
 
@@ -362,7 +599,7 @@ fn permission_extractor_only_reads_the_permissions_array() {
 #[test]
 fn permission_extractor_detects_forbidden_entries_when_present() {
     let json = r#"{"permissions": ["core:event:default", "shell:allow-open"]}"#;
-    let extracted = extract_permission_strings(json);
+    let extracted = extract_permission_strings(json, "正例用例");
     assert!(
         extracted.iter().any(|p| p.starts_with("shell:")),
         "提取器必须能认出被禁前缀，否则上面那条锁在真实回接时不会变红（假阴性）"
