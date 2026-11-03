@@ -35,6 +35,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { join } from '@tauri-apps/api/path'
 import type { AppUpdateCheckResult } from '@binblink/wasmnest-plugin-sdk-desktop'
 import { logger } from '@/utils/frontendLogger'
+import { ensureHostCredential } from '@/utils/appCommands'
 import { invoke } from '@/utils/invoke'
 import { appSurfaces, type AppSurfaceHandle } from './appSurfaceRegistry'
 
@@ -225,7 +226,7 @@ export function assertMountContract(appId: string, actual: string | undefined): 
  */
 async function notifySurfaceOpen(appId: string): Promise<void> {
   try {
-    await invoke('plugin_surface_open', { appId })
+    await invoke('plugin_surface_open', { appId, credential: await ensureHostCredential() })
   } catch (e) {
     logger.error(`[AppMount] surface open failed: ${appId}`, e)
   }
@@ -234,7 +235,7 @@ async function notifySurfaceOpen(appId: string): Promise<void> {
 /** 应用界面租约：卸载时释放（未持有 = 幂等成功；失败只记日志） */
 async function notifySurfaceClose(appId: string): Promise<void> {
   try {
-    await invoke('plugin_surface_close', { appId })
+    await invoke('plugin_surface_close', { appId, credential: await ensureHostCredential() })
   } catch (e) {
     logger.error(`[AppMount] surface close failed: ${appId}`, e)
   }

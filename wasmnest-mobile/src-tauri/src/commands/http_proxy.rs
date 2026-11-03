@@ -23,6 +23,7 @@ use std::time::Duration;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tauri::Manager;
 
 use crate::egress::{EgressDecision, ERROR_URL_NOT_DECLARED};
 use crate::state::is_http_encryption_active;
@@ -155,9 +156,14 @@ pub fn align_wire_headers(headers: &mut HashMap<String, String>, method: &str, b
     }
 }
 
-/// JWT 注入判定：非 `/api/auth/*` 且 token 非空
-pub fn should_inject_jwt(path: &str, token: &str) -> bool {
-    !path.starts_with(AUTH_PATH_PREFIX) && !token.is_empty()
+/// JWT 注入判定
+///
+/// 三个条件同时成立才附带 Bearer：
+/// - 请求由**宿主**发起（`host_request`）——JWT 是宿主机密，应用发起的请求不得带；
+/// - 路径不在 `/api/auth/*` 白名单（该项为免认证路径，带 token 反而会被拒）；
+/// - 宿主内存里真有 token。
+pub fn should_inject_jwt(path: &str, token: &str, host_request: bool) -> bool {
+    host_request && !path.starts_with(AUTH_PATH_PREFIX) && !token.is_empty()
 }
 
 /// 链路加密判定：主开关 ∧ HTTP 子开关 ∧ 已 pin（state.rs），且非 auth 路径
@@ -168,18 +174,73 @@ pub fn should_encrypt(path: &str) -> bool {
 // ==================== 核心命令 ====================
 
 /// 统一 HTTP 代理命令（D1：invoke promise 路由回调用方）
+///
+/// ## 身份（安全审查 #43，2026-11-02）
+///
+/// 调用方必须附前端通道凭证（宿主 loader 会话 / 应用自己的通道令牌）：
+///
+/// - **宿主**：`source = "host"`——宿主内置外网面（更新检查）与宿主页面请求，
+///   可按宿主记账并附带全局 JWT；
+/// - **应用**：`source = "plugin:{id}"`——egress 按**真实发起应用**记账与分档，
+///   并要求该应用声明并获准 `network:http`；**不注入宿主 JWT**（宿主机密不出 Rust）；
+/// - **无凭证 / 凭证无效**：直接拒绝（fail-visible）。应用前端与宿主同 webview，
+///   裸 invoke 不得被当成宿主。
 #[tauri::command]
-pub async fn http_request(request: HttpProxyRequest, app: tauri::AppHandle) -> Result<HttpProxyResponse> {
-    execute_proxy(request, Some(&app)).await
+pub async fn http_request(
+    request: HttpProxyRequest,
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+    credential: String,
+) -> Result<HttpProxyResponse> {
+    let channel = crate::commands::host_gate::channel_registry(&app)?;
+    let caller = crate::commands::host_gate::resolve_caller(
+        &channel,
+        webview.label(),
+        "http_request",
+        &credential,
+    )?;
+
+    // 应用发起：先过 `network:http` 权限位（该位在 wasm 侧只门控 guest host fn，
+    // 前端面此前无任何仲裁 ⇒ 声明与审批形同虚设）
+    if let crate::commands::host_gate::CallerIdentity::Plugin(ref plugin_id) = caller {
+        let manager = app.state::<std::sync::Arc<crate::plugin::manager::PluginManager>>();
+        if !manager.has_permission(plugin_id, wasmnest_wasm_core::permission::PERMISSION_NETWORK_HTTP).await
+        {
+            tracing::warn!(
+                plugin_id = %plugin_id,
+                url = %request.url,
+                "egress: app frontend has no network:http permission, denying"
+            );
+            return Err(AppError::Plugin(format!(
+                "Plugin {plugin_id} has no network:http permission"
+            )));
+        }
+    }
+
+    execute_proxy(request, Some(&app), &caller).await
 }
 
 /// 代理核心执行（命令与集成测试共用；`app` 为 None 时 L3 弹窗路径 fail-closed 拒绝）
-pub async fn execute_proxy(request: HttpProxyRequest, app: Option<&tauri::AppHandle>) -> Result<HttpProxyResponse> {
+///
+/// `caller` 决定 egress 记账主体与是否附带全局 JWT——绝不在内部默认为宿主身份。
+pub async fn execute_proxy(
+    request: HttpProxyRequest,
+    app: Option<&tauri::AppHandle>,
+    caller: &crate::commands::host_gate::CallerIdentity,
+) -> Result<HttpProxyResponse> {
+    use crate::commands::host_gate::CallerIdentity;
     use tauri::Emitter;
 
     let request_id = request.request_id.clone();
     let timeout = Duration::from_millis(request.timeout_ms.unwrap_or(DEFAULT_TIMEOUT.as_millis() as u64));
     let kind = request.kind.as_deref().unwrap_or("external");
+    // 记账与分档主体：宿主 `host`，应用 `plugin:{id}`（与 wasm 侧 agent 口径一致）
+    let source = match caller {
+        CallerIdentity::Host => "host".to_string(),
+        CallerIdentity::Plugin(plugin_id) => format!("plugin:{plugin_id}"),
+    };
+    // JWT 是宿主机密：只随宿主发起的请求出 Rust，应用请求不得附带
+    let host_request = matches!(caller, CallerIdentity::Host);
 
     // ---------- URL 解析 + Egress 校验 ----------
     let parsed = crate::egress::parse_url_lite(&request.url)
@@ -208,9 +269,8 @@ pub async fn execute_proxy(request: HttpProxyRequest, app: Option<&tauri::AppHan
             )));
         }
     } else {
-        // external：Egress 全层判定（L1/L2/L3）
-        let source = "host"; // 宿主前端调用；插件路径走 wasm_host（ticket 06）
-        match crate::egress::policy().decide(&request.url, source) {
+        // external：Egress 全层判定（L1/L2/L3），记账主体 = 真实调用方
+        match crate::egress::policy().decide(&request.url, &source) {
             EgressDecision::Allow(_) => {}
             EgressDecision::Deny(e) => {
                 tracing::warn!(
@@ -256,7 +316,9 @@ pub async fn execute_proxy(request: HttpProxyRequest, app: Option<&tauri::AppHan
     let mut headers = sanitize_headers(&request.headers);
     let path = parsed.path.clone();
 
-    if should_inject_jwt(&path, &crate::state::get_global_token()) {
+    // JWT 只随宿主发起的请求外发（`host_request`）；应用请求即使命中路径白名单
+    // 也不得附带宿主机密
+    if host_request && should_inject_jwt(&path, &crate::state::get_global_token(), host_request) {
         headers.insert(
             "Authorization".to_string(),
             format!("Bearer {}", crate::state::get_global_token()),
@@ -264,7 +326,11 @@ pub async fn execute_proxy(request: HttpProxyRequest, app: Option<&tauri::AppHan
     }
 
     // 链路加密信封（非 auth 且开关开且已 pin）
-    let encryption_active = should_encrypt(&path);
+    //
+    // 只对宿主请求生效：信封密钥是宿主与桌面端协商的会话密钥，应用请求加信封
+    // 只会让服务端解不开（而会把密文当明文）——应用出站靠传输层身份（`source`）
+    // 与 egress 判定，不借宿主的密钥体系
+    let encryption_active = host_request && should_encrypt(&path);
     let mut request_keys: Option<wasmnest_link_crypto::HttpTrafficKeys> = None;
     let mut body_bytes: Option<Vec<u8>> = request.body.clone().map(String::into_bytes);
 
@@ -428,9 +494,31 @@ pub async fn execute_proxy(request: HttpProxyRequest, app: Option<&tauri::AppHan
 }
 
 /// 取消在途请求（request_id 多路复用；不存在时静默成功）
+///
+/// 身份（安全审查 #43）：按 `request_id` 取消是**宿主面**动作（前端超时兜底），
+/// 应用前端不得借已知 request_id 掐断他人请求。用 `resolve_caller` 而不要求宿主：
+/// 应用取消**自己的**请求是合法语义，身份只用于日志归因。
 #[tauri::command]
-pub async fn http_cancel(request_id: String) -> Result<()> {
-    let removed = pending_requests().lock().await.remove(&request_id);
+pub async fn http_cancel(
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+    request_id: String,
+    credential: String,
+) -> Result<()> {
+    let channel = crate::commands::host_gate::channel_registry(&app)?;
+    let caller = crate::commands::host_gate::resolve_caller(
+        &channel,
+        webview.label(),
+        "http_cancel",
+        &credential,
+    )?;
+    tracing::debug!(request_id = %request_id, caller = ?caller, "http proxy: cancel requested");
+    cancel_pending(&request_id).await
+}
+
+/// 取消在途请求（命令体的可测试内核；集成测试不经凭证门直接调它）
+pub async fn cancel_pending(request_id: &str) -> Result<()> {
+    let removed = pending_requests().lock().await.remove(request_id);
     if removed.is_none() {
         tracing::debug!(request_id = %request_id, "http proxy: cancel for unknown request_id");
     }
@@ -486,10 +574,17 @@ mod tests {
 
     #[test]
     fn jwt_injection_whitelist() {
-        assert!(!should_inject_jwt("/api/auth/pairing", "tok"));
-        assert!(!should_inject_jwt("/api/auth/reauth", ""));
-        assert!(should_inject_jwt("/api/sessions", "tok"));
-        assert!(!should_inject_jwt("/api/sessions", ""));
+        assert!(!should_inject_jwt("/api/auth/pairing", "tok", true));
+        assert!(!should_inject_jwt("/api/auth/reauth", "", true));
+        assert!(should_inject_jwt("/api/sessions", "tok", true));
+        assert!(!should_inject_jwt("/api/sessions", "", true));
+    }
+
+    /// 应用发起的请求不得附带宿主 JWT（安全审查 #43：宿主机密不出 Rust）
+    #[test]
+    fn jwt_never_injected_for_app_requests() {
+        assert!(!should_inject_jwt("/api/sessions", "tok", false));
+        assert!(!should_inject_jwt("/api/file-tree", "tok", false));
     }
 
     #[test]

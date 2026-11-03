@@ -34,14 +34,14 @@ export type {
  * 连接到桌面端
  */
 export async function wsConnect(address: string, port: number, name?: string): Promise<ConnectionInfo> {
-  return await invoke('ws_connect', { address, port, name })
+  return await invoke('ws_connect', { address, port, name, credential: await ensureHostCredential() })
 }
 
 /**
  * 断开连接
  */
 export async function wsDisconnect(): Promise<void> {
-  return await invoke('ws_disconnect')
+  return await invoke('ws_disconnect', { credential: await ensureHostCredential() })
 }
 
 /**
@@ -62,7 +62,10 @@ export async function wsIsConnected(): Promise<boolean> {
  * 重新连接（断线重连）
  */
 export async function wsReconnect(sessionToken?: string): Promise<void> {
-  return await invoke('ws_reconnect', { sessionToken: sessionToken || null })
+  return await invoke('ws_reconnect', {
+    sessionToken: sessionToken || null,
+    credential: await ensureHostCredential(),
+  })
 }
 
 /**
@@ -72,30 +75,33 @@ export async function wsReconnect(sessionToken?: string): Promise<void> {
  * 前端不持有重连循环，只把用户意图递过去。
  */
 export async function setAutoReconnect(enabled: boolean): Promise<void> {
-  return await invoke('set_auto_reconnect', { enabled })
+  return await invoke('set_auto_reconnect', { enabled, credential: await ensureHostCredential() })
 }
 
 // ==================== Token Commands ====================
+//
+// 宿主面门（安全审查 #42）：本组命令读写宿主机密事实（JWT / 配对身份），
+// 必须附宿主 loader 会话凭证——应用前端同 webview 裸 invoke 会被拒绝。
 
 /**
  * 设置全局 Token（前端启动时从 localStorage 读取并调用）
  */
 export async function wsSetToken(token: string): Promise<void> {
-  return await invoke('ws_set_token', { token })
+  return await invoke('ws_set_token', { token, credential: await ensureHostCredential() })
 }
 
 /**
  * 获取当前全局 Token
  */
 export async function wsGetToken(): Promise<string> {
-  return await invoke('ws_get_token')
+  return await invoke('ws_get_token', { credential: await ensureHostCredential() })
 }
 
 /**
  * 清除全局 Token（登出时调用）
  */
 export async function wsClearToken(): Promise<void> {
-  return await invoke('ws_clear_token')
+  return await invoke('ws_clear_token', { credential: await ensureHostCredential() })
 }
 
 // ==================== Auth Commands（票 14 阶段 B：配对 / 认证编排迁插件） ====================
@@ -115,18 +121,24 @@ interface PluginAuthOutcome {
 
 /**
  * 使用 JWT token 认证（重连时使用已存储的 session_token）
+ *
+ * 宿主面门（安全审查 #42）：凭证由宿主封装提供，应用前端不直接调用。
  */
 export async function wsAuthenticate(sessionToken: string): Promise<boolean> {
-  return await invoke('ws_authenticate', { sessionToken })
+  return await invoke('ws_authenticate', {
+    sessionToken,
+    credential: await ensureHostCredential(),
+  })
 }
 
 /**
  * 读取宿主持有的认证凭据（宿主引擎窄读口；未持有 → null）
  *
- * C4：凭据持有与读取都在宿主，前端只拿窄投影做持久化镜像
+ * C4：凭据持有与读取都在宿主，前端只拿窄投影做持久化镜像。
+ * 宿主面门（安全审查 #42）：读到凭据即等价取得已配对身份。
  */
 export async function wsGetAuthCredentials(): Promise<AuthCredentials | null> {
-  return await invoke('ws_get_auth_credentials')
+  return await invoke('ws_get_auth_credentials', { credential: await ensureHostCredential() })
 }
 
 /**
@@ -159,7 +171,7 @@ export async function wsRequestPairing(): Promise<void> {
  */
 export async function wsVerifyPairingCode(code: string): Promise<AuthCredentials | null> {
   const outcome = await invokeTerminalPlugin<PluginAuthOutcome>('bedcode.verify-pairing-code', { code })
-  return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
+  return outcome.accepted ? await wsGetAuthCredentials() : null
 }
 
 /**
@@ -167,7 +179,7 @@ export async function wsVerifyPairingCode(code: string): Promise<AuthCredentials
  */
 export async function wsAuthenticateWithQr(token: string): Promise<AuthCredentials | null> {
   const outcome = await invokeTerminalPlugin<PluginAuthOutcome>('bedcode.authenticate-with-qr', { token })
-  return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
+  return outcome.accepted ? await wsGetAuthCredentials() : null
 }
 
 /**
@@ -175,21 +187,21 @@ export async function wsAuthenticateWithQr(token: string): Promise<AuthCredentia
  */
 export async function wsAuthenticateWithBiometric(): Promise<AuthCredentials | null> {
   const outcome = await invokeTerminalPlugin<PluginAuthOutcome>('bedcode.authenticate-with-biometric')
-  return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
+  return outcome.accepted ? await wsGetAuthCredentials() : null
 }
 
 /**
  * 绑定生物凭证：本地生成密钥对并注册公钥到桌面端（需已认证连接）
  */
 export async function wsBindBiometricCredential(): Promise<boolean> {
-  return await invoke('ws_bind_biometric_credential')
+  return await invoke('ws_bind_biometric_credential', { credential: await ensureHostCredential() })
 }
 
 /**
  * 解绑生物凭证：删除本地密钥并通知桌面端清空公钥（需已认证连接）
  */
 export async function wsUnbindBiometricCredential(): Promise<boolean> {
-  return await invoke('ws_unbind_biometric_credential')
+  return await invoke('ws_unbind_biometric_credential', { credential: await ensureHostCredential() })
 }
 
 /**
@@ -203,7 +215,7 @@ export interface BiometricKeyStatus {
 }
 
 export async function wsGetBiometricKeyStatus(): Promise<BiometricKeyStatus> {
-  return await invoke('ws_get_biometric_key_status')
+  return await invoke('ws_get_biometric_key_status', { credential: await ensureHostCredential() })
 }
 
 // ==================== Session Commands ====================

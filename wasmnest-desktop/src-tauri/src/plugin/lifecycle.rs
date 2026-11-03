@@ -309,6 +309,29 @@ async fn write_bool_pref(storage: &PluginStorage, prefix: &str, plugin_id: &str,
 // 仅补移动端 `commands.rs` 已有而桌面 api_bridge 缺失的六臂；清单 / 启停 /
 // 审批 / 卸载等既有臂已由 api_bridge 注册（lib.rs 保留）。
 
+/// 标记插件错误（插件自报面 + 宿主代报面）
+///
+/// 身份绑定（安全审查 #48，与移动端 `plugin/commands.rs::plugin_mark_error` 同判据）：
+/// 插件通道令牌只能标自己，宿主 loader 会话凭证可代报任意目标。桌面原先经
+/// `api_bridge` 的裸命令暴露（无 `webview` / `credential`），任意应用前端可把他人
+/// 标成 Error 并释放其服务租约（`PluginHost::mark_error` → `release_services_for`）；
+/// 该裸命令已从注册表摘除，改由本命令承接（`bootstrap` 注册本路径）。
+#[tauri::command]
+pub async fn plugin_mark_error(
+    webview: tauri::Webview,
+    plugin_id: String,
+    error: String,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<()> {
+    plugin_host
+        .frontend_channel()
+        .authorize(webview.label(), &plugin_id, &credential)
+        .map_err(|e| crate::AppError::Plugin(e.to_string()))?;
+    plugin_host.mark_error(&plugin_id, error).await;
+    Ok(())
+}
+
 /// 查询插件启用状态（主屏入口可见性偏好：缺省 true = 显示；不是启动触发器）
 #[tauri::command]
 pub async fn plugin_is_enabled(plugin_id: String, manager: State<'_, Arc<PluginLifecycleManager>>) -> Result<bool> {
@@ -316,12 +339,23 @@ pub async fn plugin_is_enabled(plugin_id: String, manager: State<'_, Arc<PluginL
 }
 
 /// 设置插件启用状态并持久化（不触发激活、不停止已运行实例；桌面壳消费为主屏入口可见性）
+///
+/// 宿主面门（安全审查 #48）：启停偏好是宿主 UI 的职权，应用前端同 webview 可直接
+/// 调用 ⇒ 不带凭证时任一应用能静默启停他人应用。
 #[tauri::command]
 pub async fn plugin_set_enabled(
+    webview: tauri::Webview,
     plugin_id: String,
     enabled: bool,
+    credential: String,
     manager: State<'_, Arc<PluginLifecycleManager>>,
 ) -> Result<()> {
+    super::require_host_frontend(
+        manager.host().as_ref(),
+        webview.label(),
+        &credential,
+        "plugin_set_enabled",
+    )?;
     manager.set_enabled(&plugin_id, enabled).await
 }
 
@@ -332,12 +366,23 @@ pub async fn plugin_is_autostart(plugin_id: String, manager: State<'_, Arc<Plugi
 }
 
 /// 设置插件「启动时自动激活」偏好（只改偏好，下次 boot 生效）
+///
+/// 宿主面门（安全审查 #48）：自启偏好可被静默改写 ⇒ 配合重启即形成驻留，
+/// 与 `plugin_set_enabled` 同判据。
 #[tauri::command]
 pub async fn plugin_set_autostart(
+    webview: tauri::Webview,
     plugin_id: String,
     autostart: bool,
+    credential: String,
     manager: State<'_, Arc<PluginLifecycleManager>>,
 ) -> Result<()> {
+    super::require_host_frontend(
+        manager.host().as_ref(),
+        webview.label(),
+        &credential,
+        "plugin_set_autostart",
+    )?;
     manager.set_autostart(&plugin_id, autostart).await
 }
 

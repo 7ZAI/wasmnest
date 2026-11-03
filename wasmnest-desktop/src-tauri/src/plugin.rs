@@ -33,6 +33,8 @@ pub mod assets;
 pub mod auth;
 pub mod bindings;
 
+/// 剪贴板（共享域契约 `host-clipboard` 的桌面实现；ADR-0006）
+pub mod clipboard;
 pub mod connection;
 pub mod crypto;
 pub mod fs;
@@ -61,3 +63,28 @@ pub mod services;
 pub mod task;
 pub mod timer;
 pub mod ws;
+
+/// 宿主面凭证门（ADR 0058 方案 A：管理类命令只认宿主前端凭证）
+///
+/// 应用前端与宿主**同 webview、共享同一 Tauri IPC**，所以「命令不带凭证」等价于
+/// 「任意应用可调用」——宿主 UI 职权（启停 / 自启 / 界面租约 / 全局设置）必须只认
+/// 宿主凭证（2026-11-02 安全审查 #48）。失败 fail-visible：**不**降级成「无凭证就
+/// 按宿主处理」，否则门禁形同虚设。
+pub(crate) fn require_host_frontend(
+    plugin_host: &wasmnest_wasm_core::manager::host::PluginHost,
+    webview_label: &str,
+    credential: &str,
+    command: &'static str,
+) -> crate::Result<()> {
+    plugin_host
+        .frontend_channel()
+        .require_host_identity(webview_label, credential, command)
+        .map_err(|_| {
+            tracing::warn!(
+                command,
+                webview = %webview_label,
+                "宿主面命令拒绝了非宿主凭证调用"
+            );
+            crate::AppError::Plugin(format!("command '{command}' must be requested by the host frontend"))
+        })
+}

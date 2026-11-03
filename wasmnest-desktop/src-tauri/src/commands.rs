@@ -20,6 +20,9 @@ use tracing_subscriber::filter::EnvFilter;
 use wasmnest_server_core::link_crypto::{self, LinkCryptoConfig};
 use wasmnest_server_core::metrics::ServerMetrics;
 use wasmnest_server_core::supervisor::{ServerStatusInfo, ServerSupervisor};
+use wasmnest_wasm_core::manager::host::PluginHost;
+
+use crate::plugin::require_host_frontend;
 
 // ==================== 会话命令面（票 08 已整体注销） ====================
 
@@ -65,9 +68,18 @@ pub async fn get_app_settings(app_handle: tauri::AppHandle) -> crate::Result<cra
 /// 保存应用设置
 #[tauri::command]
 pub async fn save_app_settings(
+    webview: tauri::Webview,
     app_handle: tauri::AppHandle,
     settings: crate::system::config::AppConfig,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
 ) -> crate::Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "save_app_settings",
+    )?;
     let config_path = app_handle
         .path()
         .app_data_dir()
@@ -663,12 +675,16 @@ pub use crate::wasm_core::api_bridge::*;
 ///
 /// 真源语义：app 挂载环境的 `env.invoke` 只放行本表命令；安全边界仍在 Rust 命令门禁
 /// （管理类命令的宿主面凭证门，见 wasm-core api_bridge）。来源 = 2026-10-24 全仓盘点
-///（issue #21）：auth-center / monitor 调 plugin_list_loaded，bedcode 调设置三命令。
+///（issue #21）：auth-center / monitor 调 plugin_list_loaded，bedcode 调设置三命令；
+/// 2026-11-03 增链路加密**只读**能力查询（按应用/端点加密策略 spec §8：应用声明
+/// required 端点前必须能确认宿主能力）。写入口 `set_traffic_encryption_config`
+/// **不进白名单**：宿主下限只能由宿主设置页带凭证写。
 pub const APP_FRONTEND_INVOKE_WHITELIST: &[&str] = &[
     "plugin_list_loaded",
     "get_app_settings",
     "update_server_port",
     "get_server_network_config",
+    "get_link_crypto_capabilities",
 ];
 
 /// app 前端查询 env.invoke 白名单（前端代理启动时取用；公开只读面）
@@ -708,12 +724,31 @@ async fn declares_background_transport(app_id: &str) -> bool {
 ///
 /// 声明了 `backgroundTransport` 的应用租约跟运行期走，界面打开不再参与。
 #[tauri::command]
-pub async fn plugin_surface_open(app_id: String) -> Result<()> {
-    if declares_background_transport(&app_id).await {
+pub async fn plugin_surface_open(
+    webview: tauri::Webview,
+    app_id: String,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "plugin_surface_open",
+    )?;
+    surface_open_lease(&app_id).await
+}
+
+/// 界面打开的租约内核（命令门之后的部分）
+///
+/// 抽出来是为了让「界面不决定传输面生死」这条语义可被集成测试直接验证：
+/// `#[tauri::command]` 需要 `Webview` / `State`，进程外构造不出来。
+pub async fn surface_open_lease(app_id: &str) -> Result<()> {
+    if declares_background_transport(app_id).await {
         return Ok(());
     }
     let ctx = crate::system::app_context::AppContext::global();
-    crate::plugin::services::acquire_for_surface(ctx.service_registry(), &app_id, "plugin_surface_open")
+    crate::plugin::services::acquire_for_surface(ctx.service_registry(), app_id, "plugin_surface_open")
         .await
         .map_err(crate::AppError::Internal)
 }
@@ -723,8 +758,24 @@ pub async fn plugin_surface_open(app_id: String) -> Result<()> {
 /// 声明了 `backgroundTransport` 的应用在界面卸载时仍处于运行期：**不得释放**
 /// （否则又回到「挂载决定传输面生死」的旧病）；停用时的回收由 `release_all_for` 兜底。
 #[tauri::command]
-pub async fn plugin_surface_close(app_id: String) -> Result<()> {
-    if declares_background_transport(&app_id).await {
+pub async fn plugin_surface_close(
+    webview: tauri::Webview,
+    app_id: String,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "plugin_surface_close",
+    )?;
+    surface_close_lease(&app_id).await
+}
+
+/// 界面关闭的租约内核（命令门之后的部分；同 [`surface_open_lease`] 的可测理由）
+pub async fn surface_close_lease(app_id: &str) -> Result<()> {
+    if declares_background_transport(app_id).await {
         tracing::debug!(
             plugin_id = %app_id,
             "surface close ignored: backgroundTransport lease follows app runtime"
@@ -732,7 +783,7 @@ pub async fn plugin_surface_close(app_id: String) -> Result<()> {
         return Ok(());
     }
     let ctx = crate::system::app_context::AppContext::global();
-    crate::plugin::services::release_for_surface(ctx.service_registry(), &app_id, "plugin_surface_close")
+    crate::plugin::services::release_for_surface(ctx.service_registry(), app_id, "plugin_surface_close")
         .await
         .map_err(crate::AppError::Internal)
 }
@@ -747,24 +798,115 @@ pub async fn get_server_status() -> Result<ServerStatusInfo> {
 // ==================== 链路加密配置（issue 01） ====================
 
 /// 读取链路加密配置（运行期快照，spec §6）
+///
+/// 只读面：应用前端据此展示「当前生效的宿主下限」，不再据此推演自己的端点
+/// 是否加密——端点生效策略看 [`get_link_crypto_capabilities`] 与端点清单。
 #[tauri::command]
 pub fn get_traffic_encryption_config() -> LinkCryptoConfig {
     link_crypto::current_config()
 }
 
-/// 更新链路加密配置：先持久化成功再热更新快照并同步过滤器注册；
-/// 落库失败不影响运行态（快照保持原值）
+/// 链路加密能力查询（宿主 → 应用前端，只读）
+///
+/// 应用在声明 `required` 端点前必须能确认本端支持 per-endpoint 策略与对应密钥
+/// 模型（spec §8）：旧宿主不返回本命令 = 无此能力，应用必须拒绝启用该业务，
+/// 不得假定字段被理解、更不得静默降级成明文。
+#[tauri::command]
+pub fn get_link_crypto_capabilities() -> link_crypto::LinkCryptoCapabilities {
+    link_crypto::capabilities()
+}
+
+/// 一条端点加密审计记录（全量注册面：声明值可空，生效值必填）
+///
+/// `declared = None` = 端点未声明策略（跟随宿主下限）。这类端点同样属于明文
+/// 暴露面（下限为 `off` 时），所以审计面必须能枚举，不能只列已声明的少数端点。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EndpointEncryptionAudit {
+    /// 属主插件 id
+    pub owner: String,
+    /// 端点句柄（`http-*` / `wse-*`）
+    pub endpoint: String,
+    /// 人可读端点路径（HTTP = `/api/plugin/<owner>/<path>`，WS = `/ws/plugin/<owner>/<path>`）
+    pub locator: String,
+    /// 通道（`http` / `ws-plugin`；与日志字段同源）
+    pub channel: &'static str,
+    /// 端点声明的策略；`None` = 未声明（跟随宿主下限）
+    pub declared: Option<link_crypto::EncryptionPolicy>,
+    /// 生效策略 = `strictest(通道下限, 声明)`
+    pub effective: link_crypto::EncryptionPolicy,
+}
+
+/// 当前注册中的全部插件端点及其加密状态（只读审计面：明文端点必须可见，spec §7）
+///
+/// 端点来自 HTTP / WS 注册表，声明值来自 `link_crypto` 端点策略表——两者按宿主
+/// 铸造的句柄拼合。这样「未声明策略的端点」也能在下限为 `off` 时被审计到；只列
+/// 显式声明会让大多数明文端点从清单里消失。不含载荷与密钥材料。
+#[tauri::command]
+pub fn get_link_crypto_endpoint_policies() -> Vec<EndpointEncryptionAudit> {
+    use wasmnest_server_core::filter::TrafficChannel;
+
+    let mut records: Vec<EndpointEncryptionAudit> = Vec::new();
+    for entry in wasmnest_server_http::registry::list_all() {
+        records.push(EndpointEncryptionAudit {
+            owner: entry.owner.clone(),
+            declared: link_crypto::endpoint_policy(&entry.owner, &entry.endpoint_id),
+            effective: link_crypto::effective_endpoint_policy(&entry.owner, &entry.endpoint_id, TrafficChannel::Http),
+            endpoint: entry.endpoint_id,
+            locator: entry.internal_path,
+            channel: TrafficChannel::Http.as_str(),
+        });
+    }
+    for entry in wasmnest_server_websocket::endpoint::list_all() {
+        records.push(EndpointEncryptionAudit {
+            owner: entry.owner.clone(),
+            declared: link_crypto::endpoint_policy(&entry.owner, &entry.endpoint_id),
+            effective: link_crypto::effective_endpoint_policy(
+                &entry.owner,
+                &entry.endpoint_id,
+                TrafficChannel::WsPlugin,
+            ),
+            endpoint: entry.endpoint_id,
+            locator: entry.mount_path,
+            channel: TrafficChannel::WsPlugin.as_str(),
+        });
+    }
+    records.sort_by(|a, b| (&a.owner, &a.locator).cmp(&(&b.owner, &b.locator)));
+    records
+}
+
+/// 更新宿主链路加密下限（宿主面凭证门，ADR 0058 / issue #45）
+///
+/// 只接受 `floor`（`off` / `preferred` / `required`）：这是本命令唯一的写入口。
+/// 旧字段（`enabled` / `encrypt_*` / `allow_plaintext_fallback`）只是迁移输入，
+/// 前端不再直写——否则「floor=required + 旧开关回落」会让下限被静默降级。
+/// 配置由 [`LinkCryptoConfig::from_floor`] 构造，`enabled` 与 `floor` 同源。
+///
+/// 门禁先于副作用：应用与宿主同 webview、共享 Tauri IPC（ADR 0058），
+/// 不带宿主凭证的调用一律拒绝。先持久化成功再热更新快照并同步过滤器注册；
+/// 落库失败不影响运行态（快照保持原值）。
 #[tauri::command]
 pub async fn set_traffic_encryption_config(
+    webview: tauri::Webview,
+    plugin_host: State<'_, Arc<PluginHost>>,
+    credential: String,
+    floor: link_crypto::EncryptionPolicy,
     db: State<'_, Arc<std::sync::Mutex<Database>>>,
-    config: LinkCryptoConfig,
 ) -> Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "set_traffic_encryption_config",
+    )?;
+    let config = LinkCryptoConfig::from_floor(floor);
     {
         let guard = db.lock().expect("main db lock poisoned");
         link_crypto::persist_config_to_db(guard.conn(), &config)?;
     }
     link_crypto::update_config(config);
     link_crypto::sync_registration();
+    tracing::info!(floor = floor.as_str(), "link crypto host floor updated (host-gated)");
     Ok(())
 }
 

@@ -12,6 +12,7 @@ use base64::Engine as _;
 use serde_json::{json, Value};
 use tokio::sync::OnceCell;
 
+use wasmnest_mobile_lib::commands::host_gate::CallerIdentity;
 use wasmnest_mobile_lib::commands::http_proxy::{execute_proxy, http_cancel, HttpProxyRequest};
 
 /// 全局串行闸：代理的全局 state（desktop_targets / link crypto context /
@@ -273,6 +274,7 @@ async fn jwt_injection_and_auth_whitelist() {
     let resp = execute_proxy(
         proxy_req("jwt-1", "GET", &format!("{}/api/sessions", mock.base_url()), "desktop"),
         None,
+        &CallerIdentity::Host,
     )
     .await
     .expect("desktop session request should pass");
@@ -287,7 +289,7 @@ async fn jwt_injection_and_auth_whitelist() {
         "desktop",
     );
     auth_req.body = Some(json!({ "deviceId": "dev-1", "deviceName": "mi-pad", "fingerprint": "fp" }).to_string());
-    let resp = execute_proxy(auth_req, None).await.expect("auth request should pass");
+    let resp = execute_proxy(auth_req, None, &CallerIdentity::Host).await.expect("auth request should pass");
     assert_eq!(resp.status, 200);
     let cap = mock.capture("/api/auth/pairing");
     assert!(cap.authorization.is_none(), "auth 路径不得注入 JWT");
@@ -308,6 +310,7 @@ async fn desktop_requires_declared_target() {
     let err = execute_proxy(
         proxy_req("d-1", "GET", &format!("{}/api/health", mock.base_url()), "desktop"),
         None,
+        &CallerIdentity::Host,
     )
     .await
     .expect_err("未声明目标应拒绝");
@@ -318,6 +321,7 @@ async fn desktop_requires_declared_target() {
     let err = execute_proxy(
         proxy_req("d-2", "GET", "https://api.github.com/repos/x", "desktop"),
         None,
+        &CallerIdentity::Host,
     )
     .await
     .expect_err("desktop 类 https 应拒绝");
@@ -328,6 +332,7 @@ async fn desktop_requires_declared_target() {
     let resp = execute_proxy(
         proxy_req("d-3", "GET", &format!("{}/api/health", mock.base_url()), "desktop"),
         None,
+        &CallerIdentity::Host,
     )
     .await
     .expect("声明后应放行");
@@ -345,7 +350,7 @@ async fn wire_alignment() {
     let mut req = proxy_req("w-1", "POST", &format!("{}/echo", mock.base_url()), "desktop");
     req.headers.insert("Host".to_string(), "evil.example.com".to_string());
     req.headers.insert("Range".to_string(), "bytes=0-1023".to_string());
-    let _ = execute_proxy(req, None).await.expect("echo should pass");
+    let _ = execute_proxy(req, None, &CallerIdentity::Host).await.expect("echo should pass");
 
     let cap = mock.capture("/echo");
     assert_eq!(
@@ -379,7 +384,7 @@ async fn crypto_envelope_roundtrip() {
 
     let mut req = proxy_req("c-1", "POST", &format!("{}/crypto", mock.base_url()), "desktop");
     req.body = Some("hello sealed".to_string());
-    let resp = execute_proxy(req, None).await.expect("crypto request should pass");
+    let resp = execute_proxy(req, None, &CallerIdentity::Host).await.expect("crypto request should pass");
     assert_eq!(resp.status, 200);
     assert!(
         resp.body_text.contains("decrypted ok"),
@@ -404,7 +409,7 @@ async fn concurrent_request_ids() {
         let url = format!("{}/api/sessions", mock.base_url());
         handles.push(tokio::spawn(async move {
             let req = proxy_req(&format!("conc-{i}"), "GET", &url, "desktop");
-            execute_proxy(req, None).await
+            execute_proxy(req, None, &CallerIdentity::Host).await
         }));
     }
     for (i, h) in handles.into_iter().enumerate() {
@@ -423,10 +428,13 @@ async fn cancel_inflight_request() {
 
     let url = format!("{}/slow", mock.base_url());
     let req = proxy_req("cancel-1", "GET", &url, "desktop");
-    let handle = tokio::spawn(async move { execute_proxy(req, None).await });
+    let handle = tokio::spawn(async move { execute_proxy(req, None, &CallerIdentity::Host).await });
 
     tokio::time::sleep(Duration::from_millis(200)).await;
-    http_cancel("cancel-1".to_string()).await.expect("cancel");
+    // 命令面的通信取消需要凭证；冷路径直调内部函数（命令只是凭证门 + 这一行）
+    wasmnest_mobile_lib::commands::http_proxy::cancel_pending("cancel-1")
+        .await
+        .expect("cancel");
 
     let result = handle.await.expect("join");
     let err = result.expect_err("取消后应报错");
@@ -443,6 +451,7 @@ async fn external_undeclared_denied() {
     let err = execute_proxy(
         proxy_req("e-1", "GET", &format!("{}/api/health", mock.base_url()), "external"),
         None,
+        &CallerIdentity::Host,
     )
     .await
     .expect_err("未声明外网应拒绝");

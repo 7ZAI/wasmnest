@@ -62,6 +62,35 @@ export interface PluginUpdateDecl {
   slug?: string
 }
 
+/** 应用在 manifest 里声明的端点链路加密策略（`contributes.wsEndpoints[].encryption`） */
+export interface AppEncryptionDeclaration {
+  /** 应用内相对端点段（manifest 原文） */
+  path: string
+  /** 声明值原文（未知取值也保留：宿主注册时会跳过并告警，界面必须显性标出） */
+  policy: string
+}
+
+/**
+ * 从 manifest contributes 投影出端点加密声明（静态面：装包即可见，不需要应用运行）
+ *
+ * 只读 `wsEndpoints` 的声明式条目：裸路径形态（字符串）没有 `encryption` 字段 =
+ * 未声明（跟随宿主下限）；对象条目没有 `encryption` 也按未声明处理。HTTP 端点
+ * 没有静态声明（ABI v29 起由应用代码在 `register-endpoint` 时声明），它们的策略
+ * 只能从运行期注册表（`get_link_crypto_endpoint_policies`）读。
+ */
+export function parseEncryptionDeclarations(contributes: unknown): AppEncryptionDeclaration[] {
+  const endpoints = (contributes as { wsEndpoints?: unknown } | null | undefined)?.wsEndpoints
+  if (!Array.isArray(endpoints)) return []
+  const declarations: AppEncryptionDeclaration[] = []
+  for (const item of endpoints) {
+    if (!item || typeof item !== 'object') continue
+    const entry = item as { path?: unknown; encryption?: unknown }
+    if (typeof entry.path !== 'string' || typeof entry.encryption !== 'string') continue
+    declarations.push({ path: entry.path, policy: entry.encryption.trim() })
+  }
+  return declarations
+}
+
 /** 壳主屏的业务应用条目（注册表投影；id = pluginId，宿主 manifest 单一事实源） */
 export interface ShellAppEntry {
   /** 壳内面键（app:<id> 的 id 段 = pluginId；改名随 manifest 走，不碎卡） */
@@ -95,6 +124,8 @@ export interface ShellAppEntry {
   source: string
   /** manifest `update` 段（缺省 = 不参与更新检查） */
   update?: PluginUpdateDecl
+  /** manifest 静态声明的端点加密策略（缺省 = 未声明，跟随宿主下限） */
+  encryptionDeclarations?: AppEncryptionDeclaration[]
   sizeBytes?: number
   permissions: string[]
   /** 主屏入口可见性偏好（缺省 true；false = 用户停用 → 主屏 / 搜索隐藏入口，真源 = 宿主 lifecycle.rs） */
@@ -226,6 +257,7 @@ function toEntry(info: HostPluginInfo, enabled: boolean, autostart: boolean): Sh
     error: info.state.error,
     source: info.source,
     update: info.update,
+    encryptionDeclarations: parseEncryptionDeclarations(info.contributes),
     sizeBytes: typeof info.sizeBytes === 'number' ? info.sizeBytes : undefined,
     permissions: info.permissions ?? [],
     enabled,
@@ -425,14 +457,22 @@ async function installFromZip(path: string, upgrade: boolean): Promise<boolean> 
 /** 设置启用偏好（只改持久化偏好，不触发当前进程启停） */
 async function setEnabled(appId: string, enabled: boolean): Promise<boolean> {
   return runAction(appId, 'setEnabled', true, async () => {
-    await invoke('plugin_set_enabled', { pluginId: appId, enabled })
+    await invoke('plugin_set_enabled', {
+      pluginId: appId,
+      enabled,
+      credential: await ensureHostCredential(),
+    })
   })
 }
 
 /** 设置自启偏好（只改持久化偏好，下次 boot 生效） */
 async function setAutostart(appId: string, autostart: boolean): Promise<boolean> {
   return runAction(appId, 'setAutostart', true, async () => {
-    await invoke('plugin_set_autostart', { pluginId: appId, autostart })
+    await invoke('plugin_set_autostart', {
+      pluginId: appId,
+      autostart,
+      credential: await ensureHostCredential(),
+    })
   })
 }
 

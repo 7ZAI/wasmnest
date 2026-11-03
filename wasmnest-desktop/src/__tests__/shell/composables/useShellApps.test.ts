@@ -35,6 +35,7 @@ import { invoke } from '@tauri-apps/api/core'
 import {
   TERMINAL_PLUGIN_ID,
   mapDisplayState,
+  parseEncryptionDeclarations,
   pluginIdOfAppRoute,
   useShellApps,
   type HostPluginInfo,
@@ -282,14 +283,22 @@ describe('生命周期动作（真实命令面）', () => {
       .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })])
       .mockResolvedValue(false)
     expect(await apps.setEnabled('com.wasmnest.test-app', true)).toBe(true)
-    expect(mockedInvoke).toHaveBeenCalledWith('plugin_set_enabled', { pluginId: 'com.wasmnest.test-app', enabled: true })
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin_set_enabled', {
+      pluginId: 'com.wasmnest.test-app',
+      enabled: true,
+      credential: 'test-host-credential',
+    })
 
     mockedInvoke
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })])
       .mockResolvedValue(false)
     expect(await apps.setAutostart('com.wasmnest.test-app', true)).toBe(true)
-    expect(mockedInvoke).toHaveBeenCalledWith('plugin_set_autostart', { pluginId: 'com.wasmnest.test-app', autostart: true })
+    expect(mockedInvoke).toHaveBeenCalledWith('plugin_set_autostart', {
+      pluginId: 'com.wasmnest.test-app',
+      autostart: true,
+      credential: 'test-host-credential',
+    })
   })
 
   it('偏好动作同样占用 busyId（防连点；动作完成后复位）', async () => {
@@ -318,5 +327,62 @@ describe('生命周期动作（真实命令面）', () => {
     mockedInvoke.mockResolvedValueOnce(true)
     expect(await apps.isRunning('com.wasmnest.test-app')).toBe(true)
     expect(mockedInvoke).toHaveBeenCalledWith('plugin_is_running', { pluginId: 'com.wasmnest.test-app' })
+  })
+})
+
+describe('manifest 端点加密声明（安装/权限面静态来源）', () => {
+  it('只取声明式条目的 encryption：裸路径 / 缺字段 / 形状异常一律不算声明', () => {
+    expect(
+      parseEncryptionDeclarations({
+        wsEndpoints: [
+          'events', // 裸路径 = 未声明（跟随宿主下限）
+          { path: 'terminal', auth: 'jwt', encryption: 'required' },
+          { path: 'status', encryption: ' off ' }, // 原值 trim；未知取值保留给展示层标红
+          { path: 'no-policy' },
+          { encryption: 'required' }, // 缺 path
+          { path: 42, encryption: 'off' },
+          null,
+        ],
+      }),
+    ).toEqual([
+      { path: 'terminal', policy: 'required' },
+      { path: 'status', policy: 'off' },
+    ])
+  })
+
+  it('contributes 缺失或形状异常时返回空数组（旧宿主 / 无 WS 端点的应用）', () => {
+    expect(parseEncryptionDeclarations(undefined)).toEqual([])
+    expect(parseEncryptionDeclarations(null)).toEqual([])
+    expect(parseEncryptionDeclarations({})).toEqual([])
+    expect(parseEncryptionDeclarations({ wsEndpoints: 'oops' })).toEqual([])
+  })
+
+  it('清单投影把 manifest 声明带进 ShellAppEntry（不需要应用运行）', async () => {
+    mockedInvoke.mockReset()
+    const apps = useShellApps()
+    apps.plugins.value = []
+    apps.listReady.value = false
+    apps.loading.value = false
+    apps.lastError.value = null
+    mockedInvoke
+      .mockResolvedValueOnce([
+        info({
+          id: 'com.wasmnest.test-app',
+          contributes: {
+            wsEndpoints: [
+              'events',
+              { path: 'terminal', auth: 'jwt', encryption: 'required' },
+            ],
+          },
+        }),
+      ])
+      .mockResolvedValueOnce(true) // enabled
+      .mockResolvedValueOnce(false) // autostart
+
+    await apps.load()
+
+    expect(apps.plugins.value[0].encryptionDeclarations).toEqual([
+      { path: 'terminal', policy: 'required' },
+    ])
   })
 })
