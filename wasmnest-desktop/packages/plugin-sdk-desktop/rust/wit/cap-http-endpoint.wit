@@ -19,14 +19,19 @@ package wasmnest:plugin@0.0.2;
 // 由 `scripts/compose-wit.mjs` 复制为生成物 `rust/wit/cap-http-endpoint.wit`。
 interface host-http-endpoint {
     /// 在宿主 HTTP 服务器注册插件端点。config-json（camelCase）：
-    /// `{ path, host?, methods?, auth? }`
+    /// `{ path, host?, methods?, auth?, encryption? }`
     /// - `path`：插件内相对端点段，宿主拼出内部可达路径 `/api/plugin/<plugin-id>/<path>`
     ///   （命名空间段由宿主注入，插件只提供后缀）；
     /// - `host`：可选对外 URL 别名（如 `/api/configs`；支持 `{id}` 模板段如
     ///   `/api/sessions/{id}/stop`——模板捕获值经 `_http_endpoint` 的 `params` 字段
     ///   传给插件，宿主不拿捕获值构造路径）；
     /// - `methods`：host 别名的允许方法（缺省 `["GET"]`）；
-    /// - `auth` = "jwt"（缺省，最严：要求宿主已验签）| "none"（免凭证转发）。
+    /// - `auth` = "jwt"（缺省，最严：要求宿主已验签）| "none"（免凭证转发）；
+    /// - `encryption` = "required" | "preferred" | "off"（缺省 = 未声明，跟随宿主
+    ///   下限）。能力层按 `strictest(宿主下限, 本声明)` 执行：`required` 拒绝无协商
+    ///   对端（明文请求 → 400，点名端点与策略），`preferred` 机会主义加密，`off`
+    ///   明文（宿主下限更严时**注册即失败**，fail-visible）。未定义取值 / 未知字段
+    ///   → `Err`（严格解析，绝不静默当明文）。
     ///
     /// 冲突仲裁（fail-visible）：同一 `host+method` 已被其他插件注册 → `Err`（不覆盖
     /// 在位者）；本插件内部 path 重复注册 → `Err`。成功 → 返回端点句柄 `http-<uuid>`。

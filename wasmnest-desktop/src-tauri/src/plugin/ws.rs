@@ -215,7 +215,7 @@ wasmnest_host_kit::expect_host_module!(WS_SERVER_MODULE_NAME);
 pub const WS_SERVER_MODULE_NAME: &str = "ws-server";
 
 /// 本域提供的 WIT 接口（必须与桌面 wit-src 契约逐字一致；改错即 guest import 失配）
-pub const WS_SERVER_MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-websocket-server"];
+pub const WS_SERVER_MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-websocket-server"];
 
 /// 本域的权限位（服务端域需 `ws:server`）
 pub const WS_SERVER_MODULE_PERMISSIONS: &[&str] = &["ws:server"];
@@ -362,7 +362,7 @@ mod tests {
         assert_eq!(module_name, "websocket", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             wasmnest_server_websocket::plugin_binding::MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-websocket"],
+            &["wasmnest:plugin@0.0.2/host-websocket"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配；ADR 0052 D4 后服务端域归宿主路径 B 模块）"
         );
         assert_eq!(
@@ -382,7 +382,7 @@ mod tests {
         assert_eq!(WS_SERVER_MODULE_NAME, "ws-server");
         assert_eq!(
             WS_SERVER_MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-websocket-server"]
+            &["wasmnest:plugin@0.0.2/host-websocket-server"]
         );
         assert_eq!(WS_SERVER_MODULE_PERMISSIONS, &["ws:server"]);
         assert_eq!(WS_SERVER_DESC.name, WS_SERVER_MODULE_NAME);

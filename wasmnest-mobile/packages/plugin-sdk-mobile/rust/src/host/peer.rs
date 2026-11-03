@@ -10,6 +10,19 @@
 
 use crate::host::HostError;
 
+/// per-app 节点启动配置（WIT `peer-node-config` 的 Rust 映射）
+///
+/// 每个 app 声明自己的身份与网络参数，宿主按 app 维度隔离节点实例。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PeerNodeConfig {
+    /// 节点数据目录（存放 identity keypair、known peers 等持久状态）
+    pub data_dir: String,
+    /// 人类可读的设备名（广播给对端发现用）
+    pub device_name: String,
+    /// TCP 监听端口（0 = OS 自动分配）
+    pub listen_port: u16,
+}
+
 /// 对等网络能力 trait —— 函数签名与 WIT `host-peer` 一一对应，
 /// JSON 载荷在绑定层完成字符串 ↔ Value 转换
 pub trait HostPeer {
@@ -60,9 +73,11 @@ pub trait HostPeer {
     ) -> Result<u32, HostError>;
     /// 设置接收落点目录（空串 = 恢复默认）；引擎落盘配置原语
     fn peer_set_download_dir(&self, path: &str) -> Result<(), HostError>;
-    /// 按需启动本机 peer 节点（引擎级生命周期原语）：幂等，false = 未改变状态；
+    /// 按需启动本机 peer 节点（引擎级生命周期原语）：app 声明自己的身份与
+    /// 网络参数（`PeerNodeConfig`），宿主按 app 维度隔离节点实例。
+    /// 幂等——该 config 对应的节点已在跑时返回 false（未改变状态）。
     /// 调用方成为节点属主（谁起谁停）
-    fn peer_start_node(&self) -> Result<bool, HostError>;
+    fn peer_start_node(&self, config: &PeerNodeConfig) -> Result<bool, HostError>;
     /// 属主插件让节点下线（幂等）；非属主拒绝
     fn peer_stop_node(&self) -> Result<bool, HostError>;
     /// 活跃传输批清单（引擎会话事实投影，供插件事件归约首屏重建）

@@ -44,7 +44,7 @@ pub use log::HostLog;
 pub use mdns::HostMdns;
 pub use metrics::HostMetrics;
 pub use notify::{HostNotify, HostNotifyMobile, NotifyOptions};
-pub use peer::HostPeer;
+pub use peer::{HostPeer, PeerNodeConfig};
 pub use platform::HostPlatform;
 pub use storage::HostStorage;
 pub use terminal_stream::HostTerminalStream;

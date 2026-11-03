@@ -21,7 +21,8 @@ impl WasmPlugin for CryptoProbePlugin {
                 "crypto:kdf".to_string(),
                 "crypto:asym".to_string(),
             ],
-            plugin_type: PluginType::Rust,
+            // 纯后端形态（原 `Rust`；三档重定义后 = wasm 后端、无页面产物）
+            plugin_type: PluginType::Backend,
             ..Default::default()
         }
     }

@@ -24,7 +24,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "platform-desktop";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-platform-desktop"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-platform-desktop"];
 
 /// 本域的权限位：空——`wsl-distros` / `local-ipv4-addresses` / `reveal-in-dir`
 /// 全是平台事实 / 平台交互动作，不叠加权限门（ADR 0022 裁剪线，真源在
@@ -228,7 +228,7 @@ mod tests {
         );
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-platform-desktop"],
+            &["wasmnest:plugin@0.0.2/host-platform-desktop"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

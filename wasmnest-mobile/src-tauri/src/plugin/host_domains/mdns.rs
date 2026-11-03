@@ -141,10 +141,16 @@ impl DiscoveryPorts for StateDiscoveryPorts {
     }
 
     fn local_node_id(&self) -> Option<String> {
-        // 自播回显过滤：browse 会收到本机自己的广播（TXT `id` == 节点 ID）。
+        // 自播回显过滤：browse 会收到本机自己的广播（TXT `id` == 节点节点 ID）。
         // 无 app 句柄（无头 / 测试）或节点未启动时返回 None ⇒ 引擎不拦截
         let app = self.app.as_ref()?;
         self.host_ports.current_node_id(app.as_ref())
+    }
+
+    fn advertised_node_ids(&self) -> Vec<String> {
+        // per-app 多身份准备：当前单节点形态下等价于 local_node_id() 的单元素集合。
+        // 未来 per-app 实例表落地后，此处应遍历所有已启动节点并收集其 ID（#5）。
+        self.local_node_id().into_iter().collect()
     }
 
     fn publish(&self, topic: &str, payload: serde_json::Value) {

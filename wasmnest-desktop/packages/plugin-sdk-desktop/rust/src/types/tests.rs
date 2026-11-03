@@ -680,6 +680,31 @@ fn test_ws_endpoints_round_trip_preserves_form() {
     assert_eq!(serde_json::to_value(&parsed).unwrap(), src);
 }
 
+/// 按端点链路加密策略（spec §2）：声明面原样保留，未声明 = 跟随宿主下限；
+/// 取值合法性由宿主能力层裁决（声明面只表达，不解释）。
+#[test]
+fn test_ws_endpoints_carry_encryption_declaration() {
+    let src = serde_json::json!([
+        { "path": "terminal", "encryption": "required" },
+        { "path": "status" },
+        "monitor"
+    ]);
+    let parsed: Vec<WsEndpointContribution> = serde_json::from_value(src.clone()).unwrap();
+    assert_eq!(
+        parsed[0].encryption_raw(),
+        Some("required"),
+        "声明的策略必须能原样读出"
+    );
+    assert_eq!(parsed[1].encryption_raw(), None, "缺省 = 跟随宿主下限");
+    assert_eq!(
+        parsed[2].encryption_raw(),
+        None,
+        "裸路径形态 = 跟随宿主下限"
+    );
+    // 往返逐字一致（不把缺省写成 "preferred"）
+    assert_eq!(serde_json::to_value(&parsed).unwrap(), src);
+}
+
 /// 票 09a：形态错误的条目不会「降级成未声明」——整表解析失败（宿主拒绝激活），
 /// 而不是静默收下少一项的清单。
 #[test]

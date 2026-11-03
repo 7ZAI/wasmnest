@@ -15,17 +15,18 @@
 //! trait 签名（`host/*` 定义）保持不变，插件业务代码零改动。
 
 use crate::host::{
-    ConfigKey, CryptoKeypair, FsDirEntry, FsStat, HostApp, HostAuth, HostBus, HostConfig,
-    HostConnection, HostCrypto, HostError, HostEvents, HostFs, HostHttp, HostLog, HostMdns,
-    HostMetrics, HostNotify, HostPeer, HostPlatform, HostPluginDatabase, HostProcess, HostPty,
-    HostStorage, HostTask, HostWebsocket, NotifyOptions, ProcessSyncResult, PtyRingFetch,
+    ConfigKey, CryptoKeypair, FsDirEntry, FsStat, HostApp, HostAuth, HostBus, HostClipboard,
+    HostConfig, HostConnection, HostCrypto, HostError, HostEvents, HostFs, HostHttp, HostLog,
+    HostMdns, HostMetrics, HostNotify, HostPeer, HostPlatform, HostPluginDatabase, HostProcess,
+    HostPty, HostStorage, HostTask, HostWebsocket, NotifyOptions, PeerNodeConfig,
+    ProcessSyncResult, PtyRingFetch,
 };
 use crate::wasm::wasmnest::plugin::{
-    host_app, host_auth_center, host_bus, host_config, host_connection_registry, host_crypto, host_events,
-    host_fs, host_fs_desktop, host_http, host_http_endpoint, host_log, host_metrics,
-    host_mdns, host_notify, host_peer, host_platform, host_platform_desktop, host_plugin_database,
-    host_process, host_pty, host_storage, host_task, host_timer, host_websocket,
-    host_websocket_server,
+    host_app, host_auth_center, host_bus, host_clipboard, host_config, host_connection_registry,
+    host_crypto, host_events, host_fs, host_fs_desktop, host_http, host_http_endpoint, host_log,
+    host_metrics, host_mdns, host_notify, host_peer, host_platform, host_platform_desktop,
+    host_plugin_database, host_process, host_pty, host_storage, host_task, host_timer,
+    host_websocket, host_websocket_server,
 };
 
 /// 宿主 API 绑定（WASM 插件侧）
@@ -333,6 +334,18 @@ impl HostNotify for WasmHost {
     }
 }
 
+// ==================== HostClipboard（共享域契约 host-clipboard） ====================
+
+impl HostClipboard for WasmHost {
+    fn clipboard_read_text(&self) -> Result<Option<String>, HostError> {
+        host_clipboard::read_text().map_err(|e| host_err("clipboard_read_text", e))
+    }
+
+    fn clipboard_write_text(&self, text: &str) -> Result<(), HostError> {
+        host_clipboard::write_text(text).map_err(|e| host_err("clipboard_write_text", e))
+    }
+}
+
 // ==================== HostHttp ====================
 
 impl HostHttp for WasmHost {
@@ -600,8 +613,13 @@ impl HostPeer for WasmHost {
         host_peer::set_download_dir(path).map_err(|e| host_err("peer_set_download_dir", e))
     }
 
-    fn peer_start_node(&self) -> Result<bool, HostError> {
-        host_peer::start_node().map_err(|e| host_err("peer_start_node", e))
+    fn peer_start_node(&self, config: &PeerNodeConfig) -> Result<bool, HostError> {
+        let wit_config = host_peer::PeerNodeConfig {
+            data_dir: config.data_dir.clone(),
+            device_name: config.device_name.clone(),
+            listen_port: config.listen_port,
+        };
+        host_peer::start_node(&wit_config).map_err(|e| host_err("peer_start_node", e))
     }
 
     fn peer_stop_node(&self) -> Result<bool, HostError> {

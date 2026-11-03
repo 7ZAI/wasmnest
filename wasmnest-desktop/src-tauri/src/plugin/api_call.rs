@@ -27,7 +27,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "api_call";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-api-call"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-api-call"];
 
 /// 本域的权限位（必须与 `wasmnest.wit` / SDK 权限表逐字一致）
 ///
@@ -110,7 +110,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "api_call", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-api-call"],
+            &["wasmnest:plugin@0.0.2/host-api-call"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert!(

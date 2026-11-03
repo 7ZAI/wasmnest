@@ -8,6 +8,7 @@ world plugin {
     include cap-http;
     include cap-ws;
     include cap-notify;
+    include cap-clipboard;
     include cap-http-endpoint;
     include cap-ws-server;
     include cap-desktop;

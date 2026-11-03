@@ -20,7 +20,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "mobile-auth";
 
 /// 本域提供的 WIT 接口（必须与 `cap-mobile.wit` 逐字一致）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-auth-client"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-auth-client"];
 
 /// 本域的权限位（与 WIT / SDK 权限表逐字一致）
 pub const MODULE_PERMISSIONS: &[&str] = &["auth"];

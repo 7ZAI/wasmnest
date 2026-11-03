@@ -177,7 +177,7 @@ wasmnest_host_kit::expect_host_module!(HTTP_ENDPOINT_MODULE_NAME);
 pub const HTTP_ENDPOINT_MODULE_NAME: &str = "http-endpoint";
 
 /// 本域提供的 WIT 接口（必须与桌面 wit-src 契约逐字一致；改错即 guest import 失配）
-pub const HTTP_ENDPOINT_MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-http-endpoint"];
+pub const HTTP_ENDPOINT_MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-http-endpoint"];
 
 /// 本域的权限位（与前端面 `http.registerEndpoint` 同权限位，真源内核 `permission.rs`）
 pub const HTTP_ENDPOINT_MODULE_PERMISSIONS: &[&str] = &["network:http"];
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(module_name, "http", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             wasmnest_server_http::plugin_binding::MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-http"],
+            &["wasmnest:plugin@0.0.2/host-http"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配；ADR 0052 D4 后服务端域归宿主路径 B 模块）"
         );
         assert_eq!(
@@ -273,7 +273,7 @@ mod tests {
         assert_eq!(HTTP_ENDPOINT_MODULE_NAME, "http-endpoint");
         assert_eq!(
             HTTP_ENDPOINT_MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-http-endpoint"]
+            &["wasmnest:plugin@0.0.2/host-http-endpoint"]
         );
         assert_eq!(HTTP_ENDPOINT_MODULE_PERMISSIONS, &["network:http"]);
         assert_eq!(HTTP_ENDPOINT_DESC.name, HTTP_ENDPOINT_MODULE_NAME);

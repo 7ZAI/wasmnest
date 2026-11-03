@@ -17,6 +17,7 @@ use crate::host::{
     ConfigKey, HostAuth, HostBus, HostConfig, HostConnection, HostError, HostEvents,
     HostFs, HostHttp, HostLog, HostMdns, HostMetrics, HostNotify, HostNotifyMobile, HostPeer,
     HostPlatform, HostPluginDatabase, HostStorage, HostTerminalStream, HostWs, NotifyOptions,
+    PeerNodeConfig,
 };
 use crate::wasm::wasmnest::plugin::{
     host_auth_client, host_bus, host_config, host_connection_target, host_events, host_fs,
@@ -458,8 +459,13 @@ impl HostPeer for WasmHost {
         host_peer::set_download_dir(path).map_err(|e| host_err("peer_set_download_dir", e))
     }
 
-    fn peer_start_node(&self) -> Result<bool, HostError> {
-        host_peer::start_node().map_err(|e| host_err("peer_start_node", e))
+    fn peer_start_node(&self, config: &PeerNodeConfig) -> Result<bool, HostError> {
+        let wit_config = host_peer::PeerNodeConfig {
+            data_dir: config.data_dir.clone(),
+            device_name: config.device_name.clone(),
+            listen_port: config.listen_port,
+        };
+        host_peer::start_node(&wit_config).map_err(|e| host_err("peer_start_node", e))
     }
 
     fn peer_stop_node(&self) -> Result<bool, HostError> {

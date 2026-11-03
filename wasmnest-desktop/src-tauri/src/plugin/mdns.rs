@@ -80,6 +80,12 @@ impl DiscoveryPorts for HostDiscoveryPorts {
         wasmnest_server_peer_net::current_node_id(&peer_ctx)
     }
 
+    fn advertised_node_ids(&self) -> Vec<String> {
+        // per-app 多身份准备：当前单节点形态下等价于 local_node_id() 的单元素集合。
+        // 未来 per-app 实例表落地后，此处应遍历所有已启动节点并收集其 ID（#5）。
+        self.local_node_id().into_iter().collect()
+    }
+
     fn publish(&self, topic: &str, payload: serde_json::Value) {
         // sender 恒为 `host`（机制常量）：总线负责命名空间门禁与投递
         self.ctx().message_bus.publish(topic, "host", payload);
@@ -192,7 +198,7 @@ mod tests {
         assert_eq!(module_name, "discovery", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             wasmnest_discovery_engine::MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-mdns"],
+            &["wasmnest:plugin@0.0.2/host-mdns"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

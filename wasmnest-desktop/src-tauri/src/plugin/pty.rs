@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(module_name, "pty", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             wasmnest_pty_engine::plugin_binding::MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-pty"],
+            &["wasmnest:plugin@0.0.2/host-pty"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

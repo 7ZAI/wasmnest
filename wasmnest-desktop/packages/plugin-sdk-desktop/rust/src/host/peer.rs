@@ -10,6 +10,19 @@
 
 use crate::host::HostError;
 
+/// per-app 节点启动配置（WIT `peer-node-config` 的 Rust 映射）
+///
+/// 每个 app 声明自己的身份与网络参数，宿主按 app 维度隔离节点实例。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PeerNodeConfig {
+    /// 节点数据目录（存放 identity keypair、known peers 等持久状态）
+    pub data_dir: String,
+    /// 人类可读的设备名（广播给对端发现用）
+    pub device_name: String,
+    /// TCP 监听端口（0 = OS 自动分配）
+    pub listen_port: u16,
+}
+
 /// 对等网络能力 trait —— 函数签名与 WIT `host-peer` 一一对应，
 /// JSON 载荷在绑定层完成字符串 ↔ Value 转换
 pub trait HostPeer {
@@ -71,7 +84,7 @@ pub trait HostPeer {
     /// 返回 `true` = 本次调用把节点从「未跑」带到「跑」（调用方即成为节点属主）；
     /// `false` = 节点本就在跑。已被别的插件起着的节点不可被本调用接管（报错，
     /// 文案不回带他方身份）——谁起谁停，内核不再按硬编码插件 id 猜归属
-    fn peer_start_node(&self) -> Result<bool, HostError>;
+    fn peer_start_node(&self, config: &PeerNodeConfig) -> Result<bool, HostError>;
     /// 让本机节点下线（幂等；未跑为 no-op）：停广播 / 关监听 / 排水连接与入站记账。
     /// 仅节点属主可关停，非属主报错（文案不回带属主身份）
     fn peer_stop_node(&self) -> Result<bool, HostError>;
