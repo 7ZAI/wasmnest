@@ -15,6 +15,8 @@
 pub mod app;
 pub mod auth;
 pub mod bus;
+/// 系统剪贴板读写（共享域契约 `host-clipboard`；ADR-0006）
+pub mod clipboard;
 pub mod config;
 pub mod connection;
 pub mod crypto;
@@ -42,6 +44,7 @@ pub use auth::HostAuth;
 pub use bus::{
     owned_topic, topic_owner, HostBus, API_TOPIC_PREFIX, REPLY_TOPIC_PREFIX, TOPIC_NS_SEP,
 };
+pub use clipboard::HostClipboard;
 pub use config::{ConfigKey, HostConfig};
 pub use connection::HostConnection;
 pub use crypto::{CryptoKeypair, HostCrypto};
@@ -53,7 +56,7 @@ pub use log::HostLog;
 pub use mdns::{mdns_event_topic, HostMdns, MDNS_FOUND, MDNS_LOST};
 pub use metrics::HostMetrics;
 pub use notify::{HostNotify, NotifyOptions};
-pub use peer::HostPeer;
+pub use peer::{HostPeer, PeerNodeConfig};
 pub use platform::HostPlatform;
 pub use process::{HostProcess, ProcessSyncResult};
 pub use pty::{pty_event_topic, HostPty, PtyRingFetch, PtySpawnConfig, PTY_EXIT, PTY_OUTPUT};
@@ -169,6 +172,7 @@ pub trait HostApi:
     + HostPluginDatabase
     + HostEvents
     + HostNotify
+    + HostClipboard
     + HostHttp
     + HostFs
     + HostLog
@@ -190,6 +194,7 @@ impl<T> HostApi for T where
         + HostPluginDatabase
         + HostEvents
         + HostNotify
+        + HostClipboard
         + HostHttp
         + HostFs
         + HostLog

@@ -10,6 +10,7 @@
     "http": "../wasmnest-lib/wasmnest-server-http/wit/http.wit",
     "ws": "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit",
     "notify": "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit",
+    "clipboard": "../wasmnest-lib/wasmnest-clipboard-engine/wit/clipboard.wit",
     "http-endpoint": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-http.wit",
     "ws-server": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-ws.wit",
     "desktop": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-desktop.wit"

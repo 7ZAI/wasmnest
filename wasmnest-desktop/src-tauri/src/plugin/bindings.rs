@@ -120,8 +120,8 @@ mod tests {
 
         let mut caps: Vec<&str> = m["caps"].as_object().unwrap().keys().map(|s| s.as_str()).collect();
         caps.sort();
-        assert_eq!(caps, vec!["desktop", "http", "http-endpoint", "mdns", "notify", "peer", "pty", "ws", "ws-server"],
-            "caps 键漂移：能力域六片（pty/mdns/peer/http/ws/notify）+ 端扩展三片（http-endpoint/ws-server/desktop）是当前唯一答案（ADR 0052 D2/D4）");
+        assert_eq!(caps, vec!["clipboard", "desktop", "http", "http-endpoint", "mdns", "notify", "peer", "pty", "ws", "ws-server"],
+            "caps 键漂移：能力域七片（pty/mdns/peer/http/ws/notify/clipboard）+ 端扩展三片（http-endpoint/ws-server/desktop）是当前唯一答案（ADR 0052 D2/D4）");
 
         for key in [
             "pty",
@@ -130,6 +130,7 @@ mod tests {
             "http",
             "ws",
             "notify",
+            "clipboard",
             "http-endpoint",
             "ws-server",
             "desktop",
@@ -171,6 +172,7 @@ mod tests {
             "../wasmnest-lib/wasmnest-server-http/wit/http.wit",
             "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit",
             "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit",
+            "../wasmnest-lib/wasmnest-clipboard-engine/wit/clipboard.wit",
             "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-http.wit",
             "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-ws.wit",
             "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-desktop.wit",
@@ -367,7 +369,7 @@ mod tests {
     #[test]
     fn compose_caps_and_host_module_interfaces_cover_each_other() {
         let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        // ① 装配面：白名单模块 → interface 名（`wasmnest:plugin@0.0.1/host-x` → `host-x`，
+        // ① 装配面：白名单模块 → interface 名（`wasmnest:plugin@0.0.2/host-x` → `host-x`，
         //    rsplit('/') 剥版本后缀——版本化契约下天然免疫，与 WIT world import 的
         //    纯接口名两侧对得上）
         let registry = wasmnest_host_kit::ModuleRegistry::collected();
