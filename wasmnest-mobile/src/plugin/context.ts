@@ -367,12 +367,49 @@ export function createPluginContext(
     }
   }
 
+  /**
+   * 检测「未经预编译的字符串消息」并**一次性告警**（fail-visible，2026-11-03）
+   *
+   * 背景：双端 `vite.config.ts` 已切到 `vue-i18n` 的 **runtime-only 构建**
+   * （`__INTLIFY_DROP_MESSAGE_COMPILER__: true` + alias 到 `vue-i18n.runtime.esm-bundler.js`）
+   * 以撤掉 CSP 的 `'unsafe-eval'`。该构建**不含消息编译器**，运行期喂进去的字符串
+   * 消息会走 `compileMessageFormat` 的 `messageCompiler == null` 分支，直接原样返回：
+   *
+   * - 默认 locale 的扁平字符串：`t()` 能拿到原串（看着没问题）
+   * - **非默认 locale**（如 `en`）：`t()` 返回 **key 字面量**
+   * - **插值全部失效**：`'失败：{reason}'` 原样输出 `{reason}` 不替换
+   *
+   * 宿主自己的文案已由 `scripts/i18n-precompile.mjs` 在构建期转成消息函数，不受影响；
+   * 但该插件**管不到插件运行期注册的消息**——插件文案需要在各自应用仓的构建期预编译
+   * （复用同一个 `i18nPrecompile` 插件，产物里直接是 `() => ...` 函数）。
+   *
+   * 这里不做运行期编译兜底（那会把编译器拖回产物、与撤 `'unsafe-eval'` 的目标冲突），
+   * 只保证**退化可见**：每插件每会话告警一次，点名是哪个插件、哪些 key 受影响。
+   */
+  const warnedUncompiled = new Set<string>()
+  function warnIfUncompiled(prefixed: Record<string, unknown>): void {
+    if (warnedUncompiled.has(info.id)) return
+    const samples: string[] = []
+    for (const [key, value] of Object.entries(prefixed)) {
+      if (typeof value === 'string') samples.push(key)
+      if (samples.length >= 3) break
+    }
+    if (samples.length === 0) return
+    warnedUncompiled.add(info.id)
+    frontendLogger.warn(
+      `[PluginContext] 插件 "${info.id}" 注册了未经预编译的字符串文案（如 ${samples.join(', ')}）——` +
+        `vue-i18n 运行在 runtime-only 构建下，非默认 locale 会返回 key 字面量、插值不会替换。` +
+        `请在应用仓构建期用 i18nPrecompile 预编译文案。`,
+    )
+  }
+
   const i18n: I18nAPI = {
     registerMessages(locale: string, messages: Record<string, unknown>): void {
       const hostI18n = (window as any).__WASMNEST_SHARED__?.i18n
       if (!hostI18n) return
       const prefixed: Record<string, unknown> = {}
       flattenMessages(messages, info.id, prefixed)
+      warnIfUncompiled(prefixed)
       // 直接合并新消息，vue-i18n 会自动与现有消息深度合并
       hostI18n.global.mergeLocaleMessage(locale, prefixed)
     },
