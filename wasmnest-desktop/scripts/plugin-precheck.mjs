@@ -103,6 +103,14 @@ export const PLUGIN_WATCH_CMDS = [
     args: ['scripts/build.js', '--watch'],
     wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_auth_center.wasm',
   },
+  {
+    // Lanbitou（Markdown 记事本）：业务应用，工程住应用仓 `apps/lanbitou`。
+    // 数据根在 `$HOME/.wasmnest/lanbitou`（host-fs），前端与 Rust 都轻。
+    slug: 'lanbitou',
+    id: 'com.wasmnest.lanbitou',
+    args: ['scripts/build.js', '--watch'],
+    wasmFile: 'target/wasm-apps/wasm32-wasip3/release/wasmnest_plugin_lanbitou.wasm',
+  },
 ]
 
 /** 宿主插件产物目录（各插件子目录名 = 插件 id，来自 plugin.json，与构建脚本复制目标一致） */

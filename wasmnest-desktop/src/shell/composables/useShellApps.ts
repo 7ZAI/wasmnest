@@ -122,6 +122,8 @@ export const FILE_TRANSFER_PLUGIN_ID = 'com.wasmnest.file-transfer'
 export const MONITOR_PLUGIN_ID = 'com.wasmnest.monitor'
 /** 认证中心（服务型 wasm：L1 基础服务 / L2 内部业务，随宿主分发；应用仓 `servers/auth-center`） */
 export const AUTH_CENTER_PLUGIN_ID = 'com.wasmnest.auth-center'
+/** 烂笔头（Markdown 记事本；应用仓 `apps/lanbitou`） */
+export const LANBITOU_PLUGIN_ID = 'com.wasmnest.lanbitou'
 
 /**
  * 宿主挂载运行面路由表（桌面 UI 宿主修正 2026-10-17）：每个有前端界面的 wasm
@@ -129,7 +131,8 @@ export const AUTH_CENTER_PLUGIN_ID = 'com.wasmnest.auth-center'
  *
  * `landing` = 主屏点卡后落地的默认路由；`prefixes` = 该 app 在宿主 history 路由表
  * 里的路由前缀集（宿主 router 逐条声明 → AppMountSlot）。bedcode 保持既有路径
- * 与深链语义（/terminal-window/:id 独立窗口）；其余三 app 单面单路由。
+ * 与深链语义（/terminal-window/:id 独立窗口）；其余应用单面单路由（服务型
+ * auth-center / monitor 同样走挂载槽）。
  *
  * 插件 id 家族随 ADR 0056 全改 `com.wasmnest`；产物目录由构建脚本按 `PLUGIN_ID`
  * 同步重建。
@@ -140,6 +143,7 @@ export const SURFACE_ROUTES: Readonly<Record<string, string>> = {
   [FILE_TRANSFER_PLUGIN_ID]: '/transfer',
   [MONITOR_PLUGIN_ID]: '/monitor',
   [AUTH_CENTER_PLUGIN_ID]: '/auth',
+  [LANBITOU_PLUGIN_ID]: '/notes',
 }
 
 /** 每 app 的路由前缀集（pluginIdOfAppRoute 反向映射用） */
@@ -159,6 +163,7 @@ const APP_ROUTE_PREFIXES: Readonly<Record<string, string[]>> = {
   [FILE_TRANSFER_PLUGIN_ID]: ['/transfer'],
   [MONITOR_PLUGIN_ID]: ['/monitor'],
   [AUTH_CENTER_PLUGIN_ID]: ['/auth'],
+  [LANBITOU_PLUGIN_ID]: ['/notes'],
 }
 
 /** 应用 id（= pluginId）→ 挂载路由（landing）；无运行面的应用返回 undefined */

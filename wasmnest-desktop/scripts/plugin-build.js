@@ -61,6 +61,10 @@ const PLUGINS = {
     group: 'servers',
     slug: 'auth-center',
   },
+  'com.wasmnest.lanbitou': {
+    group: 'apps',
+    slug: 'lanbitou',
+  },
 }
 
 // 解析参数
