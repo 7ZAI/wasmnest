@@ -8,6 +8,7 @@
 > **通用测试规范（两种形态 / 禁止交付 / 测试数据临时目录 / Seam 3 锁纪律 / 验证底线）真源 = `docs/public/testing.md`（四仓共享，不在此复制）**。本文件只保留平台仓特有增量。
 
 - 运行位置（平台特有）：前端 vitest 在端目录（`src/__tests__/**`，happy-dom；桌面另含 SDK 契约测试 `packages/plugin-sdk-desktop/__tests__`；移动 vitest 的 `@apps` 别名是跨仓读取专用，**不得进宿主构建代码**）；Rust 在 crate 根（宿主 = `src-tauri`；SDK = 各自 `rust/`）。
+- **写测试前的可选方法论**：产出系统化行为契约时可加载 `unit-test-discipline` skill（契约表 → 测试矩阵 → 变异杀死自检）；**交付判据仍以 docs/public/testing.md §2/§4/§5 为准**，skill 评分卡不构成门槛。
 - 部分桌面 Rust e2e（pty / ws / http）依赖 `resources/plugins/desktop` 随包产物，跑前先构建（见各测试头注释）。
 - 跨仓锁（docs/codemap.md §8）与注册表锁是**契约声明**：改动使其清单过期时同批更新（Seam 3 细则见 docs/public/testing.md §4）。
 
@@ -40,6 +41,11 @@
 - 改 SDK → 该端 SDK `test:run`；涉及发布 → `scripts/package-sdks.mjs` 全链绿。
 - 改 WIT / 契约 / 版本 → docs/contracts.md §3 全链：`check:wit` + 受影响 app 重建 + `check:manifest` 全绿。
 - 改权限 / 清单 / 应用注册表 → `manifest-gen` / `manifest-validate` 通过；`check:manifest` 通过（涉及 id / rustLibrary / 端变化时）；相关边界锁同步更新并跑绿。
+- **新增 / 收紧权限门（含能力位与 wasm 权限位）→ 同批检查「被门拦住的既有调用方」**（2026-11-03 审核教训）：
+  1. 测试夹具的默认授予清单（`../wasmnest-lib/wasmnest-wasm-core/src/test_support/common.rs` 的 `all_permissions`、`packages/plugin-sdk-fixtures/plugin.json` 的 `permissions`）——漏改会让夹具用例从「测到域函数内部行为」退化成「被入口门直接拒」，断言失配（实例：`notify` 补门后 `sdk_e2e` 直接红）；
+  2. 宿主前端与 SDK 的每个 invoke 调用点是否已带 `credential`；
+  3. 只读面豁免清单（`*_identity_lock.rs` 的 `READ_ONLY`）是否仍需豁免。
+  判据：`cargo test` 里与门相关的锁**和**既有 e2e 同时绿，才算这次加门收口。
 - 改移动壳 / Kotlin / gradle → 移动 `test:run` + gradlew 验证 + 真机 / 模拟器目验。
 - 改发布流水线 / 安装包配置 / 随包应用铺放（`tauri.conf.json` 的 bundle·updater / `.github/workflows/product-release.yml` / `scripts/vendor-apps.mjs` / `scripts/build-latest-json.mjs`）→ 根 `pnpm run test:run`（含 vendor-apps 与 latest.json 契约测试）+ `node scripts/vendor-apps.mjs --dry-run` 核对计划 + `product-release.yml` 的 `workflow_dispatch` dry_run（契约见 docs/contracts.md §7）。
 - 改跨端面 → `../wasmnest-test/cross-end-tests` 全量通过（写清「跑了 / 没跑」）。

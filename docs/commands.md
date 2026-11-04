@@ -189,6 +189,8 @@ crates.io 精确版本；同场开发由平台仓根 `.cargo/config.toml` 的
 
 ## 6. 构建资源与 target 治理
 
+> **手工精确清理（磁盘吃紧时）→ `docs/target-governance.md`**：四仓落点全景（可清 / 禁清）、三级阶梯（测试产物 → `cargo clean -p` → incremental）、前置检查与完成验证。本节只保留自动治理与落点归属口径。
+
 - 宿主 `src-tauri/target` 阈值 **15GB**：`prebuild` 自动 `cargo clean`（`scripts/check-target-size.js`）；历史值与理由见脚本头注释，改阈值前先读它。
 - **共享 target 目录只报告不自动删**：宿主 `target/fixtures`、`target/wasm-apps`（应用共享）等——删掉等于丢共享编译缓存；`cargo clean` 只对宿主自己的 target 目录用。
 - 仓库根级历史共享落点 `target/server-libs`（server-lib 拆出后 6 crate 的共享落点）/ `target/host-kits`（wasm-core-lib-split 后机制内核 + 能力域同族）由桌面端治理脚本**报告**（不删）；跨端测试迁出后 `wasmnest-test` 的 target 不在本仓统计内。

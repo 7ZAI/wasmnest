@@ -91,6 +91,7 @@
 | --- | --- |
 | `docs/codemap.md` | ★ 代码文件导航：仓结构树 / 端内模块导览 / 任务路由表（改 X 先读 Y）/ 代码查找纪律 / 锁索引 / 文档索引 |
 | `docs/commands.md` | 命令全集：通用约定（wasmtime 48 / wasip3 / sccache / 自适应构建）/ 根 / 桌面（含 host:pack）/ 移动 / 应用与插件（§5.2 单应用调试）/ target 治理 / husky |
+| `docs/target-governance.md` | 构建资源与 target 治理：四仓落点全景（可清 / 禁清）/ 手工精确清理三级阶梯（测试产物 → `cargo clean -p` → incremental）/ 禁止项 / 完成验证 / 实测基线 |
 | `docs/architecture.md` | 架构硬约束：宿主薄壳六判据与三问全量 / 桌面挂载形态 / 退役面纪律 / 双端差异与锁步 / 权限与安全闸门总览 / 跨端协议 / 数据库 |
 | `docs/contracts.md` | 契约：release-manifest 判据 / WIT 真源链与 bump 政策 / WIT-ABI 变更 7 步流程 / 权限声明 / plugin.json / SDK / 生成物清单 |
 | `docs/frontend.md` | 前端规范：零资源访问三层封锁 / 挂载包与运行面形态 / 移动壳优先 / **UI 设计强制前置技能（`ui-ux-pro-max` + `design-taste-frontend`）** / 注释命名 i18n |

@@ -194,6 +194,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 新增 / 停用移动应用 | 移动构建自动扫描 `apps/*/mobile`（无注册表）；只需同步 `release-manifest.json`；机制差异读 docs/architecture.md §4 |
 | 改跨端传输 / 认证 / 配对面 | docs/architecture.md §6（跨端协议）；改完去 `../wasmnest-test/cross-end-tests` 跑真实互连（零 mock） |
 | 改 Android 原生（Kotlin / manifest / gradle） | `wasmnest-mobile/src-tauri/gen/android/**`；改 Kotlin 必须 gradlew 验证；`tauri android init` 重建后手工恢复手写面 |
+| 清 target / 磁盘吃紧 | `docs/target-governance.md`（落点全景 + 三级阶梯 + 前置检查；清共享 target 前先查有无并行构建）；产物落点排查见本文末行 |
 | 排查「改了没生效」/ 产物路径 | 桌面 `scripts/{dev-run,plugin-build}.js` 与 `packages/plugin-sdk-desktop/bin/plugin-watch.js`、移动 `scripts/plugin-build.js`、根 `scripts/app-paths.mjs`；先确认产物是否真写进 `src-tauri/resources/plugins/<end>/<id>/`；再确认宿主扫描目录（桌面 dev 是 `target/debug/resources/…` 运行时副本——源目录删除不会自动同步，幽灵目录只在这里活着） |
 | 发布 / 版本 | docs/contracts.md §2.1（manifest 判据）+ `scripts/bump-version.mjs` + `scripts/package-sdks.mjs`；三仓 tag 规则见 docs/git.md §3 |
 | 定位代码 | 本文 §7（代码查找纪律） |
@@ -296,6 +297,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 安全与日志红线 | `docs/security.md` |
 | 决策记录（ADR 索引；0055–0057 出处登记 / 0058 前端信任边界威胁模型） | `docs/adr/README.md` |
 | 单元测试 / 完成定义与验证 | `docs/testing.md` |
+| 构建资源与 target 清理（四仓落点 / 三级阶梯 / 验证） | `docs/target-governance.md` |
 | wasm 应用开发检查清单（双端红线，迁自旧仓 issue #14） | `docs/knowledge/wasm-app-development-checklist.md` |
 | 桌面 wasm 应用开发指南 / API 参考（迁自旧仓 issue #14；SDK README 死链的现去向） | `wasmnest-desktop/docs/wasm-app-dev-desktop.md`、`wasmnest-desktop/docs/knowledge/wasm-app-dev-guide.md` |
 | 移动 wasm 应用开发指南（迁自旧仓 issue #14） | `wasmnest-mobile/docs/wasm-app-dev-mobile.md` |
