@@ -79,7 +79,11 @@ describe('注册表投影（plugin_list_loaded 真通道）', () => {
       .mockResolvedValueOnce([
         info({ id: TERMINAL_PLUGIN_ID, name: 'BedCode' }),
         info({ id: 'com.wasmnest.ai-chatbox', name: 'AI Chatbox' }),
-        info({ id: 'com.wasmnest.file-transfer', name: 'File Transfer', state: { state: 'deactivated' } }),
+        info({
+          id: 'com.wasmnest.file-transfer',
+          name: 'File Transfer',
+          state: { state: 'deactivated' },
+        }),
       ])
       .mockResolvedValueOnce(true) // bedcode enabled
       .mockResolvedValueOnce(false) // bedcode autostart
@@ -243,7 +247,9 @@ describe('生命周期动作（真实命令面）', () => {
     const apps = await seeded()
     mockedInvoke
       .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app', state: { state: 'deactivated' } })])
+      .mockResolvedValueOnce([
+        info({ id: 'com.wasmnest.test-app', state: { state: 'deactivated' } }),
+      ])
       .mockResolvedValue(false)
     const ok = await apps.deactivate('com.wasmnest.test-app')
     expect(ok).toBe(true)
@@ -267,10 +273,7 @@ describe('生命周期动作（真实命令面）', () => {
       credential: expect.any(String),
     })
 
-    mockedInvoke
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce([])
-      .mockResolvedValue(false)
+    mockedInvoke.mockResolvedValueOnce(undefined).mockResolvedValueOnce([]).mockResolvedValue(false)
     expect(await apps.uninstall('com.wasmnest.test-app')).toBe(true)
     expect(mockedInvoke).toHaveBeenCalledWith('plugin_uninstall', {
       pluginId: 'com.wasmnest.test-app',
@@ -306,9 +309,10 @@ describe('生命周期动作（真实命令面）', () => {
     // 释放后动作完成并复位（确定性构造，无定时器）
     let release!: (v?: unknown) => void
     mockedInvoke.mockImplementationOnce(
-      () => new Promise((resolve) => {
-        release = resolve
-      }),
+      () =>
+        new Promise((resolve) => {
+          release = resolve
+        }),
     )
     const p = apps.setEnabled('com.wasmnest.test-app', true)
     await Promise.resolve() // 让 action 进入 invoke 等待点

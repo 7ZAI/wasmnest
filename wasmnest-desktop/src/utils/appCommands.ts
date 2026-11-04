@@ -178,7 +178,10 @@ export async function appInvoke<T = unknown>(
 }
 
 /** 令牌失效自愈（同 appInvoke 口径）：被拒则换发、再试一次；业务失败不重试 */
-async function withAuthRetry<T>(appId: string, run: (credential: string) => Promise<T>): Promise<T> {
+async function withAuthRetry<T>(
+  appId: string,
+  run: (credential: string) => Promise<T>,
+): Promise<T> {
   let used: string | null = null
   try {
     used = await ensureChannelToken(appId)
@@ -192,7 +195,10 @@ async function withAuthRetry<T>(appId: string, run: (credential: string) => Prom
 
 // ==================== 插件存储（host-plugin-database KV，令牌限定 app 命名空间）====================
 
-export async function appStorageGet<T = unknown>(appId: string, key: string): Promise<T | undefined> {
+export async function appStorageGet<T = unknown>(
+  appId: string,
+  key: string,
+): Promise<T | undefined> {
   return (await withAuthRetry(appId, (credential) =>
     invoke('plugin_storage_get', { pluginId: appId, key, credential }),
   )) as T | undefined
@@ -272,10 +278,7 @@ export async function networkAuthRespond(
 
 // ==================== 应用授权读模型与策略面（宿主面命令，需宿主凭证）====================
 
-import {
-  type AuthStrategy,
-  type PluginAuthOverview,
-} from '@/shell/auth/authPolicy'
+import { type AuthStrategy, type PluginAuthOverview } from '@/shell/auth/authPolicy'
 
 /**
  * 应用授权读模型（spec §9.3）：策略 + 授权记录 + 第一方免询问项
