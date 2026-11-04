@@ -290,7 +290,7 @@ impl PluginManager {
     async fn deactivate_inner(&self, plugin_id: &str) -> Result<()> {
         // mDNS 基础能力服务（spec v2 §5.1）：插件停用即回收其全部浏览 + 广播
         // 句柄（host-mdns v2 生命周期随属主；只碰本人，宿主/它插件登记不受影响）
-        crate::plugin::host_domains::purge_for_plugin(self.wasm_host_ctx(), plugin_id);
+        crate::plugin::host_domains::purge_for_plugin(plugin_id);
 
         // 1. 检查状态与插件类型（短锁）
         let (plugin_type, was_active) = {

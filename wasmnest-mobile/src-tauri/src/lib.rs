@@ -100,8 +100,10 @@ pub fn run() {
             // 进程级发现端口（ADR 0054 / 票 04）：类型中枢的泵任务经
             // `DiscoveryPorts::spawn` 派生，而中枢进程级出口取 `ports::ports()`——
             // 移动端不经桌面的 host-kit 域装配链，必须在此显式装一次（幂等）。
-            // 早于任何 `subscribe_type`（老链路 mdns 命令 / peer-net 节点启动）
-            crate::plugin::host_domains::mdns::register_process_ports();
+            // 早于任何 `subscribe_type`（老链路 mdns 命令 / peer-net 节点启动）。
+            // app 句柄供自播回显过滤读本机节点 ID；权限与总线在调用期经
+            // `state::try_get_plugin_manager()` 结算（装配早于插件管理器初始化）
+            crate::plugin::host_domains::mdns::register_process_ports(Some(Arc::new(app.handle().clone())));
 
             tracing::info!("Plugins initialized");
 
@@ -131,9 +133,9 @@ pub fn run() {
             // 对等网络节点状态容器（Engine 集中化 2026-10-10：状态类型真源在共享
             // 能力域 crate，与桌面同形以 `Arc` 托管——适配层持 Arc 句柄跨 await 存活）
             app.manage(Arc::new(crate::peer::net::PeerNetState::default()));
-            app.manage(Arc::new(crate::peer::transfer::PeerTransferState::default()));
-            app.manage(Arc::new(crate::peer::receive::PeerReceiveState::default()));
-            app.manage(Arc::new(crate::peer::remote::PeerRemoteState::default()));
+            app.manage(Arc::new(crate::peer::net::PeerTransferState::default()));
+            app.manage(Arc::new(crate::peer::net::PeerReceiveState::default()));
+            app.manage(Arc::new(crate::peer::net::PeerRemoteState::default()));
             // 节点自启已退役：peer-net 生命周期由应用作用域服务租约驱动
             // （插件经 host-peer.start-node 按引用记账；宿主不再按产品 id 驱动）
 

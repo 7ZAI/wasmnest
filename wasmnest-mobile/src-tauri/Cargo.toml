@@ -69,8 +69,9 @@ async-trait = "0.1"
 tokio-tungstenite = "0.24"
 
 # mDNS service discovery（共享引擎驱动；命令面 browse/广播仍用 mdns-sd 类型）
-# 双端共享 lib（spec M3）：引擎机制 + 守护单例真源（零 WIT 形态）
-wasmnest-discovery-engine = { path = "../../../wasmnest-lib/wasmnest-discovery-engine" }
+# 双端共享 lib（spec M3）：引擎机制 + 守护单例真源 + host-mdns WIT 绑定层
+# （`common-host`：`Host` impl 与能力模块自报都在 lib，宿主只装 `DiscoveryPorts`）
+wasmnest-discovery-engine = { path = "../../../wasmnest-lib/wasmnest-discovery-engine", features = ["common-host"] }
 mdns-sd = "0.20"
 flume = "0.12"
 
@@ -112,10 +113,11 @@ android_logger = "0.14"
 # （仅 manifest kind 锁跨核 SDK 类型对账消费）
 # 对等网络共享基础设施（节点身份 + 自签证书，issue peer-network/01）
 # 2026-10-22 peer-net-dissolve：底座拆分并入 wasmnest-server-peer-net（base/），本依赖删除
-# 对等网络能力域（双端共享纯引擎形态：节点装配 / 会话控制面 / 引擎事件桥 +
-# 端口 + 平台缝；WIT 绑定层在 common-host feature，移动形态不引）——
-# 2026-10-10 能力域集中化：移动宿主引擎控制面下沉至此，宿主只留适配层
-wasmnest-server-peer-net = { path = "../../../wasmnest-lib/wasmnest-server-peer-net" }
+# 对等网络能力域（双端共享引擎：节点装配 / 会话控制面 / 引擎事件桥 + 端口 +
+# 平台缝；host-peer 的 WIT 绑定层在 `common-host` feature，双端宿主同开）——
+# 宿主零 peer 适配代码：只注入 `PeerPorts`（`plugin/peer_ports.rs`），
+# `Host` impl / 能力模块自报 / 句柄属主仲裁全在 lib
+wasmnest-server-peer-net = { path = "../../../wasmnest-lib/wasmnest-server-peer-net", features = ["common-host"] }
 # 端口 trait 词汇（BusPort / EventSink / PathsPort / SystemInfoPort / MdnsPort）
 # ——能力域端口面与宿主适配层共用同一套 trait，不新造第二套
 wasmnest-server-base = { path = "../../../wasmnest-lib/wasmnest-server-base" }

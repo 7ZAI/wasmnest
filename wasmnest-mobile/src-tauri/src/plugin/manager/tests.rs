@@ -43,6 +43,15 @@ async fn setup_manager() -> (PluginManager, TempDir) {
         .init_schema()
         .expect("init plugin db schema");
 
+    // A 刀（移动端 peer/mdns 脱绑到能力 lib `common-host`）之后，
+    // `host_domains::purge_for_plugin` 的 mdns 分支改走引擎进程级单例
+    // `wasmnest_discovery_engine::ports::ports()`；deactivate / uninstall 路径
+    // 必经该出口。生产宿主在 boot 期 `register_process_ports(Some(app))` 装过，
+    // 但本函数构造的 `PluginManager` 绕开了 Tauri setup hook ⇒ 测试里补一次
+    // 无头形态（`None`）；`install_ports` 是 `OnceLock` 幂等首装胜出，与生产
+    // 装配不冲突。
+    crate::plugin::host_domains::mdns::register_process_ports(None);
+
     let manager = PluginManager::new(
         &app_data_dir,
         settings,
