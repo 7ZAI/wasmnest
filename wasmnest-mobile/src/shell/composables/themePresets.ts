@@ -19,7 +19,8 @@ export interface BuiltinThemeDescriptor {
   /** 一行说明 i18n key */
   descKey: string
   order: number
-  /** 主题自带缓慢动效（背景漂移），受 prefers-reduced-motion 抑制 */
+  /** 主题自带缓慢动效；只许由合成属性（transform / opacity）承载在独立图层上，
+   *  受 prefers-reduced-motion 抑制。内置主题当前全为 false（见 glass 处的性能裁决）。 */
   dynamic: boolean
   glyphStyle?: ShellThemeGlyphStyle
 }
@@ -44,7 +45,11 @@ export const BUILTIN_THEMES: readonly BuiltinThemeDescriptor[] = [
     labelKey: 'settings.appearance.themeGlass',
     descKey: 'settings.appearance.themeGlassDesc',
     order: 10,
-    dynamic: true,
+    // 不挂常驻动效（2026-11-02 桌面性能裁决，2026-11-04 移动端对齐）。原 44s 背景漂移
+    // 动的是 background-position：每帧整屏重绘，且令屏上每个 backdrop-filter 面重新
+    // 采样重算模糊——桌面 WebKitGTK 实测把玻璃主题从 62fps 拖到 11fps。设置页的
+    // 「动态」徽标因此不再出现（留待合成属性实现后重启）。
+    dynamic: false,
     glyphStyle: { strokeWidth: 2 },
   },
   {

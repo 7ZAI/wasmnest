@@ -89,14 +89,41 @@ describe('主题预设覆盖（移动端）', () => {
     expect(rules).toContain('feTurbulence')
   })
 
-  it('动效主题真的挂了动画，且 reduced-motion 守卫在位', () => {
-    for (const id of BUILTIN_THEMES.filter((theme) => theme.dynamic).map((theme) => theme.id)) {
-      expect(CSS, `${id} 声明了 dynamic 但没有挂 animation`).toContain(
-        `[data-theme='${id}'] .shell-host:not(.wall-custom)`,
-      )
+  it('大表面列表不得抬高特异性：控件的材质覆盖必须能生效', () => {
+    // `:is()` 取列表里最高特异性。`.shell-host .shell-group-card`（0,2,0）会把
+    // 整条卡片规则抬到 0,4,0，令后面给分段凹槽 / 图标按钮 / 图标井 / 胶囊写的
+    // 0,3,0 规则全部失效（表现为「所有控件都长成小卡片」）。必须用 `:where()`
+    // 把宿主作用域计为 0 特异性，保留作用域但不再抬高整条规则。
+    const rules = CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(rules, '大表面列表又用复合选择器抬高了特异性').not.toMatch(
+      /(?<!:where\()\.shell-host\s+\.shell-group-card/,
+    )
+    expect(rules, '宿主作用域未用 :where() 降特异性').toContain(
+      ':where(.shell-host) .shell-group-card',
+    )
+  })
+
+  it('主题样式表不挂常驻动画：壳根背景漂移已按性能裁决移除（与桌面同锁）', () => {
+    // 2026-11-02 桌面性能裁决：玻璃主题的 44s `theme-drift`（动 background-position）
+    // 在 WebKitGTK 上把 62fps 拖到 11fps——每帧整屏重绘 + 屏上每个 backdrop-filter 面
+    // 重新采样重算模糊。移动端 2026-11-04 对齐删除；这条锁防止它被无声加回来。
+    const rules = CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(rules, 'theme-drift 又被加回来了').not.toMatch(/@keyframes\s+theme-drift/)
+    const shellRootAnimated = /\[data-theme[^\]]*\][^{]*\.shell-host[^{]*\{[^}]*animation:/.test(
+      rules,
+    )
+    // 目录里的 dynamic 标记与 CSS 必须双向一致：声明 dynamic 就必须有壳根 animation 规则
+    // （只看选择器会被环境光的 `.shell-host` 规则误命中，必须断言规则体里真有 animation）
+    const dynamicThemes = BUILTIN_THEMES.filter((theme) => theme.dynamic).map((theme) => theme.id)
+    for (const id of dynamicThemes) {
+      const animated = new RegExp(
+        `\\[data-theme='${id}'\\][^{]*\\.shell-host[^{]*\\{[^}]*animation:`,
+      ).test(rules)
+      expect(animated, `${id} 声明了 dynamic 但没有挂 animation`).toBe(true)
     }
-    expect(CSS).toContain('@keyframes theme-drift')
-    expect(CSS).toContain('@media (prefers-reduced-motion: reduce)')
+    if (dynamicThemes.length === 0) {
+      expect(shellRootAnimated, '没有主题声明 dynamic，壳根却挂了动画').toBe(false)
+    }
   })
 
   it('默认主题的预览块挂 theme-base，隔离当前主题的 token', () => {

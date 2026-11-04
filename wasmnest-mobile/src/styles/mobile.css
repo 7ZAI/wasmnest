@@ -44,6 +44,10 @@
   --mobile-warning-muted: rgba(245, 158, 11, 0.1);
   --mobile-error: #ef4444;
   --mobile-error-muted: rgba(239, 68, 68, 0.1);
+  /* 信息色 - 与桌面端 --color-info 同源（深色 #60A5FA / 浅色 #2563EB），
+     玻璃主题的冷调采样源（体色 / caustic / 光晕 / 环境光）；不随主色色板变化，
+     与桌面「info 恒为蓝」同口径。 */
+  --mobile-info: #60A5FA;
 
   /* 弹窗遮罩 */
   --mobile-overlay: rgba(0, 0, 0, 0.6);
@@ -209,6 +213,7 @@ html:not(.dark) .theme-base {
   --mobile-warning-muted: rgba(217, 119, 6, 0.1);
   --mobile-error: #dc2626;
   --mobile-error-muted: rgba(220, 38, 38, 0.1);
+  --mobile-info: #2563EB;
 
   /* 弹窗遮罩 */
   --mobile-overlay: rgba(0, 0, 0, 0.4);
