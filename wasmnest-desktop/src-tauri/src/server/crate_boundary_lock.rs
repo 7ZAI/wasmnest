@@ -131,7 +131,7 @@ const ALLOWED_DOWNWARD_EDGES: &[(&str, &[&str])] = &[
     ),
     (
         "wasmnest-server-peer-net",
-        &["wasmnest-server-base", "wasmnest-host-kit"],
+        &["wasmnest-server-base", "wasmnest-host-kit", "wasmnest-p2p-engine"],
     ),
     // 机制内核：不依赖任何拆分产物（机制面零内部依赖）
     ("wasmnest-host-kit", &[]),
