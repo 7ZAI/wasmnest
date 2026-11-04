@@ -618,3 +618,29 @@ fn capability_scan_covers_both_ends() {
         assert!(count > 0, "{end} 未扫到任何 capability json：{}", dir.display());
     }
 }
+
+/// 桌面独立终端窗口的创建权限必须常开（2026-11-04 回归锁）
+///
+/// bedcode 的「打开终端窗口」由应用前端 `new WebviewWindow()` 发起
+/// （应用仓 `useSessionWindows.ts`），走 Tauri `create_webview_window` 命令。
+/// `core:webview:default` **不含**该命令（只含 get / position / size / devtools），
+/// 必须显式授予 `core:webview:allow-create-webview-window`。
+///
+/// 2026-11-04 的「能力位收窄」把它随 `dialog:default` / `os:default` 一起删掉，
+/// 运行期表现是「终端会话一打开就失败」（ACL 直接拒 invoke），而 JSON 改动不会
+/// 让任何既有测试变红。这条锁把该依赖固定下来，下次收窄必须显式裁决。
+#[test]
+fn desktop_terminal_window_creation_permission_is_granted() {
+    let file = desktop_root().join("capabilities/default.json");
+    let raw = fs::read_to_string(&file).unwrap_or_else(|e| panic!("读取 {} 失败：{e}", file.display()));
+    let permissions = extract_permission_strings(&raw, &file.display().to_string());
+    assert!(
+        permissions
+            .iter()
+            .any(|p| p == "core:webview:allow-create-webview-window"),
+        "桌面 capability 缺少 core:webview:allow-create-webview-window：\
+         bedcode 前端的独立终端窗口（new WebviewWindow）会被 ACL 拒绝，\
+         表现为「终端会话打开直接失败」。若确要撤除，先把窗口创建收归宿主命令\
+         （发起权归 Rust）并同步应用仓 useSessionWindows。"
+    );
+}
