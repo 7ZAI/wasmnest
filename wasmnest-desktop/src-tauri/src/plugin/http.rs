@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(module_name, "http", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             wasmnest_server_http::plugin_binding::MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-http"],
+            &["wasmnest:plugin@0.0.2/host-http"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配；ADR 0052 D4 后服务端域归宿主路径 B 模块）"
         );
         assert_eq!(
