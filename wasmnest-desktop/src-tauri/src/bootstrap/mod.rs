@@ -216,6 +216,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(frontend_channel_session_hook());
 
     // Linux：正式版抑制 WebView 原生右键菜单的页面加载钩子（dev 注册但空转）

@@ -141,6 +141,16 @@ pub const PERMISSION_METRICS_READ: &str = "metrics:read";
 /// 权限门（缺口已记录于 #36）。本位进桌面词汇是为与 core 真源集合相等
 /// （词汇锁①）——桌面插件声明它当前是惰性位。
 pub const PERMISSION_NOTIFY: &str = "notify";
+/// 系统剪贴板读取（共享域契约 `host-clipboard`，ADR-0006）：读取剪贴板文本
+///
+/// 与 `clipboard:write` 分域：读是「获取其他应用放入剪贴板的数据」——用户隐私面
+/// （剪贴板可能含密码 / 令牌等敏感文本），写是「把数据放入剪贴板供其他应用消费」
+/// ——数据泄露面方向不同。分开授权让「只需粘贴」的插件不获得复制面，反之亦然。
+/// 门禁落点 = 各端宿主 `src/plugin/clipboard.rs` 的 `require_clipboard_read` /
+/// `require_clipboard_write`（fail-closed，未声明即拒）。
+pub const PERMISSION_CLIPBOARD_READ: &str = "clipboard:read";
+/// 系统剪贴板写入（共享域契约 `host-clipboard`，ADR-0006）
+pub const PERMISSION_CLIPBOARD_WRITE: &str = "clipboard:write";
 
 
 /// 权限词汇反射表：`(常量标识符, 权限串)`
@@ -186,6 +196,8 @@ pub const PERMISSION_VOCABULARY: &[(&str, &str)] = &[
     (stringify!(PERMISSION_CRYPTO_KDF), PERMISSION_CRYPTO_KDF),
     (stringify!(PERMISSION_METRICS_READ), PERMISSION_METRICS_READ),
     (stringify!(PERMISSION_NOTIFY), PERMISSION_NOTIFY),
+    (stringify!(PERMISSION_CLIPBOARD_READ), PERMISSION_CLIPBOARD_READ),
+    (stringify!(PERMISSION_CLIPBOARD_WRITE), PERMISSION_CLIPBOARD_WRITE),
 ];
 
 /// 合法权限集合 — 桌面端权限词汇的**唯一真源**（由 [`PERMISSION_VOCABULARY`] 派生）
@@ -323,6 +335,11 @@ pub static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
     (PERMISSION_CRYPTO_KDF, &["crypto.kdfDerive"]),
     // 运行监控（WASM-only：宿主 `host-metrics.snapshot`，无前端调用点）
     (PERMISSION_METRICS_READ, &["metrics.snapshot"]),
+    // 系统剪贴板读写（WASM-only：宿主 `host-clipboard.read-text/write-text`，无前端调用点）。
+    // 门禁落点 = 各端 `src/plugin/clipboard.rs` 的 Host impl 首行（同 notify 范式）。
+    // 读 / 写分域授权：「只需粘贴」的插件不获得复制面，反之亦然（ADR-0006）。
+    (PERMISSION_CLIPBOARD_READ, &["clipboard.readText"]),
+    (PERMISSION_CLIPBOARD_WRITE, &["clipboard.writeText"]),
     // 内嵌 worker 调度（WASM-only：宿主 `host-worker.submit/cancel`，无前端调用点）
     (PERMISSION_WORKER_RUN, &["worker.submit", "worker.cancel"]),
 ];
@@ -548,5 +565,22 @@ mod tests {
             );
             assert!(!apis.is_empty(), "{perm} 登记了空 API 清单（应直接省略该条目）");
         }
+    }
+
+    /// ADR-0006：剪贴板读 / 写分域进词汇表（能力仓真源已有，SDK 不得再落后）
+    #[test]
+    fn clipboard_vocabulary_registered() {
+        assert!(VALID_PERMISSIONS.contains(&PERMISSION_CLIPBOARD_READ));
+        assert!(VALID_PERMISSIONS.contains(&PERMISSION_CLIPBOARD_WRITE));
+        let read = PERMISSION_API_MAP
+            .iter()
+            .find(|(perm, _)| *perm == PERMISSION_CLIPBOARD_READ)
+            .expect("clipboard:read 应在 API 映射表内");
+        assert_eq!(read.1, &["clipboard.readText"]);
+        let write = PERMISSION_API_MAP
+            .iter()
+            .find(|(perm, _)| *perm == PERMISSION_CLIPBOARD_WRITE)
+            .expect("clipboard:write 应在 API 映射表内");
+        assert_eq!(write.1, &["clipboard.writeText"]);
     }
 }
