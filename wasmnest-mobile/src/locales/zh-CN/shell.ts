@@ -92,11 +92,12 @@ export default {
       state: '运行状态',
       permissions: '权限',
       permissionsNote: '{granted} 项已授予 · {locked} 项默认',
-      /** 系统服务（L1/L2）不提供逐项开关：权限随包固定，只做只读呈现（2026-10-23 用户裁决） */
+      /** 权限清单只读（2026-11-04 与桌面端对齐）：审批整单 + 哈希钉扎，不做逐项开关 */
+      permissionsReadonly: '权限随应用包声明，宿主整单裁决；此处只读，不可逐项变更。',
+      /** 系统服务（L1/L2）同样只读：权限随包固定，不经用户授权（2026-10-23 用户裁决） */
       permissionServiceFixed: '系统服务的权限随包固定，不可逐项变更。',
-      permissionLocked: '默认授予 · 不可关闭',
+      permissionLocked: '默认授予 · 不可变更',
       permissionUnsupported: '当前后端不支持逐项开关权限',
-      permissionToggleFailed: '权限变更未生效：{reason}',
       storage: '存储',
       appData: '应用数据',
       grants: '授权记录',

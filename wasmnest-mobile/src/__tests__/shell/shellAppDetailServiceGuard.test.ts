@@ -5,7 +5,8 @@
  * - 系统服务（L1/L2）不渲染卸载入口，即便数据源声明支持卸载；
  * - 系统服务显示自启开关（默认开由宿主 `isAutostart` 给出，UI 不伪造）；
  * - 切换自启写偏好：成功后更新本地态，失败不改（不制造「看起来开了」的假成功）；
- * - 系统服务的权限随包固定：权限清单只读呈现，**不渲染任何逐项开关**；
+ * - 权限清单统一只读（2026-11-04 与桌面端对齐）：系统服务与业务应用都
+ *   **不渲染任何逐项开关**，只在业务应用下展示只读说明；
  * - 停止动作按 kind 分词语：服务说「停止服务」（`shell.detail.stopService`）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -30,8 +31,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/shell/composables/useShellApps', () => ({
   useShellApps: () => ({
     getApp: () => mocks.app,
-    supportsPermissionControl: () => false,
-    setPermissionGrant: vi.fn(async () => true),
     supportsRemove: () => mocks.supportsRemove,
     removeApp: vi.fn(async () => true),
     supportsAutostart: () => mocks.supportsAutostart,
@@ -138,7 +137,7 @@ function autostartCheckbox(wrapper: Awaited<ReturnType<typeof mountDetail>>) {
   return group ? wrapper.findAll('input[type="checkbox"]').find((el) => group.contains(el.element)) ?? null : null
 }
 
-/** 详情页全部开关（Toggle 一律渲染为 checkbox：自启 + 权限逐项） */
+/** 详情页全部开关（Toggle 一律渲染为 checkbox；权限清单只读，现只剩自启） */
 function allToggles(wrapper: Awaited<ReturnType<typeof mountDetail>>) {
   return wrapper.findAll('input[type="checkbox"]')
 }
@@ -216,14 +215,18 @@ describe('系统服务详情：不可卸载 + 自启可关', () => {
     expect(wrapper.text()).not.toContain('shell.detail.permissionUnsupported')
   })
 
-  it('业务应用仍按权限逐项渲染开关（服务守卫不外溢）', async () => {
+  it('业务应用权限也只读：清单保留，不再渲染逐项开关', async () => {
     mocks.params.value = { appId: 'com.wasmnest.file-transfer' }
     mocks.app = { ...businessApp(), permissions: [{ key: 'fs:write', granted: true }] }
 
     const wrapper = await mountDetail()
-    expect(allToggles(wrapper)).toHaveLength(2)
+    // 只剩自启一个开关；权限词仍逐条展示（信息不隐藏）
+    expect(allToggles(wrapper)).toHaveLength(1)
+    expect(wrapper.text()).toContain('fs:write')
     expect(wrapper.text()).toContain('shell.detail.permissionsNote')
+    expect(wrapper.text()).toContain('shell.detail.permissionsReadonly')
     expect(wrapper.text()).not.toContain('shell.detail.permissionServiceFixed')
+    expect(wrapper.text()).not.toContain('shell.detail.permissionUnsupported')
   })
 
   it('业务应用的停止按钮仍为「停用应用」', async () => {

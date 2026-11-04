@@ -160,8 +160,9 @@
       </template>
 
       <!-- ==================== 权限 ====================
-           系统服务（L1/L2）的权限随包固定、不经用户授权：保留只读清单，
-           但不渲染任何逐项开关（2026-10-23 用户裁决；同一裁决已把服务移出权限总览）。 -->
+           双端同一口径（2026-11-04 与桌面端对齐）：权限随应用包声明，由宿主
+           整单裁决（审批 / 加载），详情页只做只读呈现，不提供逐项开关。
+           系统服务（L1/L2）同样只读：权限随包固定，不经用户授权。 -->
       <ShellSection :title="t('shell.detail.permissions')" :note="permissionsNote" />
       <div class="px-4 pb-1">
         <ShellGroupCard v-if="permissionGroups.length > 0">
@@ -192,15 +193,8 @@
                   {{ grant.scope }}
                 </div>
               </div>
-              <!-- 锁定项：不给开关，只标徽标——隐藏会让用户误以为应用没有该能力 -->
+              <!-- 锁定项：只标徽标——隐藏会让用户误以为应用没有该能力 -->
               <ShellChip v-if="grant.locked" :label="t('shell.detail.permissionLocked')" tone="neutral" />
-              <!-- 系统服务不给开关（分区 note 已说明权限随包固定）；业务应用保持逐项开关 -->
-              <Toggle
-                v-else-if="!isService"
-                :model-value="grant.granted"
-                :disabled="!permissionControlEnabled"
-                @update:model-value="(next: boolean) => handleToggle(grant.key, next)"
-              />
             </div>
           </template>
         </ShellGroupCard>
@@ -210,16 +204,18 @@
         >
           {{ t('mobile.plugin.noPermissions') }}
         </p>
-        <!-- 能力缺失要显性说明：把开关置灰却不解释，用户会以为是应用的问题。
-             系统服务的「无开关」由分区 note 解释，不走这条后端能力提示。 -->
+        <!-- 只读说明：权限松紧由 manifest 声明与宿主整单裁决决定，详情页不提供开关。
+             信息不隐藏：权限词、locked 标记与 scope 仍逐条展示。系统服务的固定口径
+             已由分区 note 说明，不重复。 -->
         <p
-          v-if="!permissionControlEnabled && !isService"
+          v-if="!isService && permissionGroups.length > 0"
           class="mt-2 px-1 shell-type-caption text-[var(--mobile-text-secondary)]"
         >
-          {{ t('shell.detail.permissionUnsupported') }}
+          {{ t('shell.detail.permissionsReadonly') }}
         </p>
-        <p v-if="toggleError" class="mt-2 px-1 shell-type-caption" :style="{ color: 'var(--mobile-error)' }">
-          {{ toggleError }}
+        <!-- 审批失败等动作错误：放在权限区下方沿用既有提示位，不伪造成功态 -->
+        <p v-if="actionError" class="mt-2 px-1 shell-type-caption" :style="{ color: 'var(--mobile-error)' }">
+          {{ actionError }}
         </p>
       </div>
 
@@ -316,9 +312,10 @@
 /**
  * 应用详情与权限
  *
- * 权限开关是 UX，裁决在 Rust 端（docs/security.md §1）。因此：
- *   · 后端不支持逐项授予时，开关置灰并显式说明，不做「点了就算通过」的假成功
- *   · 授权记录区没有后端真源，渲染空态而不是编造几条示例
+ * 权限清单只读（2026-11-04 与桌面端对齐）：裁决在 Rust 端——用户安装应用
+ * 整单审批 + 内容哈希钉扎，生效权限 = 批准 ∩ manifest 声明；内置应用随包受信。
+ * 详情页不提供逐项开关，只呈现声明事实（词 / locked / scope）。
+ * 授权记录区没有后端读模型，渲染空态而不是编造几条示例。
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -340,8 +337,6 @@ const toast = useToast()
 const nav = useShellNavigation()
 const {
   getApp,
-  supportsPermissionControl,
-  setPermissionGrant,
   supportsRemove,
   removeApp,
   supportsAutostart,
@@ -357,9 +352,6 @@ const {
 const appId = computed(() => nav.params.value.appId ?? '')
 const app = computed(() => getApp(appId.value))
 
-const permissionControlEnabled = computed(() =>
-  appId.value ? supportsPermissionControl(appId.value) : false,
-)
 const isService = computed(() => isServiceKind(app.value?.kind))
 const canRemove = computed(
   () => !isService.value && (appId.value ? supportsRemove(appId.value) : false),
@@ -499,7 +491,7 @@ const stateDot = computed(() => {
   }
 })
 
-const toggleError = ref<string | null>(null)
+const actionError = ref<string | null>(null)
 /** 卸载二次确认（复用平台 ConfirmDialog，见模板） */
 const confirmRemove = ref(false)
 /** 系统服务停止二次确认（复用平台 ConfirmDialog，见模板） */
@@ -508,7 +500,7 @@ const confirmStop = ref(false)
 watch(
   appId,
   async () => {
-    toggleError.value = null
+    actionError.value = null
     autostart.value = appId.value ? await isAutostart(appId.value) : false
   },
   { immediate: true },
@@ -522,16 +514,6 @@ async function handleAutostart(next: boolean): Promise<void> {
     if (ok) autostart.value = next
   } finally {
     autostartBusy.value = false
-  }
-}
-
-async function handleToggle(key: string, next: boolean): Promise<void> {
-  if (!appId.value) return
-  const ok = await setPermissionGrant(appId.value, key, next)
-  if (!ok) {
-    toggleError.value = t('shell.detail.permissionToggleFailed', {
-      reason: t('shell.detail.permissionUnsupported'),
-    })
   }
 }
 
@@ -562,7 +544,7 @@ async function handleApprove(): Promise<void> {
   if (!app.value) return
   const approved = await approveApp(app.value.id)
   if (!approved) {
-    toggleError.value = t('shell.permissions.approveFailed')
+    actionError.value = t('shell.permissions.approveFailed')
     return
   }
   const started = await launch(app.value.id)

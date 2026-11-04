@@ -5,8 +5,8 @@
  * 插件；反过来，插件系统也不需要知道壳的存在。后续真源换成 WASM 应用平台时，
  * 只需新增一个实现 ShellAppSource 的适配器并替换注册处，壳内零改动。
  *
- * 能力诚实原则：后端目前没有「逐项开关权限」的命令，因此 setPermissionGrant
- * 明确返回 false（宿主据此置灰并说明原因），而不是假装开关生效。
+ * 权限面与桌面同口径：审批是整单的（全部声明权限 + 内容哈希钉扎），没有
+ * 「逐项开关权限」的命令。适配器不实现 setPermissionGrant，详情页据此只读呈现。
  */
 
 import { open } from '@tauri-apps/plugin-dialog'
@@ -193,18 +193,6 @@ export function createPluginAppSource(): ShellAppSource {
      */
     async approve(appId: string): Promise<void> {
       await pluginApprove(appId)
-    },
-
-    /**
-     * 逐项权限开关：后端暂无对应命令，明确返回 false
-     *
-     * 不在这里做「写入本地并假装生效」的降级——权限是安全面，假成功比不支持更危险。
-     */
-    async setPermissionGrant(): Promise<boolean> {
-      logger.warn(
-        '[ShellAdapter] per-permission grant not supported by backend; permission toggles stay read-only',
-      )
-      return false
     },
 
     /**

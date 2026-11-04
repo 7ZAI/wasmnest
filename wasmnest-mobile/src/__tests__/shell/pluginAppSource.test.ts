@@ -190,10 +190,10 @@ describe('启动与停止', () => {
 })
 
 describe('能力诚实口径', () => {
-  it('should_returnFalse_when_permissionGrantUnsupported', async () => {
+  it('should_notAdvertisePermissionGrant_when_backendHasNoCommand', () => {
     const source = createPluginAppSource()
-    // 后端暂无逐项授权命令：返回 false 让 UI 置灰并说明，而不是假装通过
-    await expect(source.setPermissionGrant?.('com.test.app', 'fs:read', true)).resolves.toBe(false)
+    // 后端没有逐项授权命令：能力本身不成立，不提供可被 UI 误判为「支持」的方法
+    expect(source.setPermissionGrant).toBeUndefined()
   })
 
   it('should_returnNullWithoutInstalling_when_userCancelsFilePicker', async () => {

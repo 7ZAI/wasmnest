@@ -72,9 +72,10 @@ export const enShell = {
       state: 'Runtime state',
       permissions: 'Permissions',
       permissionsNote: '{granted} granted · {locked} by default',
-      permissionLocked: 'Granted by default · cannot be turned off',
+      permissionsReadonly:
+        'Permissions are declared by the app package and decided as a whole by the host; read-only here, cannot be changed per item.',
+      permissionLocked: 'Granted by default · cannot be changed',
       permissionUnsupported: 'Per-permission toggles are not supported by the current backend',
-      permissionToggleFailed: 'Permission change not applied: {reason}',
       storage: 'Storage',
       appData: 'App data',
       grants: 'Grant log',
