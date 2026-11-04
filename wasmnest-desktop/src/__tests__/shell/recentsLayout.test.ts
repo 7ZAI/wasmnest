@@ -6,24 +6,32 @@
  * 上一版实现方向恰好相反（卡宽固定三等分 + 420px 上限 → 单卡最小），本文件锁死方向。
  *
  * 2026-11-01 用户裁决：单卡要有**上限**（桌面单卡曾达到 ~1250×780，几乎整屏）；
- * 第二轮进一步定为「**不得比两张卡大**」——上限 = 同一带内两张卡的格宽；
- * 同日第三轮把卡片改成**竖版 3:4**（「高比宽长才好看」，横卡太扁）。
- * 本文件同时锁中「方向」「上限 = 两张卡」「竖版比例」三边。
+ * 第二轮进一步定为「**不得比两张卡大**」——上限 = 同一带内两张卡的格宽。
+ * 2026-11-04 用户裁决：卡片形状跟**应用区整幅比例**（默认 16:10）走——缩略区与页面
+ * 同比例，contain 缩放才能正好铺满（竖版 3:4 卡配横版页面必然剩大片空白，已退役）。
+ * 本文件同时锁中「方向」「上限 = 两张卡」「缩略区比例 + 信息条高度」三边。
  *
  * 三层断言：
  * 1. 方向：卡片数增加时卡宽单调不增，第 7 张起与第 6 张同尺寸（不再缩，改滚动）；
  * 2. 几何：解算出的卡宽在带内既不溢宽也不溢高（2 行恰好放下，3 行必然溢出 → 滚动），
  *    且任何带尺寸下单卡都不超过两张卡的尺寸；
- * 3. 常量同源：`.ts-card` 的 aspect-ratio 与 RECENTS_CARD_ASPECT 必须一致。
+ * 3. 常量同源：`.ts-card` 的 aspect-ratio 兜底值与 RECENTS_PREVIEW_ASPECT 必须一致，
+ *    且组件真的把实测比例注入 `--ts-card-aspect`（否则兜底 16:10 盖掉真实比例）。
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 
 import {
-  RECENTS_CARD_ASPECT,
+  DEFAULT_RECENTS_METRICS,
+  RECENTS_CARD_CHROME,
+  RECENTS_CARD_INSET,
   RECENTS_GRID_TRACKS,
   RECENTS_MAX_COLS,
   RECENTS_MAX_VISIBLE_ROWS,
+  RECENTS_PREVIEW_ASPECT,
+  RECENTS_PREVIEW_ASPECT_MAX,
+  RECENTS_PREVIEW_ASPECT_MIN,
+  normalizePreviewAspect,
   recentsCardHeight,
   recentsCardMaxWidth,
   recentsCardPlacement,
@@ -40,7 +48,12 @@ const BAND_MIN: RecentsBand = { width: 700, height: 470, gap: 16 }
 /** 「两行三列」格子的尺寸基准：第 6 张及以后卡宽必须等于它 */
 const TWO_BY_THREE = recentsCardWidth(6, BAND_16_9)
 
-/** 卡高（由 16:10 比例派生，与 CSS aspect-ratio 同一公式） */
+const { aspect: ASPECT, chrome: CHROME, inset: INSET } = DEFAULT_RECENTS_METRICS
+
+/** 行高里放得下的最大卡宽（与实现同一反解，用在新断言里当基准） */
+const widthForHeight = (height: number): number => (height - CHROME) * ASPECT + INSET
+
+/** 卡高（由卡宽按缩略区比例 + 信息条派生，与 CSS 行高同一公式） */
 const cardHeight = recentsCardHeight
 
 describe('卡片数 → 网格形状（最多 3 列，尺寸行数封顶 2 行）', () => {
@@ -61,25 +74,37 @@ describe('卡片数 → 网格形状（最多 3 列，尺寸行数封顶 2 行�
     expect(recentsGridShape(40)).toEqual(recentsGridShape(6))
   })
 
-  it('常量口径：最多 3 列、可视 2 行、竖版 3:4', () => {
+  it('常量口径：最多 3 列、可视 2 行、缩略区横版 16:10', () => {
     expect(RECENTS_MAX_COLS).toBe(3)
     expect(RECENTS_MAX_VISIBLE_ROWS).toBe(2)
-    // 2026-11-01 用户裁决：卡片竖版（高 > 宽），与移动端 recents 同形
-    expect(RECENTS_CARD_ASPECT).toBeCloseTo(3 / 4)
-    expect(RECENTS_CARD_ASPECT).toBeLessThan(1)
+    // 2026-11-04 用户裁决：卡片形状跟应用区比例（横版），与页面同比例才能铺满
+    expect(RECENTS_PREVIEW_ASPECT).toBeCloseTo(16 / 10)
+    expect(RECENTS_PREVIEW_ASPECT).toBeGreaterThan(1)
+    // 缩略区之外的固定开销：信息条 + 描边
+    expect(RECENTS_CARD_CHROME).toBeGreaterThan(0)
+    expect(RECENTS_CARD_INSET).toBeGreaterThan(0)
+  })
+
+  it('实测比例夹到可用区间（0 / 负数 / NaN → 默认；极端值不产出怪形状）', () => {
+    expect(normalizePreviewAspect(0)).toBeCloseTo(RECENTS_PREVIEW_ASPECT)
+    expect(normalizePreviewAspect(-2)).toBeCloseTo(RECENTS_PREVIEW_ASPECT)
+    expect(normalizePreviewAspect(Number.NaN)).toBeCloseTo(RECENTS_PREVIEW_ASPECT)
+    expect(normalizePreviewAspect(0.4)).toBeCloseTo(RECENTS_PREVIEW_ASPECT_MIN)
+    expect(normalizePreviewAspect(9)).toBeCloseTo(RECENTS_PREVIEW_ASPECT_MAX)
+    expect(normalizePreviewAspect(1.93)).toBeCloseTo(1.93)
   })
 })
 
 describe('方向：卡片越少越大，第 6 张起封底', () => {
   it('单卡上限 = 两张卡的格宽：1 张不再比 2 张大', () => {
     const width = recentsCardWidth(1, BAND_16_9)
-    // 竖版卡：两张卡 = min(横向均分 690, 带高 × 3/4 = 597) = 597 → 由带高封顶
+    // 横版卡：带高充裕时由「两张卡格宽」(1396-16)/2 = 690 封顶
     expect(width, '单卡必须与两张卡同尺寸').toBe(recentsCardWidth(2, BAND_16_9))
     expect(width).toBe(Math.floor(recentsCardMaxWidth(BAND_16_9)))
     expect(recentsCardMaxWidth(BAND_16_9)).toBeCloseTo(
-      Math.min((BAND_16_9.width - BAND_16_9.gap) / 2, BAND_16_9.height * RECENTS_CARD_ASPECT),
+      Math.min((BAND_16_9.width - BAND_16_9.gap) / 2, widthForHeight(BAND_16_9.height)),
     )
-    expect(width).toBe(Math.floor(BAND_16_9.height * RECENTS_CARD_ASPECT))
+    expect(width).toBe(Math.floor((BAND_16_9.width - BAND_16_9.gap) / 2))
     expect(cardHeight(width)).toBeLessThanOrEqual(BAND_16_9.height)
   })
 
@@ -93,7 +118,7 @@ describe('方向：卡片越少越大，第 6 张起封底', () => {
     const band: RecentsBand = { width: 3000, height: 300, gap: 16 }
     const width = recentsCardWidth(1, band)
     expect(width).toBe(recentsCardWidth(2, band))
-    expect(width).toBe(Math.floor(band.height * RECENTS_CARD_ASPECT))
+    expect(width).toBe(Math.floor(widthForHeight(band.height)))
     expect(cardHeight(width)).toBeLessThanOrEqual(band.height)
   })
 
@@ -138,19 +163,28 @@ describe('几何：解算结果在带内不溢宽，两行放得下、三行必�
     expect(height * 3 + BAND_16_9.gap * 2).toBeGreaterThan(BAND_16_9.height)
   })
 
-  it('卡高 = 卡宽 / 3:4（行高与 aspect-ratio 同一公式，不另立一套比例）', () => {
+  it('卡高 = 缩略区（按比例）+ 信息条（行高与 contain 缩放同一公式，不另立一套比例）', () => {
     const width = recentsCardWidth(3, BAND_16_9)
-    expect(recentsCardHeight(width)).toBeCloseTo(width / RECENTS_CARD_ASPECT)
+    // 卡高显式取整（亚像素行高会让 grid 轨道对不齐）
+    expect(recentsCardHeight(width)).toBe(Math.round((width - INSET) / ASPECT + CHROME))
     expect(recentsCardHeight(0)).toBe(0)
     expect(recentsCardHeight(-10)).toBe(0)
   })
 
-  it('单卡与两张卡同高（高度由同一卡宽按 16:10 派生，不另立上限）', () => {
+  it('单卡与两张卡同高（高度由同一卡宽派生，不另立上限）', () => {
     const w1 = recentsCardWidth(1, BAND_16_9)
     const w2 = recentsCardWidth(2, BAND_16_9)
     expect(w1).toBe(w2)
-    expect(recentsCardHeight(w1)).toBeCloseTo(w1 / RECENTS_CARD_ASPECT)
-    expect(recentsCardHeight(w2)).toBeCloseTo(w2 / RECENTS_CARD_ASPECT)
+    expect(recentsCardHeight(w1)).toBe(Math.round((w1 - INSET) / ASPECT + CHROME))
+    expect(recentsCardHeight(w2)).toBe(Math.round((w2 - INSET) / ASPECT + CHROME))
+  })
+
+  it('实测应用区比例改动只影响卡高（卡片形状跟随页面，宽度仍由带宽 / 张数决定）', () => {
+    const wide = { aspect: 1.93, chrome: CHROME, inset: INSET }
+    const narrow = { aspect: 1.4, chrome: CHROME, inset: INSET }
+    const w = recentsCardWidth(2, BAND_16_9, wide)
+    expect(recentsCardWidth(2, BAND_16_9, narrow)).toBe(w)
+    expect(recentsCardHeight(w, wide)).toBeLessThan(recentsCardHeight(w, narrow))
   })
 
   it('带尺寸没量到（0 / 负数）或没有卡片 → 0，调用方保留 CSS 兜底宽度', () => {
@@ -166,18 +200,30 @@ describe('几何：解算结果在带内不溢宽，两行放得下、三行必�
 })
 
 describe('与组件样式同源', () => {
-  it('.ts-card 的 aspect-ratio 必须等于 RECENTS_CARD_ASPECT', () => {
+  it('.ts-card 的 aspect-ratio 兜底值必须等于 RECENTS_PREVIEW_ASPECT', () => {
     const src = readFileSync('src/shell/components/ShellTaskSwitcher.vue', 'utf-8')
-    const rule = src.match(/\.ts-card\s*\{[^}]*aspect-ratio:\s*([\d.]+)\s*\/\s*([\d.]+)/)
-    expect(rule, '.ts-card 必须声明 aspect-ratio').not.toBeNull()
+    const rule = src.match(
+      /\.ts-card\s*\{[^}]*aspect-ratio:\s*var\(--ts-card-aspect,\s*([\d.]+)\s*\/\s*([\d.]+)\)/,
+    )
+    expect(rule, '.ts-card 必须声明 aspect-ratio 兜底（var(--ts-card-aspect, …)）').not.toBeNull()
     const ratio = Number(rule?.[1]) / Number(rule?.[2])
-    expect(ratio).toBeCloseTo(RECENTS_CARD_ASPECT)
+    expect(ratio).toBeCloseTo(RECENTS_PREVIEW_ASPECT)
   })
 
-  it('行高显式注入 + 溢出时置顶（auto 行高会被引擎压扁，首行滚不回来）', () => {
+  it('组件把实测比例注入 `--ts-card-aspect`（否则兜底 16:10 盖掉真实应用区比例）', () => {
+    const src = readFileSync('src/shell/components/ShellTaskSwitcher.vue', 'utf-8')
+    expect(src).toContain("'--ts-card-aspect'")
+    expect(src).toContain('appViewportAspect')
+    expect(src, '信息条高度必须实测（不能只靠常量）').toContain('measureCardChrome')
+  })
+
+  it('卡片按行高拉伸（align-items: stretch）+ 行高显式注入（auto 行高会被引擎压扁）', () => {
     const src = readFileSync('src/shell/components/ShellTaskSwitcher.vue', 'utf-8')
     expect(src, '行高必须与卡高同源').toMatch(
       /\.ts-cards\s*\{[^}]*grid-auto-rows:\s*var\(--ts-card-h/,
+    )
+    expect(src, '卡片必须精确填满行高（否则缩略区高度靠 aspect-ratio 自算，留边）').toMatch(
+      /\.ts-cards\s*\{[^}]*align-items:\s*stretch/,
     )
     expect(src, '超过 2 行必须从头排（可滚动）').toMatch(
       /\.ts-cards\.is-scrolling\s*\{[^}]*align-content:\s*start/,

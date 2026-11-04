@@ -11,7 +11,8 @@ import {
  * 语义（`.scratch/2026-10-23-app-surface-keepalive/spec.md` §2.1；2026-10-30 追加预览态）：
  *   首次打开 → register + attach；切走 → detach（容器脱文档，实例保留）；
  *   切回 → attach（同一容器节点放回槽，状态不重建）；停用 / 卸载 → dispose（才 unmount）；
- *   多任务卡 → attachPreview（同一实例搬进卡片，等比缩放、不谎报前台）/ detachPreview。
+ *   多任务卡 → attachPreview（同一实例搬进卡片，等比缩小到整幅可见、不谎报前台）
+ * / detachPreview。
  *
  * 这些断言锁住的核心不变量是「detach 不销毁、dispose 才销毁」——写反了就是
  * 「切回来应用被重置」（用户可感知）或「停用了实例还赖在内存里」（泄漏）。
@@ -218,14 +219,23 @@ describe('多任务卡预览态：真实实例搬运（2026-10-30）', () => {
     expect(host.inert, '卡片里的实例不可交互 / 不可聚焦').toBe(true)
   })
 
-  it('卡片尺寸变化：fitPreview 重算缩放并铺满缩略区（左上对齐裁切）', () => {
+  it('卡片尺寸变化：fitPreview 重算缩放并整幅可见（contain 居中，不裁切）', () => {
     registry.attachPreview(APP, box)
-    // 640×500 比整幅（1.6）更高：contain 会取 0.5 留上下边，cover 取较大比例 0.625；
-    // 左上对齐（先保应用自己的侧栏 / 顶栏，右侧溢出被裁）
+    // 640×500 比整幅（1.6）更高：contain 取较小比例 0.5（整幅可见），上下各留 50px 边；
+    // cover 会取 0.625 并裁掉右侧内容——2026-11-04 用户裁决改为 contain
     fakeSize(box, 640, 500)
 
     expect(registry.fitPreview(APP)).toBe(true)
-    expect(host.style.transform).toBe('translate(0px, 0px) scale(0.625)')
+    expect(host.style.transform).toBe('translate(0px, 50px) scale(0.5)')
+  })
+
+  it('卡片比整幅更宽：按高度缩小并横向居中（左右留边、不裁切）', () => {
+    registry.attachPreview(APP, box)
+    // 1600×400：按宽会放大（1.25）把整幅高度裁掉，contain 取 0.5 → 640×400 居中
+    fakeSize(box, 1600, 400)
+
+    expect(registry.fitPreview(APP)).toBe(true)
+    expect(host.style.transform).toBe('translate(480px, 0px) scale(0.5)')
   })
 
   it('detachPreview 摘回后台：清掉缩放内联样式，实例与记账保留', () => {

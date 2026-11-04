@@ -49,6 +49,8 @@ vi.mock('@/shell/mount/useAppMount', () => ({
   presentAppSurfaceInPreview: vi.fn(() => false),
   fitAppSurfacePreview: vi.fn(() => false),
   leaveAppSurfacePreview: vi.fn(() => false),
+  // 应用区比例（卡片形状来源）：返回 0 = 还没量到 → 组件回默认 16:10
+  appViewportAspect: vi.fn(() => 0),
 }))
 
 vi.mock('@/shell/composables/useShellApps', async () => {

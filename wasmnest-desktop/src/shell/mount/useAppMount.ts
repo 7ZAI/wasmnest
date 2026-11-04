@@ -305,6 +305,23 @@ export function returnAppSurfaceToSlot(appId: string): boolean {
 }
 
 /**
+ * 应用区整幅的宽高比（宽 / 高）。
+ *
+ * 多任务卡片用它定缩略区形状（`recentsLayout.RecentsCardMetrics.aspect`）：缩略区比例
+ * 与应用页一致时，卡片里的实例按 contain 缩放正好铺满、不留边也不裁切。
+ * 取任一保活实例最近一次实测的尺寸（同一挂载槽里的应用区尺寸对每个应用都相同）。
+ *
+ * @returns 0 = 还没量到任何实例（首帧 / 全部已停用）→ 调用方用默认 16:10
+ */
+export function appViewportAspect(): number {
+  for (const appId of appSurfaces.list()) {
+    const size = appSurfaces.get(appId)?.size
+    if (size && size.width > 0 && size.height > 0) return size.width / size.height
+  }
+  return 0
+}
+
+/**
  * 切走：把实例容器从挂载槽移除，但**保留实例**（DOM / 组件状态 / 内存路由原样）。
  *
  * 不释放界面租约——应用仍在运行，只是不在前台；真正回收在
@@ -497,5 +514,6 @@ export function useAppMount() {
     fitAppSurfacePreview,
     leaveAppSurfacePreview,
     returnAppSurfaceToSlot,
+    appViewportAspect,
   }
 }

@@ -39,8 +39,8 @@
                越多越小，最小只缩到「3 列 × 2 行」的格子；
                第 7 张起不再缩小，改为纵向滚动（解算见 composables/recentsLayout.ts）。
                缩略区 = **真实实例的当前页面**（2026-10-30 用户裁决）：宿主把保活实例
-               搬进卡片、按整幅尺寸等比缩放并**铺满**缩略区（cover：多出的部分左上对齐裁切，
-               优先保留应用自己的侧栏 / 顶栏；不重排 / 终端不 resize / 滚动与输入原样），
+               搬进卡片、按整幅尺寸**等比缩小到整幅可见**（contain：比例不一致时居中留边，
+               不裁切；2026-11-04 用户裁决取代 cover；不重排 / 终端不 resize / 滚动与输入原样），
                不是截图 / 不是 DOM 克隆 / 不是应用自绘预览面；卡片里的实例 inert，
                多任务层收起后回后台（脱离文档不渲染）。系统页卡没有实例，保持品牌卡。 -->
           <div
@@ -153,10 +153,10 @@
  * 头部「全部关闭」一键清场；点空白 / ✕ / Esc 收起。
  *
  * 缩略区（2026-10-30 用户裁决）：app 卡展示**真实实例的当前页面**——`AppSurfaceTile`
- * 请求挂载层把保活实例搬进卡片、按整幅尺寸等比缩放并铺满缩略区（cover）；系统页卡
- * 没有实例，保持品牌
+ * 请求挂载层把保活实例搬进卡片、按整幅尺寸等比缩小到整幅可见（contain，居中留边，
+ * 2026-11-04 用户裁决取代 cover 裁切）；系统页卡没有实例，保持品牌
  * 渐变 + 36px glyph。代价：多任务层打开期间所有运行中应用都会重新渲染（收起即回
- * 后台不渲染）；竖卡裁掉横向溢出（保留应用左侧 / 顶栏，不整幅缩小）。
+ * 后台不渲染）。
  *
  * 收货：普通收起（Esc / 点空白 / 切回同一张卡）时，前台实例必须送回挂载槽——
  * 搬运发生在卡片里，不送回去应用就“消失”了。切到别的应用由 `AppMountSlot` 的
@@ -171,18 +171,22 @@ import { SYS_PAGES, chipMetaOf, type AppTone } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
 import { useShellApps } from '../composables/useShellApps'
 import {
+  RECENTS_CARD_CHROME,
+  RECENTS_CARD_INSET,
   RECENTS_MAX_COLS,
   RECENTS_MAX_VISIBLE_ROWS,
+  normalizePreviewAspect,
   recentsCardHeight,
   recentsCardPlacement,
   recentsCardWidth,
   recentsTrackCount,
   type RecentsBand,
+  type RecentsCardMetrics,
 } from '../composables/recentsLayout'
 import ShellIcon from './ShellIcon.vue'
 import ShellAppTile from './ShellAppTile.vue'
 import AppSurfaceTile from '../mount/AppSurfaceTile.vue'
-import { returnAppSurfaceToSlot } from '../mount/useAppMount'
+import { appViewportAspect, returnAppSurfaceToSlot } from '../mount/useAppMount'
 import type { CardKey } from '../types'
 import type { ShellAppEntry } from '../composables/useShellApps'
 
@@ -199,19 +203,46 @@ const bandEl = ref<HTMLElement | null>(null)
  * 所以窗口缩放 / 卡片增减 / 滚动条出现都只需重算一次 computed。
  */
 const band = ref<RecentsBand>({ width: 0, height: 0, gap: 0 })
+
+/**
+ * 缩略区之外占用的高 / 宽（信息条 + 描边，实测；见 `measureCardChrome`）。
+ * 量不到时用 `recentsLayout` 的常量兜底（与 `.ts-meta` / `.ts-card` 的 CSS 同源）。
+ */
+const cardChrome = ref({ chrome: RECENTS_CARD_CHROME, inset: RECENTS_CARD_INSET })
+/** 每量一次带尺寸就刷新一次比例（`appViewportAspect` 读的是挂载注册表，非响应式） */
+const metricsTick = ref(0)
+
+/**
+ * 卡片形状 = 缩略区（应用整页）比例 + 信息条高度。
+ *
+ * 比例 = 运行期实测的应用区宽高比（`appViewportAspect`）：缩略区与页面同比例，
+ * 卡片里的实例按 contain 缩放（见 `mount/appSurfaceRegistry`）正好**铺满**缩略区，
+ * 不留边也不裁切（2026-11-04 用户裁决，取代竖版 3:4 + cover 裁切）。
+ * 一个实例都没量到（首帧 / 卡片全是系统页）→ 回默认 16:10。
+ */
+const metrics = computed<RecentsCardMetrics>(() => {
+  void metricsTick.value
+  return {
+    aspect: normalizePreviewAspect(appViewportAspect()),
+    chrome: cardChrome.value.chrome,
+    inset: cardChrome.value.inset,
+  }
+})
 /** 单卡宽度；0 = 还没量到带尺寸 → 交给 CSS 兜底（三等分） */
-const cardWidth = computed(() => recentsCardWidth(state.cards.value.length, band.value))
-/** 行高（卡高）：显式喂给 grid-auto-rows，避免引擎把溢出的行压扁 */
-const cardHeight = computed(() => recentsCardHeight(cardWidth.value))
+const cardWidth = computed(() =>
+  recentsCardWidth(state.cards.value.length, band.value, metrics.value),
+)
+/** 卡高：缩略区按比例 + 信息条（显式喂给 grid-auto-rows，避免引擎把溢出的行压扁） */
+const cardHeight = computed(() => recentsCardHeight(cardWidth.value, metrics.value))
 /** 超过可视 2 行 → 改滚动：必须置顶对齐，否则居中的首行会被滚出可视区 */
 const scrolls = computed(
   () =>
     state.cards.value.length > 0 &&
     Math.ceil(state.cards.value.length / RECENTS_MAX_COLS) > RECENTS_MAX_VISIBLE_ROWS,
 )
-/** 注入 `--ts-card-w` / `--ts-card-h` / `--ts-tracks`：CSS 不重复尺寸算术 */
+/** 注入 `--ts-card-w` / `--ts-card-h` / `--ts-tracks` / `--ts-card-aspect`：CSS 不重复尺寸算术 */
 const bandStyle = computed<Record<string, string>>(() => {
-  const style: Record<string, string> = {}
+  const style: Record<string, string> = { '--ts-card-aspect': `${metrics.value.aspect}` }
   if (cardWidth.value > 0) {
     style['--ts-card-w'] = `${cardWidth.value}px`
     style['--ts-card-h'] = `${cardHeight.value}px`
@@ -260,6 +291,25 @@ function measureBand(): void {
     width: el.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight),
     height: el.clientHeight - px(cs.paddingTop) - px(cs.paddingBottom),
     gap: px(cs.columnGap) || px(cs.rowGap),
+  }
+  measureCardChrome()
+  metricsTick.value += 1
+}
+
+/**
+ * 量卡片信息条 + 描边实际占掉的高 / 宽。
+ *
+ * 卡高 = 缩略区高 + 这部分：写成常量的话，改 `.ts-meta` 的内边距 / 图标尺寸就会让
+ * 缩略区比例偏掉（页面与缩略区不一致 → contain 又出现留边），所以直接量 DOM。
+ */
+function measureCardChrome(): void {
+  const card = bandEl.value?.querySelector<HTMLElement>('.ts-card')
+  const meta = card?.querySelector<HTMLElement>('.ts-meta')
+  if (!card || !meta) return
+  const cs = getComputedStyle(card)
+  cardChrome.value = {
+    chrome: meta.offsetHeight + px(cs.borderTopWidth) + px(cs.borderBottomWidth),
+    inset: px(cs.borderLeftWidth) + px(cs.borderRightWidth),
   }
 }
 
@@ -506,12 +556,15 @@ function close(): void {
 
 /* 卡片带：卡片数决定卡片尺寸（与移动端 recents 同一条产品口径）。
    卡宽由卡片自身注入（`--ts-card-w`，见 composables/recentsLayout.ts）：1 张 =
-   带内最大 3:4 竖卡、居中（单卡封顶 = 两张卡的格宽，2026-11-01）；越多越小，最小缩到
+   带内最大卡、居中（单卡封顶 = 两张卡的格宽，2026-11-01）；越多越小，最小缩到
    「3 列 × 2 行」的格子；第 7 张起
    不再缩小，改为整带纵向滚动。
    网格拆成 6 个半列轨道、每张卡跨 2 轨：(卡宽 - 间距) / 2 让「跨 2 轨 + 轨间
    gap」恰好等于一张卡宽，6 轨总宽 = 3 张卡 + 2 个间距。半列的唯一目的是末行
    不满 3 张时能精确居中（2 张各让半卡、1 张落在正中，见 recentsCardPlacement）。
+   align-items: stretch：行高由 `--ts-card-h` 给出时让卡片精确填满该行高度，
+   缩略区因此拿到「卡高 - 信息条」的确定高度，contain 才能正好铺满（留 center
+   会让卡片按 aspect-ratio 自算高度，行高与卡高两张皮）。
    注意：这里**不能**加 container-type:size 去按 cqh 收敛卡片高度——WebKitGTK
    下容器查询高度解析为 0，卡片会塌成不可见（2026-10-23 实测）。 */
 .ts-cards {
@@ -524,7 +577,7 @@ function close(): void {
     calc((var(--ts-card-w, calc((100% - var(--ts-gap) * 2) / 3)) - var(--ts-gap)) / 2)
   );
   justify-content: center;
-  align-items: center;
+  align-items: stretch;
   align-content: center;
   /* 行高 = 卡高（由 --ts-card-h 显式给出）：交给 auto 时，Chromium 会在内容超过
      带高的情况下把隐式行压扁去填满容器，卡片溢出到带顶之外、首行不可见。
@@ -552,22 +605,27 @@ function close(): void {
   align-content: start;
 }
 
-/* 卡片：竖版 3/4（缩略区 flex 撑满 + 顶部信息条）——与移动端多任务卡同形；
-   2026-11-01 用户裁决「高比宽长才好看」，替换之前的 16:10 横版（横卡显得太扁）。
-   真实实例是横向画面，竖卡里按 cover 铺满、左上对齐裁切（见 appSurfaceRegistry），
-   优先保留应用自己的侧栏 / 顶栏。比例与 recentsLayout 的 RECENTS_CARD_ASPECT 同源。
+/* 卡片：横版（顶部信息条 + 缩略区）——缩略区宽高比 = 应用区整幅宽高比
+   （默认 16:10，运行期由 `--ts-card-aspect` 注入；2026-11-04 用户裁决）。
+   缩略区里是真实实例按 contain 缩放（见 appSurfaceRegistry），比例一致时正好铺满，
+   不裁切也不留边；旧的竖版 3:4 卡（2026-11-01）配横版页面必然剩大片空白，已退役。
    宽度 = 跨 2 个半列轨道（轨道宽由 `--ts-card-w` 注入，见 recentsLayout）：
    少卡大、多卡小，最小到 2 行 3 列的格，第 7 张起整带滚动；兜底（首帧测量前 /
    无 ResizeObserver）是三等分，保证未测量时也不会溢出。
+   卡高由 `--ts-card-h` 显式给出（行高同源）；未测量时用 aspect-ratio 兜底，
+   量到后卡片按行高拉伸（`.ts-cards` 的 align-items: stretch），aspect-ratio 让位。
    末行不满 3 张时 `cardStyle` 注入起始轨把它整组居中；其余卡片自动排布。
    box-sizing 必须 border-box：卡宽含 1px 描边，否则轨宽按内容算会多 2px。
-   aspect-ratio 与 RECENTS_CARD_ASPECT 同源（改一处必须改另一处）。 */
+   卡宽必须显式取 `--ts-card-w`（而不是只靠网格拉伸）：可 stretched 的宽度 + 几何高度
+   会让引擎优先用 aspect-ratio 反推宽度（实测 429 → 507，卡片横向溢出）。
+   aspect-ratio 只在未测量时生效（那时宽高都还不是确定值）。 */
 .ts-card {
   position: relative;
   box-sizing: border-box;
   min-width: 0;
+  width: var(--ts-card-w, auto);
   grid-column: span 2;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: var(--ts-card-aspect, 16 / 10);
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-sheet);
