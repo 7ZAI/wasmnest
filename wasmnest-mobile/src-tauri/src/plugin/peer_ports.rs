@@ -1,9 +1,10 @@
 //! 移动宿主 host-peer 端口（`PeerPorts` 实现 + 开机装配）
 //!
-//! host-peer 域机制（19 条原语 + 句柄表 / 自动重拨 / 载荷校验）在共享能力域
-//! `wasmnest-server-peer-net`；本文件是**宿主侧的另一半**——wasm-core bare 面
-//! 的 19 条薄转发经 crate `plugin_binding::ports::ports()` 取本文件装入的
-//! 进程级端口（wasm-core-mobile-purity 票 03；桌面同构先例
+//! host-peer 域的**全部**机制（19 条原语 + `Host` impl + 句柄表 / 属主仲裁 /
+//! 自动重拨 / 载荷校验 + 能力模块自报）在共享能力域 `wasmnest-server-peer-net`
+//! 的 `common-host` 绑定层；宿主经依赖导入获得该接口实现，**自身零 WIT 代码**。
+//! 本文件是宿主侧仅剩的一半——注入 lib 定义的平台差异端口，lib 经
+//! `plugin_binding::ports::ports()` 取用（桌面同构先例
 //! `wasmnest-desktop/src-tauri/src/plugin/peer.rs`）。
 //!
 //! 三个端口方法即「离宿主无法实现」的三件事：
@@ -28,6 +29,12 @@ use std::sync::Arc;
 
 use wasmnest_server_peer_net::plugin_binding::ports::{BoxedBlocked, PeerPorts, HEADLESS_UNAVAILABLE};
 use wasmnest_server_peer_net::PeerCtx;
+
+// 能力模块白名单条目与强制引用行**必须同处**（本文件），两者不漂移——漏引用 ⇒
+// 该 crate 的 inventory 自报静态不进最终二进制（装载期 missing 方向点名）；漏白名单
+// ⇒ unlisted 方向点名。判据与纪律见 `wasmnest_host_kit::assembly` 模块文档。
+wasmnest_host_kit::expect_host_module!(wasmnest_server_peer_net::plugin_binding::MODULE_NAME);
+use wasmnest_server_peer_net as _;
 
 /// 端口的宿主实现（持 AppHandle；无头 / 测试为 `None`）
 pub struct HostPeerPorts {
@@ -108,5 +115,32 @@ mod tests {
         let registry = Arc::new(wasmnest_server_base::service::ServiceRegistry::new());
         let ports = HostPeerPorts::new(None, registry);
         assert!(ports.service_registry().is_some(), "移动生产端口必须装配服务注册表");
+    }
+
+    /// 脱绑装配锁：白名单声明 + 接口路径 + 权限位三件与能力域描述符逐字一致。
+    /// 漏 `expect_host_module!` / 强制引用行即装载期点名，本用例在单测期先红。
+    #[test]
+    fn host_module_declaration_matches_capability_domain_desc() {
+        let module_name = wasmnest_server_peer_net::plugin_binding::MODULE_NAME;
+        assert!(
+            wasmnest_host_kit::expected_host_modules().contains(&module_name),
+            "能力模块白名单缺 {module_name}（expect_host_module! 行被删 / 未收集）"
+        );
+        assert_eq!(module_name, "peer-net", "白名单键即装载期日志与错误文案里的模块名");
+        assert_eq!(
+            wasmnest_server_peer_net::plugin_binding::MODULE_INTERFACES,
+            &["wasmnest:plugin@0.0.2/host-peer"],
+            "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
+        );
+        assert_eq!(
+            wasmnest_server_peer_net::plugin_binding::MODULE_PERMISSIONS,
+            &["peer"],
+            "权限位必须与 SDK 权限表逐字一致"
+        );
+        // 宿主自身不得再声明该接口（两份 add_to_linker ⇒ 装配期 defined twice）
+        assert!(
+            !crate::plugin::host_domains::MODULE_INTERFACES.contains(&"wasmnest:plugin@0.0.2/host-peer"),
+            "host-peer 已由能力 lib 自报，宿主 mobile-host-core 不得重复声明"
+        );
     }
 }

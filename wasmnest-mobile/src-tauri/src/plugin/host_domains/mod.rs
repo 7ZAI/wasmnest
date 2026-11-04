@@ -10,27 +10,31 @@
 //! 移动宿主**不再自报**这 8 域（同一 interface 两份 `add_to_linker` 注册 ⇒ 装配期
 //! `defined twice`）。
 //!
-//! 本模块保留**实现按端不同**的 4 个能力域（host-http / host-peer / host-mdns /
-//! host-websocket）：契约真源已随 ADR 0052 D2 迁各能力域 crate 的 `wit/<domain>.wit`，
-//! 由移动 compose caps 直接消费；端差异经移动宿主自报（`HostModule` +
-//! `inventory`）；移动独有 5 域（`plugin/{notify,fs_mobile,terminal_stream,connection,auth}.rs`）
-//! 各自自报。
+//! 本模块保留**实现按端不同**的 2 个能力域（host-http / host-websocket）：契约真源
+//! 已随 ADR 0052 D2 迁各能力域 crate 的 `wit/<domain>.wit`，由移动 compose caps 直接
+//! 消费；端差异经移动宿主自报（`HostModule` + `inventory`）；移动独有 5 域
+//! （`plugin/{notify,fs_mobile,terminal_stream,connection,auth}.rs`）各自自报。
+//!
+//! **host-peer / host-mdns 已不在本模块**：两域的 `Host` impl 随能力 lib 的
+//! `common-host` feature 自报（`wasmnest-server-peer-net` / `wasmnest-discovery-engine`
+//! 经依赖导入，宿主零 WIT 实现）。移动宿主只提供两域的**平台差异端口**：
+//! `plugin/peer_ports.rs`（`PeerPorts`）与 `plugin/host_domains/mdns.rs`
+//! （`DiscoveryPorts`）。接口不再在此登记——同一 interface 两份 `add_to_linker`
+//! 即装配期 `defined twice`。
 //!
 //! ## 结构
 //!
 //! - 每域一个文件：域逻辑（共享核 adapter）+ 该 interface 的 `Host` impl 同处；
-//! - 域逻辑的机制语义在共享 crate（`wasmnest-server-http` / `wasmnest-server-peer-net`
-//!   / `wasmnest-discovery-engine` / `wasmnest-ws-client-engine`），本层只做
-//!   「`WasmPluginState` → 端口」接线；
-//! - 装配经 [`MobileHostCoreModule`] 自报：4 个 interface 一次注册，
+//! - 域逻辑的机制语义在共享 crate（`wasmnest-server-http` /
+//!   `wasmnest-ws-client-engine`），本层只做「`WasmPluginState` → 端口」接线；
+//! - 装配经 [`MobileHostCoreModule`] 自报：2 个 interface 一次注册，
 //!   `expect_host_module!` 与自报同处（漏一处即装载期 `missing` / `unlisted` 点名）。
 
 pub(crate) mod http;
-// mdns 对外可见（其余三域 pub(crate)）：宿主开机期要装一次**进程级**发现端口
+// mdns 对外可见（其余域 pub(crate)）：宿主开机期要装一次**进程级**发现端口
 // （`mdns::register_process_ports`，类型中枢的泵任务经它派生），无头探针
 // （`tests/shared_artifact_probe`）也要走同一条生产装配入口
 pub mod mdns;
-pub(crate) mod peer;
 pub(crate) mod support;
 pub(crate) mod ws;
 
@@ -63,8 +67,8 @@ pub(crate) fn current_handle() -> tokio::runtime::Handle {
 /// 停用后无转发目标，残留表位只会让后续转发打到已失效的页面通道）。
 /// 新域接入回收必须在此登记——漏登记 = 停用后连接泄漏（ADR 0022 §5.1.3
 /// 「停用可回收」硬要求）。
-pub fn purge_for_plugin(host_ctx: &wasmnest_wasm_core::host_api::WasmHostContext, plugin_id: &str) -> usize {
-    let mut purged = mdns::purge_for_plugin(&host_ctx.ports, plugin_id);
+pub fn purge_for_plugin(plugin_id: &str) -> usize {
+    let mut purged = mdns::purge_for_plugin(plugin_id);
     purged += ws::purge_for_plugin(plugin_id);
     crate::plugin::terminal_stream::terminal_stream_gateway().clear_all();
     purged
@@ -77,15 +81,16 @@ pub const MODULE_NAME: &str = "mobile-host-core";
 
 /// 本模块提供的 WIT 接口（移动独有 / 端差异能力域；契约真源在各能力域 crate 的 wit 分片，
 /// 接口名与拼装 package 内定义逐字一致；版本随契约 0.0.2，落后会让跨端回退判据失配）
+///
+/// host-peer / host-mdns 由能力 lib 的 `common-host` 绑定层自报，**不在此列**
+/// （fallback 跳过是整模块粒度：这里若仍声明同名接口，http / websocket 会被一起跳过）
 pub const MODULE_INTERFACES: &[&str] = &[
     "wasmnest:plugin@0.0.2/host-http",
-    "wasmnest:plugin@0.0.2/host-peer",
-    "wasmnest:plugin@0.0.2/host-mdns",
     "wasmnest:plugin@0.0.2/host-websocket",
 ];
 
 /// 本模块读写的权限位（各域权限门的并集；装载期一致性核对用）
-pub const MODULE_PERMISSIONS: &[&str] = &["network:http", "peer", "mdns", "ws:client"];
+pub const MODULE_PERMISSIONS: &[&str] = &["network:http", "ws:client"];
 
 /// 能力模块描述符（机制面：接口路径 / 权限位 / ABI 下界；禁带产品名词）
 const DESC: HostModuleDesc = HostModuleDesc {
@@ -96,7 +101,8 @@ const DESC: HostModuleDesc = HostModuleDesc {
     abi_min: 20,
 };
 
-/// 移动独有 / 端差异能力域能力模块（4 个；双端全等 8 域在内核 core_binding）
+/// 移动独有 / 端差异能力域能力模块（2 个；双端全等 8 域在内核 core_binding，
+/// host-peer / host-mdns 在能力 lib 的 `common-host` 绑定层）
 pub struct MobileHostCoreModule;
 
 impl HostModule for MobileHostCoreModule {
@@ -115,8 +121,6 @@ impl HostModule for MobileHostCoreModule {
         type D = wasmtime::component::HasSelf<WasmPluginState>;
         for iface in [
             wasmnest::plugin::host_http::add_to_linker::<WasmPluginState, D>,
-            wasmnest::plugin::host_peer::add_to_linker::<WasmPluginState, D>,
-            wasmnest::plugin::host_mdns::add_to_linker::<WasmPluginState, D>,
             wasmnest::plugin::host_websocket::add_to_linker::<WasmPluginState, D>,
         ] {
             iface(linker, |s| s)?;

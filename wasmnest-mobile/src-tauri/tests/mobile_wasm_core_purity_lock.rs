@@ -15,10 +15,12 @@
 //!    `manager/runtime/core_binding.rs`（双端全等 8 域，绑契约真源
 //!    `wit/core.wit`）；**统一壳**（`runtime.rs` / `runtime/component.rs`）
 //!    不得出现 `bindgen!` 与 `wasmnest::plugin::` 路径。单形态（2026-10-13）起
-//!    移动 host_domains 收为 4 域（http / peer / mdns / ws），双端全等 8 域
+//!    移动 host_domains 收为 2 域（http / ws），双端全等 8 域
 //!    （storage / log / config / plugin-database / events / fs / bus / platform）
 //!    由内核 core_binding 单份实现（权限门收敛统一 PermissionManager、私有库布局
 //!    统一内核）——移动侧对应 adapter 文件不再要求在场。
+//!    **host-peer / host-mdns 更进一步**：连端差异 adapter 都不在宿主，`Host` impl
+//!    随能力 lib 的 `common-host` feature 自报（判据 3b 正向钉住该装配）。
 //! 3. **共享实现核不得消失**（正向）：搬出内核的域逻辑必须在共享 crate 里可寻址，
 //!    且宿主 adapter 真的转发到共享核（薄转发的最低证据）——否则「壳变薄」会退化
 //!    成「能力没了」（fail-visible）。
@@ -204,15 +206,15 @@ fn core_domain_bindings_stay_out_of_wasm_core() {
         }
     }
 
-    // 正向：宿主侧的绑定与保留的 4 个端差异 core 域必须在场（单形态收口：
+    // 正向：宿主侧的绑定与保留的 2 个端差异 core 域必须在场（单形态收口：
     // 双端全等 8 域 storage/log/config/plugin-database/events/fs/bus/platform
-    // 已迁内核 core_binding，移动 host_domains 只留 http/peer/mdns/ws）
+    // 已迁内核 core_binding；host-peer / host-mdns 已迁能力 lib common-host，
+    // 移动 host_domains 只留 http/ws + mdns 平台缝端口）
     for rel in [
         "bindings.rs",
         "guest_events.rs",
         "host_domains/mod.rs",
         "host_domains/http.rs",
-        "host_domains/peer.rs",
         "host_domains/mdns.rs",
         "host_domains/ws.rs",
     ] {
@@ -251,9 +253,8 @@ const SHARED_CORES: [(&str, &str); 4] = [
 /// 迁内核 core_binding」删除——对应薄转发在 `../wasmnest-lib/wasmnest-wasm-core/src/
 /// host_api/{fs,storage}.rs`（同走 wasmnest-host-api-core 共享核），由 wasm-core
 /// 自身测试覆盖；本表只钉移动宿主仍持有的端差异域。
-const HOST_ADAPTER_CORE_FORWARDS: [(&str, &str); 3] = [
+const HOST_ADAPTER_CORE_FORWARDS: [(&str, &str); 2] = [
     ("host_domains/http.rs", "wasmnest_server_http"),
-    ("host_domains/peer.rs", "wasmnest_server_peer_net"),
     // 移动 host-websocket 是**客户端域**（5 函数），引擎面在 ws-client-engine
     //（ADR 0043 双端共享 crate）；桌面服务端域（host-websocket-server）不经此表。
     ("host_domains/ws.rs", "wasmnest_ws_client_engine"),
@@ -278,6 +279,110 @@ fn shared_implementation_cores_stay_addressable() {
             read(&path).contains(needle),
             "{rel} 未转发到共享核 `{needle}`——域逻辑既不在内核也不在共享 crate（回流信号）"
         );
+    }
+}
+
+// ==================== 判据 3b：peer / mdns 的 WIT 绑定住在能力 lib ====================
+
+/// `(能力 crate 相对仓库根, 绑定层文件, 接口短名, 宿主端口适配器相对 plugin/)`
+///
+/// 脱绑终态：两域的 `Host` impl + 能力模块自报都在 lib 的 `common-host` 层，
+/// 宿主只剩平台差异端口。四件缺一即红——feature 没开 = 静态不进二进制（guest
+/// 实例化期 missing import）；宿主自持 impl = 同接口两份注册（defined twice）。
+const LIB_BOUND_DOMAINS: [(&str, &str, &str, &str); 2] = [
+    (
+        "../wasmnest-lib/wasmnest-server-peer-net",
+        "src/plugin_binding.rs",
+        "peer",
+        "peer_ports.rs",
+    ),
+    (
+        "../wasmnest-lib/wasmnest-discovery-engine",
+        "src/lib.rs",
+        "mdns",
+        "host_domains/mdns.rs",
+    ),
+];
+
+#[test]
+fn peer_and_mdns_wit_bindings_live_in_capability_lib() {
+    let root = repo_root();
+    let manifest = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"));
+    let host_core = read(&mobile_plugin_dir().join("host_domains/mod.rs"));
+
+    for (crate_dir, binding_rel, iface, adapter_rel) in LIB_BOUND_DOMAINS {
+        let crate_name = crate_dir.rsplit('/').next().expect("crate name");
+        // Cargo.toml 依赖键用连字符（`wasmnest-server-peer-net = ...`），
+        // 但 Rust `use` 路径必须是合法标识符——连字符要换成下划线
+        // （`use wasmnest_server_peer_net as _;`）。两形态不能共用同一字面量。
+        let crate_name_as_ident = crate_name.replace('-', "_");
+        let binding = read(&root.join(crate_dir).join(binding_rel));
+        let impl_needle = format!("impl wasmnest::plugin::host_{iface}::Host for WasmPluginState");
+
+        // 1. lib 侧绑定层在场（能力去宿主化 ≠ 能力消失）
+        assert!(
+            binding.contains(&impl_needle),
+            "{crate_dir}/{binding_rel} 缺 `{impl_needle}`——WIT 实现既不在 lib 也不在宿主"
+        );
+        assert!(
+            binding.contains("inventory::submit!"),
+            "{crate_dir}/{binding_rel} 缺能力模块自报（漏则装载期 unlisted 点名）"
+        );
+
+        // 2. 移动宿主开了 common-host（否则上面那些静态根本不进二进制）
+        let dep_line = manifest
+            .lines()
+            .find(|l| l.starts_with(&format!("{crate_name} = ")))
+            .unwrap_or_else(|| panic!("移动 Cargo.toml 缺依赖 {crate_name}"));
+        assert!(
+            dep_line.contains("common-host"),
+            "移动宿主必须对 {crate_name} 开 `common-host`（宿主零 WIT 实现，接口由 lib 自报）——行：{dep_line}"
+        );
+
+        // 3. 宿主端口适配器在场，且白名单 + 强制引用行同处
+        let adapter = read(&mobile_plugin_dir().join(adapter_rel));
+        assert!(
+            adapter.contains("expect_host_module!"),
+            "plugin/{adapter_rel} 缺 expect_host_module!（漏则装载期 unlisted 点名）"
+        );
+        assert!(
+            adapter.contains(&format!("use {crate_name_as_ident} as _;")),
+            "plugin/{adapter_rel} 缺 `use {crate_name_as_ident} as _;` 强制引用行（漏则 inventory 静态不进二进制）"
+        );
+
+        // 4. 宿主不得再声明 / 注册该接口（防回接）
+        for (idx, line) in code_lines(&host_core) {
+            assert!(
+                !line.contains(&format!("host_{iface}::add_to_linker")),
+                "host_domains/mod.rs:{} 仍注册 host_{iface}——该接口已由 lib 自报，重复注册即 defined twice",
+                idx + 1
+            );
+        }
+        assert!(
+            !host_core.contains(&format!("/host-{iface}\"")),
+            "host_domains/mod.rs 的 MODULE_INTERFACES 仍声明 host-{iface}（fallback 跳过是整模块粒度，会连带跳过 http/ws）"
+        );
+    }
+
+    // 防锁空转：宿主 src/ 全树不得出现两域的 Host impl（回接信号）
+    let mut files = Vec::new();
+    collect_rs_files(&mobile_plugin_dir(), &mut files);
+    assert!(!files.is_empty(), "移动 plugin/ 源码树为空——判据 3b 空转");
+    for path in files {
+        let content = read(&path);
+        for (idx, line) in code_lines(&content) {
+            for needle in [
+                "impl wasmnest::plugin::host_peer::Host",
+                "impl wasmnest::plugin::host_mdns::Host",
+            ] {
+                assert!(
+                    !line.contains(needle),
+                    "peer/mdns 的 Host impl 回流移动宿主：{}:{}（终态在能力 lib common-host）",
+                    path.display(),
+                    idx + 1
+                );
+            }
+        }
     }
 }
 

@@ -1,126 +1,76 @@
-//! host-mdns v2 逻辑层 —— 移动端薄转发（双端共享 lib spec M3）
+//! host-mdns 移动端平台缝（`DiscoveryPorts` 的宿主实现 + 进程级装配）
 //!
-//! 引擎机制（共享守护 / 双句柄表 / 属主仲裁 / 事件定向投递 / re-announce /
-//! purge）全部在共享引擎 [`wasmnest_discovery_engine`]（能力仓 `../wasmnest-lib/`，
-//! 零 WIT 形态，M1 落地）；本模块只保留两件事：
+//! `host-mdns` 的 WIT 实现与五条原语的机制（共享守护 / 双句柄表 / 属主仲裁 /
+//! 事件定向投递 / re-announce / purge）全部在能力仓
+//! [`wasmnest_discovery_engine`]：该 crate 的 `common-host` 绑定层自报
+//! `DiscoveryModule` 并 `impl Host for WasmPluginState`，宿主**不再自持**
+//! `impl host_mdns::Host` 与逐条薄转发（同一 interface 两份 `add_to_linker`
+//! 注册 ⇒ 装配期 `defined twice`）。
 //!
-//! 1. **5 条 host-mdns 原语薄转发**：函数签名与历史一致（component.rs 绑定 /
-//!    host_impl 聚合入口不变），body 改为调引擎域函数；
-//! 2. **移动端 `DiscoveryPorts` 适配器**（[`StateDiscoveryPorts`]）：权限门
-//!    （manifest `granted_permissions`）/ 总线发布 / 自播回显节点 ID / 宿主
-//!    运行时任务派生——四个平台差异面的移动端实现。
+//! 本模块只剩能力域要求宿主注入的四个平台差异面：权限门 / 自播回显节点 ID /
+//! 总线发布 / 运行时任务派生。
 //!
-//! 守护单例真源：移动端宿主 `crate::mdns::engine` 已随 M3 删除，统一指向
-//! 引擎的 `DAEMON`（Android 多播锁经 [`engine::set_daemon_init_hook`] 平台钩子
-//! 装配，宿主 src-tauri 初始化期注册）。防回接锁：**本 crate 零
-//! `ServiceDaemon::new()`**——任何新建守护都会打破「单守护」红线
-//! （双守护同绑 5353 互抢多播包）。
+//! ## 为什么是进程级 + 按 plugin_id 动态判权
 //!
-//! 浏览面另有**第二层**不变量（ADR 0054 / 票 04）：全进程对同一服务类型的
+//! 能力域的 `Host` impl 取 `ports::ports()`（进程级一格），故端口必须自己按
+//! 调用方 `plugin_id` 结算权限——与桌面 `HostDiscoveryPorts`（持宿主上下文、
+//! 每次调用问 `PermissionManager`）和移动 `plugin/peer_ports.rs` 同形。
+//! 旧形态在构造期把 `permitted` 快照进端口，只适用于「逐插件实例传参」的自持
+//! adapter；脱绑后快照会让所有插件共用一格授权，故改为逐次查真源。
+//!
+//! 守护单例真源：统一指向引擎的 `DAEMON`（Android 多播锁经
+//! `engine::set_daemon_init_hook` 平台钩子装配，宿主 src-tauri 初始化期注册）。
+//! 防回接锁：**本 crate 零 `ServiceDaemon::new()`**——任何新建守护都会打破
+//! 「单守护」红线（双守护同绑 5353 互抢多播包）。
+//!
+//! 浏览面第二层不变量（ADR 0054 / 票 04）：全进程对同一服务类型的
 //! `daemon.browse` / `stop_browse` 只由引擎的**类型中枢**
-//! （`wasmnest_discovery_engine::type_hub`）代持，本模块的 `browse` 薄转发经
-//! `engine::browse` 挂中枢订阅（不再直调守护），宿主侧零 `daemon.browse`。中枢的
-//! 泵任务经 `DiscoveryPorts::spawn` 派生，故本域进程级端口必须由宿主开机期装入
-//! （[`register_process_ports`]）——未装即 `subscribe_type` 里 fail-visible panic。
+//! （`wasmnest_discovery_engine::type_hub`）代持，宿主侧零 `daemon.browse`。
+//! 中枢的泵任务经 `DiscoveryPorts::spawn` 派生，故进程级端口必须在任何
+//! `subscribe_type` 之前装入（[`register_process_ports`]）——未装即 fail-visible panic。
 //!
-//! 行为契约（句柄表 / 属主隔离 / purge / topic 形状）由引擎自身单测覆盖
-//! （`wasmnest-discovery-engine` crate 测试），本模块只保薄转发语义断言。
+//! 行为契约（句柄表 / 属主隔离 / purge / topic 形状）由引擎自身单测覆盖，
+//! 本模块只保平台缝语义断言。
 
 use std::sync::Arc;
 use wasmnest_discovery_engine::ports::{BoxedTask, DiscoveryPorts, DiscoveryTask};
+use wasmnest_wasm_core::permission::PERMISSION_MDNS;
 
-use super::host_ctx;
-use wasmnest_host_kit::WasmPluginState;
-use wasmnest_wasm_core::bus::MessageBus;
-use wasmnest_wasm_core::host_api::ports::HostEnginePorts;
-
-use crate::plugin::bindings::wasmnest;
-
-impl wasmnest::plugin::host_mdns::Host for WasmPluginState {
-    fn browse(&mut self, service_type: String) -> Result<String, String> {
-        mdns_browse(self, &service_type)
-    }
-
-    fn stop_browse(&mut self, browser_id: String) -> Result<bool, String> {
-        mdns_stop_browse(self, &browser_id)
-    }
-
-    fn advertise(&mut self, config_json: String) -> Result<String, String> {
-        mdns_advertise(self, &config_json)
-    }
-
-    fn stop_advertise(&mut self, advertise_id: String) -> Result<bool, String> {
-        mdns_stop_advertise(self, &advertise_id)
-    }
-
-    fn is_advertising(&mut self, advertise_id: String) -> Result<bool, String> {
-        mdns_is_advertising(self, &advertise_id)
-    }
-}
+// 能力模块白名单条目与强制引用行**必须同处**（本文件），两者不漂移——漏引用 ⇒
+// 该 crate 的 inventory 自报静态不进最终二进制（装载期 missing 方向点名）；漏白名单
+// ⇒ unlisted 方向点名。判据与纪律见 `wasmnest_host_kit::assembly` 模块文档。
+wasmnest_host_kit::expect_host_module!(wasmnest_discovery_engine::MODULE_NAME);
+use wasmnest_discovery_engine as _;
 
 // ==================== 移动端 DiscoveryPorts 适配器 ====================
 
-/// 移动端端口适配：实现引擎 `DiscoveryPorts` 的四个平台差异面。
+/// 移动端平台缝：进程级单份，按调用方 `plugin_id` 逐次结算权限。
 ///
-/// 按插件实例构建（`from_state`）：权限门读该插件 manifest
-/// `granted_permissions`；事件线程 / 续期任务会克隆本端口并长期持有
-/// （'static），故字段只放 Arc / 可克隆宿主句柄。`purge` / 无 state 上下文的
-/// 登记走 [`minimal`]（bus/app 缺省，不发布、不拦回显）。
-struct StateDiscoveryPorts {
-    /// 插件消息总线（事件定向投递出口；minimal 形态 None = 不发布）
-    bus: Option<Arc<MessageBus>>,
-    /// 宿主引擎端口（自播回显过滤读本机节点 ID）
-    host_ports: Arc<dyn HostEnginePorts>,
-    /// 宿主 AppHandle（节点 ID 查询入口；无头 / purge 形态 None）
+/// 事件线程 / 续期任务会克隆本端口并长期持有（`'static`），故字段只放
+/// 可克隆宿主句柄；总线与权限真源都在调用期经 `state::try_get_plugin_manager()`
+/// 取（装配早于插件管理器初始化，故不能在构造期快照）。
+pub struct MobileDiscoveryPorts {
+    /// 宿主 AppHandle（自播回显过滤读本机节点 ID）；无头 / 测试为 None
     app: Option<Arc<tauri::AppHandle>>,
-    /// 该插件实例是否已授权 `network:mdns`（构造时向内核权限真源结算，权限门零延迟）
-    permitted: bool,
 }
 
-impl StateDiscoveryPorts {
-    /// 从插件实例状态构建（宿主原语路径）；返回 trait 对象（引擎 API 要求）
-    fn from_state(state: &WasmPluginState) -> Arc<dyn DiscoveryPorts> {
-        Arc::new(Self {
-            bus: Some(Arc::clone(&host_ctx(state).message_bus)),
-            host_ports: Arc::clone(&host_ctx(state).ports),
-            // 无头 / 测试形态 app_handle 为 None：自播回显不拦截（与历史 is_self_broadcast
-            // 的 None 分支同口径）
-            app: host_ctx(state).app_handle.clone(),
-            // 权限真源 = 内核 PermissionManager（`WasmHostContext::has_permission`）；
-            // 构造时取快照（引擎事件线程会长期持有本端口，目的权限门零延迟）
-            permitted: host_ctx(state)
-                .has_permission(&state.plugin_id, wasmnest_wasm_core::permission::PERMISSION_MDNS),
-        })
+impl MobileDiscoveryPorts {
+    /// 生产装配（boot 期传入 app 句柄）
+    pub fn new(app: Option<Arc<tauri::AppHandle>>) -> Self {
+        Self { app }
     }
 
-    /// 最小形态（purge 聚合入口）：无总线 / 无 app，不发布、不拦回显
-    fn minimal(host_ports: &Arc<dyn HostEnginePorts>) -> Arc<dyn DiscoveryPorts> {
-        Arc::new(Self {
-            bus: None,
-            host_ports: Arc::clone(host_ports),
-            app: None,
-            permitted: false,
-        })
+    fn manager() -> Option<Arc<crate::plugin::manager::PluginManager>> {
+        crate::state::try_get_plugin_manager()
     }
 }
 
-/// 进程级端口装配（宿主开机期一次，幂等：`install_ports` 首装胜出；无头探针
-/// 装配插件浏览面时同用——与 `plugin::peer_ports::install` 同款入口）
+/// 进程级端口装配（宿主开机期一次，幂等：`install_ports` 首装胜出）
 ///
-/// **为什么需要它**（ADR 0054 / 票 04）：类型中枢的泵任务经
-/// `DiscoveryPorts::spawn` 派生到宿主运行时（中枢模块不假设 tokio 上下文），
-/// 而中枢的进程级出口走 `ports::ports()`；插件浏览面（`mdns_browse` →
-/// `engine::browse`）同样经中枢。移动端**不经**桌面的 host-kit 域装配链
-/// （移动的 `impl Host for WasmPluginState` 是自持 adapter，端口逐次按插件实例传参，
-/// 从不装全局），故必须显式装一次——否则老链路浏览（`mdns/discovery.rs`）、
-/// peer-net 订阅（`peer/ports.rs`）与插件 `host-mdns.browse` 全部在
-/// `subscribe_type` 里 fail-visible panic。
-///
-/// 取 [`StateDiscoveryPorts::minimal`] 形态：中枢只消费 `spawn`（fan-out 直接推给
-/// 订阅者，不经总线；也不经权限门——权限在插件原语入口按实例端口结算）。
-pub fn register_process_ports() {
-    let host_ports: Arc<dyn HostEnginePorts> = Arc::new(crate::plugin::host_ports::HostPorts::new());
-    wasmnest_discovery_engine::ports::install_ports(StateDiscoveryPorts::minimal(&host_ports));
+/// 无头探针（`tests/shared_artifact_probe`）走同一入口传 `None`——装的是生产
+/// 适配器的无头形态，不是自造替身。
+pub fn register_process_ports(app: Option<Arc<tauri::AppHandle>>) {
+    wasmnest_discovery_engine::ports::install_ports(Arc::new(MobileDiscoveryPorts::new(app)));
 }
 
 /// 宿主运行时任务包装（tauri async_runtime JoinHandle → `DiscoveryTask`）
@@ -132,32 +82,50 @@ impl DiscoveryTask for TauriSpawnedTask {
     }
 }
 
-impl DiscoveryPorts for StateDiscoveryPorts {
-    fn check_permission(&self, _plugin_id: &str, _api: &str) -> bool {
-        // 权限仲裁已统一到内核 PermissionManager（构造时向真源结算的快照，
-        // 与桌面 check_permission 同语义）；引擎在每次原语入口先问本门，
-        // denied 时原语直接拒绝（fail-closed）
-        self.permitted
+impl DiscoveryPorts for MobileDiscoveryPorts {
+    fn check_permission(&self, plugin_id: &str, api: &str) -> bool {
+        // 权限门留宿主（AGENTS §5.1.3 安全闸门不可插拔）：真源 = 内核
+        // PermissionManager，与移动 peer 端口同一条判定与 warn 路径。
+        // 拿不到管理器（无头 / 未初始化）一律 false（fail-safe）。
+        let Some(pm) = Self::manager() else {
+            tracing::warn!(
+                plugin_id = %plugin_id,
+                permission = %PERMISSION_MDNS,
+                api = %api,
+                "mdns permission denied (plugin manager not initialized)"
+            );
+            return false;
+        };
+        // `has_permission` 是 async（plugins 为 tokio RwLock）——经 wasm-core 唯一
+        // 那份同步桥驱动（host fn 线程可能是 worker / 已让出 / 纯 std 线程）
+        let allowed = wasmnest_wasm_core::runtime_util::block_on_async(pm.has_permission(plugin_id, PERMISSION_MDNS));
+        if !allowed {
+            tracing::warn!(
+                plugin_id = %plugin_id,
+                permission = %PERMISSION_MDNS,
+                api = %api,
+                "mdns permission denied"
+            );
+        }
+        allowed
     }
 
     fn local_node_id(&self) -> Option<String> {
         // 自播回显过滤：browse 会收到本机自己的广播（TXT `id` == 节点 ID）。
         // 无 app 句柄（无头 / 测试）或节点未启动时返回 None ⇒ 引擎不拦截
         let app = self.app.as_ref()?;
-        self.host_ports.current_node_id(app.as_ref())
+        crate::peer::net::current_node_id(app.as_ref())
     }
 
     fn publish(&self, topic: &str, payload: serde_json::Value) {
         // 总线订阅方隔离属宿主门禁；sender 恒 "host"（总线过滤「发布者==订阅者」，
         // 用插件 id 会把自己的事件一起滤掉，与历史 publish_mdns 语义一致）
-        if let Some(bus) = &self.bus {
-            bus.publish(topic, "host", payload);
+        if let Some(pm) = Self::manager() {
+            pm.message_bus().publish(topic, "host", payload);
         }
     }
 
     fn spawn(&self, task: BoxedTask) -> Arc<dyn DiscoveryTask> {
-        // 宿主运行时派生（替代历史 std::thread + 阻塞 recv：事件循环 / 续期任务
-        // 统一挂 tauri async_runtime，顺带消灭线程阻塞范式）
         Arc::new(TauriSpawnedTask(tauri::async_runtime::spawn(task)))
     }
 
@@ -184,100 +152,95 @@ impl DiscoveryPorts for StateDiscoveryPorts {
     }
 }
 
-// ==================== 5 条原语薄转发（签名与历史一致） ====================
-
-/// 浏览某服务类型：引擎铸造 browser-id（`mdnsbr-<uuid>`）并经本模块端口启动
-/// 事件定向投递循环（topic 最新格式 `<owner>::mdns:found|lost`，M3 统一）
-pub(crate) fn mdns_browse(state: &WasmPluginState, service_type: &str) -> Result<String, String> {
-    let ports = StateDiscoveryPorts::from_state(state);
-    wasmnest_discovery_engine::engine::browse(&ports, &state.plugin_id, service_type)
-}
-
-/// 停止浏览并回收句柄：引擎权限门 + 属主校验后退订；事件循环随 channel 断开退出
-pub(crate) fn mdns_stop_browse(state: &WasmPluginState, browser_id: &str) -> Result<bool, String> {
-    let ports = StateDiscoveryPorts::from_state(state);
-    wasmnest_discovery_engine::engine::stop_browse(&ports, &state.plugin_id, browser_id)
-}
-
-/// 广播某服务类型（v2 新增）：引擎解析 config-json（纯引擎参数透传）→ 共享守护
-/// 注册 + 周期续期 + 句柄登记（owner = 调用插件）
-pub(crate) fn mdns_advertise(state: &WasmPluginState, config_json: &str) -> Result<String, String> {
-    let ports = StateDiscoveryPorts::from_state(state);
-    wasmnest_discovery_engine::engine::advertise(&ports, &state.plugin_id, config_json)
-}
-
-/// 停止广播并回收句柄：引擎权限门 + 属主校验 → 注销 → 回收续期任务
-pub(crate) fn mdns_stop_advertise(state: &WasmPluginState, advertise_id: &str) -> Result<bool, String> {
-    let ports = StateDiscoveryPorts::from_state(state);
-    wasmnest_discovery_engine::engine::stop_advertise(&ports, &state.plugin_id, advertise_id)
-}
-
-/// 查询广播状态（返回是否存在该句柄）：引擎权限门 + 属主校验（跨插件拒绝）
-pub(crate) fn mdns_is_advertising(state: &WasmPluginState, advertise_id: &str) -> Result<bool, String> {
-    let ports = StateDiscoveryPorts::from_state(state);
-    wasmnest_discovery_engine::engine::is_advertising(&ports, &state.plugin_id, advertise_id)
-}
-
-// 宿主身份广播登记转发（原 `register_host_service` / `stop_host_service` 两条
-// 薄包装）已随票 05 删除：它们的唯一消费者（peer-net 引擎经 `host_impl` 垫片反向
-// 消费）早已改为直连 `wasmnest_discovery_engine::engine`（移动 `src/peer/ports.rs`
-// 适配层），宿主侧零调用点——留薄包装只会让「能力面在场」被误读。
-
 // ==================== 双表回收 ====================
 
-/// 回收指定插件的全部浏览 + 广播句柄（插件停用/卸载时经 host_impl 聚合入口
-/// 调用）。只回收本人句柄；其余插件与宿主（owner=host）登记不受影响
-pub(crate) fn purge_for_plugin(ports: &Arc<dyn HostEnginePorts>, plugin_id: &str) -> usize {
-    let state_ports = StateDiscoveryPorts::minimal(ports);
-    wasmnest_discovery_engine::engine::purge_for_plugin(plugin_id, &state_ports)
+/// 回收指定插件的全部浏览 + 广播句柄（插件停用/卸载时经宿主聚合入口调用）。
+/// 只回收本人句柄；其余插件与宿主（owner=host）登记不受影响。
+///
+/// 移动宿主不遍历 host-kit `DomainHooksRegistry`（桌面走该钩子），故停用回收
+/// 由本入口显式承担；端口取进程级那一格，与 `Host` impl 同源。
+pub(crate) fn purge_for_plugin(plugin_id: &str) -> usize {
+    wasmnest_discovery_engine::engine::purge_for_plugin(plugin_id, &wasmnest_discovery_engine::ports::ports())
 }
 
-// ==================== Tests（薄转发语义，零运行时 / 零真实守护依赖） ====================
+// ==================== Tests（平台缝语义，零运行时 / 零真实守护依赖） ====================
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// 无头插件状态：权限集按 mdns 授权开关构建。deny 路径在引擎权限门处
-    /// 短路（零守护 / 零 spawn），其余行为契约由引擎 crate 单测覆盖
-    fn state(plugin_id: &str, mdns_granted: bool) -> WasmPluginState {
-        let granted: Vec<&str> = if mdns_granted {
-            vec![wasmnest_wasm_core::permission::PERMISSION_MDNS]
-        } else {
-            Vec::new()
-        };
-        wasmnest_wasm_core::test_support::build_component_state(plugin_id, &granted)
+    /// 平台缝端口（无头形态：无 app、无插件管理器）
+    fn headless_ports() -> Arc<dyn DiscoveryPorts> {
+        Arc::new(MobileDiscoveryPorts::new(None))
     }
 
-    /// 权限门 fail-closed：未授权（granted_permissions 缺 network:mdns）时
-    /// 全部浏览/广播原语在引擎权限门处直接拒绝——零守护触网（薄转发关键面）
+    /// 权限门 fail-closed：拿不到权限真源时全部浏览/广播原语在引擎权限门处
+    /// 直接拒绝——零守护触网。脱绑后这条判定是宿主唯一保留的安全面。
     #[tokio::test]
     async fn mdns_denied_without_permission_short_circuits_before_daemon() {
-        let s = state("deny-a", false);
-        for result in [
-            super::mdns_browse(&s, "_test._tcp.local."),
-            super::mdns_advertise(&s, r#"{"serviceType":"_t._cp.local.","port":1}"#),
-        ] {
-            assert_eq!(result, Err("permission denied: mdns".to_string()));
-        }
-        for result in [
-            super::mdns_stop_advertise(&s, "mdnsad-x"),
-            super::mdns_is_advertising(&s, "mdnsad-x"),
-        ] {
-            assert_eq!(result, Err("permission denied: mdns".to_string()));
-        }
+        let ports = headless_ports();
+        let engine = wasmnest_discovery_engine::engine::browse;
+        assert_eq!(
+            engine(&ports, "deny-a", "_test._tcp.local."),
+            Err("permission denied: mdns".to_string())
+        );
+        assert_eq!(
+            wasmnest_discovery_engine::engine::advertise(
+                &ports,
+                "deny-a",
+                r#"{"serviceType":"_t._cp.local.","port":1}"#
+            ),
+            Err("permission denied: mdns".to_string())
+        );
+        assert_eq!(
+            wasmnest_discovery_engine::engine::stop_advertise(&ports, "deny-a", "mdnsad-x"),
+            Err("permission denied: mdns".to_string())
+        );
+        assert_eq!(
+            wasmnest_discovery_engine::engine::is_advertising(&ports, "deny-a", "mdnsad-x"),
+            Err("permission denied: mdns".to_string())
+        );
     }
 
-    /// 宿主身份登记的属主仲裁与幂等注销（原 wasm-core 同形用例）：`register_host_service`
-    /// / `stop_host_service` 两条薄包装随票 05 删除（唯一消费者已直连 discovery-engine），
-    /// 契约覆盖下沉引擎 crate——`cross_plugin_stop_and_query_rejected`（跨 owner 拒绝）
-    /// 与 `host_and_plugin_advertise_coexist_on_shared_daemon`（host 登记共存 + purge
-    /// 隔离 + 幂等注销）逐条等价。此处不重复持有，防「引用已删函数」的编译死链。
+    /// 无头形态不拦自播回显（无 app 句柄 ⇒ 节点 ID 不可知 ⇒ None）
+    #[test]
+    fn headless_ports_do_not_filter_self_broadcast() {
+        assert_eq!(headless_ports().local_node_id(), None);
+    }
 
-    /// purge 空表零副作用（minimal 端口，不发布 / 不拦回显 / 不触守护）
+    /// purge 空表零副作用（进程级端口未装时本用例自带一格，不触守护）
     #[tokio::test]
     async fn purge_empty_table_is_noop() {
-        let ports: Arc<dyn HostEnginePorts> = Arc::new(wasmnest_wasm_core::test_support::MockPorts::new());
-        assert_eq!(super::purge_for_plugin(&ports, "ghost-plugin"), 0);
+        let ports = headless_ports();
+        assert_eq!(
+            wasmnest_discovery_engine::engine::purge_for_plugin("ghost-plugin", &ports),
+            0
+        );
+    }
+
+    /// 脱绑装配锁：白名单声明 + 接口路径 + 权限位三件与能力域描述符逐字一致。
+    /// 漏 `expect_host_module!` / 强制引用行即装载期点名，本用例在单测期先红。
+    #[test]
+    fn host_module_declaration_matches_capability_domain_desc() {
+        let module_name = wasmnest_discovery_engine::MODULE_NAME;
+        assert!(
+            wasmnest_host_kit::expected_host_modules().contains(&module_name),
+            "能力模块白名单缺 {module_name}（expect_host_module! 行被删 / 未收集）"
+        );
+        assert_eq!(
+            wasmnest_discovery_engine::MODULE_INTERFACES,
+            &["wasmnest:plugin@0.0.2/host-mdns"],
+            "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
+        );
+        assert_eq!(
+            wasmnest_discovery_engine::MODULE_PERMISSIONS,
+            &["network:mdns"],
+            "权限位必须与 SDK 权限表逐字一致"
+        );
+        // 宿主自身不得再声明该接口（两份 add_to_linker ⇒ 装配期 defined twice）
+        assert!(
+            !super::super::MODULE_INTERFACES.contains(&"wasmnest:plugin@0.0.2/host-mdns"),
+            "host-mdns 已由能力 lib 自报，宿主 mobile-host-core 不得重复声明"
+        );
     }
 }

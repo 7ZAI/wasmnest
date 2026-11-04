@@ -3,9 +3,14 @@
 //! 插件机制面（统一 wasm-core `wasmnest-wasm-core`，单形态 2026-10-13 起无
 //! common/bare 之分）的所有「离宿主无法实现」
 //! 引擎调用经此注入：auth 引擎（C4 凭据零过境）/ egress 安全闸门（D5，判定 +
-//! 弹窗编排整体在宿主）/ 主连接事实 / WS 重连策略 / peer 四模块 / mDNS 共享
-//! 守护 / android 平台桥（android_plugins + SAF）。DTO 以原始值 / JSON 过界，
-//! 宿主类型（DialEndpoint / RemotePullFileDto / ConsentRequest…）不出宿主。
+//! 弹窗编排整体在宿主）/ 主连接事实 / WS 重连策略 / mDNS 共享守护 / android
+//! 平台桥（android_plugins + SAF）。DTO 以原始值 / JSON 过界，宿主类型不出宿主。
+//!
+//! 对等网络（peer）引擎调用**不经本端口**：`host-peer` 的 WIT 实现由能力仓
+//! `wasmnest-server-peer-net` 的 `common-host` 绑定层自报，宿主只注入
+//! [`wasmnest_server_peer_net::plugin_binding::ports::PeerPorts`]（见
+//! `plugin/peer_ports.rs`）。本端口只保留 peer 域也要用的两件平台事实：
+//! 本机节点 ID 回显（mDNS 自播过滤）与系统文件选择器。
 //!
 //! 装配点：`PluginManager::init_wasm_runtime_with` 构造 `WasmHostContext` 时
 //! 注入 `Arc<HostPorts>`；fs_auth 闸门不再经端口投影——判定链已收敛到 wasm-core
@@ -240,177 +245,6 @@ impl HostEnginePorts for HostPorts {
         crate::peer::net::current_node_id(app)
     }
 
-    // ==================== peer：`peer` 模块引擎适配层 ====================
-
-    async fn peer_dial_endpoint(
-        &self,
-        app: &tauri::AppHandle,
-        node_id: String,
-        addr: String,
-        port: u16,
-    ) -> wasmnest_wasm_core::Result<String> {
-        let dto =
-            crate::peer::net::dial_peer_endpoint(app.clone(), crate::peer::net::DialEndpoint { node_id, addr, port })
-                .await?;
-        Ok(dto.status)
-    }
-
-    async fn peer_disconnect(&self, app: &tauri::AppHandle, node_id: String) -> wasmnest_wasm_core::Result<bool> {
-        crate::peer::net::disconnect_peer(app.clone(), node_id).await
-    }
-
-    async fn peer_respond_consent(
-        &self,
-        app: &tauri::AppHandle,
-        request_id: String,
-        accepted: bool,
-    ) -> wasmnest_wasm_core::Result<bool> {
-        crate::peer::net::respond_peer_consent(app.clone(), request_id, accepted).await
-    }
-
-    async fn peer_list_trusted(&self, app: &tauri::AppHandle) -> wasmnest_wasm_core::Result<String> {
-        let dtos = crate::peer::net::list_trusted_peers(app.clone()).await?;
-        serde_json::to_string(&dtos).map_err(|e| crate::AppError::Serialization(e))
-    }
-
-    async fn peer_revoke_trusted(&self, app: &tauri::AppHandle, node_id: String) -> wasmnest_wasm_core::Result<bool> {
-        crate::peer::net::revoke_trusted_peer(app.clone(), node_id).await
-    }
-
-    async fn peer_set_shared_roots(
-        &self,
-        app: &tauri::AppHandle,
-        entries_json: String,
-    ) -> wasmnest_wasm_core::Result<()> {
-        let seeds: Vec<SharedRootSeed> =
-            serde_json::from_str(&entries_json).map_err(|e| crate::AppError::Serialization(e))?;
-        let entries = seeds
-            .into_iter()
-            .map(|s| wasmnest_server_peer_net::SharedDirEntry {
-                id: s.id,
-                name: s.name,
-                root: wasmnest_server_peer_net::SharedDirRoot::Saf {
-                    tree_uri: s.saf_tree_uri,
-                },
-            })
-            .collect();
-        crate::peer::net::set_shared_roots(app.clone(), entries).await
-    }
-
-    async fn peer_start_node(&self, _app: &tauri::AppHandle, caller: &str) -> wasmnest_wasm_core::Result<bool> {
-        // 与 WIT host-peer 同一入口：服务租约按插件 id 记账
-        let ports = wasmnest_server_peer_net::plugin_binding::ports::ports();
-        wasmnest_server_peer_net::plugin_binding::peer_start_node(&ports, caller).map_err(crate::AppError::Plugin)
-    }
-
-    async fn peer_stop_node(&self, _app: &tauri::AppHandle, caller: &str) -> wasmnest_wasm_core::Result<bool> {
-        let ports = wasmnest_server_peer_net::plugin_binding::ports::ports();
-        wasmnest_server_peer_net::plugin_binding::peer_stop_node(&ports, caller).map_err(crate::AppError::Plugin)
-    }
-
-    // ==================== peer：transfer / receive / remote ====================
-
-    async fn peer_cancel_transfer(&self, app: &tauri::AppHandle, batch_id: String) -> wasmnest_wasm_core::Result<bool> {
-        crate::peer::transfer::cancel_peer_transfer(app.clone(), batch_id).await
-    }
-
-    async fn peer_cancel_receiving(
-        &self,
-        app: &tauri::AppHandle,
-        batch_id: String,
-    ) -> wasmnest_wasm_core::Result<bool> {
-        crate::peer::receive::cancel_peer_receiving(app.clone(), batch_id).await
-    }
-
-    async fn peer_send_files_with_policy(
-        &self,
-        app: &tauri::AppHandle,
-        node_id: String,
-        paths: Vec<String>,
-        force_encrypt: Option<bool>,
-    ) -> wasmnest_wasm_core::Result<String> {
-        crate::peer::transfer::send_files_to_peer_with_policy(app.clone(), node_id, paths, force_encrypt).await
-    }
-
-    async fn peer_respond_transfer(
-        &self,
-        app: &tauri::AppHandle,
-        batch_id: String,
-        accept: bool,
-    ) -> wasmnest_wasm_core::Result<()> {
-        crate::peer::receive::respond_peer_transfer(app.clone(), batch_id, accept).await?;
-        Ok(())
-    }
-
-    async fn peer_set_receive_policy(
-        &self,
-        app: &tauri::AppHandle,
-        mode: String,
-        timeout_secs: u64,
-    ) -> wasmnest_wasm_core::Result<()> {
-        crate::peer::receive::set_peer_receive_policy(app.clone(), mode, timeout_secs).await
-    }
-
-    async fn peer_pause_transfer(&self, app: &tauri::AppHandle, batch_id: String) -> wasmnest_wasm_core::Result<bool> {
-        crate::peer::transfer::pause_peer_transfer(app.clone(), batch_id).await
-    }
-
-    async fn peer_resume_transfer(&self, app: &tauri::AppHandle, batch_id: String) -> wasmnest_wasm_core::Result<bool> {
-        crate::peer::transfer::resume_peer_transfer(app.clone(), batch_id).await
-    }
-
-    async fn peer_set_download_dir(
-        &self,
-        app: &tauri::AppHandle,
-        path: Option<String>,
-    ) -> wasmnest_wasm_core::Result<()> {
-        crate::peer::receive::set_peer_download_dir(app, path).await
-    }
-
-    async fn peer_list_shared_roots(
-        &self,
-        app: &tauri::AppHandle,
-        node_id: String,
-    ) -> wasmnest_wasm_core::Result<String> {
-        let roots = crate::peer::remote::list_peer_shared_roots(app.clone(), node_id).await?;
-        serde_json::to_string(&roots).map_err(|e| crate::AppError::Serialization(e))
-    }
-
-    async fn peer_browse_directory(
-        &self,
-        app: &tauri::AppHandle,
-        node_id: String,
-        dir_id: String,
-        rel_path: String,
-    ) -> wasmnest_wasm_core::Result<String> {
-        let dto = crate::peer::remote::browse_peer_directory(app.clone(), node_id, dir_id, rel_path).await?;
-        serde_json::to_string(&dto).map_err(|e| crate::AppError::Serialization(e))
-    }
-
-    async fn peer_pull_files(
-        &self,
-        app: &tauri::AppHandle,
-        node_id: String,
-        dir_id: String,
-        files_json: String,
-    ) -> wasmnest_wasm_core::Result<u32> {
-        let files: Vec<crate::peer::remote::RemotePullFileDto> =
-            serde_json::from_str(&files_json).map_err(|e| crate::AppError::Serialization(e))?;
-        crate::peer::remote::pull_peer_files(app.clone(), node_id, dir_id, files)
-            .await
-            .map(|n| n as u32)
-    }
-
-    async fn peer_active_transfers(&self, app: &tauri::AppHandle) -> wasmnest_wasm_core::Result<String> {
-        // 三表聚合投影（send 句柄表 + receive pending 询问表 + pull 会话表）——
-        // 真源在共享能力域 crate（Engine 集中化 2026-10-10）
-        crate::peer::transfer::active_transfers_json(app).await
-    }
-
-    async fn peer_collect_outgoing(&self, paths: Vec<String>) -> wasmnest_wasm_core::Result<String> {
-        crate::peer::transfer::collect_outgoing_for_plugin(paths).await
-    }
-
     // ==================== platform / fs / config / db / notify ====================
 
     async fn platform_pick_files(&self, app: &tauri::AppHandle) -> wasmnest_wasm_core::Result<Vec<String>> {
@@ -581,16 +415,6 @@ impl HostEnginePorts for HostPorts {
             Err("only supported on Android".to_string())
         }
     }
-}
-
-/// `peer_set_shared_roots` 的 JSON 契约（camelCase；域内不做形状解析——
-/// 解析责任在端口实现方，与迁移前域内 SharedRootSeed 同形状）
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SharedRootSeed {
-    id: String,
-    name: String,
-    saf_tree_uri: String,
 }
 
 // ==================== Tests ====================

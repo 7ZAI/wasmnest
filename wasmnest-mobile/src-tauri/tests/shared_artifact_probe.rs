@@ -122,9 +122,9 @@ fn mobile_runtime(aot_cache_dir: Option<PathBuf>) -> WasmRuntime {
 
     // 发现域端口同理：插件 `host-mdns.browse` 走**类型中枢**（ADR 0054），中枢的泵任务
     // 经 `DiscoveryPorts::spawn` 派生到宿主运行时，进程级出口取 `ports::ports()`
-    // （域内刻意 fail-visible）。装的是生产适配器的无头形态（`register_process_ports`：
-    // spawn 走 tauri async_runtime，bus / app 缺省）——不是自造替身。crate 侧幂等。
-    wasmnest_mobile_lib::plugin::host_domains::mdns::register_process_ports();
+    // （域内刻意 fail-visible）。装的是生产适配器的无头形态（`register_process_ports(None)`：
+    // spawn 走 tauri async_runtime，app / 权限真源 / 总线缺省）——不是自造替身。crate 侧幂等。
+    wasmnest_mobile_lib::plugin::host_domains::mdns::register_process_ports(None);
 
     let runtime =
         wasmnest_wasm_core::test_support::setup_headless_runtime_with_abi(aot_cache_dir, AbiPolicy { form: None })
