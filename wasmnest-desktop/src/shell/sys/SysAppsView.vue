@@ -160,17 +160,6 @@
       </ShellCard>
     </template>
 
-    <!-- 安装应用（本地 zip）：原生选包对话框（Rust 发起，前端不传任意路径）→
-         既有 plugin_install_from_file；安装后清单自动刷新 -->
-    <ShellCard :title="t('shell.apps.install')" icon="file">
-      <p class="note">{{ t('shell.apps.installDesc') }}</p>
-      <div class="flex gap-2">
-        <button class="shell-btn ghost" data-testid="sys-apps-install" @click="onInstallZip">
-          <ShellIcon name="folder" :size="13" /> {{ t('shell.apps.install') }}
-        </button>
-      </div>
-    </ShellCard>
-
     <!-- 权限入口（与「权限与授权」系统页同构跳转；策略/记录呈现单一口径） -->
     <ShellCard :title="t('shell.apps.permCardTitle')" icon="shield">
       <p class="note">{{ t('shell.apps.permHint') }}</p>
@@ -196,9 +185,6 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { invoke } from '@/utils/invoke'
-import { ensureHostCredential } from '@/utils/appCommands'
-import { showUserError } from '@/utils/userError'
 import { chipMetaOf, isHighRisk } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
 import { isServiceKind, useShellApps, type ShellAppEntry } from '../composables/useShellApps'
@@ -340,18 +326,6 @@ async function onApplyUpdate(app: ShellAppEntry) {
   if (ok) await appsStore.refresh()
 }
 
-/** 安装应用（本地 zip）：原生选包 → 既有安装命令（首装模式） */
-async function onInstallZip() {
-  try {
-    const credential = await ensureHostCredential()
-    const picked = await invoke<string | null>('plugin_pick_app_zip')
-    if (!picked) return // 用户取消
-    await invoke('plugin_install_from_file', { path: picked, credential })
-    await appsStore.refresh()
-  } catch (e) {
-    showUserError(e)
-  }
-}
 </script>
 
 <style scoped>

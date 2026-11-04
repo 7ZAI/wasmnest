@@ -882,8 +882,13 @@ pub fn run() {
             // 安装复用 plugin_install_from_file 升级模式，兼容判断在壳前端）
             plugin_updates::plugin_check_app_update,
             plugin_updates::plugin_download_update,
-            plugin_updates::plugin_pick_app_zip,
-            commands::plugin_mark_error,
+            // `plugin_pick_app_zip` 已注销（2026-11-03 审核 P3-2）：SysAppsView 的
+            // 「安装应用（本地 zip）」重复卡片删除后，本命令在前端再无消费者。
+            // 按仓规「退役面收口 / 不留无消费者的 invoke 面」，命令实现与注册一并移除；
+            // 选包能力仍由 `state.installApp()` 那条主链路提供（走原生对话框 + 安装命令）。
+            // 插件自报面（#48）：身份门在命令体内（插件令牌只能标自己），
+            // 不用 api_bridge 的无凭证版本（后者仍被 glob 再导出，但不再注册）
+            plugin::lifecycle::plugin_mark_error,
             commands::plugin_frontend_load_report,
             // 生命周期偏好/状态（D3：桌面补移动端同款缺失臂，语义逐字一致；编排层在
             // plugin/lifecycle.rs，与 api_bridge 的清单/启停/审批/卸载臂并存）

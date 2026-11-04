@@ -31,7 +31,6 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
-use tauri_plugin_dialog::DialogExt;
 use wasmnest_wasm_core::app_update::{
     asset_named, pick_latest_release, resolve_update_source, validate_download_args, validate_release_metadata,
     AppUpdateSource, CompatInfo,
@@ -157,35 +156,20 @@ async fn download_zip_verified(
 
 // ==================== Tauri 命令 ====================
 
-/// 原生选包对话框（Rust 侧发起：前端不持有 fs 权限，也不传任意路径给命令）
+/// `plugin_pick_app_zip` 已注销（2026-11-03 审核 P3-2）
 ///
-/// 「安装应用（本地 zip）」入口的第一步：返回 None = 用户取消。拿到路径后前端
-/// 再调 `plugin_install_from_file`（安装 / 升级模式由调用方定），路径来源是原生
-/// 对话框而不是前端拼串。
-#[tauri::command]
-pub async fn plugin_pick_app_zip(app_handle: tauri::AppHandle) -> Result<Option<String>> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    app_handle
-        .dialog()
-        .file()
-        .add_filter("Plugin package", &["zip"])
-        .pick_file(move |selection| {
-            if tx.send(selection).is_err() {
-                tracing::debug!("plugin_pick_app_zip: receiver dropped before dialog completed");
-            }
-        });
-    match rx.await {
-        Ok(Some(file_path)) => file_path
-            .into_path()
-            .map(|p| Some(p.to_string_lossy().to_string()))
-            .map_err(|e| AppError::InvalidInput(format!("安装包路径转换失败: {e}"))),
-        // 用户取消（与失败可区分：None，不回错误）
-        Ok(None) => Ok(None),
-        Err(e) => Err(AppError::Internal(format!(
-            "plugin_pick_app_zip: dialog channel closed: {e}"
-        ))),
-    }
-}
+/// 原用途：`SysAppsView` 里「安装应用（本地 zip）」重复卡片的第一步（原生选包 →
+/// 返回路径 → 前端再调 `plugin_install_from_file`）。该卡片在 2026-11-03 的改动中
+/// 被删除（与第一张卡片功能重叠，后者 `state.installApp()` 走同一条安装链路），
+/// 本命令遂成无前端消费者的 invoke 面。
+///
+/// **不保留的理由**（仓规「退役面必须 fail-visible / 不留悬空面」）：一个仍被注册
+/// 但没人调的 `#[tauri::command]` 是一条对前端开放的选包能力——它的存在本身扩大了
+/// 攻击面，而「以后可能要用」不是留在宿主里的理由（宿主薄壳三问第①问：离宿主能
+/// 实现吗）。真需要重新开放时，从 git 历史取回即可。
+///
+/// 选包能力未失效：`state.installApp()` 的链路仍由原生对话框发起，前端依旧不持有
+/// fs 权限、不传任意路径。
 
 /// 检查指定应用的最新 Release（宿主前端专用）
 #[tauri::command]
