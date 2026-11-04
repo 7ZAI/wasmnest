@@ -98,14 +98,40 @@ fn update_source_of(plugin: &MobilePluginInfo) -> Result<AppUpdateSource> {
     })
 }
 
+/// 更新链路唯一出站客户端
+///
+/// 与其它出站面同判据（安全审查：不允许存在不经 egress 的出站路径）：
+/// - 客户端装 `egress::redirect_policy()`——`github.com` 资产会 302 到
+///   `objects.githubusercontent.com`，首跳放行不代表跳转链放行，必须逐跳复检；
+/// - 每次请求先过 `EgressPolicy::decide`（`source = "host"`）：L2 内置声明覆盖
+///   api / 资产 / codeload 四个域名，其余目标按三档策略走（未声明即 NeedConsent，
+///   无人应答则 fail-closed）。
 fn github_client() -> Result<reqwest::Client> {
     reqwest::Client::builder()
         .user_agent(USER_AGENT)
+        .redirect(crate::egress::redirect_policy())
         .build()
         .map_err(|e| crate::AppError::Internal(format!("HTTP client build failed: {e}")))
 }
 
+/// egress 裁决（宿主内置更新链路；拒绝即 fail-visible，不降级继续发请求）
+fn gate_update_url(url: &str) -> Result<()> {
+    use crate::egress::EgressDecision;
+    match crate::egress::policy().decide(url, "host") {
+        EgressDecision::Allow(_) => Ok(()),
+        EgressDecision::Deny(e) => Err(crate::AppError::Egress(format!("{}: {}", e.code, e.url))),
+        EgressDecision::NeedConsent(req) => {
+            // 更新链路是宿主内置行为，没有弹窗渠道：未声明目标一律拒绝
+            Err(crate::AppError::Egress(format!(
+                "{}: {url}（host-initiated update flow cannot prompt for consent）",
+                crate::egress::ERROR_URL_DENIED
+            )))
+        }
+    }
+}
+
 async fn fetch_text(client: &reqwest::Client, url: &str, what: &str) -> Result<String> {
+    gate_update_url(url)?;
     let resp = client
         .get(url)
         .header("Accept", "application/vnd.github+json")
@@ -132,6 +158,7 @@ async fn download_zip_verified(
     dest: PathBuf,
     expected_sha256: &str,
 ) -> Result<PathBuf> {
+    gate_update_url(url)?;
     let resp = client
         .get(url)
         .send()
