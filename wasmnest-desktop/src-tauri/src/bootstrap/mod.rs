@@ -534,8 +534,8 @@ pub fn run() {
             app.manage(db.clone());
             app.manage(mdns_advertiser.clone());
 
-            // 链路加密先于任何服务启动装配：第一条流量就要被开关裁决（spec §6）；
-            // 身份损坏时强制回退全关，不阻断启动。
+            // 链路加密先于任何服务启动装配：第一条流量就要按应用策略裁决；
+            // 身份损坏时加密不可用（策略由核心逐条 error 留痕），不阻断启动。
             tauri::async_runtime::block_on(server::composition::init_link_crypto_at_startup(&app_handle));
 
             // WS 管理器纯内存装配（不监听）：传输面由服务租约按需 start
@@ -912,8 +912,10 @@ pub fn run() {
             commands::get_server_network_config,
             commands::update_server_port,
             commands::update_server_network_config,
-            commands::get_traffic_encryption_config,
-            commands::set_traffic_encryption_config,
+            commands::get_link_crypto_capabilities,
+            commands::get_link_crypto_app_policies,
+            commands::get_app_link_crypto_policy,
+            commands::set_app_link_crypto_policy,
             commands::get_link_crypto_fingerprint,
             commands::reset_server_network_config,
             // 应用界面租约（service-leases）：外壳挂载 / 卸载应用整包时驱动

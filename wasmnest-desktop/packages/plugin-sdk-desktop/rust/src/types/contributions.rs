@@ -241,12 +241,6 @@ pub enum WsEndpointContribution {
         /// `"none"` | `"jwt"`；缺省 = 宿主默认档位
         #[serde(default, skip_serializing_if = "Option::is_none")]
         auth: Option<String>,
-        /// 链路加密策略：`"required"` | `"preferred"` | `"off"`；缺省 = 跟随宿主下限
-        ///
-        /// 能力层按 `strictest(宿主下限, 本声明)` 执行：`required` 拒绝明文对端，
-        /// `preferred` 机会主义加密，`off` 明文（宿主下限更严时注册失败，fail-visible）。
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        encryption: Option<String>,
     },
 }
 
@@ -267,13 +261,6 @@ impl WsEndpointContribution {
         }
     }
 
-    /// 声明的链路加密策略原始值（`None` = 未声明，跟随宿主下限）
-    pub fn encryption_raw(&self) -> Option<&str> {
-        match self {
-            Self::Path(_) => None,
-            Self::Declared { encryption, .. } => encryption.as_deref(),
-        }
-    }
 }
 
 /// 一条 WASI 预打开目录声明（manifest `wasiPreopenDirs`，审计票 07 增只读档）

@@ -44,6 +44,19 @@ pub fn parse_url_lite(url: &str) -> Option<LiteUrl> {
     })
 }
 
+/// 目标 host 是否环回（本地豁免判据；与桌面过滤器同口径）
+///
+/// 环回流量在桌面端**不进入链路加密过滤器**（本地豁免）：客户端若给它加信封，
+/// 密文会被原样交给插件。移动端所有「是否加信封」的判定都必须先排除环回目标。
+pub fn is_loopback_host(host: &str) -> bool {
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .map(|ip| ip.is_loopback())
+            .unwrap_or(false)
+}
+
 // ==================== URL 声明模式（preauthUrls / 宿主内置） ====================
 
 /// URL 声明模式（glob）：`[scheme://][*.]host[:port][/path-prefix]`

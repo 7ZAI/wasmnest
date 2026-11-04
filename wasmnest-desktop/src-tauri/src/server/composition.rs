@@ -86,12 +86,12 @@ pub async fn start_http_server(
 
 // ==================== 链路加密启动装配 ====================
 
-/// 启动期链路加密装配薄壳：解析应用数据目录与主库连接后交 core（spec §6：
-/// 必须在 `supervisor.start` 之前完成，第一条流量就要被开关裁决）
+/// 启动期链路加密装配薄壳：解析应用数据目录与主库连接后交 core
 ///
-/// 数据目录解析失败时不走 core 的正常装配：core 的 `init_at_startup` 需要目录
-/// 建身份，而拆分前这条分支的行为是「error 日志 + 读 DB 配置但强制全关」，
-/// 身份不可用时静默换钥比全关更糟，故该 fail-safe 在此逐字保持。
+/// 必须在 `supervisor.start` 之前完成：第一条流量就要按应用策略裁决。
+/// 数据目录解析失败 = 建不出链路身份，本启动期加密不可用（`required` 策略由
+/// 核心逐条 error 留痕并按明文执行）；静默换钥比不可用更糟，故直接报错，
+/// 不阻断宿主启动。
 pub async fn init_link_crypto_at_startup(app_handle: &tauri::AppHandle) {
     use tauri::Manager;
 
@@ -101,13 +101,7 @@ pub async fn init_link_crypto_at_startup(app_handle: &tauri::AppHandle) {
 
     match dir {
         Ok(dir) => wasmnest_server_core::link_crypto::init_at_startup(&dir, guard.conn()),
-        Err(e) => {
-            tracing::error!("app data dir unavailable ({e}), link crypto stays off");
-            let mut config = wasmnest_server_core::link_crypto::load_config_from_db(guard.conn());
-            config.enabled = false;
-            wasmnest_server_core::link_crypto::update_config(config);
-            wasmnest_server_core::link_crypto::sync_registration();
-        }
+        Err(e) => tracing::error!("app data dir unavailable ({e}), link crypto stays off this boot"),
     }
 }
 

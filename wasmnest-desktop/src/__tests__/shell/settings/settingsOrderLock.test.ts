@@ -90,6 +90,7 @@ const EXPECTED_ORDER = [
   'shell.settings.shortcutsEntry.title', // 快捷键入口（录制 / 恢复在二级页，2026-10-28）
   'shell.settings.nav.title', // 导航（悬浮导航开关，2026-10-28）
   'SYSTEM', // SettingsSystemSection（系统设置，动态扩展项也渲染在此卡内）
+  'LINKCRYPTO', // SettingsLinkCryptoSection（宿主只读审计：应用策略 + 指纹）
   'LOGGING', // SettingsLoggingSection（日志）
   'shell.settings.permsEntry.title', // 授权管理入口
   'RESET', // SettingsResetSection（破坏性复位）
@@ -122,6 +123,7 @@ function mountSettings() {
     global: {
       stubs: {
         SettingsSystemSection: sectionStub('SYSTEM'),
+        SettingsLinkCryptoSection: sectionStub('LINKCRYPTO'),
         SettingsLoggingSection: sectionStub('LOGGING'),
         SettingsResetSection: sectionStub('RESET'),
         SettingsAboutSection: sectionStub('ABOUT'),
@@ -151,14 +153,12 @@ function groupTitles(wrapper: VueWrapper): string[] {
   const anchors = [
     ...wrapper.findAll('.shell-card-title').map((h) => h.element),
     ...wrapper.findAll('[data-group]').map((h) => h.element),
-  ].sort((a, b) =>
-    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
-  )
+  ].sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
   return anchors.map((el) => el.textContent?.trim() ?? '')
 }
 
 describe('设置页分组顺序（DOM 顺序断言）', () => {
-  it('按「外观入口 → 系统 → 日志 → 授权入口 → 复位 → 关于」排列', () => {
+  it('按「外观入口 → 系统 → 链路加密 → 日志 → 授权入口 → 复位 → 关于」排列', () => {
     const wrapper = mountSettings()
 
     expect(groupTitles(wrapper), '分组缺项或顺序不符').toEqual(EXPECTED_ORDER)

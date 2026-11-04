@@ -54,11 +54,13 @@
   </ShellCard>
 
   <!-- ==================== 系统 / 日志（复用既有设置分组组件，零重写） ====================
-       链路加密属终端的业务设置（加密哪些通道取决于终端数据面），已随设置归属回归
-       bedcode wasm-app，宿主系统页不再承载。
+       链路加密策略属于应用（2026-11-04 裁决）：每个应用在自己的设置页决定，
+       宿主不设整机下限、没有开关；本页的链路加密分组只是只读审计（应用策略 +
+       本机指纹），便于用户看见明文暴露面。
        应用贡献的动态扩展设置项渲染在「系统设置」卡内（SettingsSystemSection），
        无独立「扩展设置」分组（用户 2026-10-22 裁决）。 -->
   <SettingsSystemSection />
+  <SettingsLinkCryptoSection />
   <SettingsLoggingSection />
 
   <!-- 授权管理入口（一级系统页互切，spec-c §3） -->
@@ -92,6 +94,7 @@
  */
 import { useI18n } from 'vue-i18n'
 import SettingsSystemSection from '@/shell/settings/SettingsSystemSection.vue'
+import SettingsLinkCryptoSection from '@/shell/settings/SettingsLinkCryptoSection.vue'
 import SettingsLoggingSection from '@/shell/settings/SettingsLoggingSection.vue'
 import SettingsAboutSection from '@/shell/settings/SettingsAboutSection.vue'
 import SettingsResetSection from '@/shell/settings/SettingsResetSection.vue'

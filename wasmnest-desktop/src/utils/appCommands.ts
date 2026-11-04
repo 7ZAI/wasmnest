@@ -210,6 +210,25 @@ export async function appStorageDelete(appId: string, key: string): Promise<void
   )
 }
 
+// ==================== 链路加密策略（按应用；app 通道令牌限定自己）====================
+
+/** 应用链路加密策略（与能力仓 `link_crypto::EncryptionPolicy` 的 wire 字面量一致） */
+export type AppLinkCryptoPolicy = 'off' | 'preferred' | 'required'
+
+/** 读取本应用的链路加密策略（令牌限定 app 命名空间；宿主不设全局下限） */
+export async function appLinkCryptoGet(appId: string): Promise<AppLinkCryptoPolicy> {
+  return (await withAuthRetry(appId, (credential) =>
+    invoke('get_app_link_crypto_policy', { pluginId: appId, credential }),
+  )) as AppLinkCryptoPolicy
+}
+
+/** 写入本应用的链路加密策略（令牌限定 app 命名空间；宿主只执行应用的决定） */
+export async function appLinkCryptoSet(appId: string, policy: AppLinkCryptoPolicy): Promise<void> {
+  return withAuthRetry(appId, (credential) =>
+    invoke('set_app_link_crypto_policy', { pluginId: appId, policy, credential }),
+  )
+}
+
 // ==================== 授权应答（安全闸门，fail-closed）====================
 
 /**

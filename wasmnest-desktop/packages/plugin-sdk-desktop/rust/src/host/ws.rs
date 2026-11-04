@@ -76,14 +76,12 @@ pub trait HostWebsocket {
     /// 注册插件端点（实际路径 `/ws/plugin/<plugin-id>/<path>`，命名空间由宿主注入）。
     ///
     /// config-json（camelCase）：
-    /// `{ path, auth?, max-message-bytes?, max-clients?, encryption? }`
+    /// `{ path, auth?, max-message-bytes?, max-clients? }`
     /// `auth = "none"`（默认，插件自管认证）| `"jwt"`（宿主校验首消息
     /// `{"type":"auth","token":"<jwt>"}`）
     ///
-    /// `encryption = "required" | "preferred" | "off"`（缺省 = 跟随宿主下限）：
-    /// `required` 端点在握手前要求连接已完成链路加密协商（未配对客户端 → 400，
-    /// fail-visible，不降级成明文）；`off` 在宿主下限更严时注册即失败；
-    /// 未定义取值 / 未知字段 → `Err`（严格解析）。
+    /// 链路加密策略按**应用**决定（应用设置页 → 宿主 `link_crypto::set_app_policy`），
+    /// 覆盖该应用全部端点，不在端点注册配置里声明；未知字段 → `Err`（严格解析）。
     fn ws_register_endpoint(&self, config_json: &str) -> Result<String, HostError>;
     /// 向端点指定客户端发文本帧
     fn ws_send_text_to_client(

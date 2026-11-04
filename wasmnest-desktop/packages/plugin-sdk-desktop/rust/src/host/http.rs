@@ -31,16 +31,15 @@ pub trait HostHttp {
     /// 注册插件 HTTP 端点（WIT `host-http.register-endpoint`，ABI v29）。
     ///
     /// config-json（camelCase）：
-    /// `{ path, host?, methods?, auth?, encryption? }`
+    /// `{ path, host?, methods?, auth? }`
     /// - `path`：插件内相对端点段 → 宿主拼出内部可达路径 `/api/plugin/<plugin-id>/<path>`
     ///   （命名空间段由宿主注入）；
     /// - `host`：可选对外 URL 别名（支持 `{id}` 模板段）；
     /// - `methods`：host 别名的允许方法（缺省 `["GET"]`）；
-    /// - `auth` = `"jwt"`（缺省，最严：要求宿主已验签）| `"none"`（免凭证转发）；
-    /// - `encryption` = `"required"` | `"preferred"` | `"off"`（缺省 = 跟随宿主下限）：
-    ///   能力层按 `strictest(宿主下限, 本声明)` 执行。`required` 拒绝无协商对端
-    ///   （明文请求 → 400，点名端点与策略）；`off` 在宿主下限更严时**注册即失败**；
-    ///   未定义取值 / 未知字段 → `Err`（严格解析，绝不静默当明文）。
+    /// - `auth` = `"jwt"`（缺省，最严：要求宿主已验签）| `"none"`（免凭证转发）。
+    ///
+    /// 链路加密策略按**应用**决定（应用设置页 → 宿主 `link_crypto::set_app_policy`），
+    /// 覆盖该应用全部端点，不在端点注册配置里声明；未知字段 → `Err`（严格解析）。
     ///
     /// 成功 → 返回端点句柄 `http-<uuid>`；`host+method` 被其他插件占用 / 本插件
     /// 内部 path 重复 → `Err`（fail-visible，不覆盖在位者）。

@@ -24,7 +24,9 @@ use super::{current_handle, host_ctx};
 use tauri::Emitter;
 use wasmnest_host_kit::WasmPluginState;
 use wasmnest_server_http::plugin_binding::egress::http_fetch as core_http_fetch;
-use wasmnest_server_http::plugin_binding::ports::{BoxedBlocked, HttpEventSink, HttpPorts, OutboundAuth};
+use wasmnest_server_http::plugin_binding::ports::{
+    BoxedBlocked, HttpEventSink, HttpPorts, OutboundAuth, OutboundEnvelope,
+};
 
 use crate::plugin::bindings::wasmnest;
 
@@ -102,6 +104,138 @@ impl HttpPorts for StateHttpPorts {
             Ok(Some(token))
         }
     }
+
+    /// 出站链路信封（应用发起的 HTTP 到已配对桌面）
+    ///
+    /// 与宿主 `http_proxy` 的 `host_request` 信封同协议；差别只在触发面：应用请求
+    /// 没有“宿主内建”身份，但目标若是已声明桌面端，同一份宿主信任锚可以透明加封。
+    /// gating 口径：主开关 ∧ `encryptHttp` ∧ 已 pin ∧ 目标是已配对桌面 ∧ 非 auth 路径。
+    fn outbound_envelope(&self, plugin_id: &str, url: &str) -> Option<Arc<dyn OutboundEnvelope>> {
+        mobile_http_envelope(plugin_id, url)
+    }
+}
+
+// ==================== 出站链路信封（移动端协议实现） ====================
+
+/// 应用发起的 HTTP 是否走宿主信封；`None` = 明文
+/// （未启用 / 非桌面目标 / 环回 / auth·health 路径 / 该应用策略为 off 或未知）
+fn mobile_http_envelope(plugin_id: &str, url: &str) -> Option<Arc<dyn OutboundEnvelope>> {
+    let parsed = crate::egress::parse_url_lite(url)?;
+    if parsed.scheme != "http" {
+        return None;
+    }
+    let port = parsed.port?;
+    // 环回目标是桌面端本地豁免面（过滤器不介入）：加信封 = 把密文直投插件
+    if crate::egress::is_loopback_host(&parsed.host) {
+        return None;
+    }
+    if !crate::egress::policy().is_desktop_target(&parsed.host, Some(port)) {
+        return None;
+    }
+    // auth / health 路径在桌面端被过滤器豁免（明文白名单），信封会被当密文/无用
+    if parsed.path.starts_with(crate::commands::http_proxy::AUTH_PATH_PREFIX)
+        || parsed.path == "/api/health"
+        || parsed.path == "/health"
+    {
+        return None;
+    }
+    // 按**该应用**在对端的策略裁决（健康探测缓存的 `linkCryptoPolicies`）：
+    // off / 未登记 / 未知 = 明文；只有 preferred / required 才加信封。这样
+    // 「bedcode 加密、file-transfer 明文」的 per-app 语义在客户端侧也成立。
+    if !matches!(
+        crate::state::link_crypto_app_policy(&parsed.host, port, plugin_id).as_deref(),
+        Some("preferred") | Some("required")
+    ) {
+        return None;
+    }
+    let ctx = crate::state::get_link_crypto_context();
+    if !ctx.enabled || !ctx.encrypt_http {
+        return None;
+    }
+    let Some(kd_raw) = ctx.kd_public_b64.as_deref() else {
+        // 未配对（无信任锚）= 无法信封；与 HTTP 宿主路径同口径
+        return None;
+    };
+    let kd_public = match wasmnest_link_crypto::b64_decode(kd_raw) {
+        Ok(raw) => match raw.try_into() {
+            Ok(key) => key,
+            Err(_) => {
+                tracing::error!("http link crypto: pinned key has invalid length (expect 32 bytes)");
+                return None;
+            }
+        },
+        Err(error) => {
+            tracing::error!(%error, "http link crypto: pinned key is not valid base64");
+            return None;
+        }
+    };
+    let (ephemeral_private, ephemeral_public) = wasmnest_link_crypto::generate_ephemeral();
+    let keys = match wasmnest_link_crypto::derive_http_keys(&ephemeral_private, &kd_public, &parsed.path) {
+        Ok(keys) => keys,
+        Err(error) => {
+            tracing::error!(%error, "http link crypto: key derivation failed");
+            return None;
+        }
+    };
+    Some(Arc::new(MobileHttpEnvelope {
+        path: parsed.path,
+        ephemeral_b64: wasmnest_link_crypto::b64_encode(&ephemeral_public),
+        request_key: keys.request,
+        response_key: keys.response,
+    }))
+}
+
+/// 单次请求的信封状态（请求/响应双向密钥 + 路径绑定 AAD）
+struct MobileHttpEnvelope {
+    path: String,
+    ephemeral_b64: String,
+    request_key: [u8; wasmnest_link_crypto::X25519_KEY_LEN],
+    response_key: [u8; wasmnest_link_crypto::X25519_KEY_LEN],
+}
+
+impl OutboundEnvelope for MobileHttpEnvelope {
+    fn seal_request(
+        &self,
+        headers: &mut Vec<(String, String)>,
+        body: Option<Vec<u8>>,
+    ) -> Result<Option<Vec<u8>>, String> {
+        // 传输面头后写入：插件自带的同名头不得覆盖协商提案
+        headers.retain(|(name, _)| !name.eq_ignore_ascii_case(wasmnest_link_crypto::NEGOTIATION_HEADER));
+        headers.push((
+            wasmnest_link_crypto::NEGOTIATION_HEADER.to_string(),
+            format!("v{} {}", wasmnest_link_crypto::PROTOCOL_VERSION, self.ephemeral_b64),
+        ));
+        match body {
+            // GET/HEAD 无 body：协商头足以派生响应密钥（与桌面入站过滤器同语义）
+            Some(plain) if !plain.is_empty() => {
+                let aad = wasmnest_link_crypto::http_aad(wasmnest_link_crypto::Direction::Inbound, &self.path);
+                wasmnest_link_crypto::encrypt_http_body(&self.request_key, &plain, &aad)
+                    .map(Some)
+                    .map_err(|error| format!("encrypt http body failed: {error}"))
+            }
+            _ => Ok(body),
+        }
+    }
+
+    fn open_response(&self, headers: &[(String, String)], body: Vec<u8>) -> Result<Vec<u8>, String> {
+        let negotiated = headers.iter().any(|(name, value)| {
+            name.eq_ignore_ascii_case(wasmnest_link_crypto::NEGOTIATION_HEADER)
+                && value.trim() == format!("v{}", wasmnest_link_crypto::PROTOCOL_VERSION)
+        });
+        if !negotiated {
+            if crate::state::get_link_crypto_context().strict_mode {
+                return Err("LINK_ENCRYPTION_DOWNGRADE".to_string());
+            }
+            tracing::warn!(
+                path = %self.path,
+                "http link crypto: response is not encrypted (downgrade tolerated)"
+            );
+            return Ok(body);
+        }
+        let aad = wasmnest_link_crypto::http_aad(wasmnest_link_crypto::Direction::Outbound, &self.path);
+        wasmnest_link_crypto::decrypt_http_body(&self.response_key, &body, &aad)
+            .map_err(|error| format!("decrypt http body failed: {error}"))
+    }
 }
 
 /// 前端事件通道：`tauri::AppHandle` 的 emit 投影
@@ -169,6 +303,178 @@ mod tests {
             plugin_id,
             &[wasmnest_wasm_core::permission::PERMISSION_NETWORK_HTTP],
         )
+    }
+
+    // ==================== 出站链路信封（2026-11-04） ====================
+
+    /// 触碰全局链路上下文的用例必须串行
+    static CRYPTO_CTX_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    const TEST_PATH: &str = "/api/sessions";
+
+    fn envelope_fixture() -> MobileHttpEnvelope {
+        let kd_public = [7u8; wasmnest_link_crypto::X25519_KEY_LEN];
+        let (ephemeral_private, ephemeral_public) = wasmnest_link_crypto::generate_ephemeral();
+        let keys = wasmnest_link_crypto::derive_http_keys(&ephemeral_private, &kd_public, TEST_PATH)
+            .expect("derive http keys");
+        MobileHttpEnvelope {
+            path: TEST_PATH.to_string(),
+            ephemeral_b64: wasmnest_link_crypto::b64_encode(&ephemeral_public),
+            request_key: keys.request,
+            response_key: keys.response,
+        }
+    }
+
+    /// 密封：保留插件自带头、覆盖同名协商头、body 密文可被同密钥解开
+    #[test]
+    fn envelope_seals_request_and_keeps_plugin_headers() {
+        let envelope = envelope_fixture();
+        let mut headers = vec![
+            ("Content-Type".to_string(), "application/json".to_string()),
+            (
+                wasmnest_link_crypto::NEGOTIATION_HEADER.to_string(),
+                "v1 attacker-value".to_string(),
+            ),
+        ];
+
+        let sealed = envelope
+            .seal_request(&mut headers, Some(b"hello".to_vec()))
+            .expect("seal")
+            .expect("body present");
+
+        assert!(
+            headers
+                .iter()
+                .any(|(k, v)| k == "Content-Type" && v == "application/json"),
+            "插件自带头不得丢失"
+        );
+        let negotiation: Vec<_> = headers
+            .iter()
+            .filter(|(k, _)| k.eq_ignore_ascii_case(wasmnest_link_crypto::NEGOTIATION_HEADER))
+            .collect();
+        assert_eq!(negotiation.len(), 1, "协商头必须唯一（插件自带值被覆盖）");
+        assert!(negotiation[0].1.starts_with("v1 "));
+        assert_ne!(negotiation[0].1, "v1 attacker-value");
+        assert!(!sealed.windows(5).any(|w| w == b"hello"), "body 必须是密文");
+
+        let aad = wasmnest_link_crypto::http_aad(wasmnest_link_crypto::Direction::Inbound, TEST_PATH);
+        let plain =
+            wasmnest_link_crypto::decrypt_http_body(&envelope.request_key, &sealed, &aad).expect("decrypt sealed body");
+        assert_eq!(plain, b"hello");
+    }
+
+    /// 无 body（GET/HEAD）：只下发协商头，不伪造 body
+    #[test]
+    fn envelope_seals_header_only_for_empty_body() {
+        let envelope = envelope_fixture();
+        let mut headers = Vec::new();
+        let sealed = envelope.seal_request(&mut headers, None).expect("seal");
+        assert!(sealed.is_none());
+        assert_eq!(headers.len(), 1);
+        assert!(headers[0].1.starts_with("v1 "));
+    }
+
+    /// 响应解密：带协商回执 → 解信封；缺回执 → 非 strict 明文续跑 / strict 断开
+    #[test]
+    fn envelope_opens_response_and_honors_strict_mode() {
+        let _guard = CRYPTO_CTX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let envelope = envelope_fixture();
+        let aad = wasmnest_link_crypto::http_aad(wasmnest_link_crypto::Direction::Outbound, TEST_PATH);
+        let sealed =
+            wasmnest_link_crypto::encrypt_http_body(&envelope.response_key, b"ok", &aad).expect("encrypt response");
+        let negotiated = vec![(wasmnest_link_crypto::NEGOTIATION_HEADER.to_string(), "v1".to_string())];
+
+        assert_eq!(envelope.open_response(&negotiated, sealed).expect("open"), b"ok");
+
+        // 缺加密回执：非 strict 明文续跑
+        crate::state::set_link_crypto_context(crate::state::LinkCryptoContext {
+            enabled: true,
+            strict_mode: false,
+            encrypt_http: true,
+            kd_public_b64: None,
+        });
+        assert_eq!(
+            envelope.open_response(&[], b"plain".to_vec()).expect("plain downgrade"),
+            b"plain"
+        );
+
+        // strict：显性降级错误（与宿主 http_proxy 同字面量）
+        crate::state::set_link_crypto_context(crate::state::LinkCryptoContext {
+            enabled: true,
+            strict_mode: true,
+            encrypt_http: true,
+            kd_public_b64: None,
+        });
+        let err = match envelope.open_response(&[], b"plain".to_vec()) {
+            Ok(_) => panic!("strict mode must reject plaintext response"),
+            Err(error) => error,
+        };
+        assert_eq!(err, "LINK_ENCRYPTION_DOWNGRADE");
+
+        // 复位全局态，避免污染其他用例
+        crate::state::set_link_crypto_context(crate::state::LinkCryptoContext::default());
+    }
+
+    /// 应用 HTTP 信封按**该应用**策略裁决：off / 未探测 = 明文，preferred / required = 加密
+    #[test]
+    fn envelope_follows_per_app_policy_cache() {
+        let _guard = CRYPTO_CTX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let host = "203.0.113.77";
+        let port = 4555u16;
+        crate::egress::policy().add_desktop_target(host, port);
+        crate::state::set_link_crypto_context(crate::state::LinkCryptoContext {
+            enabled: true,
+            strict_mode: false,
+            encrypt_http: true,
+            kd_public_b64: Some(wasmnest_link_crypto::b64_encode(
+                &[7u8; wasmnest_link_crypto::X25519_KEY_LEN],
+            )),
+        });
+        let url = format!("http://{host}:{port}/api/sessions");
+        let owner = "com.example.envelope-policy";
+
+        // 未探测（旧宿主 / 首请求前）→ 明文
+        assert!(super::mobile_http_envelope(owner, &url).is_none());
+
+        // off → 明文
+        crate::state::set_link_crypto_server(
+            host,
+            port,
+            true,
+            [(owner.to_string(), "off".to_string())].into_iter().collect(),
+        );
+        assert!(super::mobile_http_envelope(owner, &url).is_none());
+
+        // preferred / required → 加密；其他应用未登记 → 明文
+        for policy in ["preferred", "required"] {
+            crate::state::set_link_crypto_server(
+                host,
+                port,
+                true,
+                [(owner.to_string(), policy.to_string())].into_iter().collect(),
+            );
+            assert!(
+                super::mobile_http_envelope(owner, &url).is_some(),
+                "{policy} 应用必须加信封"
+            );
+            assert!(
+                super::mobile_http_envelope("com.example.other", &url).is_none(),
+                "未登记应用必须明文"
+            );
+        }
+
+        // 环回 / auth / health 永不加密
+        crate::state::set_link_crypto_server(
+            host,
+            port,
+            true,
+            [(owner.to_string(), "required".to_string())].into_iter().collect(),
+        );
+        assert!(super::mobile_http_envelope(owner, "http://127.0.0.1:4555/api/sessions").is_none());
+        assert!(super::mobile_http_envelope(owner, &format!("http://{host}:{port}/api/auth/pairing")).is_none());
+        assert!(super::mobile_http_envelope(owner, &format!("http://{host}:{port}/api/health")).is_none());
+
+        crate::state::set_link_crypto_context(crate::state::LinkCryptoContext::default());
     }
 
     /// 权限门 fail-closed（票 13 显性锁）：未授予 `network:http` → 请求在

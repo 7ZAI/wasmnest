@@ -18,8 +18,8 @@
 //!   `reset_server_network_config`——前者应改为原生对话框（#44），后三条当前由
 //!   bedcode 应用前端直接调用（#45），改宿主门会破坏应用，需先裁决归属
 //!   （宿主门 vs 应用令牌 + 权限位）。
-//! - `set_traffic_encryption_config` 已按本 spec 收口：只写宿主下限 `floor`，
-//!   归 `HOST_GATED` 表（应用改为端点声明 + 只读展示）。
+//! - 链路加密策略属于应用（2026-11-04 裁决）：写命令 `set_app_link_crypto_policy`
+//!   归 `PLUGIN_GATED`（own-token，只能改自己）；宿主设置页只读审计，没有整机下限。
 
 use std::path::{Path, PathBuf};
 
@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 ///
 /// 副作用特征串用于断言「门禁先于副作用」——只看有没有 `credential` 参数，挡不住
 /// 「先把事做了再验身份」这种顺序错误。
-const HOST_GATED: [(&str, &str, &str); 6] = [
+const HOST_GATED: [(&str, &str, &str); 5] = [
     // #48：界面租约——释放他人租约 = 掐断对端传输
     ("plugin_surface_open", "src/commands.rs", "acquire_for_surface"),
     ("plugin_surface_close", "src/commands.rs", "release_for_surface"),
@@ -40,20 +40,21 @@ const HOST_GATED: [(&str, &str, &str); 6] = [
     ),
     // #45：整份 AppConfig 写入口（含 network / ui / terminal / log）
     ("save_app_settings", "src/commands.rs", "settings.save"),
-    // issue #45 / 按应用链路加密 spec §6：宿主下限是持久化安全策略，
-    // 应用只能在自己的端点上声明，不能改整机下限
-    (
-        "set_traffic_encryption_config",
-        "src/commands.rs",
-        "persist_config_to_db",
-    ),
 ];
 
 /// 插件自报面：必须带通道令牌，且「只能标自己」（#48）
 ///
 /// 与宿主门分开判：这里的门是 `FrontendChannelRegistry::authorize`（插件令牌的
 /// 目标必须等于自己；宿主凭证可代报任意目标），不是 `require_host_frontend`。
-const PLUGIN_GATED: [(&str, &str, &str); 1] = [("plugin_mark_error", "src/plugin/lifecycle.rs", "mark_error(")];
+const PLUGIN_GATED: [(&str, &str, &str); 2] = [
+    ("plugin_mark_error", "src/plugin/lifecycle.rs", "mark_error("),
+    // 链路加密策略按应用：own-token 目标必须等于自己；副作用先落策略表再落库
+    (
+        "set_app_link_crypto_policy",
+        "src/commands.rs",
+        "link_crypto::set_app_policy",
+    ),
+];
 
 /// 门禁调用名（宿主面凭证门的唯一实现点）
 const GATE: &str = "require_host_frontend(";
@@ -163,8 +164,12 @@ fn plugin_gated_commands_authorize_before_side_effects() {
             continue;
         }
         let body = code_only(&command.body);
-        let Some(gate_at) = body.find("authorize(") else {
-            violations.push(format!("`{name}`：命令体未出现插件身份门（authorize(）"));
+        // 插件面身份门有两种合法调用形态：直接 `authorize(`（前端通道）或
+        // 统一封装 `authorize_plugin_call(`（跨 crate 复用，语义同源）
+        let Some(gate_at) = body.find("authorize(").or_else(|| body.find("authorize_plugin_call(")) else {
+            violations.push(format!(
+                "`{name}`：命令体未出现插件身份门（authorize( / authorize_plugin_call(）"
+            ));
             continue;
         };
         if let Some(effect_at) = body.find(effect) {
@@ -279,37 +284,11 @@ fn app_invoke_whitelist_matches_identity_boundary() {
         "只读能力查询 `get_link_crypto_capabilities` 必须可经 env.invoke 取用（spec §8）"
     );
     assert!(
-        !list.contains("\"get_link_crypto_endpoint_policies\""),
-        "端点策略清单是宿主审计面，不下放给应用前端"
-    );
-}
-
-/// 宿主下限写命令**只接受 `floor`**（spec §6）
-///
-/// 旧形状接受整份 `LinkCryptoConfig`（`enabled` / `encrypt_*` /
-/// `allow_plaintext_fallback`），前端传一份「floor=required + enabled=false」
-/// 就能让下限与开关自相矛盾；写入口只收三档字面量、由 `from_floor` 同源构造，
-/// 旧字段只剩迁移读语义。
-#[test]
-fn link_crypto_floor_write_takes_floor_only() {
-    let src = read_source("src/commands.rs");
-    let commands = parse_commands(&src);
-    let command = commands
-        .iter()
-        .find(|c| c.name == "set_traffic_encryption_config")
-        .expect("`set_traffic_encryption_config` 不存在（写入口被删 / 改名？）");
-
-    assert!(
-        command.signature.contains("floor: link_crypto::EncryptionPolicy"),
-        "写入口必须显式接收 `floor: EncryptionPolicy`（三档字面量）"
+        !list.contains("\"get_link_crypto_app_policies\""),
+        "应用策略审计是宿主只读面，不下放给应用前端"
     );
     assert!(
-        !command.signature.contains("LinkCryptoConfig"),
-        "写入口不得再接收整份 `LinkCryptoConfig`（旧字段可把下限静默降级）"
-    );
-    let body = code_only(&command.body);
-    assert!(
-        body.contains("LinkCryptoConfig::from_floor("),
-        "配置必须由 `from_floor` 构造（enabled 与 floor 同源）"
+        !list.contains("\"set_app_link_crypto_policy\""),
+        "应用策略写入口必须走 own-token 通道，不得进无身份白名单"
     );
 }

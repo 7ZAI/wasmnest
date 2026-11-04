@@ -10,9 +10,11 @@
  * - WS 文本帧信封：{ v:1, seq, n, ct }；WS AAD："v1" ‖ channelStr ‖ dir ‖ origin
  * - 算法库：@noble/curves(x25519) + @noble/ciphers(AES-256-GCM，密文尾部拼 tag) + @noble/hashes
  *
- * HTTP 信封能力已收束至 Rust（ticket 03/09：wasmnest-link-crypto crate 字节级对齐
- * 金样在 `packages/link-crypto` 单测，前端 HTTP 加解密已删除）；本文件仅保留
- * WS 终端通道（useTerminalSocket 直连，终端 WS 搬迁见 spec §7 边界后续分支）。
+ * **状态（2026-11-04）：本文件的 WS 会话实现是旧 `ws-terminal`/`ws-event` 遗留，
+ * 生产路径没有调用方。现役 WS 帧级链路加密在移动宿主 Rust 引擎
+ * （`wasmnest-ws-client-engine` + `wasmnest-link-crypto::ClientWsCrypto`）里完成；
+ * HTTP 信封同样在 Rust（`http_proxy` / `link-crypto` crate）。仅 `base64ToBytes`
+ * 等纯工具仍被设置页/测试使用。本文件不得再作为 WS 协议真源。
  */
 
 // x25519 自 @noble/curves 1.9 起从 ./x25519 子路径移入 ./ed25519（该路径在 1.8.x 同样可用）

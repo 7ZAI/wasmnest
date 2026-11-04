@@ -2,8 +2,8 @@
 //!
 //! 全局单例管理器和 Token 存储
 
-use std::sync::Arc;
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock, OnceLock};
 
 use crate::auth::AuthManager;
 use crate::connection::manager::ConnectionManager;
@@ -106,8 +106,8 @@ pub fn try_get_plugin_manager() -> Option<Arc<PluginManager>> {
 
 // ==================== Link Crypto Context（issue 09） ====================
 
-/// 链路加密运行期上下文（HTTP 信封加密；WS 帧级加密已随桌面端插件端点
-/// 帧加密退役——`TrafficChannel::WsPlugin => false`，本结构不再含 WS 通道）
+/// 链路加密运行期上下文（HTTP 信封加密；WS 帧级加密另由
+/// `plugin/host_domains/ws.rs` 的 engine 端口读取同一份主开关/pin/strict 裁决）
 ///
 /// 设置开关与 pin 存于 WebView localStorage（issue 05/06 的 TS 侧），而 HTTP
 /// 加密裁决在 Rust 侧（http_proxy）——前端经 `set_link_crypto_context` 命令把
@@ -164,8 +164,56 @@ pub fn update_link_crypto_pin(kd_public_b64: Option<String>) {
 
 /// HTTP 通道是否应加密（HTTP 代理收束后由 Rust 裁决）：主开关 ∧ HTTP 子开关
 /// ∧ 已持有 pin——对齐前端 `isChannelEncryptionActive('http')` 的判定。
-/// （WS 通道加密已随桌面端插件端点帧加密退役，无对应判定函数）
 pub fn is_http_encryption_active() -> bool {
     let ctx = get_link_crypto_context();
     ctx.enabled && ctx.encrypt_http && ctx.kd_public_b64.is_some()
+}
+
+/// 对端桌面链路加密能力快照（`/api/health` 的只读字段）
+///
+/// 移动端只有一个全局开关，无法预知每个应用在对端的策略；健康探测是连接流程的
+/// 必经一步，这里缓存「过滤器是否在链上 + 已登记的应用策略」，供应用发起的
+/// HTTP 决定是否加信封（`off` / 未登记 = 明文；`preferred` / `required` = 加密）。
+#[derive(Debug, Clone, Default)]
+pub struct ServerLinkCrypto {
+    /// 对端流量链上是否装着链路加密过滤器（全 off 时为 false）
+    pub active: bool,
+    /// 已登记的应用策略（plugin id → wire 字面量；未登记 = off）
+    pub policies: HashMap<String, String>,
+}
+
+static LINK_CRYPTO_SERVERS: LazyLock<std::sync::RwLock<HashMap<(String, u16), ServerLinkCrypto>>> =
+    LazyLock::new(|| std::sync::RwLock::new(HashMap::new()));
+
+/// 记录对端链路加密能力快照（健康探测响应解析后调用；覆盖旧值）
+pub fn set_link_crypto_server(host: &str, port: u16, active: bool, policies: HashMap<String, String>) {
+    let key = (host.to_lowercase(), port);
+    LINK_CRYPTO_SERVERS
+        .write()
+        .unwrap()
+        .insert(key, ServerLinkCrypto { active, policies });
+}
+
+/// 读取对端能力快照（未探测 = None）
+pub fn link_crypto_server(host: &str, port: u16) -> Option<ServerLinkCrypto> {
+    LINK_CRYPTO_SERVERS
+        .read()
+        .unwrap()
+        .get(&(host.to_lowercase(), port))
+        .cloned()
+}
+
+/// 对端过滤器是否在链上（未知 = None → 调用方按明文处理）
+pub fn link_crypto_server_active(host: &str, port: u16) -> Option<bool> {
+    link_crypto_server(host, port).map(|state| state.active)
+}
+
+/// 某应用在对端的策略（未探测 / 未登记 / 旧宿主缺字段 = None → 按明文处理）
+pub fn link_crypto_app_policy(host: &str, port: u16, plugin_id: &str) -> Option<String> {
+    link_crypto_server(host, port)?.policies.get(plugin_id).cloned()
+}
+
+/// 清空对端能力快照（测试隔离 / 切换目标）
+pub fn clear_link_crypto_servers() {
+    LINK_CRYPTO_SERVERS.write().unwrap().clear();
 }

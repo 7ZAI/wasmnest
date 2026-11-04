@@ -30,6 +30,16 @@ fn parse_url_lite_basic() {
 }
 
 #[test]
+fn loopback_host_detection() {
+    for host in ["127.0.0.1", "127.0.0.2", "localhost", "LOCALHOST", "[::1]"] {
+        assert!(is_loopback_host(host), "{host} 必须判为环回");
+    }
+    for host in ["192.168.1.5", "10.0.2.2", "example.com", ""] {
+        assert!(!is_loopback_host(host), "{host} 不得判为环回");
+    }
+}
+
+#[test]
 fn url_pattern_parse_and_match() {
     // 完整模式
     let p = UrlPattern::parse("https://api.github.com/*").unwrap();

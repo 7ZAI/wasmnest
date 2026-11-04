@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tracing_subscriber::filter::EnvFilter;
-use wasmnest_server_core::link_crypto::{self, LinkCryptoConfig};
+use wasmnest_server_core::link_crypto;
 use wasmnest_server_core::metrics::ServerMetrics;
 use wasmnest_server_core::supervisor::{ServerStatusInfo, ServerSupervisor};
 use wasmnest_wasm_core::manager::host::PluginHost;
@@ -676,9 +676,9 @@ pub use crate::wasm_core::api_bridge::*;
 /// 真源语义：app 挂载环境的 `env.invoke` 只放行本表命令；安全边界仍在 Rust 命令门禁
 /// （管理类命令的宿主面凭证门，见 wasm-core api_bridge）。来源 = 2026-10-24 全仓盘点
 ///（issue #21）：auth-center / monitor 调 plugin_list_loaded，bedcode 调设置三命令；
-/// 2026-11-03 增链路加密**只读**能力查询（按应用/端点加密策略 spec §8：应用声明
-/// required 端点前必须能确认宿主能力）。写入口 `set_traffic_encryption_config`
-/// **不进白名单**：宿主下限只能由宿主设置页带凭证写。
+/// 2026-11-03 增链路加密**只读**能力查询；2026-11-04 应用策略写入口改为 app 通道
+/// 令牌门（`set_app_link_crypto_policy`），不在本白名单——白名单是无身份代理，
+/// 写策略必须经 `AppMountEnv.appLinkCryptoSet` 的 own-token 通道。
 pub const APP_FRONTEND_INVOKE_WHITELIST: &[&str] = &[
     "plugin_list_loaded",
     "get_app_settings",
@@ -795,118 +795,119 @@ pub async fn get_server_status() -> Result<ServerStatusInfo> {
     Ok(supervisor.get_status_info().await)
 }
 
-// ==================== 链路加密配置（issue 01） ====================
-
-/// 读取链路加密配置（运行期快照，spec §6）
-///
-/// 只读面：应用前端据此展示「当前生效的宿主下限」，不再据此推演自己的端点
-/// 是否加密——端点生效策略看 [`get_link_crypto_capabilities`] 与端点清单。
-#[tauri::command]
-pub fn get_traffic_encryption_config() -> LinkCryptoConfig {
-    link_crypto::current_config()
-}
+// ==================== 链路加密（按应用策略；宿主只执行与只读审计） ====================
 
 /// 链路加密能力查询（宿主 → 应用前端，只读）
 ///
-/// 应用在声明 `required` 端点前必须能确认本端支持 per-endpoint 策略与对应密钥
-/// 模型（spec §8）：旧宿主不返回本命令 = 无此能力，应用必须拒绝启用该业务，
-/// 不得假定字段被理解、更不得静默降级成明文。
+/// 应用在设置 `required` 前必须能确认本端支持按应用策略与对应密钥模型；
+/// 旧宿主不返回本命令 / 缺字段 = 无此能力，应用必须显性提示，
+/// 不得假定已加密（fail-visible，不静默降级）。
 #[tauri::command]
 pub fn get_link_crypto_capabilities() -> link_crypto::LinkCryptoCapabilities {
     link_crypto::capabilities()
 }
 
-/// 一条端点加密审计记录（全量注册面：声明值可空，生效值必填）
-///
-/// `declared = None` = 端点未声明策略（跟随宿主下限）。这类端点同样属于明文
-/// 暴露面（下限为 `off` 时），所以审计面必须能枚举，不能只列已声明的少数端点。
+/// 一条应用链路加密审计记录（宿主设置页只读）
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct EndpointEncryptionAudit {
+pub struct AppLinkCryptoAudit {
     /// 属主插件 id
     pub owner: String,
-    /// 端点句柄（`http-*` / `wse-*`）
-    pub endpoint: String,
-    /// 人可读端点路径（HTTP = `/api/plugin/<owner>/<path>`，WS = `/ws/plugin/<owner>/<path>`）
-    pub locator: String,
-    /// 通道（`http` / `ws-plugin`；与日志字段同源）
-    pub channel: &'static str,
-    /// 端点声明的策略；`None` = 未声明（跟随宿主下限）
-    pub declared: Option<link_crypto::EncryptionPolicy>,
-    /// 生效策略 = `strictest(通道下限, 声明)`
-    pub effective: link_crypto::EncryptionPolicy,
+    /// 应用当前策略（未设置 = `off`；有端点的未设置应用同样会出现在审计里）
+    pub policy: link_crypto::EncryptionPolicy,
+    /// 该应用当前注册中的端点数（HTTP + WS）
+    pub endpoint_count: usize,
 }
 
-/// 当前注册中的全部插件端点及其加密状态（只读审计面：明文端点必须可见，spec §7）
+/// 应用链路加密状态（只读审计面：明文暴露面必须可见）
 ///
-/// 端点来自 HTTP / WS 注册表，声明值来自 `link_crypto` 端点策略表——两者按宿主
-/// 铸造的句柄拼合。这样「未声明策略的端点」也能在下限为 `off` 时被审计到；只列
-/// 显式声明会让大多数明文端点从清单里消失。不含载荷与密钥材料。
+/// 策略真源在 `link_crypto::app_policy()`（由应用经 own-token 命令写入）；
+/// 清单来自 HTTP / WS 注册表（只列**当前有端点**的应用——没有端点就没有暴露面，
+/// 也不产生已卸载应用的幽灵行）。本命令**没有写入口**：宿主不决定应用的
+/// 链路加密策略，只展示当前执行事实。
 #[tauri::command]
-pub fn get_link_crypto_endpoint_policies() -> Vec<EndpointEncryptionAudit> {
-    use wasmnest_server_core::filter::TrafficChannel;
+pub fn get_link_crypto_app_policies() -> Vec<AppLinkCryptoAudit> {
+    use std::collections::BTreeMap;
 
-    let mut records: Vec<EndpointEncryptionAudit> = Vec::new();
+    // 端点注册面：**未设置策略但有端点的应用也要出现**（它们不要求加密，
+    // 属于必须可见的暴露面）。只列已声明应用会让大多数明文应用从审计里消失。
+    let mut owners: BTreeMap<String, usize> = BTreeMap::new();
     for entry in wasmnest_server_http::registry::list_all() {
-        records.push(EndpointEncryptionAudit {
-            owner: entry.owner.clone(),
-            declared: link_crypto::endpoint_policy(&entry.owner, &entry.endpoint_id),
-            effective: link_crypto::effective_endpoint_policy(&entry.owner, &entry.endpoint_id, TrafficChannel::Http),
-            endpoint: entry.endpoint_id,
-            locator: entry.internal_path,
-            channel: TrafficChannel::Http.as_str(),
-        });
+        *owners.entry(entry.owner).or_default() += 1;
     }
     for entry in wasmnest_server_websocket::endpoint::list_all() {
-        records.push(EndpointEncryptionAudit {
-            owner: entry.owner.clone(),
-            declared: link_crypto::endpoint_policy(&entry.owner, &entry.endpoint_id),
-            effective: link_crypto::effective_endpoint_policy(
-                &entry.owner,
-                &entry.endpoint_id,
-                TrafficChannel::WsPlugin,
-            ),
-            endpoint: entry.endpoint_id,
-            locator: entry.mount_path,
-            channel: TrafficChannel::WsPlugin.as_str(),
-        });
+        *owners.entry(entry.owner).or_default() += 1;
     }
-    records.sort_by(|a, b| (&a.owner, &a.locator).cmp(&(&b.owner, &b.locator)));
-    records
+
+    owners
+        .into_iter()
+        .map(|(owner, endpoint_count)| AppLinkCryptoAudit {
+            policy: link_crypto::app_policy(&owner),
+            owner,
+            endpoint_count,
+        })
+        .collect()
 }
 
-/// 更新宿主链路加密下限（宿主面凭证门，ADR 0058 / issue #45）
+/// 读取**本应用**的链路加密策略（app 通道令牌门：只能读自己）
 ///
-/// 只接受 `floor`（`off` / `preferred` / `required`）：这是本命令唯一的写入口。
-/// 旧字段（`enabled` / `encrypt_*` / `allow_plaintext_fallback`）只是迁移输入，
-/// 前端不再直写——否则「floor=required + 旧开关回落」会让下限被静默降级。
-/// 配置由 [`LinkCryptoConfig::from_floor`] 构造，`enabled` 与 `floor` 同源。
-///
-/// 门禁先于副作用：应用与宿主同 webview、共享 Tauri IPC（ADR 0058），
-/// 不带宿主凭证的调用一律拒绝。先持久化成功再热更新快照并同步过滤器注册；
-/// 落库失败不影响运行态（快照保持原值）。
+/// 前端经挂载环境 `appLinkCryptoGet()` 调用（`plugin_channel_token` 铸造的
+/// 本 app 令牌），不接受前端自报他人 plugin id。
 #[tauri::command]
-pub async fn set_traffic_encryption_config(
+pub async fn get_app_link_crypto_policy(
     webview: tauri::Webview,
-    plugin_host: State<'_, Arc<PluginHost>>,
+    plugin_id: String,
     credential: String,
-    floor: link_crypto::EncryptionPolicy,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<link_crypto::EncryptionPolicy> {
+    wasmnest_wasm_core::manager::host::api_bridge::authorize_plugin_call(
+        plugin_host.inner(),
+        webview.label(),
+        &plugin_id,
+        &credential,
+    )?;
+    Ok(link_crypto::app_policy(&plugin_id))
+}
+
+/// 写入**本应用**的链路加密策略（app 通道令牌门：只能改自己）
+///
+/// 归属（2026-11-04 用户裁决）：策略属于应用，应用在自己的设置页决定；宿主不设
+/// 整机下限、不提供写入口。宿主只保存该值并交给过滤链执行（后台服务型应用未
+/// 打开界面时也要生效），持久化失败则回滚运行态，不制造「界面已改、执行没变」。
+///
+/// `required` 在链路身份不可用时由核心拒绝（fail-visible，不静默当明文）。
+#[tauri::command]
+pub async fn set_app_link_crypto_policy(
+    webview: tauri::Webview,
+    plugin_id: String,
+    policy: link_crypto::EncryptionPolicy,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
     db: State<'_, Arc<std::sync::Mutex<Database>>>,
 ) -> Result<()> {
-    require_host_frontend(
-        plugin_host.inner().as_ref(),
+    wasmnest_wasm_core::manager::host::api_bridge::authorize_plugin_call(
+        plugin_host.inner(),
         webview.label(),
+        &plugin_id,
         &credential,
-        "set_traffic_encryption_config",
     )?;
-    let config = LinkCryptoConfig::from_floor(floor);
-    {
-        let guard = db.lock().expect("main db lock poisoned");
-        link_crypto::persist_config_to_db(guard.conn(), &config)?;
+    if !plugin_host.is_activated(&plugin_id).await {
+        return Err(crate::AppError::Plugin(format!("Plugin {plugin_id} is not activated")));
     }
-    link_crypto::update_config(config);
-    link_crypto::sync_registration();
-    tracing::info!(floor = floor.as_str(), "link crypto host floor updated (host-gated)");
+
+    let previous = link_crypto::app_policy(&plugin_id);
+    link_crypto::set_app_policy(&plugin_id, policy).map_err(crate::AppError::InvalidInput)?;
+    let snapshot = link_crypto::app_policy_snapshot();
+    let persisted = {
+        let guard = db.lock().expect("main db lock poisoned");
+        link_crypto::persist_app_policies_to_db(guard.conn(), &snapshot)
+    };
+    if let Err(e) = persisted {
+        // 落库失败 → 回滚运行态（界面不能显示「已生效」而重启后又变回去）
+        let _ = link_crypto::set_app_policy(&plugin_id, previous);
+        return Err(e);
+    }
+    tracing::info!(plugin_id = %plugin_id, policy = policy.as_str(), "app link encryption policy updated");
     Ok(())
 }
 

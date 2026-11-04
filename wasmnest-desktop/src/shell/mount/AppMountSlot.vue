@@ -67,6 +67,8 @@ import {
   appStorageGet,
   appStorageSet,
   appStorageDelete,
+  appLinkCryptoGet,
+  appLinkCryptoSet,
   refreshChannelToken,
 } from '@/utils/appCommands'
 import { whitelistedHostInvoke } from '@/shell/mount/invokeWhitelist'
@@ -121,6 +123,8 @@ async function buildEnv(initialRoute: string, appId: string): Promise<AppMountEn
     appStorageGet: (key) => appStorageGet(appId, key),
     appStorageSet: (key, value) => appStorageSet(appId, key, value),
     appStorageDelete: (key) => appStorageDelete(appId, key),
+    appLinkCryptoGet: () => appLinkCryptoGet(appId),
+    appLinkCryptoSet: (policy) => appLinkCryptoSet(appId, policy),
     locale: settingsStore.settings.ui.language || 'zh-CN',
     theme: settingsStore.settings.ui.theme || 'dark',
     platform: platformInfo.value.isDesktop ? 'desktop' : 'mobile',

@@ -82,6 +82,12 @@ struct MockDesktop {
 
 impl MockDesktop {
     async fn start() -> Self {
+        Self::start_bound("127.0.0.1").await
+    }
+
+    /// 绑定指定地址（链路加密用例必须用非环回地址：环回是桌面端本地豁免面，
+    /// 过滤器不介入，加信封只会把密文直投插件）
+    async fn start_bound(bind_ip: &str) -> Self {
         let state = Arc::new(MockState::default());
         let state_clone = state.clone();
         let server = actix_web::HttpServer::new(move || {
@@ -94,7 +100,7 @@ impl MockDesktop {
                 .route("/crypto", actix_web::web::post().to(mock_crypto))
                 .route("/slow", actix_web::web::get().to(mock_slow))
         })
-        .bind(("127.0.0.1", 0))
+        .bind((bind_ip, 0))
         .expect("bind mock proxy server");
         let addr = server.addrs()[0];
         let server = server.run();
@@ -141,6 +147,25 @@ impl Drop for MockDesktop {
             let _ = handle.stop(false).await;
         });
     }
+}
+
+/// 等待 mock 服务器真正开始监听（`start_bound` 只保证 bind，run 在独立线程轮询）
+async fn wait_mock_ready(addr: std::net::SocketAddr) {
+    for _ in 0..100 {
+        if tokio::net::TcpStream::connect(addr).await.is_ok() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("mock server {addr} did not start listening");
+}
+
+/// 取本机非环回地址（UDP connect 只做路由选择，不发包）
+fn primary_non_loopback_ip() -> Option<std::net::IpAddr> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let ip = socket.local_addr().ok()?.ip();
+    (!ip.is_loopback()).then_some(ip)
 }
 
 // ==================== Mock handlers ====================
@@ -289,7 +314,9 @@ async fn jwt_injection_and_auth_whitelist() {
         "desktop",
     );
     auth_req.body = Some(json!({ "deviceId": "dev-1", "deviceName": "mi-pad", "fingerprint": "fp" }).to_string());
-    let resp = execute_proxy(auth_req, None, &CallerIdentity::Host).await.expect("auth request should pass");
+    let resp = execute_proxy(auth_req, None, &CallerIdentity::Host)
+        .await
+        .expect("auth request should pass");
     assert_eq!(resp.status, 200);
     let cap = mock.capture("/api/auth/pairing");
     assert!(cap.authorization.is_none(), "auth 路径不得注入 JWT");
@@ -350,7 +377,9 @@ async fn wire_alignment() {
     let mut req = proxy_req("w-1", "POST", &format!("{}/echo", mock.base_url()), "desktop");
     req.headers.insert("Host".to_string(), "evil.example.com".to_string());
     req.headers.insert("Range".to_string(), "bytes=0-1023".to_string());
-    let _ = execute_proxy(req, None, &CallerIdentity::Host).await.expect("echo should pass");
+    let _ = execute_proxy(req, None, &CallerIdentity::Host)
+        .await
+        .expect("echo should pass");
 
     let cap = mock.capture("/echo");
     assert_eq!(
@@ -371,7 +400,12 @@ async fn wire_alignment() {
 async fn crypto_envelope_roundtrip() {
     let _serial = SERIAL.lock().unwrap();
     reset_egress();
-    let mock = mock_once().await;
+    let Some(bind_ip) = primary_non_loopback_ip() else {
+        eprintln!("skipping: no non-loopback interface available");
+        return;
+    };
+    let mock = MockDesktop::start_bound(&bind_ip.to_string()).await;
+    wait_mock_ready(mock.addr).await;
     wasmnest_mobile_lib::egress::policy().add_desktop_target(&mock.addr.ip().to_string(), mock.addr.port());
 
     // 开加密：主开关 + HTTP 子开关 + pin（对应前端推送 set_link_crypto_context）
@@ -384,7 +418,9 @@ async fn crypto_envelope_roundtrip() {
 
     let mut req = proxy_req("c-1", "POST", &format!("{}/crypto", mock.base_url()), "desktop");
     req.body = Some("hello sealed".to_string());
-    let resp = execute_proxy(req, None, &CallerIdentity::Host).await.expect("crypto request should pass");
+    let resp = execute_proxy(req, None, &CallerIdentity::Host)
+        .await
+        .expect("crypto request should pass");
     assert_eq!(resp.status, 200);
     assert!(
         resp.body_text.contains("decrypted ok"),
@@ -393,6 +429,76 @@ async fn crypto_envelope_roundtrip() {
     );
     // mock 侧已断言请求信封解密得 "hello sealed"（panic 即失败）
 
+    reset_egress();
+}
+
+/// 应用发起（Plugin 身份）的加密跟随**该应用**策略：required → 加信封并成对解密
+#[tokio::test]
+async fn app_request_envelope_follows_per_app_policy() {
+    let _serial = SERIAL.lock().unwrap();
+    reset_egress();
+    let Some(bind_ip) = primary_non_loopback_ip() else {
+        eprintln!("skipping: no non-loopback interface available");
+        return;
+    };
+    let mock = MockDesktop::start_bound(&bind_ip.to_string()).await;
+    wait_mock_ready(mock.addr).await;
+    wasmnest_mobile_lib::egress::policy().add_desktop_target(&mock.addr.ip().to_string(), mock.addr.port());
+    wasmnest_mobile_lib::state::set_link_crypto_context(wasmnest_mobile_lib::state::LinkCryptoContext {
+        enabled: true,
+        strict_mode: true,
+        encrypt_http: true,
+        kd_public_b64: Some(base64::engine::general_purpose::STANDARD.encode(kd_pub())),
+    });
+    let plugin = "com.example.crypto-app";
+    wasmnest_mobile_lib::state::set_link_crypto_server(
+        &bind_ip.to_string(),
+        mock.addr.port(),
+        true,
+        [(plugin.to_string(), "required".to_string())].into_iter().collect(),
+    );
+
+    assert_eq!(
+        wasmnest_mobile_lib::state::link_crypto_app_policy(&bind_ip.to_string(), mock.addr.port(), plugin).as_deref(),
+        Some("required"),
+        "policy cache must be visible"
+    );
+    assert!(wasmnest_mobile_lib::state::is_http_encryption_active());
+
+    let mut req = proxy_req("app-1", "POST", &format!("{}/crypto", mock.base_url()), "desktop");
+    req.body = Some("hello sealed".to_string());
+    let resp = execute_proxy(req, None, &CallerIdentity::Plugin(plugin.to_string()))
+        .await
+        .expect("app request with required policy should pass");
+    assert_eq!(resp.status, 200);
+    assert!(
+        resp.body_text.contains("decrypted ok"),
+        "响应应被解密为明文: {}",
+        resp.body_text
+    );
+
+    // 同一应用切到 off：该客户端不应再加信封（明文 /echo 也能通）
+    wasmnest_mobile_lib::state::set_link_crypto_server(
+        &bind_ip.to_string(),
+        mock.addr.port(),
+        true,
+        [(plugin.to_string(), "off".to_string())].into_iter().collect(),
+    );
+    let mut plain = proxy_req("app-2", "POST", &format!("{}/echo", mock.base_url()), "desktop");
+    plain.body = Some("plain".to_string());
+    let resp = execute_proxy(plain, None, &CallerIdentity::Plugin(plugin.to_string()))
+        .await
+        .expect("off app request should pass");
+    assert_eq!(resp.status, 200);
+    let cap = mock.capture("/echo");
+    assert!(
+        cap.crypto_negotiation.is_none(),
+        "off 应用不得携带协商头: {:?}",
+        cap.crypto_negotiation
+    );
+
+    wasmnest_mobile_lib::state::clear_link_crypto_servers();
+    wasmnest_mobile_lib::state::set_link_crypto_context(wasmnest_mobile_lib::state::LinkCryptoContext::default());
     reset_egress();
 }
 

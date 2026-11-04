@@ -36,7 +36,7 @@ use crate::Result;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// JWT 注入白名单前缀：`/api/auth/*` 不带 Bearer（与现状一致，spec §5 第 4 条）
-const AUTH_PATH_PREFIX: &str = "/api/auth/";
+pub(crate) const AUTH_PATH_PREFIX: &str = "/api/auth/";
 
 /// 桌面端 HTTP 为局域网明文（单端口自定义），https 外网不得借 kind=desktop 逃逸
 const DESKTOP_REQUIRED_SCHEME: &str = "http";
@@ -166,9 +166,12 @@ pub fn should_inject_jwt(path: &str, token: &str, host_request: bool) -> bool {
     host_request && !path.starts_with(AUTH_PATH_PREFIX) && !token.is_empty()
 }
 
-/// 链路加密判定：主开关 ∧ HTTP 子开关 ∧ 已 pin（state.rs），且非 auth 路径
+/// 链路加密判定：主开关 ∧ HTTP 子开关 ∧ 已 pin（state.rs），且非明文白名单路径
+///
+/// auth 路径要明文响应（pin 刷新），health 路径在桌面端被过滤器豁免——两者加
+/// 信封只会得到「对端不参与」的 400 或明文降级警告。
 pub fn should_encrypt(path: &str) -> bool {
-    is_http_encryption_active() && !path.starts_with(AUTH_PATH_PREFIX)
+    is_http_encryption_active() && !path.starts_with(AUTH_PATH_PREFIX) && path != "/api/health" && path != "/health"
 }
 
 // ==================== 核心命令 ====================
@@ -327,10 +330,23 @@ pub async fn execute_proxy(
 
     // 链路加密信封（非 auth 且开关开且已 pin）
     //
-    // 只对宿主请求生效：信封密钥是宿主与桌面端协商的会话密钥，应用请求加信封
-    // 只会让服务端解不开（而会把密文当明文）——应用出站靠传输层身份（`source`）
-    // 与 egress 判定，不借宿主的密钥体系
-    let encryption_active = host_request && should_encrypt(&path);
+    // 触发面 = 宿主请求 ∪ 目标为已声明桌面端的应用请求：信封密钥是宿主与桌面端
+    // 协商的会话密钥，只有“对端就是那台桌面”时才成立（外部 URL 加信封只会让
+    // 对端解不开）。应用请求还要求健康探测已报告「对端链上有加密过滤器」——
+    // 对端全 off 时加信封只会被 fail-visible 400（`linkCryptoActive` 能力位）。
+    let local_target = crate::egress::is_loopback_host(&parsed.host);
+    // 应用请求按**该应用**在对端的策略裁决（off / 未登记 = 明文）；策略来自健康
+    // 探测缓存。宿主请求保持既有行为（shell 只打 auth/health 等宿主面）。
+    let app_policy_encrypts = match (&caller, parsed.port) {
+        (crate::commands::host_gate::CallerIdentity::Plugin(plugin_id), Some(port)) => matches!(
+            crate::state::link_crypto_app_policy(&parsed.host, port, plugin_id).as_deref(),
+            Some("preferred") | Some("required")
+        ),
+        _ => false,
+    };
+    let desktop_target_request = kind == "desktop" && !local_target && app_policy_encrypts;
+    // 环回目标是桌面端本地豁免面（过滤器不介入）：加信封 = 把密文直投插件
+    let encryption_active = !local_target && (host_request || desktop_target_request) && should_encrypt(&path);
     let mut request_keys: Option<wasmnest_link_crypto::HttpTrafficKeys> = None;
     let mut body_bytes: Option<Vec<u8>> = request.body.clone().map(String::into_bytes);
 
@@ -453,6 +469,26 @@ pub async fn execute_proxy(
         String::from_utf8_lossy(&raw_body).to_string()
     };
 
+    // 健康探测：缓存对端能力快照（过滤器是否在链上 + 应用策略 → 应用 HTTP
+    // 是否加信封的判据）。只认 200 + JSON 字段；缺字段（旧宿主）= 不覆盖缓存
+    // （未知 → 明文；required 应用会显性 400）。
+    if kind == "desktop" && path == "/api/health" && status.is_success() {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&body_text) {
+            if let (Some(active), Some(port)) = (value.get("linkCryptoActive").and_then(|v| v.as_bool()), parsed.port) {
+                let policies = value
+                    .get("linkCryptoPolicies")
+                    .and_then(|v| v.as_object())
+                    .map(|map| {
+                        map.iter()
+                            .filter_map(|(k, v)| v.as_str().map(|policy| (k.clone(), policy.to_string())))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                crate::state::set_link_crypto_server(&parsed.host, port, active, policies);
+            }
+        }
+    }
+
     // pin 刷新收束（handoff §3.5）：auth 响应携带 kdPublicB64 → Rust 落地 +
     // 广播 ws_link_crypto_pin（前端 localStorage 保留作设置页展示，裁决在 Rust）
     if path.starts_with(AUTH_PATH_PREFIX) {
@@ -506,12 +542,7 @@ pub async fn http_cancel(
     credential: String,
 ) -> Result<()> {
     let channel = crate::commands::host_gate::channel_registry(&app)?;
-    let caller = crate::commands::host_gate::resolve_caller(
-        &channel,
-        webview.label(),
-        "http_cancel",
-        &credential,
-    )?;
+    let caller = crate::commands::host_gate::resolve_caller(&channel, webview.label(), "http_cancel", &credential)?;
     tracing::debug!(request_id = %request_id, caller = ?caller, "http proxy: cancel requested");
     cancel_pending(&request_id).await
 }
