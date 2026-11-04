@@ -8,6 +8,24 @@
 - 前端**禁止** `fetch` / `XMLHttpRequest` / `WebSocket` / `EventSource` / `navigator.sendBeacon`，禁止 `window.open` / `location.href=` 等导航原语，禁止裸 `__TAURI__`，禁止 import `@tauri-apps/plugin-{http,fs,shell,updater,opener}`。
 - 一切 HTTP / WS / 文件访问由 Rust 端发起并经权限仲裁：走 `invoke(...)` → 宿主命令 / `appInvoke(...)` → 插件命令面。允许 `convertFileSrc`（既定产物 / 图标加载路径）与 `invoke` / `listen`。
 - **三层封锁**：① 源码 ESLint 静态锁（根 `eslint.config.js`）② Tauri ACL 运行期拒（ACL 未写即拒）③ CSP 引擎级封（`connect-src 'none'`；`index.html` 不得内联 `<style>` / `<script>`，nonce 会令 `'unsafe-inline'` 失效——锁在 `src-tauri/tests/capabilities_lock.rs`）。**ACL 与 CSP 两层无豁免机制**：要开就改锁并写清理由。
+
+### 1.1 能力位 ↔ wasm 权限位对照表（安全审查 #47，2026-11-02）
+
+两套账的根源：用户在应用详情页看到 / 撤销的是 **wasm 权限位**（`PermissionManager`，guest host fn 入口仲裁），而 **Tauri 能力位**（ACL）是 webview 级、对同 webview 的所有应用前端一起生效。语义重叠的能力位因此等于「绕过权限位」。
+
+裁决真源 = `src-tauri/tests/capabilities_lock.rs` 的 `WASM_EQUIVALENT_PERMISSION_DECISIONS`（新增条目不写进该表则锁红）：
+
+| 能力位 | 重叠的 wasm 权限位 | 现状 | 收敛入口 |
+| --- | --- | --- | --- |
+| `dialog:allow-open`（桌面） | `fs:pick` | 保留：`bedcode` 桌面前端的目录选择器直接调 `@tauri-apps/plugin-dialog` | 应用改走宿主 `plugin.platform_picker`（wasm 侧已端口化）后撤除 |
+| `dialog:default`（移动） | `fs:pick` | 保留：宿主壳设置页 `confirm` + 插件安装对话框 | 逐步收窄到具体 `allow-*` |
+| `notification:default`（桌面） | `notify` | 保留：`file-transfer` 前端的本机进度提示 | 应用改走共享域契约 `host-notify`（已双端门禁） |
+| `task-notification:default`（移动） | `notify` | 保留：宿主壳连接 / 任务状态通知（Kotlin 插件命令） | 宿主命令封装（发起权归 Rust）+ 应用面走 `host-notify` |
+| `foreground-service:default`（移动） | 无 | 保留：宿主连接保活（宿主机制，应用无消费者） | 正向白名单固定命令面 |
+| `os:allow-{platform,arch,version,os-type}` | 无（平台信息面） | 保留：`usePlatform` 唯一入口（双端同形） | 已从 `os:default` 收窄到四条；主机名 / locale 不开 |
+| `process:allow-restart` | 无（进程面） | 保留：设置页「检查更新 → 安装后重启」（`relaunch()`） | 已从 `process:default` 收窄到单条；`exit` / `spawn` 不开 |
+
+配套口径：`machine-uid` 移动端为 **Rust 侧**调用（`app.machine_uid()`），不需要 ACL，已从 `mobile.json` 移除（前端拿到硬件指纹 = 跨应用关联面）。
 - 唯一豁免路径：ESLint 层逐行 `eslint-disable-next-line` 并注明理由（豁免随 code review 可见，不静默放行）。
 - 错误处理：统一 `logger`（真源 `src/utils/frontendLogger.ts`，双端头注释写明 release 落盘差异——**桌面 release 侧 error/warn 仍转发落盘、移动 release 侧整体空实现，勿强行统一**）；禁止静默 `catch`；IPC 调用统一走 `src/utils/invoke.ts`（带超时，失败承载为 ADR 0030 错误信封）；用户可见文案一律走 i18n。
 - 禁止用 viewport 宽度 / UA 字符串推断平台；平台判断统一走 Tauri API / `usePlatform`。
