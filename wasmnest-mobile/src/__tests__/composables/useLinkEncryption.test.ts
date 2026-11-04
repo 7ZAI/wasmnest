@@ -3,7 +3,7 @@
  *
  * 覆盖配置持久化往返、HTTP 通道子开关粒度判定与 pin 依赖：
  * isChannelEncryptionActive = 主开关 ∧ HTTP 子开关 ∧ 已 pin。
- * WS 通道子开关已随桌面端插件端点帧加密退役（票 06），本测试不再覆盖。
+ * WS 帧加密由宿主 Rust 引擎透明处理（前端无 WS 开关/通道字面量），本测试不覆盖 WS。
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -121,17 +121,22 @@ describe('syncLinkCryptoContextToNative（set_link_crypto_context 推送）', ()
     setEnabled(true)
     setStrictMode(true)
     setChannel('http', false)
-    mockInvoke.mockResolvedValue(undefined)
+    // 宿主面门（安全审查 #42）：开关推送必须附宿主 loader 会话凭证
+    mockInvoke.mockImplementation((cmd: string) =>
+      cmd === 'plugin_frontend_loader_session' ? Promise.resolve('host-cred') : Promise.resolve(undefined),
+    )
 
     await syncLinkCryptoContextToNative()
 
-    expect(mockInvoke).toHaveBeenCalledWith('set_link_crypto_context', {
+    const pushCall = mockInvoke.mock.calls.find(([cmd]) => cmd === 'set_link_crypto_context')
+    expect(pushCall?.[1]).toEqual({
       enabled: true,
       strictMode: true,
       encryptHttp: false,
       kdPublicB64: 'cHVibGljLWtleQ==',
+      credential: 'host-cred',
     })
-    expect(mockInvoke.mock.calls[0][1]).not.toHaveProperty('encryptWsEvent')
+    expect(pushCall?.[1]).not.toHaveProperty('encryptWsEvent')
   })
 })
 
