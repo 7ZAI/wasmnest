@@ -49,6 +49,10 @@
       "types": "./src/ui/Select.d.ts",
       "import": "./src/ui/Select.vue"
     },
+    "./ui/number-field": {
+      "types": "./src/ui/NumberField.d.ts",
+      "import": "./src/ui/NumberField.vue"
+    },
     "./ui/zoom-compensation": {
       "types": "./src/ui/zoom-compensation.d.ts",
       "import": "./src/ui/zoom-compensation.ts"
@@ -84,6 +88,7 @@
     "marked": "^18.0.11"
   },
   "peerDependencies": {
+    "reka-ui": "^2.11.0",
     "vite": "^8.0.0",
     "vue": "^3.4.0"
   },
@@ -91,6 +96,7 @@
     "@vitejs/plugin-vue": "^6.0.0",
     "@vue/test-utils": "^2.4.11",
     "happy-dom": "^13.10.1",
+    "reka-ui": "^2.11.0",
     "tsup": "^8.5.1",
     "vitest": "^3.2.7"
   }
