@@ -323,6 +323,22 @@ pub fn register_core_lifecycle_hooks() {
         }
     });
 
+    // mDNS 共享守护 — 优先级 45（广告与插件句柄回收之后）
+    //
+    // 共享守护是进程级后台线程（`mdns-sd::ServiceDaemon`），插件浏览/广播句柄
+    // 已在 deactivate 中按属主回收、宿主广告已在上一步 stop。这里显式发 shutdown：
+    // 进程退出也能回收，但「优雅关闭」应覆盖守护线程本身，而不是只靠 final
+    // `process::exit` 硬杀。`shutdown()` 只投递 Exit 命令，不阻塞；若命令队列满/
+    // 守护已退出，记录后继续（进程退出是最终兜底）。
+    registry.on_shutdown("mdns-shared-daemon", 45, || async {
+        if let Some(daemon) = wasmnest_discovery_engine::engine::daemon_if_initialized() {
+            match daemon.shutdown() {
+                Ok(_status_rx) => tracing::info!("mDNS shared daemon shutdown requested"),
+                Err(e) => tracing::warn!(error = %e, "Failed to request mDNS shared daemon shutdown"),
+            }
+        }
+    });
+
     // PowerManager — 优先级 50，释放休眠阻止
     registry.on_shutdown("power-manager", 50, || async {
         crate::system::power::power_manager().disable();
