@@ -329,7 +329,7 @@ export default {
         check: '检查更新',
         apply: '更新到 v{version}',
         checking: '正在检查更新…',
-        upToDate: '已是最新（v{version}）',
+        upToDate: '已是最新',
         available: '可更新到 v{version}',
         incompatible: '发现新版本 v{version}，但与当前平台不兼容',
         updating: '正在下载并更新…',

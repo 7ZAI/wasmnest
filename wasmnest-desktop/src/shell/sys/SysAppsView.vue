@@ -135,6 +135,11 @@
         >
           <ShellIcon name="reset" :size="13" /> {{ t('shell.apps.update.check') }}
         </button>
+        <!-- 当前版本号常显在「检查更新」右侧（不依赖检查结果；升级后随清单刷新） -->
+        <span
+          class="sub-note mono"
+          :data-testid="`sys-apps-update-version-${app.pluginId}`"
+        >v{{ app.version }}</span>
         <span
           v-if="updateStatusText(app.id)"
           class="sub-note update-status"
@@ -296,7 +301,8 @@ function updateStatusText(appId: string): string {
     case 'checking':
       return t('shell.apps.update.checking')
     case 'up-to-date':
-      return t('shell.apps.update.upToDate', { version: st.currentVersion ?? '' })
+      // 当前版本号已常显在检查按钮右侧，状态行不再重复版本
+      return t('shell.apps.update.upToDate')
     case 'available':
       return t('shell.apps.update.available', { version: st.latestVersion ?? '' })
     case 'incompatible':

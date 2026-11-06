@@ -340,7 +340,7 @@ export default {
         check: 'Check for updates',
         apply: 'Update to v{version}',
         checking: 'Checking for updates…',
-        upToDate: 'Up to date (v{version})',
+        upToDate: 'Up to date',
         available: 'v{version} available',
         incompatible: 'New version v{version} found, but it is incompatible with this platform',
         updating: 'Downloading and updating…',
