@@ -80,19 +80,13 @@
 
       <!-- ==================== 自启（系统服务默认开，用户可关） ==================== -->
       <template v-if="canAutostart">
-        <ShellSection
-          :title="t('shell.apps.autostart')"
-          :note="isService ? t('shell.apps.systemServiceHint') : t('shell.apps.autostartHint')"
-        />
+        <ShellSection :title="t('shell.apps.autostart')" />
         <div class="px-4 pb-1">
           <ShellGroupCard>
             <div class="flex items-center gap-3 px-3 py-3 min-h-[var(--mobile-touch-target-min)]">
               <div class="flex-1 min-w-0">
                 <div class="shell-type-label text-[var(--mobile-text-primary)]">
                   {{ t('shell.apps.autostart') }}
-                </div>
-                <div class="shell-type-caption text-[var(--mobile-text-secondary)]">
-                  {{ t('shell.apps.autostartHint') }}
                 </div>
               </div>
               <Toggle
@@ -163,7 +157,7 @@
            双端同一口径（2026-11-04 与桌面端对齐）：权限随应用包声明，由宿主
            整单裁决（审批 / 加载），详情页只做只读呈现，不提供逐项开关。
            系统服务（L1/L2）同样只读：权限随包固定，不经用户授权。 -->
-      <ShellSection :title="t('shell.detail.permissions')" :note="permissionsNote" />
+      <ShellSection :title="t('shell.detail.permissions')" />
       <div class="px-4 pb-1">
         <ShellGroupCard v-if="permissionGroups.length > 0">
           <template v-for="group in permissionGroups" :key="group.id">
@@ -180,16 +174,7 @@
                   {{ permissionTitle(grant.key) }}
                   <code class="ml-1.5 shell-type-micro text-[var(--mobile-text-secondary)]">{{ grant.key }}</code>
                 </div>
-                <div
-                  v-if="permissionDesc(grant.key)"
-                  class="shell-type-caption text-[var(--mobile-text-secondary)]"
-                >
-                  {{ permissionDesc(grant.key) }}
-                </div>
-                <div v-if="grant.locked" class="shell-type-caption text-[var(--mobile-text-secondary)]">
-                  {{ t('shell.detail.permissionLocked') }}
-                </div>
-                <div v-else-if="grant.scope" class="shell-type-caption text-[var(--mobile-text-secondary)]">
+                <div v-if="grant.scope" class="shell-type-caption text-[var(--mobile-text-secondary)]">
                   {{ grant.scope }}
                 </div>
               </div>
@@ -203,15 +188,6 @@
           class="rounded-[12px] border border-dashed border-[var(--mobile-border-hover)] px-3 py-4 text-center shell-type-caption text-[var(--mobile-text-secondary)]"
         >
           {{ t('mobile.plugin.noPermissions') }}
-        </p>
-        <!-- 只读说明：权限松紧由 manifest 声明与宿主整单裁决决定，详情页不提供开关。
-             信息不隐藏：权限词、locked 标记与 scope 仍逐条展示。系统服务的固定口径
-             已由分区 note 说明，不重复。 -->
-        <p
-          v-if="!isService && permissionGroups.length > 0"
-          class="mt-2 px-1 shell-type-caption text-[var(--mobile-text-secondary)]"
-        >
-          {{ t('shell.detail.permissionsReadonly') }}
         </p>
         <!-- 审批失败等动作错误：放在权限区下方沿用既有提示位，不伪造成功态 -->
         <p v-if="actionError" class="mt-2 px-1 shell-type-caption" :style="{ color: 'var(--mobile-error)' }">
@@ -231,16 +207,6 @@
           </div>
           <!-- 缓存行已删：后端没有缓存统计源，永远显示「—」的行属于空白项 -->
         </ShellGroupCard>
-      </div>
-
-      <!-- ==================== 授权记录 ==================== -->
-      <ShellSection :title="t('shell.detail.grants')" :note="t('shell.detail.grantsNote')" />
-      <div class="px-4 pb-1">
-        <p
-          class="rounded-[12px] border border-dashed border-[var(--mobile-border-hover)] px-3 py-4 text-center shell-type-caption text-[var(--mobile-text-secondary)]"
-        >
-          {{ t('shell.detail.grantsEmpty') }}
-        </p>
       </div>
 
       <!-- ==================== 操作 ==================== -->
@@ -315,7 +281,8 @@
  * 权限清单只读（2026-11-04 与桌面端对齐）：裁决在 Rust 端——用户安装应用
  * 整单审批 + 内容哈希钉扎，生效权限 = 批准 ∩ manifest 声明；内置应用随包受信。
  * 详情页不提供逐项开关，只呈现声明事实（词 / locked / scope）。
- * 授权记录区没有后端读模型，渲染空态而不是编造几条示例。
+ * 页面只保留值、动作、命名、警告与异常；分区说明 / 条目描述等次级文字按
+ * docs/frontend.md §4.4「布局自解释」不渲染。授权记录没有后端读模型，不留占位区。
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -325,7 +292,7 @@ import { useToast } from '../../composables/useToast'
 import { useAppUpdates, type AppUpdateState } from '../../composables/useAppUpdates'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
-import { groupPermissions, permissionDescKey, permissionTitleKey } from '../../permissions'
+import { groupPermissions, permissionTitleKey } from '../../permissions'
 import { formatBytes, isServiceKind } from '../../utils'
 import ShellAppIcon from '../ShellAppIcon.vue'
 import ShellChip from '../ShellChip.vue'
@@ -422,30 +389,10 @@ const permissionGroups = computed(() =>
   groupPermissions(app.value?.permissions ?? [], 'shell.permission.group.other'),
 )
 
-/**
- * 权限分区说明
- *
- * 系统服务没有逐项开关（权限随包固定），这里说明「为什么没有开关」，
- * 而不是继续报授予计数——否则用户会去别处找本不存在的控制项。
- */
-const permissionsNote = computed(() => {
-  if (isService.value) return t('shell.detail.permissionServiceFixed')
-  const list = app.value?.permissions ?? []
-  const granted = list.filter((p) => p.granted).length
-  const locked = list.filter((p) => p.locked).length
-  return t('shell.detail.permissionsNote', { granted, locked })
-})
-
 /** 权限标题：复用既有本地化文案，未知权限回退原始权限词（不显示为空白） */
 function permissionTitle(key: string): string {
   const i18nKey = permissionTitleKey(key)
   return i18nKey ? t(i18nKey) : key
-}
-
-/** 权限说明：已知权限展示能力边界（如 metrics:read 的侧信道提示）；未知权限不占行 */
-function permissionDesc(key: string): string {
-  const i18nKey = permissionDescKey(key)
-  return i18nKey ? t(i18nKey) : ''
 }
 
 const stateLabel = computed(() => {

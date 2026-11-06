@@ -53,8 +53,6 @@ export default {
       systemServices: 'System services',
       businessApps: 'Apps',
       autostart: 'Autostart',
-      autostartHint: 'Auto-activate at startup (preference only; takes effect next boot)',
-      systemServiceHint: 'Bundled system service; uninstall is disabled. Autostart can be turned off below.',
       addTitle: 'Add app',
       installLocal: 'Install local package (.wasm)',
       empty: 'No apps',
@@ -94,18 +92,10 @@ export default {
       /** Runtime state (each app owns its connection; the platform projects state only) */
       state: 'Runtime state',
       permissions: 'Permissions',
-      permissionsNote: '{granted} granted · {locked} by default',
-      permissionsReadonly:
-        'Permissions are declared by the app package and decided as a whole by the host; read-only here, cannot be changed per item.',
-      permissionServiceFixed:
-        'System service permissions are fixed by the bundled manifest and cannot be changed.',
       permissionLocked: 'Granted by default · cannot be changed',
       permissionUnsupported: 'Per-permission toggles are not supported by the current backend',
       storage: 'Storage',
       appData: 'App data',
-      grants: 'Grant log',
-      grantsNote: 'Last 7 days',
-      grantsEmpty: 'No grant records',
       disable: 'Disable app',
       stopService: 'Stop service',
       /** Stop-service confirmation (services are resident capabilities; a mistaken stop has wide impact) */

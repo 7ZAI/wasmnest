@@ -51,8 +51,6 @@ export default {
       systemServices: '系统服务',
       businessApps: '应用',
       autostart: '自启',
-      autostartHint: '启动时自动激活（只改偏好，下次启动生效）',
-      systemServiceHint: '系统服务随包分发，不可卸载；自启可在下方关闭',
       addTitle: '添加应用',
       installLocal: '安装本地包（.wasm）',
       empty: '暂无应用',
@@ -91,18 +89,10 @@ export default {
       /** 运行态（应用自持连接，平台只投影运行态） */
       state: '运行状态',
       permissions: '权限',
-      permissionsNote: '{granted} 项已授予 · {locked} 项默认',
-      /** 权限清单只读（2026-11-04 与桌面端对齐）：审批整单 + 哈希钉扎，不做逐项开关 */
-      permissionsReadonly: '权限随应用包声明，宿主整单裁决；此处只读，不可逐项变更。',
-      /** 系统服务（L1/L2）同样只读：权限随包固定，不经用户授权（2026-10-23 用户裁决） */
-      permissionServiceFixed: '系统服务的权限随包固定，不可逐项变更。',
       permissionLocked: '默认授予 · 不可变更',
       permissionUnsupported: '当前后端不支持逐项开关权限',
       storage: '存储',
       appData: '应用数据',
-      grants: '授权记录',
-      grantsNote: '近 7 天',
-      grantsEmpty: '暂无授权记录',
       disable: '停用应用',
       /** 停止动作按装配角色分词语：服务说「停止服务」（同一裁决） */
       stopService: '停止服务',

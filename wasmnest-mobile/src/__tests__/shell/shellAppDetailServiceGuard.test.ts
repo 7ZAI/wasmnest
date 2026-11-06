@@ -6,7 +6,7 @@
  * - 系统服务显示自启开关（默认开由宿主 `isAutostart` 给出，UI 不伪造）；
  * - 切换自启写偏好：成功后更新本地态，失败不改（不制造「看起来开了」的假成功）；
  * - 权限清单统一只读（2026-11-04 与桌面端对齐）：系统服务与业务应用都
- *   **不渲染任何逐项开关**，只在业务应用下展示只读说明；
+ *   **不渲染任何逐项开关**；分区说明 / 条目描述等次级文字按布局自解释口径退役；
  * - 停止动作按 kind 分词语：服务说「停止服务」（`shell.detail.stopService`）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -206,12 +206,11 @@ describe('系统服务详情：不可卸载 + 自启可关', () => {
     expect(wrapper.text()).not.toContain('shell.apps.autostart')
   })
 
-  it('服务详情不渲染任何权限开关：清单只读 + 说明权限随包固定', async () => {
+  it('服务详情不渲染任何权限开关：权限词仍逐条展示', async () => {
     const wrapper = await mountDetail()
     // 只剩自启一个开关；声明的 metrics:read 仍以只读行呈现（信息不隐藏）
     expect(allToggles(wrapper)).toHaveLength(1)
     expect(wrapper.text()).toContain('metrics:read')
-    expect(wrapper.text()).toContain('shell.detail.permissionServiceFixed')
     expect(wrapper.text()).not.toContain('shell.detail.permissionUnsupported')
   })
 
@@ -223,10 +222,30 @@ describe('系统服务详情：不可卸载 + 自启可关', () => {
     // 只剩自启一个开关；权限词仍逐条展示（信息不隐藏）
     expect(allToggles(wrapper)).toHaveLength(1)
     expect(wrapper.text()).toContain('fs:write')
-    expect(wrapper.text()).toContain('shell.detail.permissionsNote')
-    expect(wrapper.text()).toContain('shell.detail.permissionsReadonly')
     expect(wrapper.text()).not.toContain('shell.detail.permissionServiceFixed')
     expect(wrapper.text()).not.toContain('shell.detail.permissionUnsupported')
+  })
+
+  it('详情页不渲染次级说明与描述：布局自解释', async () => {
+    // 退役面反向锁：分区说明 / 行内提示 / 只读说明 / 授权记录占位文案不得回接
+    const retired = [
+      'shell.apps.autostartHint',
+      'shell.apps.systemServiceHint',
+      'shell.detail.permissionsNote',
+      'shell.detail.permissionsReadonly',
+      'shell.detail.permissionServiceFixed',
+      'shell.detail.grants',
+      'shell.detail.grantsNote',
+      'shell.detail.grantsEmpty',
+    ]
+    for (const app of [serviceApp(), businessApp()]) {
+      mocks.app = app
+      const wrapper = await mountDetail()
+      for (const key of retired) {
+        expect(wrapper.text(), `${key} 不得回接`).not.toContain(key)
+      }
+      wrapper.unmount()
+    }
   })
 
   it('业务应用的停止按钮仍为「停用应用」', async () => {
