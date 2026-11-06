@@ -423,14 +423,21 @@ pub fn get_app_version() -> String {
 
 // ==================== Window Close Commands ====================
 
-/// 用户确认关闭窗口（前端确认弹窗后调用）
+/// 用户确认退出（前端退出确认弹窗后调用）
 ///
-/// 使用 destroy() 直接销毁窗口，不再次触发 CloseRequested
+/// **不能**再走 `window.close()`，也不能只销毁 main 窗口：
+/// - 会话守卫在存活 PTY 存在时 `prevent_close()`（见
+///   `system::lifecycle::register_window_close_hooks`），前端再次 close 只会重新
+///   弹确认面——2026-11-05 用户缺陷「点仍然退出没效果 / 无法关闭应用」的根因；
+/// - 只 `destroy()` main 时，独立终端窗口仍存活，进程不会退出。
+///
+/// 用户已明确确认，先启动**有界优雅关闭**（shutdown hooks）；hooks 完成后再
+/// `app.exit(0)`，超时/主线程卡死由 shutdown 协调器 watchdog 强制结束进程
+/// （先优雅、实在不行再强制，2026-11-05 用户裁决）。
 #[tauri::command]
 pub fn confirm_window_close(app_handle: tauri::AppHandle) -> Result<()> {
-    if let Some(window) = app_handle.get_webview_window("main") {
-        window.destroy().map_err(|e| crate::AppError::Internal(e.to_string()))?;
-    }
+    tracing::info!("User confirmed exit; starting graceful shutdown");
+    crate::system::shutdown::begin_graceful_shutdown(&app_handle);
     Ok(())
 }
 

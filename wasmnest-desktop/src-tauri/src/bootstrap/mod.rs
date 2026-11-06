@@ -743,7 +743,6 @@ pub fn run() {
             let window = app_handle
                 .get_webview_window("main")
                 .expect("Failed to get main window");
-            let close_window = window.clone();
             let close_app_handle = app_handle.clone();
             window.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -752,16 +751,15 @@ pub fn run() {
                     // 因此改为先阻止关闭，再 spawn 异步任务检查钩子
                     api.prevent_close();
 
-                    let win = close_window.clone();
                     let ah = close_app_handle.clone();
                     tauri::async_runtime::spawn(async move {
                         let should_close = system::lifecycle::lifecycle_registry().run_window_close_hooks().await;
 
                         if should_close {
-                            // 无运行中会话，直接关闭
-                            if let Err(e) = win.destroy() {
-                                tracing::error!("Failed to destroy window: {}", e);
-                            }
+                            // 主窗口关闭 = 退出整个应用。先走有界优雅关闭：
+                            // hooks 完成后再 app.exit(0)，超时由 shutdown 协调器 watchdog
+                            // 强制结束进程（2026-11-05 用户裁决：先优雅，实在不行再强制）。
+                            system::shutdown::begin_graceful_shutdown(&ah);
                         } else {
                             // 有运行中会话，通知前端弹窗确认。payload = 插件登记域视图
                             // 数组原样透传（`session-list {filter:"running"}`）——「哪些状态
@@ -932,14 +930,23 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    // 使用 .build() + .run() 替代 .run()，以接入 Tauri RunEvent 循环
-    // RunEvent::ExitRequested 是执行优雅关闭的最后时机
-    app.run(move |_app_handle, event| match event {
-        tauri::RunEvent::ExitRequested { .. } => {
-            tracing::info!("WasmNest Desktop exit requested, running shutdown hooks...");
-            tauri::async_runtime::block_on(async {
-                system::lifecycle::lifecycle_registry().run_shutdown_hooks().await;
-            });
+    // 使用 .build() + .run() 替代 .run()，以接入 Tauri RunEvent 循环。
+    //
+    // 退出分两段（2026-11-05 用户裁决）：
+    // 1. 优雅关闭：shutdown 协调器在 async runtime 跑 hooks（不阻塞主线程），
+    //    期间 `api.prevent_exit()` 拦住默认退出；
+    // 2. 强制关闭：hooks 超时 / 主线程卡死时，协调器 watchdog 直接结束进程。
+    app.run(move |app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { api, .. } => {
+            if system::shutdown::should_allow_exit() {
+                tracing::info!("WasmNest Desktop exit allowed (graceful shutdown completed)");
+            } else {
+                // 主线程不跑 block_on：hooks 在 async runtime 上执行，避免 Tokio
+                // 繁忙时 main-thread block_on 死锁；完成后再请求一次退出。
+                api.prevent_exit();
+                tracing::info!("WasmNest Desktop exit requested; waiting for graceful shutdown");
+                system::shutdown::begin_graceful_shutdown(app_handle);
+            }
         }
         tauri::RunEvent::Exit { .. } => {
             tracing::info!("WasmNest Desktop exited");

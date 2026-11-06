@@ -237,6 +237,9 @@ export default {
         desc: '以下应用仍在运行：',
         none: '没有应用在运行，可直接退出。',
         confirm: '仍然退出',
+        quitting: '正在优雅关闭应用…',
+        quittingHint: '若长时间无响应，将自动强制退出。',
+        quittingButton: '正在退出…',
       },
     },
     settings: {

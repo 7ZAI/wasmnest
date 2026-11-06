@@ -18,7 +18,7 @@
             <div class="dlg-h danger">
               <span class="dlg-ic"><ShellIcon name="exit" :size="15" /></span>
               <span class="t">{{ t('shell.dialog.exit.title') }}</span>
-              <button class="dlg-x" :aria-label="t('shell.dialog.close')" @click="close">
+              <button class="dlg-x" :disabled="quitting" :aria-label="t('shell.dialog.close')" @click="close">
                 <ShellIcon name="x" :size="13" />
               </button>
             </div>
@@ -28,12 +28,23 @@
                 <span class="tg">{{ running.name }}</span>
                 <span class="shell-chip warn">{{ t('shell.state.running') }}</span>
               </div>
-              <p v-if="!runningApps.length" class="note">{{ t('shell.dialog.exit.none') }}</p>
+              <template v-if="quitting">
+                <p class="note" data-testid="exit-quitting">
+                  {{ t('shell.dialog.exit.quitting') }}
+                </p>
+                <p class="note">{{ t('shell.dialog.exit.quittingHint') }}</p>
+              </template>
+              <p v-else-if="!runningApps.length" class="note">
+                {{ t('shell.dialog.exit.none') }}
+              </p>
             </div>
             <div class="dlg-f">
-              <button class="shell-btn ghost" @click="close">{{ t('shell.dialog.cancel') }}</button>
-              <button class="shell-btn danger-fill" @click="confirmExit">
-                <ShellIcon name="exit" :size="13" /> {{ t('shell.dialog.exit.confirm') }}
+              <button class="shell-btn ghost" :disabled="quitting" @click="close">
+                {{ t('shell.dialog.cancel') }}
+              </button>
+              <button class="shell-btn danger-fill" :disabled="quitting" @click="confirmExit">
+                <ShellIcon name="exit" :size="13" />
+                {{ quitting ? t('shell.dialog.exit.quittingButton') : t('shell.dialog.exit.confirm') }}
               </button>
             </div>
           </template>
@@ -166,10 +177,18 @@
  * - 安装升级确认（2026-10-28）：安装外部应用包命中已装同 id（user-installed、
  *   未运行）时先确认，确认 = confirmInstallUpgrade（就地升级保数据；新装不经弹窗）。
  * 窗口关闭按钮与 requestClose 统一走退出确认，避免绕过会话关窗守卫。
+ * 宿主侧会话守卫拦截关窗时广播 `window-close-requested`（存活 PTY 场景），
+ * 本组件在主窗口自监听并打开确认面；确认后调 `confirm_window_close` 启动
+ * **有界优雅关闭**（宿主 hooks 超时后 watchdog 强制退出），**不能再调 window.close()**
+ * ——会话守卫会再次拦截，形成「点仍然退出没反应」的循环（2026-11-05 用户缺陷）。
+ * 确认后进入 quitting 态：保持进度可见、禁止关闭弹窗/重复触发；命令失败才恢复。
  */
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { logger } from '@/utils/frontendLogger'
 import { isHighRisk } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
 import { useShellApps } from '../composables/useShellApps'
@@ -178,6 +197,40 @@ import ShellIcon from './ShellIcon.vue'
 const { t } = useI18n()
 const state = useShellState()
 const appsStore = useShellApps()
+
+/** 宿主关窗守卫广播的 unlisten（仅主窗口装配；独立终端窗口不消费退出确认） */
+let unlistenWindowClose: UnlistenFn | null = null
+
+/** 已确认退出：宿主正在有界优雅关闭，禁止关闭弹窗 / 重复触发 */
+const quitting = ref(false)
+
+onMounted(async () => {
+  // 独立终端窗口同样挂载壳根（bareWindow），但退出确认只属于主窗口。
+  // 浏览器预览没有 Tauri 窗口元数据，直接跳过（事件通道也不存在）。
+  try {
+    if (getCurrentWindow().label !== 'main') return
+  } catch {
+    return
+  }
+
+  try {
+    unlistenWindowClose = await listen('window-close-requested', () => {
+      // 宿主已拦下未确认的关窗（session-guard：仍有存活 PTY），打开确认面；
+      // 用户确认后走 confirm_window_close 启动有界优雅关闭。已确认退出后，
+      // 关窗守卫的重复广播不再改写确认面（否则会回到可点击状态）。
+      if (quitting.value) return
+      state.dialogAppId.value = null
+      state.dialog.value = 'exit'
+    })
+  } catch (e) {
+    logger.warn('[Shell] window-close-requested listener unavailable:', e)
+  }
+})
+
+onUnmounted(() => {
+  unlistenWindowClose?.()
+  unlistenWindowClose = null
+})
 
 const dialog = computed(() => state.dialog.value)
 const app = computed(() =>
@@ -216,6 +269,8 @@ const dlgTitle = computed(() => {
 })
 
 function close() {
+  // 退出已确认：关闭弹窗不得中断宿主的有界优雅关闭（只限退出面）。
+  if (quitting.value && dialog.value === 'exit') return
   state.dialog.value = null
   state.dialogAppId.value = null
   // 升级确认的选包目标随弹窗关闭作废（其余弹窗本就不消费它，清空无害）
@@ -223,10 +278,18 @@ function close() {
 }
 
 async function confirmExit() {
+  if (quitting.value) return
+  // 先进入 quitting 态再 invoke：宿主命令只负责启动有界优雅关闭，命令返回时
+  // 进程可能仍在跑 hooks；确认面保持可见并显示进度，直到窗口随进程退出。
+  quitting.value = true
   try {
-    await getCurrentWindow().close()
-  } catch {
-    /* 预览环境（非 Tauri）忽略 */
+    // 会话守卫会拦截普通 window.close()；用户已确认，先走宿主优雅关闭
+    // （hooks 有总预算，超过后由宿主 watchdog 强制退出）。
+    await invoke('confirm_window_close')
+  } catch (e) {
+    // 命令失败必须显性：恢复确认面供重试，详情进日志。
+    quitting.value = false
+    logger.error('[Shell] confirm exit failed:', e)
   }
 }
 

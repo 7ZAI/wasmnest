@@ -244,6 +244,9 @@ export default {
         desc: 'These apps are still running:',
         none: 'No apps running; you can quit now.',
         confirm: 'Quit anyway',
+        quitting: 'Shutting down gracefully…',
+        quittingHint: 'The app will force-quit if it stops responding.',
+        quittingButton: 'Quitting…',
       },
     },
     settings: {

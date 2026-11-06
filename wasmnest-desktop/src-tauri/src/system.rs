@@ -20,6 +20,8 @@ pub mod lifecycle;
 pub mod logging;
 pub mod power;
 pub mod power_wake;
+// 退出协调器：优雅关闭（有界）→ 正常退出 → 超时强制退出（2026-11-05）
+pub mod shutdown;
 // 宿主进程 / WebView 进程指标（`host-metrics.snapshot` 的 `process` 段）——
 // 「整个 wasmnest 占多少内存 / CPU」只能按 OS 进程树算，见文件头归属判据
 pub mod process_metrics;
