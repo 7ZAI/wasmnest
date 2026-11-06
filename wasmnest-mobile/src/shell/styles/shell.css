@@ -73,8 +73,6 @@
   --shell-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   /* 系统宫格图标与桌面壳同口径：中性 card 表面 + stroke 线稿（样式见
      .shell-sys-tile）。不按入口上色，双端保持同一套图标语言（2026-10-23）。 */
-  /* 快捷磁贴 hover 光晕：由强调色派生，随主题与色板变化（原为硬编码青色 rgba） */
-  --shell-action-glow: 0 0 15px color-mix(in srgb, var(--mobile-accent) 12%, transparent);
 }
 
 /* ============================================================================
@@ -305,18 +303,18 @@
 }
 
 /* ============================================================================
-   字母头像渐变档位（LetterAvatar 用）
+   字母头像（LetterAvatar 用）
    ----------------------------------------------------------------------------
-   迁移自旧 `components/LetterAvatar.vue` 的六组硬编码渐变：颜色落点收归本文件
-   （唯一允许出现字面色值的落点），组件只按 seed 哈希选档。档位固定不随主题
-   反转——头像底不是主题语义面，因此不做深浅两套。
+   2026-11-05 unslop 审核：六组彩虹渐变（靛 / 蓝 / 绿 / 琥珀 / 粉 / 青）退役。
+   头像底不是主题语义面，但仍属于宿主 chrome——用一层 accent tint + secondary
+   文字 + hairline，与桌面端收敛后的做法一致；不同 seed 只由首字母区分，
+   不再用色相区分。
    ============================================================================ */
-.shell-avatar-g0 { background: linear-gradient(135deg, #7c3aed, #4f46e5); }
-.shell-avatar-g1 { background: linear-gradient(135deg, #0ea5e9, #6366f1); }
-.shell-avatar-g2 { background: linear-gradient(135deg, #10b981, #0d9488); }
-.shell-avatar-g3 { background: linear-gradient(135deg, #f59e0b, #ef4444); }
-.shell-avatar-g4 { background: linear-gradient(135deg, #ec4899, #8b5cf6); }
-.shell-avatar-g5 { background: linear-gradient(135deg, #06b6d4, #3b82f6); }
+.shell-avatar-tint {
+  background: color-mix(in srgb, var(--mobile-accent) 12%, var(--mobile-bg-card));
+  border: 1px solid var(--mobile-border);
+  color: var(--mobile-text-secondary);
+}
 
 /* 分组卡片的默认悬浮影：ShellGroupCard 只给形状与分隔线，投影属于壳的
    材质语汇（主题可整条覆盖；写进组件 inline style 会压过主题规则）。 */

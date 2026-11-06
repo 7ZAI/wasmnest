@@ -521,7 +521,7 @@ function onDimInput(event: Event): void {
   justify-content: space-between;
   margin-top: 0.25rem;
   font-size: clamp(0.5625rem, 0.625rem + (100vw - 360px) / 840, 0.6875rem);
-  color: var(--mobile-text-disabled);
+  color: var(--mobile-text-muted);
 }
 
 /* ==================== 主题选择器 ====================

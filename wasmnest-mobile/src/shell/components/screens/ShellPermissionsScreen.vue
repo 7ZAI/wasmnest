@@ -292,7 +292,7 @@ function grantStateOf(app: ShellApp, key: string): GrantState {
   if (!grant || !grant.granted) {
     return {
       label: t('shell.permissions.ungranted'),
-      color: 'var(--mobile-text-disabled)',
+      color: 'var(--mobile-text-muted)',
       filled: false,
       locked: false,
     }

@@ -20,11 +20,11 @@
         ]"
       ></div>
       <div
-        class="absolute top-[3px] w-3 h-3 rounded-[2px] transition-all"
+        class="absolute top-1/2 -translate-y-1/2 left-[3px] w-3 h-3 rounded-[2px] transition-[transform,background-color] duration-150 motion-reduce:transition-none"
         :class="[
           modelValue
-            ? 'left-[22px] bg-[var(--mobile-text-on-accent)]'
-            : 'left-[3px] bg-[var(--mobile-bg-tertiary)]'
+            ? 'translate-x-[19px] bg-[var(--mobile-text-on-accent)]'
+            : 'bg-[var(--mobile-bg-tertiary)]'
         ]"
       ></div>
     </div>

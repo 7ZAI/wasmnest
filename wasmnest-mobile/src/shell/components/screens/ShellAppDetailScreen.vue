@@ -44,7 +44,7 @@
           class="rounded-[12px] border px-3 py-3"
           :style="{
             background: 'var(--mobile-warning-muted)',
-            borderColor: 'var(--mobile-warning)',
+            borderColor: 'color-mix(in srgb, var(--mobile-warning) 35%, transparent)',
           }"
         >
           <p class="shell-type-body text-[var(--mobile-text-primary)]">

@@ -2,7 +2,7 @@
   <!-- 宿主页头模式（descriptor.header 默认 true）：复用 SettingsSubPage（back + title + 滚动区） -->
   <SettingsSubPage v-if="pageMeta.header" :title="pageTitle">
     <component :is="routeComponent" v-if="routeComponent" />
-    <div v-else class="flex items-center justify-center h-full text-[var(--mobile-text-disabled)] text-sm">
+    <div v-else class="flex items-center justify-center h-full text-[var(--mobile-text-secondary)] text-sm">
       {{ pluginRoute ? t('mobile.plugin.loadFailed') : t('mobile.plugin.routeLoading') }}
     </div>
   </SettingsSubPage>
@@ -10,7 +10,7 @@
   <!-- 裸渲染模式：插件自带布局/页头 -->
   <div v-else class="h-full">
     <component :is="routeComponent" v-if="routeComponent" />
-    <div v-else class="flex items-center justify-center h-full text-[var(--mobile-text-disabled)] text-sm">
+    <div v-else class="flex items-center justify-center h-full text-[var(--mobile-text-secondary)] text-sm">
       {{ pluginRoute ? t('mobile.plugin.loadFailed') : t('mobile.plugin.routeLoading') }}
     </div>
   </div>
