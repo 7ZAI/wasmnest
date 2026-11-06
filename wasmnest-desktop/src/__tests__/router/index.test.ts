@@ -57,6 +57,8 @@ describe('Router Configuration（静态表）', () => {
       expect(routeByName('history').path).toBe('/history')
       // bedcode 新增内部路由的宿主镜像（Agent 管理域，原 agent-hub 并入）
       expect(routeByName('app-agents').path).toBe('/agents')
+      // bedcode 新增内部路由的宿主镜像（Agent 编排：列表 + /:id 详情）
+      expect(routeByName('app-orchestrations').path).toBe('/orchestrations/:sub(.*)?')
       // bedcode 新增内部路由的宿主镜像（项目容器，issue #23 M2；:id 深链走子段）
       expect(routeByName('app-projects').path).toBe('/projects/:sub(.*)?')
       // 其余 app：独立界面单面路由（含 servers/ 下的认证中心）
@@ -71,6 +73,7 @@ describe('Router Configuration（静态表）', () => {
         'tasks',
         'history',
         'app-agents',
+        'app-orchestrations',
         'app-projects',
         'app-ai-chatbox',
         'app-file-transfer',

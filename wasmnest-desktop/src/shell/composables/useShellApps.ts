@@ -158,6 +158,7 @@ const APP_ROUTE_PREFIXES: Readonly<Record<string, string[]>> = {
     '/history',
     '/terminal-window',
     '/agents',
+    '/orchestrations',
   ],
   [AI_CHATBOX_PLUGIN_ID]: ['/chat'],
   [FILE_TRANSFER_PLUGIN_ID]: ['/transfer'],

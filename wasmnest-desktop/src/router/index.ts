@@ -13,6 +13,7 @@
  * - com.wasmnest.bedcode：/pairing /sessions /projects(.*)? /tasks
  *   /settings(.*)? /server /history /terminal-window/:id
  * - com.wasmnest.bedcode 增：/agents（Agent 管理域，并入自 agent-hub）
+ *   /orchestrations（Agent 编排，列表 + /:id 详情）
  *   /projects（项目容器，issue #23 M2）
  * - com.wasmnest.ai-chatbox：/chat
  * - com.wasmnest.file-transfer：/transfer
@@ -88,6 +89,13 @@ const router = createRouter({
       name: 'app-agents',
       component: AppMountSlot,
       props: { appId: TERMINAL_PLUGIN_ID, route: '/agents' },
+    },
+    {
+      // Agent 编排（bedcode 新增内部路由的宿主镜像）：列表 + /:id 详情
+      path: '/orchestrations/:sub(.*)?',
+      name: 'app-orchestrations',
+      component: AppMountSlot,
+      props: (route) => ({ appId: TERMINAL_PLUGIN_ID, route: route.fullPath }),
     },
     {
       // 连接历史：设备列表「历史」按钮 query 深链直达
