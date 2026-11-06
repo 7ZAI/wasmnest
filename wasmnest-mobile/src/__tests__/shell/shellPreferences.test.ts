@@ -5,7 +5,7 @@
  *
  * | 契约 | 来源 | 规则 | 预期 |
  * |---|---|---|---|
- * | C-P1 | load 缺省分支 | 无存储时用默认档（aurora / 30） | 默认值 |
+ * | C-P1 | load 缺省分支 | 无存储时用默认档（none / 16） | 默认值 |
  * | C-P2 | load 正常分支 | 合法存储被读取 | 读回存储值 |
  * | C-P3 | load 逐项校验 | 非法 wallpaper / 越界 dim 各自回落默认 | 单项回落，不整表重置 |
  * | C-P4 | load 异常分支 | 损坏 JSON | 回落默认且不抛（warn 可见） |
@@ -90,11 +90,11 @@ describe('C-P1..C-P4 偏好加载', () => {
 
   it('should_fallBackToDefaults_when_storageCorrupted', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { useShellPreferences, WALL_DIM_DEFAULT } = await loadPrefsWith('{not json')
+    const { useShellPreferences, WALLPAPER_DEFAULT, WALL_DIM_DEFAULT } = await loadPrefsWith('{not json')
 
     const prefs = useShellPreferences()
 
-    expect(prefs.wallpaper.value).toBe('aurora')
+    expect(prefs.wallpaper.value).toBe(WALLPAPER_DEFAULT)
     expect(prefs.wallDim.value).toBe(WALL_DIM_DEFAULT)
     expect(warn, '损坏数据要可观测，不能静默').toHaveBeenCalled()
   })

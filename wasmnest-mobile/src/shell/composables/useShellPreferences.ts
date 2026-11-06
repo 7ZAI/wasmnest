@@ -25,7 +25,14 @@ export type ShellWallpaper = (typeof SHELL_WALLPAPERS)[number]
 /** 自定义档位的内部标识（与 i18n / token 无关，只用于分支） */
 export const WALLPAPER_CUSTOM: ShellWallpaper = 'custom'
 
-export const WALLPAPER_DEFAULT: ShellWallpaper = 'aurora'
+/**
+ * 默认档 = none（2026-11-05 unslop 审核裁决）
+ *
+ * 首装不再铺 aurora：它是 accent 26% + success 16% 的全屏色阶，浅色主题下整屏
+ * 读作薄荷绿，把「暖纸墨」的宿主表面染成另一种产品。壁纸保留为可选档位，
+ * 默认让内容（应用图标 / 卡片）承担颜色。
+ */
+export const WALLPAPER_DEFAULT: ShellWallpaper = 'none'
 /** 遮罩强度上限：超过 70% 壁纸几乎不可见，留着只是让用户白调 */
 export const WALL_DIM_MAX = 70
 /**
