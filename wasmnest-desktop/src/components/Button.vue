@@ -3,7 +3,7 @@
     :type="type"
     :disabled="disabled || loading"
     :title="title"
-    class="inline-flex items-center justify-center gap-2 font-medium rounded-btn transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-dark-900"
+    class="inline-flex items-center justify-center gap-2 font-medium rounded-btn transition-[background-color,border-color,color,opacity,transform] duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-dark-900"
     :class="[variantClass, sizeClass, { 'opacity-50 cursor-not-allowed': disabled || loading }]"
     @click="$emit('click', $event)"
   >
@@ -62,7 +62,7 @@ const variantClass = computed(() => {
     case 'secondary':
       return 'bg-card hover:bg-[var(--bg-hover)] text-[var(--text-primary)] border border-[var(--border)] focus:ring-[var(--border)]'
     case 'danger':
-      return 'bg-[var(--color-danger-light)] hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 focus:ring-red-500'
+      return 'bg-[var(--color-danger-light)] hover:bg-[var(--color-danger-light)] text-[var(--color-danger-ink)] focus:ring-[var(--color-danger)]'
     case 'ghost':
       return 'bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] focus:ring-[var(--border)]'
     default:

@@ -7,11 +7,11 @@
         @click.self="closeOnBackdrop && close()"
       >
         <!-- Backdrop -->
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+        <div class="absolute inset-0 bg-black/55 backdrop-blur-sm"></div>
 
-        <!-- Modal Content -->
+        <!-- Modal Content：浅色用小阴影，深色靠 surface step + hairline，不用大阴影 -->
         <div
-          class="relative rounded-card shadow-2xl border bg-card border-[var(--border)]"
+          class="relative rounded-card border bg-card border-[var(--border)] shadow-[0_1px_2px_rgba(0,0,0,0.08)] dark:shadow-none"
           :class="[sizeClass]"
         >
           <!-- Header -->
@@ -116,7 +116,12 @@ function close() {
 <style scoped>
 .modal-enter-active,
 .modal-leave-active {
-  transition: all 0.2s ease;
+  transition: opacity 200ms var(--motion-ease, ease);
+}
+
+.modal-enter-active > div:last-child,
+.modal-leave-active > div:last-child {
+  transition: transform 200ms var(--motion-ease, ease);
 }
 
 .modal-enter-from,
@@ -126,6 +131,6 @@ function close() {
 
 .modal-enter-from > div:last-child,
 .modal-leave-to > div:last-child {
-  transform: scale(0.95);
+  transform: scale(0.98);
 }
 </style>

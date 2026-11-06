@@ -79,8 +79,8 @@ html.platform-linux {
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
 
   /* 动态字体大小：各档以"正常"档位实际像素为基准，随 --ui-scale 等比缩放 */
-  --font-size-xs: calc(9px * var(--ui-scale));
-  --font-size-sm: calc(10px * var(--ui-scale));
+  --font-size-xs: calc(10px * var(--ui-scale));
+  --font-size-sm: calc(11px * var(--ui-scale));
   --font-size-base: calc(12px * var(--ui-scale));
   --font-size-lg: calc(14px * var(--ui-scale));
   --font-size-xl: calc(16px * var(--ui-scale));
@@ -805,22 +805,20 @@ body {
   flex-shrink: 0;
 }
 
-/* 小号全大写 section 标题（ENABLED · 2 等） */
+/* 小号 section 标题（ENABLED · 2 等）：sentence case，靠字号/颜色分层，不靠全大写 */
 .wb-section-title {
   font-size: calc(11px * var(--ui-scale));
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   color: var(--text-secondary);
   margin-bottom: 8px;
 }
 
-/* 侧边栏分组标签（Navigation / Plugins / Status） */
+/* 侧边栏分组标签（Navigation / Plugins / Status）：sentence case；技术 token 才保留大写 */
 .wb-sidebar-section {
-  font-size: calc(10px * var(--ui-scale));
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
+  font-size: calc(11px * var(--ui-scale));
+  font-weight: 500;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   white-space: nowrap;
 }

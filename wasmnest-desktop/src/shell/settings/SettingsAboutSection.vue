@@ -24,8 +24,8 @@
           <template v-if="updateStatus === 'downloading'">
             <div class="w-32 h-1.5 bg-[var(--border)] overflow-hidden">
               <div
-                class="h-full bg-[var(--color-primary)] transition-all duration-300"
-                :style="{ width: downloadPercent + '%' }"
+                class="h-full w-full origin-left bg-[var(--color-primary)] transition-transform duration-300"
+                :style="{ transform: `scaleX(${downloadPercent / 100})` }"
               />
             </div>
             <span class="wb-mono text-[var(--text-secondary)]">{{ downloadPercent }}%</span>
