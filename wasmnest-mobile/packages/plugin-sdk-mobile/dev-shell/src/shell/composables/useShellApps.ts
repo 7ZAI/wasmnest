@@ -16,7 +16,7 @@ import { computed, ref, type Component, type ComputedRef, type Ref } from 'vue'
 import { i18n } from '../../i18n'
 import { logger } from '../logger'
 import { getShellRegistry } from '../registry'
-import type { ShellApp, ShellAppSource } from '../types'
+import type { ShellApp, ShellAppSource, ShellInstallRestoreDecider } from '../types'
 import { pushRecent } from './useShellRecent'
 import { useShellNavigation } from './useShellNavigation'
 import { useShellNotifications } from './useShellNotifications'
@@ -307,7 +307,9 @@ function supportsInstall(): boolean {
  * @returns 安装后的应用 id；null = 用户取消（调用方不弹错误）。
  *          失败由 catch 抛出，错误已由 lastError 暴露。
  */
-async function installFromLocalPackage(): Promise<string | null> {
+async function installFromLocalPackage(
+  decideRestore?: ShellInstallRestoreDecider,
+): Promise<string | null> {
   const source = registry
     .listSources()
     .find((s): s is ShellAppSource & Required<Pick<ShellAppSource, 'installFromLocalPackage'>> =>
@@ -318,7 +320,7 @@ async function installFromLocalPackage(): Promise<string | null> {
     return null
   }
   try {
-    const installedId = await source.installFromLocalPackage()
+    const installedId = await source.installFromLocalPackage(decideRestore)
     if (installedId !== null) {
       await refresh()
       // 安装成功的新应用名要到刷新后的清单里取（安装前注册表里还没有它）

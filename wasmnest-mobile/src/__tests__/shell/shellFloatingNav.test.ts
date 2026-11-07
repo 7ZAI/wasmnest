@@ -8,11 +8,12 @@
  * | C-F1 | 开关 | 默认关闭；关闭时不渲染 | DOM 无悬浮条 |
  * | C-F2 | 回主屏 | 任意页面点 home = 重置壳栈 + 进壳路由 | goHome + push(mobile-shell) |
  * | C-F3 | 多任务 | 点多任务 = 打开切换屏 + 进壳路由 | openSwitcher + push |
+ * | C-F3b | 返回 | 壳内走共用返回序列；整页路由回浏览器历史；无可退时置灰 | 调用 / disabled 在场 |
  * | C-F4 | 已在壳内 | 不重复导航 | 只调 goHome，不 push |
  * | C-F5 | 拖动 | 越过阈值才判拖拽；抬手落归一化位置 | setFloatingNavPos(x,y) 在 [0,1] |
  * | C-F6 | 拖拽余波 | 拖动抬手补的 click 在捕获阶段被吞没 | preventDefault 为真 |
  * | C-F7 | 键盘替代 | 拖动面聚焦后方向键移动并持久化 | 位置左移 + setFloatingNavPos |
- * | C-F8 | 可读名 | 两个按钮与拖动面都有 aria-label | 定位即断言 |
+ * | C-F8 | 可读名 | 三个按钮与拖动面都有 aria-label | 定位即断言 |
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -22,11 +23,17 @@ import { reactive, ref } from 'vue'
 
 const mockGoHome = vi.fn()
 const mockOpenSwitcher = vi.fn()
+const mockBackInShell = vi.fn(() => true)
 const mockPush = vi.fn(async () => undefined)
+const mockRouterBack = vi.fn()
+const mockRouterReplace = vi.fn(async () => undefined)
+const mockLeaveStandalone = vi.fn()
 const mockSetFloatingNavPos = vi.fn()
 
 const floatingNav = ref(true)
 const floatingNavPos = ref({ x: 0.5, y: 1 })
+/** 壳内是否有可返回目标（系统返回 / 悬浮返回同源判据） */
+const hasBackTarget = ref(false)
 /** 当前整页路由（旧设置二级页时 name 不是 mobile-shell） */
 const route = reactive<{ name: string }>({ name: 'mobile-shell' })
 
@@ -34,8 +41,14 @@ vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }))
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, back: mockRouterBack, replace: mockRouterReplace }),
   useRoute: () => route,
+}))
+vi.mock('@/shell/composables/useShellSystemBack', () => ({
+  useShellBackAction: () => ({ hasBackTarget, back: mockBackInShell }),
+}))
+vi.mock('@/router/standaloneBack', () => ({
+  leaveStandaloneRoute: (...args: unknown[]) => mockLeaveStandalone(...args),
 }))
 vi.mock('@/shell/composables/useShellNavigation', () => ({
   useShellNavigation: () => ({ goHome: mockGoHome, openSwitcher: mockOpenSwitcher }),
@@ -54,9 +67,22 @@ import enShell from '@/locales/en/shell'
 
 /** 测试视口与悬浮条尺寸：位置换算依赖实测尺寸，happy-dom 默认给 0 */
 const VIEWPORT = { width: 400, height: 800 }
-/** 与 shell.css 的胶囊尺寸同口径：6×2 padding + 48×2 按钮 + 12×2 间距 + 1 分隔线 */
-const NAV_SIZE = { width: 133, height: 56 }
+/** 与 shell.css 的胶囊尺寸同口径：6×2 padding + 48×3 按钮 + 12×2 间距 + 2 分隔线 */
+const NAV_SIZE = { width: 182, height: 56 }
 const EDGE_MARGIN = 12
+
+/**
+ * 模拟整页路由的历史回退目标
+ *
+ * happy-dom 的 `history.state` 不跟 `replaceState`（恒为 null），直接覆盖 getter：
+ * 一条断言就能分开「有整页历史」与「深链直入无历史」两个分支。
+ */
+function stubHistoryBack(back: string | null): void {
+  Object.defineProperty(window.history, 'state', {
+    configurable: true,
+    get: () => (back ? { back } : null),
+  })
+}
 
 function mountNav() {
   const wrapper = mount(ShellFloatingNav, { attachTo: document.body })
@@ -81,10 +107,15 @@ function bounds() {
 beforeEach(() => {
   mockGoHome.mockClear()
   mockOpenSwitcher.mockClear()
+  mockBackInShell.mockClear()
   mockPush.mockClear()
+  mockRouterBack.mockClear()
+  mockRouterReplace.mockClear()
+  mockLeaveStandalone.mockClear()
   mockSetFloatingNavPos.mockClear()
   floatingNav.value = true
   floatingNavPos.value = { x: 0.5, y: 1 }
+  hasBackTarget.value = false
   route.name = 'mobile-shell'
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: VIEWPORT.width })
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: VIEWPORT.height })
@@ -110,6 +141,7 @@ describe('C-F1 开关与渲染', () => {
     expect(bar.attributes('role'), '拖动面是语义分组').toBe('group')
     expect(bar.attributes('tabindex'), '拖动面可聚焦（方向键替代路径）').toBe('0')
     expect(bar.attributes('aria-label')).toBe('shell.floatingNav.move')
+    expect(wrapper.find('button[aria-label="shell.floatingNav.back"]').exists()).toBe(true)
     expect(wrapper.find('button[aria-label="shell.floatingNav.home"]').exists()).toBe(true)
     expect(wrapper.find('button[aria-label="shell.floatingNav.recents"]').exists()).toBe(true)
     wrapper.unmount()
@@ -117,6 +149,61 @@ describe('C-F1 开关与渲染', () => {
 })
 
 describe('C-F2..C-F4 导航动作', () => {
+  it('should_useSharedBackAction_when_backTappedInsideShell', async () => {
+    hasBackTarget.value = true
+    const { wrapper } = mountNav()
+    const back = wrapper.find('button[aria-label="shell.floatingNav.back"]')
+
+    expect(back.attributes('disabled'), '壳内有可退项时可点').toBeUndefined()
+    await back.trigger('click')
+    await flushPromises()
+
+    expect(mockBackInShell).toHaveBeenCalledTimes(1)
+    expect(mockPush, '已在壳内不重复导航').not.toHaveBeenCalled()
+    expect(mockRouterBack).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('should_disableBack_when_shellHasNothingToGoBackTo', () => {
+    // 主屏且无覆盖层 = 没有可退的东西：保留占位（胶囊宽度不跳）但置灰
+    const { wrapper } = mountNav()
+
+    expect(
+      wrapper.find('button[aria-label="shell.floatingNav.back"]').attributes('disabled'),
+    ).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('should_goBackInHistory_when_backTappedOnLegacyRoute', async () => {
+    route.name = 'mobile-settings-about'
+    stubHistoryBack('/mobile/shell')
+    const { wrapper } = mountNav()
+
+    await wrapper.find('button[aria-label="shell.floatingNav.back"]').trigger('click')
+    await flushPromises()
+
+    // 「有整页历史」交给共用实现判定（router.back）；壳内返回序列不得插手
+    expect(mockLeaveStandalone).toHaveBeenCalledTimes(1)
+    expect(mockLeaveStandalone.mock.calls[0][1]).toBe(true)
+    expect(mockBackInShell).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('should_fallBackToShellEntry_when_legacyRouteHasNoHistoryToGoBackTo', async () => {
+    // 直接深链进旧二级页：没有可回退的整页历史（交给共用实现 replace 回壳入口）
+    route.name = 'mobile-settings-appearance'
+    stubHistoryBack(null)
+    const { wrapper } = mountNav()
+
+    await wrapper.find('button[aria-label="shell.floatingNav.back"]').trigger('click')
+    await flushPromises()
+
+    expect(mockLeaveStandalone).toHaveBeenCalledTimes(1)
+    expect(mockLeaveStandalone.mock.calls[0][1]).toBe(false)
+    expect(mockBackInShell).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('should_goHomeAndEnterShell_when_homeTappedFromLegacyRoute', async () => {
     route.name = 'mobile-settings-about'
     const { wrapper } = mountNav()
@@ -270,7 +357,7 @@ describe('C-F8 文案双语在场', () => {
       ['zh-CN', (zhShell as any).shell],
       ['en', (enShell as any).shell],
     ] as const) {
-      for (const key of ['home', 'recents', 'move']) {
+      for (const key of ['back', 'home', 'recents', 'move']) {
         expect(typeof tree.floatingNav?.[key], `${locale} 缺 shell.floatingNav.${key}`).toBe(
           'string',
         )

@@ -260,10 +260,12 @@ app.mount(container)
 ## 8. WASM 后端（rust）
 
 插件后端编译为 **WASM 组件（Component Model）**，契约真源在
-`../wasmnest-lib/wasmnest-wasm-core/wit/core.wit`（机制必需面，8 import + 4 export）+ 能力域
+`../wasmnest-lib/wasmnest-wasm-core/wit/core.wit`（机制必需面，10 import + 3 export）+ 能力域
 `../wasmnest-lib/wasmnest-*/wit/<domain>.wit` + 端 `rust/wit-src/cap-*.wit`（每域一文件）/ `plugin-face.wit`；端生成物
 `packages/plugin-sdk-mobile/rust/wit/wasmnest.wit` 由 `compose.json` 驱动
-`scripts/compose-wit.mjs` 拼装（`world plugin` = `include` core + 6 个 cap），
+`scripts/compose-wit.mjs` 拼装（`world plugin` = `include` core + `plugin-face` + 10 个能力域包：
+`mdns` / `peer` / `http` / `ws` / `notify` / `notify-mobile` / `fs-mobile` / `terminal-stream` /
+`connection-target` / `auth-client`，均 `@0.0.1`），
 **禁止手改生成物**（漂移锁：平台仓根 `pnpm run check:wit` + husky pre-commit）。
 `rust/src/lib.rs` 实现 `WasmPlugin` trait 后以 `wasm_entry!` 宏生成组件导出
 （manifest / activate / deactivate / invoke_command / 生命周期钩子 / 事件 / 上传与传输钩子）；
@@ -272,9 +274,11 @@ app.mount(container)
 
 **版本与形态模型**（整数 ABI 已退役，ADR 0051 D2）：
 
-- **包版本** = WIT package semver `wasmnest:plugin@0.0.1`，真源能力仓
-  `../wasmnest-lib/wasmnest-contract/src/lib.rs::PACKAGE_VERSION`；compose.json 只声明包名，
-  源文件 package 行由 `compose-wit.mjs` 注入，`wit_package_version_lock.rs` 钉一致。
+- **包版本** = WIT package semver（拆包后按包独立版本化，ADR 0061）；`wasmnest:plugin@0.1.0`
+  的版本真源是能力仓 `../wasmnest-lib/wasmnest-contract/src/lib.rs::PACKAGE_VERSION`，
+  其余能力域包各自持 `@0.0.1`（真源 = 分片 `.wit` 的 package 行 + 同 crate 的 `WIT_PACKAGE` 常量）。
+  compose.json 只声明包名，生成物 `wasmnest.wit` 的 package 行由 `compose-wit.mjs` 注入；
+  双端锁钉一致（桌面 `wit_package_version_lock.rs` / 移动 `mobile_wit_composition_lock.rs`）。
 - **组件形态**经 `AbiPolicy` 只管 `abi-form`：桌面要求 `form = 1`，移动端 `None`
   （移动 WIT 无 `abi-form` 导出，不要求）——`compose.json` 里的 `abi.version`
   （桌面 38 / 移动 21）仅作重建提示的参考号，不再由 wasm-core 强制校验。
@@ -289,10 +293,10 @@ wasm 构建开启 `--features wasm`（`wasm_entry!` / `WasmHost` / `WasmPlugin` 
 
 | 项 | 桌面端 | 移动端 | 说明 |
 |----|--------|--------|------|
-| 宿主导入接口 | 26 组 | 18 组 | 真源 = 两端 `rust/wit/` 生成物（`grep 'interface host-'` 即得） |
-| 插件导出接口 | 4 组 | 4 组 | `command` / `lifecycle` / `events-binary` / `manifest`，均住 `core.wit` |
-| 核心机制面 | 8 import | 8 import | `host-storage` / `host-plugin-database` / `host-log` / `host-config` / `host-events` / `host-bus` / `host-fs` / `host-platform`（ADR 0052 D1） |
-| 桌面独有 | `host-pty` / `host-process` / `host-task` / `host-api-call` / `host-app` / `host-crypto` / `host-auth-center` / `host-connection-registry` / `host-timer` / `host-websocket`（客户端域） / `host-websocket-server` / `host-http-endpoint` / `host-fs-desktop` / `host-platform-desktop` | — | 端扩展的声明与实现均住桌面宿主（ADR 0052 D4） |
+| 宿主导入接口 | 29 组 | 20 组 | 真源 = 两端 `rust/wit/` 生成物（`grep 'interface host-'` 即得） |
+| 插件导出接口 | 5 组 | 4 组 | `core.wit` 的 `command` / `lifecycle` / `manifest` + `plugin-face.wit` 的 `events`（桌面另有 `abi-form`） |
+| 核心机制面 | 10 import | 10 import | `host-storage` / `host-plugin-database` / `host-log` / `host-config` / `host-events` / `host-bus` / `host-fs` / `host-platform` / `host-metrics` / `host-worker`（ADR 0052 D1） |
+| 桌面独有 | `host-pty` / `host-clipboard` / `host-process` / `host-task` / `host-api-call` / `host-app` / `host-crypto` / `host-auth-center` / `host-connection-registry` / `host-timer` / `host-websocket-server` / `host-http-endpoint` / `host-fs-desktop` / `host-platform-desktop` | — | 端扩展的声明与实现均住桌面宿主（ADR 0052 D4） |
 | 移动独有 | — | `host-terminal-stream` / `host-fs-mobile` / `host-notify-mobile` / `host-auth-client` / `host-connection-target` | 端独有域整面落移动宿主 |
 | 通知 | `host-notify`（共享契约房） | `host-notify` + `host-notify-mobile`（4 函数） | 2026-10-13 通知功能级统一；移动端附加震动 / 声音 / 权限查询面 |
 | 认证 | `host-auth-center`（v32 四函数 + 组合式原语） | `host-auth-client` | 入场签发密钥与生物公钥托管均归认证中心自持（ADR 0031 / 0033） |

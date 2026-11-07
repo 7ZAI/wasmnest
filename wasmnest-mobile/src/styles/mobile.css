@@ -130,7 +130,7 @@
   --mobile-group-divider: rgba(236, 232, 220, 0.06);
   --mobile-group-row-active: rgba(236, 232, 220, 0.05);
 
-  /* 分组标题 */
+  /* 分组标题（删除 .group-section-title 后暂无消费方；保留给后续分组标题面） */
   --mobile-section-title-color: #8A8270;
 
   /* 图标 chip 色调 (12% 透明底) - 状态色与桌面端语义色同源，violet 为移动端分类装饰色 */
@@ -290,7 +290,7 @@ html:not(.dark) .theme-base {
   --mobile-group-divider: rgba(38, 35, 27, 0.06);
   --mobile-group-row-active: rgba(38, 35, 27, 0.04);
 
-  /* 分组标题 */
+  /* 分组标题（删除 .group-section-title 后暂无消费方；保留给后续分组标题面） */
   --mobile-section-title-color: #776F5F;
 
   /* 图标 chip 色调 - 浅色模式（状态色用加深变体保证对比度，色相与桌面端语义色同族） */

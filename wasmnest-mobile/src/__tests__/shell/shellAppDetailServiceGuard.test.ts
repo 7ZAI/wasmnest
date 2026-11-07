@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   autostartValue: true,
   autostartSetOk: true,
   setAutostart: vi.fn(async () => true),
+  removeApp: vi.fn(async () => true),
   back: vi.fn(),
   openApp: vi.fn(),
   stopSpy: vi.fn(async () => {}),
@@ -32,7 +33,7 @@ vi.mock('@/shell/composables/useShellApps', () => ({
   useShellApps: () => ({
     getApp: () => mocks.app,
     supportsRemove: () => mocks.supportsRemove,
-    removeApp: vi.fn(async () => true),
+    removeApp: (...args: unknown[]) => mocks.removeApp(...args as [string, boolean?]),
     supportsAutostart: () => mocks.supportsAutostart,
     isAutostart: async () => mocks.autostartValue,
     setAutostart: (...args: unknown[]) => mocks.setAutostart(...args as []),
@@ -166,6 +167,24 @@ describe('系统服务详情：不可卸载 + 自启可关', () => {
 
     const wrapper = await mountDetail()
     expect(wrapper.text()).toContain('shell.detail.uninstall')
+  })
+
+  it('卸载确认缺省删除应用数据：removeApp(id, false)', async () => {
+    mocks.params.value = { appId: 'com.wasmnest.file-transfer' }
+    mocks.app = businessApp()
+
+    const { wrapper } = await mountDetailWithDialogStub()
+    const uninstall = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('shell.detail.uninstall'))
+    expect(uninstall, '卸载入口必须在位').toBeDefined()
+    await uninstall!.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.removeApp).toHaveBeenCalledWith('com.wasmnest.file-transfer', false)
   })
 
   it('服务显示自启开关并反映宿主偏好（默认开）', async () => {

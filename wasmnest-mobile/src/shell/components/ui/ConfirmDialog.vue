@@ -42,6 +42,7 @@
               <h3 class="text-lg font-semibold text-[var(--mobile-text-primary)]">{{ title }}</h3>
             </div>
             <p class="text-[var(--mobile-text-secondary)] text-sm leading-relaxed">{{ message }}</p>
+            <slot />
           </div>
 
           <!-- Actions -->

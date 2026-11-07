@@ -162,7 +162,19 @@ function measureInDocument(record: MutableSurfaceAppRecord): void {
   record.size = { width, height }
 }
 
-/** 按卡片盒子的可用尺寸等比缩放整幅画面（居中留边；量不到就先不猜） */
+/**
+ * 按卡片盒子的可用尺寸等比缩放整幅画面（居中留边；量不到就先不猜）
+ *
+ * 用 `Math.min`（contain，与桌面 `appSurfaceRegistry` 同口径）：缩略区展示的是
+ * 「应用的整页」，必须能看全——cover 取较大比例会裁掉应用右侧内容。
+ *
+ * 「零留边」由**卡片盒子**保证，不由这里改缩放策略：`.shell-recents-thumb` 填满
+ * 卡片剩余空间，卡片本身是竖版 3:4 而应用区多为横向（手机横屏 / 桌面应用），
+ * 比例天生不一致时 contain 必然留边——那是「看得全」的代价，不是缺陷。
+ * 桌面端之所以零留边，是因为那边卡片比例由 `recentsLayout` 按应用区比例解算。
+ *
+ * 卡片里内容要铺满、不裁切：宁可上下（或左右）留边，也不切掉应用的任何一页内容。
+ */
 function fitPreviewStyle(record: MutableSurfaceAppRecord, boxEl: HTMLElement): void {
   const size = record.size
   if (!size) return

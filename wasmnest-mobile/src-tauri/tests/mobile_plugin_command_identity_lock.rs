@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 /// 必须带身份并过门禁的命令（issue #28 收敛面 + issue #21 已落地的管理面
 /// + 2026-11-02 同判据补收的授权回执与终端通道登记）
-const CREDENTIAL_GATED: [&str; 19] = [
+const CREDENTIAL_GATED: [&str; 20] = [
     // issue #28：插件面命令（令牌决定身份，plugin_id 只作目标）
     "plugin_invoke",
     "plugin_storage_get",
@@ -38,7 +38,8 @@ const CREDENTIAL_GATED: [&str; 19] = [
     "plugin_activate",
     "plugin_deactivate",
     "plugin_approve",
-    "plugin_download",
+    "plugin_peek_app_package",
+    "plugin_download_package",
     "plugin_install_from_file",
     "plugin_uninstall",
     "reload_wasm_plugin",

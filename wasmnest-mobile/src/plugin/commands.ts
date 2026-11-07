@@ -160,16 +160,57 @@ export async function pluginDownloadUpdate(args: {
   return await invoke('plugin_download_update', { ...args, credential })
 }
 
-/** 从本地 zip 插件包安装（宿主面凭证已绑定，ADR 0058） */
-export async function pluginInstallFromFile(path: string, upgrade = false): Promise<string> {
-  const credential = await ensureHostCredential()
-  return await invoke('plugin_install_from_file', { path, credential, upgrade })
+/**
+ * 应用包预读结果（安装前裁决：新装 / 已装 / 是否留有可恢复旧数据）
+ *
+ * 与 Rust `PeekedAppPackage` 同形状：`hasRetainedData` 只在 fresh install 消费，
+ * `installed` 供壳层区分「已装应用自己的数据」与「keep-data 卸载残留」。
+ */
+export interface PeekedAppPackage {
+  /** 包路径（本地包原样；远程包 = 已下载的临时文件） */
+  path: string
+  pluginId: string
+  hasRetainedData: boolean
+  installed: boolean
 }
 
-/** 卸载插件（仅用户安装的插件；宿主面凭证已绑定，ADR 0058） */
-export async function pluginUninstall(pluginId: string): Promise<void> {
+/** 预读本地应用包（只读：不解压落盘、不改注册表；宿主面凭证） */
+export async function pluginPeekAppPackage(path: string): Promise<PeekedAppPackage> {
   const credential = await ensureHostCredential()
-  return await invoke('plugin_uninstall', { pluginId, credential })
+  return await invoke('plugin_peek_app_package', { path, credential })
+}
+
+/**
+ * 下载远程应用包到本地临时目录（两相安装的第一相；出站过 egress 闸门）
+ *
+ * 落地前壳层据返回的 id / 已装 / 旧数据决定是否询问恢复，再把 `path` 交给
+ * `pluginInstallFromFile`。移动端尚无远程安装 UI 入口，本命令是将来入口的
+ * 唯一正确形态（一相「下载即安装」无法在落盘前询问）。
+ */
+export async function pluginDownloadPackage(zipUrl: string): Promise<PeekedAppPackage> {
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_download_package', { zipUrl, credential })
+}
+
+/**
+ * 从本地 zip 插件包安装（宿主面凭证已绑定，ADR 0058）
+ *
+ * `restoreData` 只对 fresh install 生效：keep-data 卸载留下的旧数据是否恢复；
+ * 缺省 false = 丢弃（壳层在存在旧数据时先询问，默认也是不恢复）。
+ */
+export async function pluginInstallFromFile(
+  path: string,
+  upgrade = false,
+  restoreData = false,
+): Promise<string> {
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_install_from_file', { path, credential, upgrade, restoreData })
+}
+
+/** 卸载应用（L3；宿主拒绝系统服务）。`keepData` 缺省 = 删除应用数据 */
+export async function pluginUninstall(pluginId: string, keepData = false): Promise<void> {
+  const credential = await ensureHostCredential()
+  return await invoke('plugin_uninstall', { pluginId, credential, keepData })
 }
 
 /** 用系统查看器打开已下载文件（需 system:open 权限） */

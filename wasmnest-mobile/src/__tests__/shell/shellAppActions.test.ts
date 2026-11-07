@@ -78,8 +78,8 @@ function registeredSource(): ShellAppSource {
     launch: (...args: unknown[]) => source.launch(...(args as [string])) as Promise<void>,
     stop: (...args: unknown[]) => source.stop(...(args as [string])) as Promise<void>,
     approve: (...args: unknown[]) => source.approve(...(args as [string])) as Promise<void>,
-    installFromLocalPackage: () =>
-      source.install() as unknown as Promise<string | null>,
+    installFromLocalPackage: (decideRestore) =>
+      source.install(decideRestore) as unknown as Promise<string | null>,
     remove: (...args: unknown[]) => source.remove(...(args as [string])) as Promise<boolean>,
   }
 }
@@ -190,6 +190,15 @@ describe('C-A4..C-A7 启动 / 停止通知', () => {
 })
 
 describe('C-A8/C-A9 安装 / 卸载通知', () => {
+  it('should_forwardRestoreDecider_when_installing', async () => {
+    // 询问 UI 在屏内、决策回调经壳转交数据源：壳不得吞掉或替换该回调
+    const decide = vi.fn(async () => false)
+
+    await useShellApps().installFromLocalPackage(decide)
+
+    expect(source.install).toHaveBeenCalledWith(decide)
+  })
+
   it('should_notifyInstalledWithAppName_when_installReturnsId', async () => {
     // 安装成功后清单里才有它：通知名要取刷新后的注册表事实
     shell.registerSource({

@@ -42,6 +42,13 @@ pub const SOURCE_REMOTE_DOWNLOAD: &str = "remote-download";
 /// 插件数据目录（app_data_dir 下）
 pub const PLUGIN_DATA_DIR: &str = "plugins";
 
+/// 已卸载覆盖目录（`plugins/.uninstalled/<plugin_id>` 空标记文件）
+///
+/// 只服务随包内置（APK assets）应用：删除插件目录后，下一次启动的 Kotlin
+/// `PluginAssetExtractor` / dev 复制会跳过该 id，除非用户用 zip 重装（重装命令
+/// 清标记）。与 Kotlin `PluginAssetExtractor.UNINSTALLED_DIR` 逐字一致。
+pub const PLUGIN_UNINSTALLED_DIR: &str = ".uninstalled";
+
 /// 远程下载临时目录
 pub const PLUGIN_DOWNLOAD_TEMP_DIR: &str = "plugins/_download_tmp";
 

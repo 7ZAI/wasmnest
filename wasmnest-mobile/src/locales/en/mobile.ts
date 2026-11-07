@@ -50,6 +50,9 @@ export default {
       fsAuthRemember: 'Remember this path for future access',
       fsAuthAllow: 'Allow',
       fsAuthDeny: 'Deny',
+      // `desc` currently has no rendering surface (removed from app detail on
+      // 2026-11-05 by the layout-self-explaining rule); kept for future
+      // permission approval / overview surfaces, never used for decisions.
       perm: {
         unknown: 'Unknown permission',
         storage: {

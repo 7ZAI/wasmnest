@@ -57,7 +57,12 @@ export default {
       permissionCount: '{count} 项权限',
       installSuccess: '安装完成，可在列表中批准并启动',
       installFailed: '安装失败：{error}',
-      uninstallConfirm: '确定卸载「{name}」并删除其数据吗？此操作不可恢复。',
+      installRestoreTitle: '恢复旧应用数据？',
+      installRestoreBody: '该应用上次卸载时保留了数据（私有库与存储）。勾选可恢复；不恢复（默认）会删除旧数据，且不可撤销。',
+      installRestoreKeep: '恢复旧应用数据（重装后继续使用）',
+      installRestoreDiscardHint: '未勾选恢复：旧应用数据将被删除，不可恢复。',
+      installRestoreConfirm: '安装',
+      uninstallConfirm: '确定卸载「{name}」吗？默认删除应用数据，可勾选保留。审批与授权记录将撤销，重装后需重新批准。',
       uninstallSuccess: '已卸载 {name}',
       uninstallFailed: '卸载失败：{error}',
       update: {
@@ -98,7 +103,9 @@ export default {
       stopService: '停止服务',
       /** 服务停止二次确认（服务是常驻能力，误停影响面广） */
       stopServiceConfirm: '确定停止服务「{name}」吗？服务将停止对外提供能力，可在应用管理中重新启动。',
-      uninstall: '卸载并删除数据',
+      uninstall: '卸载应用',
+      keepData: '保留应用数据（重装后继续使用）',
+      deleteDataHint: '未勾选「保留应用数据」：将同时删除应用私有数据库与存储，不可恢复。',
       version: 'v{version}',
     },
     run: {
@@ -112,6 +119,7 @@ export default {
     },
     /** 悬浮导航（开关开启后常驻在任意页面之上） */
     floatingNav: {
+      back: '返回',
       home: '回主屏',
       recents: '切换应用',
       move: '悬浮导航，可拖动；聚焦后可用方向键移动',
@@ -189,7 +197,7 @@ export default {
         },
         uninstalled: {
           title: '{name} 已卸载',
-          body: '应用与其数据已删除',
+          body: '已从本机移除',
         },
         failed: {
           title: '{name} 启动失败',
@@ -201,7 +209,7 @@ export default {
       title: '设置',
       navigation: '导航',
       floatingNavLabel: '悬浮导航',
-      floatingNavHint: '回主屏与切换应用，可拖动',
+      floatingNavHint: '返回、回主屏与切换应用，可拖动',
       platform: '平台',
       appearance: '外观',
       appearanceHint: '主题与色板',

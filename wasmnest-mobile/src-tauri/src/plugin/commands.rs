@@ -5,8 +5,8 @@
 //! ## 宿主面凭证门（ADR 0058 方案 A，2026-10-24 / issue #21）
 //!
 //! 管理类命令（plugin_preauthorize / plugin_activate / plugin_deactivate /
-//! plugin_approve / plugin_install_from_file / plugin_uninstall / plugin_download /
-//! reload_wasm_plugin + 偏好写面 plugin_set_enabled / plugin_set_autostart +
+//! plugin_approve / plugin_peek_app_package / plugin_download_package /
+//! plugin_install_from_file / plugin_uninstall / reload_wasm_plugin + 偏好写面 plugin_set_enabled / plugin_set_autostart +
 //! 授权回执 plugin_fs_auth_respond + 终端页面通道登记
 //! terminal_page_{subscribe,unsubscribe}）只认宿主前端凭证（loader 会话密钥）：
 //! 激活 / 停用 / 安装 / 卸载 / 审批 / 下载 / 热重载 / 偏好写入 / 授权回执 /
@@ -435,31 +435,117 @@ pub async fn plugin_storage_delete(
 
 // ==================== Plugin Download & Install Commands ====================
 
-/// 下载并安装远程 zip 插件包
+/// 应用包预读结果（壳层安装前裁决：新装 / 已装 / 是否需要询问恢复旧数据）
+///
+/// 与桌面 `PickedPackage` 同口径（`has_retained_data` 只被 fresh install 消费），
+/// 多一个 `installed`：移动端本地包入口没有桌面那套「就地升级确认」分支，
+/// 壳层必须自己区分「已装（其自身数据不算旧数据）」与「残留」。
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeekedAppPackage {
+    /// 包路径（本地包原样回传；远程包 = 已下载的临时文件，供随后安装使用）
+    pub path: String,
+    /// 包内 `plugin.json` 的 `id`（反向域名）
+    pub plugin_id: String,
+    /// 该 id 是否留有可恢复的旧数据（keep-data 卸载的私有库 / 主库 KV）
+    pub has_retained_data: bool,
+    /// 该 id 当前是否已安装
+    pub installed: bool,
+}
+
+/// 预读本地应用包（只读：不解压落盘、不改注册表）
+///
+/// 安装↔卸载闭环的前置：壳层先拿到 id / 已装 / 旧数据三项事实，才能在真正
+/// 安装前询问「是否恢复旧应用数据」（默认不恢复）。识别失败 fail-visible。
 #[tauri::command]
-pub async fn plugin_download(
+pub async fn plugin_peek_app_package(
+    app_handle: tauri::AppHandle,
+    webview: tauri::Webview,
+    path: String,
+    credential: String,
+) -> Result<PeekedAppPackage> {
+    require_host_surface(
+        &app_handle.state::<Arc<FrontendChannelRegistry>>(),
+        webview.label(),
+        "plugin_peek_app_package",
+        &credential,
+        "plugin package inspection must be requested by the host frontend",
+    )?;
+    let manager = app_handle.state::<Arc<PluginManager>>();
+    let plugin_id = crate::plugin::downloader::PluginDownloader::peek_plugin_id(std::path::Path::new(&path))?;
+    let installed = manager.get_info(&plugin_id).await.is_some();
+    let has_retained_data = manager.has_retained_data(&plugin_id).await?;
+    tracing::info!(
+        path = %path,
+        plugin_id = %plugin_id,
+        installed,
+        has_retained_data,
+        "[API] plugin_peek_app_package"
+    );
+    Ok(PeekedAppPackage {
+        path,
+        plugin_id,
+        has_retained_data,
+        installed,
+    })
+}
+
+/// 下载远程应用包到本地临时目录（两相安装的第一相：不落插件目录、不改注册表）
+///
+/// 一相「下载即安装」无法在落盘前知道包 id，也就无法询问「是否恢复旧数据」；
+/// 拆成两相后与本地包入口同一条裁决链：预读 → 壳层询问 → `plugin_install_from_file`。
+/// 出站仍过 egress 闸门（`PluginDownloader::download_package` 内）。
+#[tauri::command]
+pub async fn plugin_download_package(
     app_handle: tauri::AppHandle,
     webview: tauri::Webview,
     zip_url: String,
     credential: String,
-) -> Result<String> {
+) -> Result<PeekedAppPackage> {
     require_host_surface(
         &app_handle.state::<Arc<FrontendChannelRegistry>>(),
         webview.label(),
-        "plugin_download",
+        "plugin_download_package",
         &credential,
         "plugin download must be requested by the host frontend",
     )?;
     let manager = app_handle.state::<Arc<PluginManager>>();
     let plugins_dir = manager.plugins_dir().clone();
-
-    let plugin_id =
-        crate::plugin::downloader::PluginDownloader::download_and_install(&app_handle, &zip_url, &plugins_dir).await?;
-
-    // 重新扫描并加载
-    manager.scan_and_load().await;
-
-    Ok(plugin_id)
+    let path =
+        crate::plugin::downloader::PluginDownloader::download_package(&app_handle, &zip_url, &plugins_dir).await?;
+    let path_str = match path.to_str() {
+        Some(p) => p.to_string(),
+        None => {
+            let _ = tokio::fs::remove_file(&path).await;
+            return Err(crate::AppError::Plugin(format!(
+                "Downloaded package path is not valid UTF-8: {}",
+                path.display()
+            )));
+        }
+    };
+    // 预读失败不把临时包留在磁盘上（壳层拿不到 id 就无法进入安装相）
+    let plugin_id = match crate::plugin::downloader::PluginDownloader::peek_plugin_id(&path) {
+        Ok(id) => id,
+        Err(e) => {
+            let _ = tokio::fs::remove_file(&path).await;
+            return Err(e);
+        }
+    };
+    let installed = manager.get_info(&plugin_id).await.is_some();
+    let has_retained_data = manager.has_retained_data(&plugin_id).await?;
+    tracing::info!(
+        url = %zip_url,
+        plugin_id = %plugin_id,
+        installed,
+        has_retained_data,
+        "[API] plugin_download_package"
+    );
+    Ok(PeekedAppPackage {
+        path: path_str,
+        plugin_id,
+        has_retained_data,
+        installed,
+    })
 }
 
 /// 从本地 zip 插件包安装
@@ -467,6 +553,9 @@ pub async fn plugin_download(
 /// `upgrade = true`（应用版本更新链路）：同 id 就地升级——只允许可更新应用
 /// （manifest 声明 `update`），运行中 / 系统服务一律拒绝；插件 KV 保留，目录内容
 /// 换新后审批哈希失配 → 下次激活需要重新批准（升级保数据，不保信任）。
+///
+/// `restoreData` 只对 fresh install 生效：keep-data 卸载留下的旧数据是否恢复。
+/// 缺省 false = 丢弃（壳层在存在旧数据时先询问，默认也是不恢复）。
 #[tauri::command]
 pub async fn plugin_install_from_file(
     app_handle: tauri::AppHandle,
@@ -474,6 +563,7 @@ pub async fn plugin_install_from_file(
     path: String,
     credential: String,
     upgrade: Option<bool>,
+    restore_data: Option<bool>,
 ) -> Result<String> {
     require_host_surface(
         &app_handle.state::<Arc<FrontendChannelRegistry>>(),
@@ -485,6 +575,7 @@ pub async fn plugin_install_from_file(
     let manager = app_handle.state::<Arc<PluginManager>>();
     let plugins_dir = manager.plugins_dir().clone();
     let upgrade = upgrade.unwrap_or(false);
+    let restore_data = restore_data.unwrap_or(false);
 
     if upgrade {
         // 先解出目标 id（任何落盘动作之前），再按真实状态裁决。
@@ -525,8 +616,49 @@ pub async fn plugin_install_from_file(
         }
     }
 
-    let plugin_id =
-        crate::plugin::downloader::PluginDownloader::install_from_file(&path, &plugins_dir, upgrade).await?;
+    let mode = if upgrade {
+        crate::plugin::downloader::InstallMode::Upgrade
+    } else {
+        crate::plugin::downloader::InstallMode::FreshInstall { restore_data }
+    };
+    // 远程安装是两相：第一相把包下到 `plugins/_download_tmp/`（`plugin_download_package`），
+    // 第二相回本命令安装。按路径落点保留来源标记 `remote-download`——否则远程安装会被
+    // 记成 file-install，来源事实在壳层（官方/用户副本判定、排障）就丢了。
+    let from_download = std::path::Path::new(&path)
+        .starts_with(plugins_dir.join(crate::system::constants::plugin::PLUGIN_DOWNLOAD_TEMP_DIR));
+    let plugin_id = if from_download {
+        crate::plugin::downloader::PluginDownloader::install_downloaded_file(&path, &plugins_dir, mode).await?
+    } else {
+        crate::plugin::downloader::PluginDownloader::install_from_file(&path, &plugins_dir, mode).await?
+    };
+    if from_download {
+        // 包装完就不再有用；删失败只留一次 warn（临时目录下次下载会清）。
+        if let Err(e) = tokio::fs::remove_file(&path).await {
+            tracing::warn!(path = %path, error = %e, "Failed to remove downloaded package after install");
+        }
+    }
+
+    // fresh install 且用户选择「不恢复」：主库 KV 也是旧数据，必须一并清掉。
+    // 失败只告警（不把安装判失败），但必须留痕——静默留下旧 KV 等于「不恢复」失效。
+    if !upgrade && !restore_data {
+        if let Err(e) = manager.storage().clear_all(&plugin_id).await {
+            tracing::warn!(
+                plugin_id = %plugin_id,
+                error = %e,
+                "Failed to clear retained plugin storage after fresh install"
+            );
+        }
+    }
+
+    // 重装：清「已卸载」覆盖，否则下次启动解压器仍会跳过该 id。清除失败不把安装
+    // 判失败（包已落地，与桌面 `installFromZip` 同口径），但必须留痕。
+    if let Err(e) = manager.clear_uninstalled_marker(&plugin_id).await {
+        tracing::warn!(
+            plugin_id = %plugin_id,
+            error = %e,
+            "Failed to clear uninstall marker after install"
+        );
+    }
 
     // 重新扫描并加载（新目录 / 新版本进入注册表）
     manager.scan_and_load().await;
@@ -534,13 +666,14 @@ pub async fn plugin_install_from_file(
     Ok(plugin_id)
 }
 
-/// 卸载插件（仅用户安装的插件；内置插件拒绝）
+/// 卸载应用（L3；系统服务拒绝）。`keepData` 缺省 = 删除应用数据
 #[tauri::command]
 pub async fn plugin_uninstall(
     app_handle: tauri::AppHandle,
     webview: tauri::Webview,
     plugin_id: String,
     credential: String,
+    keep_data: Option<bool>,
 ) -> Result<()> {
     require_host_surface(
         &app_handle.state::<Arc<FrontendChannelRegistry>>(),
@@ -550,7 +683,7 @@ pub async fn plugin_uninstall(
         "plugin uninstallation must be requested by the host frontend",
     )?;
     let manager = app_handle.state::<Arc<PluginManager>>();
-    manager.uninstall(&plugin_id).await
+    manager.uninstall(&plugin_id, keep_data.unwrap_or(false)).await
 }
 
 /// 重新加载 WASM 插件（热重载）

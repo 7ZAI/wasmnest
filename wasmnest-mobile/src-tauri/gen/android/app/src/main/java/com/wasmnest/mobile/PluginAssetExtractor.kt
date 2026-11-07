@@ -73,6 +73,8 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
         val pluginIds = (activity.assets.list(pluginsRoot) ?: return 0)
             .filter { !it.startsWith(".") }
             .toSet()
+        // 用户卸载过的内置应用标记（Rust 端写入；zip 重装时清除）
+        val uninstalledDir = File(pluginsBaseDir, UNINSTALLED_DIR)
 
         // 清理 APK 中已移除的插件（暂停开发/从 bundle 移除）：保留带 apk-asset
         // 标记但不在当前 assets 列表中的残留目录会继续被宿主 load_all 扫描加载，
@@ -81,6 +83,10 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
 
         var extracted = 0
         for (id in pluginIds) {
+            if (File(uninstalledDir, id).exists()) {
+                Log.i(TAG, "Skipping uninstalled bundled plugin: $id")
+                continue
+            }
             val assetDir = "$pluginsRoot/$id"
             val destDir = File(pluginsBaseDir, id)
 
@@ -170,7 +176,9 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
         val base = pluginsBaseDir
         if (!base.isDirectory) return
         base.listFiles()?.forEach { dir ->
-            if (!dir.isDirectory || dir.name in activeIds) return@forEach
+            // 点号开头的是宿主自用目录（`.uninstalled` 已卸载标记等），不是插件，
+            // 跳过——否则每次启动都会为它打一条「无来源标记」告警。
+            if (!dir.isDirectory || dir.name.startsWith(".") || dir.name in activeIds) return@forEach
             val marker = File(dir, MARKER_FILE)
             val isApkAsset = try {
                 if (!marker.exists()) {
@@ -233,6 +241,12 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
 
         /** 插件数据目录名（与 Rust PLUGIN_DATA_DIR 一致，位于 app_data_dir 下） */
         private const val PLUGIN_BASE_DIR = "plugins"
+
+        /**
+         * 已卸载内置应用标记目录（与 Rust `PLUGIN_UNINSTALLED_DIR` 逐字一致）。
+         * 目录下以插件 id 为名的空文件存在时，解压器跳过该 id，直到 zip 重装清除。
+         */
+        private const val UNINSTALLED_DIR = ".uninstalled"
 
         /** 插件 manifest 文件名（与 Rust PLUGIN_MANIFEST_FILE 一致） */
         private const val PLUGIN_MANIFEST_FILE = "plugin.json"

@@ -152,16 +152,16 @@ fn plugin_download_calls_the_gate_before_building_the_http_client() {
     let src = std::fs::read_to_string(mobile_src_root().join("src/plugin/downloader.rs")).expect("read downloader");
 
     let body = src
-        .split("pub async fn download_and_install")
+        .split("pub async fn download_package")
         .nth(1)
-        .expect("download_and_install must exist");
+        .expect("download_package must exist");
 
     let gate_call = body
         .find("ask_consent(app, zip_url).await?")
-        .expect("download_and_install 必须调用 egress 闸门（ask_consent）");
+        .expect("download_package 必须调用 egress 闸门（ask_consent）");
     let client_build = body
         .find("reqwest::Client::builder()")
-        .expect("download_and_install 必须构造 reqwest 客户端");
+        .expect("download_package 必须构造 reqwest 客户端");
 
     assert!(
         gate_call < client_build,
@@ -171,7 +171,7 @@ fn plugin_download_calls_the_gate_before_building_the_http_client() {
     // 跳转面：首跳放行不代表整条链放行，跳转必须复检
     assert!(
         body.contains(".redirect(crate::egress::redirect_policy())"),
-        "download_and_install 未用 egress::redirect_policy() 复检跳转目标——闸门只管住了首跳"
+        "download_package 未用 egress::redirect_policy() 复检跳转目标——闸门只管住了首跳"
     );
 }
 

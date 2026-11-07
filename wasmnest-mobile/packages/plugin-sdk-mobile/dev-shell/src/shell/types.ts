@@ -107,6 +107,14 @@ export interface ShellApp {
  *
  * 能力可选：不支持的能力不实现该方法，壳据此不渲染对应入口，不做静默降级。
  */
+/**
+ * 本地包安装的「旧数据是否恢复」询问（与宿主同形状）
+ *
+ * dev-shell 当前没有安装能力的数据源，保留同构签名只为契约不漂移：
+ * 将来接安装时按宿主口径在落盘前询问（默认不恢复）。
+ */
+export type ShellInstallRestoreDecider = (info: { pluginId: string }) => Promise<boolean | null>
+
 export interface ShellAppSource {
   /** 数据源标识（日志与诊断用） */
   readonly id: string
@@ -132,10 +140,10 @@ export interface ShellAppSource {
   /**
    * 安装本地应用包（数据源自行完成选包与校验）。
    *
-   * @returns 安装后的应用 id；`null` = 用户取消选包（不是失败）。
+   * @returns 安装后的应用 id；`null` = 用户取消选包或取消恢复询问（不是失败）。
    *          未实现时壳不渲染「安装本地包」入口——不提供点了没反应的按钮。
    */
-  installFromLocalPackage?(): Promise<string | null>
+  installFromLocalPackage?(decideRestore?: ShellInstallRestoreDecider): Promise<string | null>
   /** 卸载应用并删除其数据；未实现时壳不渲染「卸载」入口 */
   remove?(appId: string): Promise<boolean>
   /** 查询 / 设置「启动时自动激活」偏好（未实现时壳不渲染自启开关） */

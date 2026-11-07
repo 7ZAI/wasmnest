@@ -382,7 +382,8 @@ pub fn run() {
             crate::plugin::commands::plugin_storage_get,
             crate::plugin::commands::plugin_storage_set,
             crate::plugin::commands::plugin_storage_delete,
-            crate::plugin::commands::plugin_download,
+            crate::plugin::commands::plugin_peek_app_package,
+            crate::plugin::commands::plugin_download_package,
             crate::plugin::commands::plugin_install_from_file,
             // 应用版本更新链路（GitHub Release 检查 / 校验下载；应用管理页与
             // SDK 默认设置卡共用同一套判定）

@@ -574,15 +574,109 @@ async fn test_mark_error_sets_error_for_other_states() {
 }
 
 #[tokio::test]
-async fn test_uninstall_builtin_rejected() {
-    // 内置插件（ApkAsset）不可卸载：拒绝且记录保留
+async fn test_uninstall_builtin_removes_record_and_writes_marker() {
+    // 内置插件（ApkAsset）也可卸载：记录清除 + 写 .uninstalled 标记（防重解压）；
+    // keep_data=true 时目录里只保留 plugin.db 家族。
     let (manager, _tmp) = setup_manager().await;
     let pid = "com.wasmnest.test.mgr-builtin";
-    seed_plugin(&manager, pid, PluginState::Activated).await;
+    let ext_dir = manager.plugins_dir().join(pid);
+    std::fs::create_dir_all(&ext_dir).expect("create plugin dir");
+    std::fs::write(ext_dir.join("plugin.json"), r#"{"id":"x"}"#).expect("write manifest");
+    std::fs::write(ext_dir.join("plugin.db"), b"db").expect("write private db");
+    seed_plugin(&manager, pid, PluginState::Loaded).await;
 
-    let err = manager.uninstall(pid).await.expect_err("内置插件不可卸载");
-    assert!(err.to_string().contains("cannot be uninstalled"), "err: {err}");
-    assert!(manager.get_info(pid).await.is_some(), "内置插件记录保留");
+    manager.uninstall(pid, true).await.expect("builtin uninstall");
+    assert!(manager.get_info(pid).await.is_none(), "内置插件记录已清除");
+    assert!(ext_dir.join("plugin.db").exists(), "keep_data 保留私有库");
+    assert!(!ext_dir.join("plugin.json").exists(), "代码 / manifest 已删除");
+    assert!(
+        manager
+            .plugins_dir()
+            .join(crate::system::constants::plugin::PLUGIN_UNINSTALLED_DIR)
+            .join(pid)
+            .exists(),
+        "内置应用写已卸载标记"
+    );
+}
+
+#[tokio::test]
+async fn test_uninstall_builtin_delete_data_removes_dir() {
+    let (manager, _tmp) = setup_manager().await;
+    let pid = "com.wasmnest.test.mgr-builtin-delete";
+    let ext_dir = manager.plugins_dir().join(pid);
+    std::fs::create_dir_all(&ext_dir).expect("create plugin dir");
+    std::fs::write(ext_dir.join("plugin.db"), b"db").expect("write private db");
+    seed_plugin(&manager, pid, PluginState::Loaded).await;
+
+    manager.uninstall(pid, false).await.expect("builtin uninstall");
+    assert!(!ext_dir.exists(), "keep_data=false 删除数据目录");
+    assert!(
+        manager
+            .plugins_dir()
+            .join(crate::system::constants::plugin::PLUGIN_UNINSTALLED_DIR)
+            .join(pid)
+            .exists(),
+        "内置应用仍须写已卸载标记"
+    );
+}
+
+/// 回归（2026-11-07）：内置应用被 zip 更新后来源变 `RemoteDownload` / `FileInstall`，
+/// 卸载仍必须写标记 —— 否则下次启动 `PluginAssetExtractor` 查无标记、从 APK assets
+/// 重新解压，用户看到的「卸载」在重启后失效（应用回到旧内置版本）。
+#[tokio::test]
+async fn test_uninstall_updated_builtin_writes_marker_despite_non_apk_source() {
+    let (manager, _tmp) = setup_manager().await;
+    let pid = "com.wasmnest.test.mgr-updated-builtin";
+    let ext_dir = manager.plugins_dir().join(pid);
+    std::fs::create_dir_all(&ext_dir).expect("create plugin dir");
+    std::fs::write(ext_dir.join("plugin.json"), r#"{"id":"x"}"#).expect("write manifest");
+    // 该 id 仍在 APK assets 里（内置副本存在），但当前落地的是用户更新副本
+    seed_user_plugin(
+        &manager,
+        pid,
+        &ext_dir,
+        vec![],
+        crate::plugin::types::PluginType::Frontend,
+    )
+    .await;
+
+    manager.uninstall(pid, false).await.expect("uninstall updated builtin");
+
+    assert!(
+        manager
+            .plugins_dir()
+            .join(crate::system::constants::plugin::PLUGIN_UNINSTALLED_DIR)
+            .join(pid)
+            .exists(),
+        "非 ApkAsset 来源也必须写标记，否则重启后从 assets 复活"
+    );
+    assert!(!ext_dir.exists(), "keep_data=false 仍须删目录");
+}
+
+/// 回归（2026-11-07）：写标记失败不得出现「目录已删、标记未写」的半卸载态。
+#[tokio::test]
+async fn test_uninstall_rolls_back_marker_when_dir_removal_fails() {
+    let (manager, _tmp) = setup_manager().await;
+    let pid = "com.wasmnest.test.mgr-remove-fail";
+    // 用同名**文件**占位：`remove_dir_all` 会失败，模拟磁盘删除失败
+    let blocker = manager.plugins_dir().join(pid);
+    std::fs::create_dir_all(manager.plugins_dir()).expect("create plugins dir");
+    std::fs::write(&blocker, b"not-a-dir").expect("write blocker file");
+    seed_plugin(&manager, pid, PluginState::Loaded).await;
+
+    manager
+        .uninstall(pid, false)
+        .await
+        .expect_err("目录删除失败必须返回 Err");
+
+    assert!(
+        !manager
+            .plugins_dir()
+            .join(crate::system::constants::plugin::PLUGIN_UNINSTALLED_DIR)
+            .join(pid)
+            .exists(),
+        "磁盘没删成功必须回滚标记，否则应用在下次启动凭空消失"
+    );
 }
 
 /// 系统服务（L1/L2）不可卸载：判据 = manifest kind，不依赖来源标记。
@@ -599,7 +693,7 @@ async fn test_uninstall_system_service_rejected_by_kind() {
         plugin.source = PluginSource::RemoteDownload;
     }
 
-    let err = manager.uninstall(pid).await.expect_err("系统服务不可卸载");
+    let err = manager.uninstall(pid, true).await.expect_err("系统服务不可卸载");
     assert!(
         err.to_string().contains("System service cannot be uninstalled"),
         "err: {err}"
@@ -630,7 +724,7 @@ async fn test_uninstall_removes_records_and_dir() {
     )
     .await;
 
-    manager.uninstall(pid).await.expect("uninstall");
+    manager.uninstall(pid, false).await.expect("uninstall");
     assert!(manager.get_info(pid).await.is_none(), "插件记录已清除");
     assert!(
         manager.approvals.get(pid).await.expect("get approval").is_none(),
@@ -809,9 +903,83 @@ async fn test_uninstall_removes_autostart_preference() {
     .await;
     manager.set_autostart(pid, true).await.expect("set autostart");
 
-    manager.uninstall(pid).await.expect("uninstall");
+    manager.uninstall(pid, false).await.expect("uninstall");
 
     assert!(!manager.is_autostart(pid).await, "卸载后自启动偏好已清除");
+}
+
+/// keep_data=true：用户安装应用保留私有库 + KV，重装后继续使用；审批仍撤销
+#[tokio::test]
+async fn test_uninstall_keep_data_preserves_private_db_and_storage() {
+    let (manager, _tmp) = setup_manager().await;
+    let pid = "com.wasmnest.test.mgr-uninstall-keep-data";
+    let ext_dir = manager.plugins_dir().join(pid);
+    std::fs::create_dir_all(&ext_dir).expect("create plugin dir");
+    std::fs::write(ext_dir.join("plugin.json"), r#"{"id":"x"}"#).expect("write manifest");
+    std::fs::write(ext_dir.join("plugin.db"), b"db").expect("write private db");
+    let hash = crate::plugin::approval::compute_dir_hash(&ext_dir).expect("dir hash");
+    manager
+        .approvals
+        .approve(pid, &[], &hash, "0.1.0")
+        .await
+        .expect("approve");
+    manager
+        .storage()
+        .set(pid, "note", serde_json::json!("keep-me"))
+        .await
+        .expect("seed storage");
+    seed_user_plugin(
+        &manager,
+        pid,
+        &ext_dir,
+        vec![],
+        crate::plugin::types::PluginType::Frontend,
+    )
+    .await;
+
+    manager.uninstall(pid, true).await.expect("uninstall keep data");
+
+    assert!(manager.get_info(pid).await.is_none(), "插件记录已清除");
+    assert!(ext_dir.join("plugin.db").exists(), "私有库保留");
+    assert!(!ext_dir.join("plugin.json").exists(), "代码文件已删除");
+    assert_eq!(
+        manager.storage().get(pid, "note").await.expect("read storage"),
+        Some(serde_json::json!("keep-me")),
+        "KV 保留"
+    );
+    assert!(
+        manager.approvals.get(pid).await.expect("get approval").is_none(),
+        "审批不随数据保留"
+    );
+}
+
+/// 旧数据判定（安装↔卸载闭环前置）：私有库 / 主库 KV 任一存在即 true，
+/// 两者都清后必须回到 false——否则每次重装都会误弹「恢复旧数据」。
+#[tokio::test]
+async fn test_has_retained_data_tracks_private_db_and_kv() {
+    let (manager, _tmp) = setup_manager().await;
+    let pid = "com.wasmnest.test.mgr-retained";
+    assert!(!manager.has_retained_data(pid).await.expect("probe"), "空 = 无旧数据");
+
+    // keep-data 卸载后只剩私有库（无 plugin.json），同样是「旧数据」
+    let ext_dir = manager.plugins_dir().join(pid);
+    std::fs::create_dir_all(&ext_dir).expect("create plugin dir");
+    std::fs::write(ext_dir.join("plugin.db"), b"db").expect("write private db");
+    assert!(manager.has_retained_data(pid).await.expect("probe"), "私有库算旧数据");
+
+    std::fs::remove_dir_all(&ext_dir).expect("remove plugin dir");
+    manager
+        .storage()
+        .set(pid, "note", serde_json::json!("keep-me"))
+        .await
+        .expect("seed storage");
+    assert!(manager.has_retained_data(pid).await.expect("probe"), "KV 算旧数据");
+
+    manager.storage().clear_all(pid).await.expect("clear storage");
+    assert!(
+        !manager.has_retained_data(pid).await.expect("probe"),
+        "两者都清 = 无旧数据"
+    );
 }
 
 // ==================== 应用作用域服务租约的生命周期回收 ====================

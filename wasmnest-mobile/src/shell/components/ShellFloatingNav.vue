@@ -1,7 +1,7 @@
 <template>
-  <!-- 悬浮导航（回主屏 / 多任务）：默认关闭，开启后由 App 根常驻渲染。
+  <!-- 悬浮导航（返回 / 回主屏 / 多任务）：默认关闭，开启后由 App 根常驻渲染。
        位置只写 transform：拖动时每帧只改合成属性，不触发布局重排。
-       整个胶囊是拖动面，两个按钮仍是普通点击目标——位移超过阈值才判为拖拽，
+       整个胶囊是拖动面，三个按钮仍是普通点击目标——位移超过阈值才判为拖拽，
        并在捕获阶段吞掉拖拽抬手后浏览器补的那次 click。 -->
   <div
     v-if="enabled"
@@ -21,6 +21,30 @@
     @keydown="onKeydown"
     @contextmenu.prevent
   >
+    <button
+      type="button"
+      class="shell-floatnav-btn"
+      :disabled="!canGoBack"
+      :aria-label="t('shell.floatingNav.back')"
+      @click="goBack"
+    >
+      <svg
+        width="19"
+        height="19"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M14.5 5.5L8 12l6.5 6.5" />
+      </svg>
+    </button>
+
+    <span class="shell-floatnav-divider" aria-hidden="true" />
+
     <button
       type="button"
       class="shell-floatnav-btn"
@@ -87,6 +111,12 @@
  * 无拖拽替代路径（WCAG 2.2 Dragging Movements）：拖动面本身可聚焦，
  * 方向键按 8px（Shift 32px）移动并持久化——位置不是只能靠拖。
  *
+ * 返回键与系统返回键同一份实现（`useShellBackAction`）：覆盖层按序先收 →
+ * 屏栈回退 → 非主屏 Tab 根回主屏。旧设置二级页等整页路由不属壳栈，走
+ * `leaveStandaloneRoute`（与系统返回同一语义：有历史回退，深链无历史 replace 回壳），
+ * 不另起一套「推一条壳路由」的分叉。
+ * 没东西可退时按钮置灰但仍占位，胶囊宽度不随面态跳。
+ *
  * 玻璃材质的三层降级：
  *   ① 不支持 backdrop-filter → 回落到实色卡片底（内容仍可读）
  *   ② 用户开启「减少透明」→ 同上，不做模糊
@@ -96,6 +126,8 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch, typ
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { logger } from '@/utils/frontendLogger'
+import { leaveStandaloneRoute } from '@/router/standaloneBack'
+import { useShellBackAction } from '../composables/useShellSystemBack'
 import { useShellNavigation } from '../composables/useShellNavigation'
 import {
   useShellPreferences,
@@ -106,6 +138,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const nav = useShellNavigation()
+const { hasBackTarget, back: backInShell } = useShellBackAction()
 const { floatingNav, floatingNavPos, setFloatingNavPos } = useShellPreferences()
 
 /** 悬浮条与屏幕边缘 / 安全区的留白（px） */
@@ -211,13 +244,31 @@ async function ensureShellRoute(): Promise<void> {
   }
 }
 
-function goHome(): void {
-  nav.goHome()
-  void ensureShellRoute()
+/**
+ * 返回可用：壳内看覆盖层 / 屏栈 / Tab 根（与系统返回键同源）；整页路由
+ * （旧设置二级页等）总能回到浏览器历史。
+ */
+const canGoBack = computed(() =>
+  route.name === 'mobile-shell' ? hasBackTarget.value : true,
+)
+
+/** 返回：整页路由与系统返回同一套语义（历史回退 / 无历史回落壳入口），壳内走共用返回序列 */
+function goBack(): void {
+  if (route.name !== 'mobile-shell') {
+    const historyState = window.history.state as { back?: string | null } | null
+    leaveStandaloneRoute(router, Boolean(historyState?.back))
+    return
+  }
+  backInShell()
 }
 
 function openSwitcher(): void {
   nav.openSwitcher()
+  void ensureShellRoute()
+}
+
+function goHome(): void {
+  nav.goHome()
   void ensureShellRoute()
 }
 

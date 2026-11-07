@@ -19,6 +19,7 @@ import {
   pluginListLoaded,
   pluginInstallFromFile,
   pluginIsAutostart,
+  pluginPeekAppPackage,
   pluginPreauthorize,
   pluginSetAutostart,
   pluginUninstall,
@@ -154,26 +155,37 @@ export function createPluginAppSource(): ShellAppSource {
     /**
      * 安装本地应用包：复用插件包安装链路（zip），需经审批与哈希钉扎
      *
-     * 用户取消选包返回 null，不算失败——调用方据此不弹错误提示。
+     * 安装↔卸载闭环（与桌面同口径，2026-11-07）：先预读包内 id 与该 id 的旧数据
+     * 事实；**新装**且留有 keep-data 旧数据时交回壳层询问（默认不恢复），用户取消
+     * 那么不装。已安装同 id 不询问——那是它自己的数据，不是「旧数据」。
+     *
+     * 用户取消选包 / 取消恢复询问均返回 null，不算失败。
      */
-    async installFromLocalPackage(): Promise<string | null> {
+    async installFromLocalPackage(decideRestore): Promise<string | null> {
       const selected = await open({
         multiple: false,
         directory: false,
         filters: [{ name: 'WasmNest', extensions: ['zip'] }],
       })
       if (typeof selected !== 'string') return null
-      return await pluginInstallFromFile(selected)
+      const peek = await pluginPeekAppPackage(selected)
+      let restoreData = false
+      if (!peek.installed && peek.hasRetainedData) {
+        const decision = decideRestore ? await decideRestore({ pluginId: peek.pluginId }) : false
+        if (decision === null) return null
+        restoreData = decision === true
+      }
+      return await pluginInstallFromFile(selected, false, restoreData)
     },
 
-    /** 卸载应用并删除数据（仅用户安装的包可卸载，内置插件由后端拒绝并抛错） */
-    async remove(appId: string): Promise<boolean> {
+    /** 卸载应用；`keepData` = 保留应用数据（私有库 + KV），重装后继续使用 */
+    async remove(appId: string, keepData = false): Promise<boolean> {
       // 卸载即结束运行期：先走前端对称拆解（注册表 / 事件 / 运行期 store 作用域 +
       // 后端停用），再让后端删包。后端 uninstall 内部也会 deactivate，但那只回收
       // Rust 侧——前端模块与 store 若不在此时收掉，应用卸载后其运行面与状态会
       // 残留在 WebView 里直到页面重载（与 stop 同口径：没有"卸载了但 store 还在跑"）
       await pluginLoader.deactivate(appId)
-      await pluginUninstall(appId)
+      await pluginUninstall(appId, keepData)
       return true
     },
 

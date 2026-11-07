@@ -134,6 +134,28 @@
         </ShellGroupCard>
       </div>
     </div>
+
+    <!-- 旧数据恢复询问（fresh install 且同 id 留有 keep-data 旧数据）：与卸载的
+         「保留应用数据」口径对称——默认不恢复（勾选才带走私有库 + KV），取消即不装。 -->
+    <ConfirmDialog
+      :model-value="restorePrompt !== null"
+      :title="t('shell.apps.installRestoreTitle')"
+      :message="t('shell.apps.installRestoreBody')"
+      :confirm-text="t('shell.apps.installRestoreConfirm')"
+      :cancel-text="t('shell.common.cancel')"
+      @update:model-value="handleRestoreDismiss"
+      @confirm="answerRestore(restoreData)"
+    >
+      <label
+        class="mt-3 flex items-center gap-2.5 rounded-[10px] bg-[var(--mobile-input-bg)] px-3 py-2.5 shell-type-label text-[var(--mobile-text-primary)]"
+      >
+        <input v-model="restoreData" type="checkbox" class="accent-[var(--mobile-accent)]" />
+        <span>{{ t('shell.apps.installRestoreKeep') }}</span>
+      </label>
+      <p v-if="!restoreData" class="mt-2 shell-type-caption text-[var(--mobile-error)]">
+        {{ t('shell.apps.installRestoreDiscardHint') }}
+      </p>
+    </ConfirmDialog>
   </div>
 </template>
 
@@ -144,7 +166,7 @@
  * 列表只展示平台掌握的事实（版本 / 权限项数 / 数据占用），不猜测应用内部状态。
  * 「添加应用」按数据源能力渲染：没有安装能力的形态不会出现点了没反应的按钮。
  */
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '../../composables/useToast'
 import { useShellApps } from '../../composables/useShellApps'
@@ -155,6 +177,7 @@ import ShellAppIcon from '../ShellAppIcon.vue'
 import ShellChip from '../ShellChip.vue'
 import ShellGroupCard from '../ShellGroupCard.vue'
 import ShellSection from '../ShellSection.vue'
+import ConfirmDialog from '../ui/ConfirmDialog.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -208,10 +231,44 @@ function appMeta(app: ShellApp): string {
   return parts.filter(Boolean).join(' · ')
 }
 
+/**
+ * 「旧数据是否恢复」询问（数据源在落盘前回调；壳层负责 UI）
+ *
+ * 返回 true = 恢复并安装 / false = 丢弃旧数据后安装 / null = 取消安装。
+ */
+const restorePrompt = ref<{ pluginId: string } | null>(null)
+/** 恢复勾选（默认关 = 不恢复；与卸载的「保留应用数据」默认口径相反相成） */
+const restoreData = ref(false)
+let resolveRestore: ((value: boolean | null) => void) | null = null
+
+function decideRestore(info: { pluginId: string }): Promise<boolean | null> {
+  restorePrompt.value = info
+  restoreData.value = false
+  return new Promise((resolve) => {
+    resolveRestore = resolve
+  })
+}
+
+function answerRestore(restore: boolean | null): void {
+  restorePrompt.value = null
+  const resolve = resolveRestore
+  resolveRestore = null
+  resolve?.(restore)
+}
+
+/** 关闭（取消 / 点遮罩）= 取消安装：不把「关掉弹窗」解释成「不恢复并继续」 */
+function handleRestoreDismiss(open: boolean): void {
+  if (!open) answerRestore(null)
+}
+
+// 翻屏（系统返回 / 路由切走）时弹窗随之消失：必须把挂起的询问判成取消，
+// 否则安装协程永远 await 一个再也不会 resolve 的 Promise。
+onUnmounted(() => answerRestore(null))
+
 async function handleInstall(): Promise<void> {
   installing.value = true
   try {
-    const installedId = await installFromLocalPackage()
+    const installedId = await installFromLocalPackage(decideRestore)
     // 取消选包不是失败，不弹错误
     if (installedId !== null) {
       toast.success(t('shell.apps.installSuccess'))

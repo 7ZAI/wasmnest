@@ -50,7 +50,8 @@
   --shell-radius-card: 12px;
   --shell-radius-control: 10px;
   --shell-radius-pill: 999px;
-  --shell-radius-lg: 18px;   /* 多任务卡等大卡 */
+  --shell-radius-lg: 18px;   /* 大卡片通用面（弹层 / 分组卡） */
+  --shell-radius-recents: 12px; /* 多任务卡单独一档（2026-11-06 用户反馈「太圆」，与桌面 10px 同一收紧口径） */
   --shell-radius-sheet: 16px; /* 底部抽屉面板 */
   /* 应用图标规格（列表行 / 宫格运行卡 / 多任务预览位）：同一图标同一尺寸策略 */
   --shell-icon-row: 32px;
@@ -719,6 +720,14 @@
   /* 只缩放图标按钮的视觉，不改胶囊位置（transform 由外层承担） */
   transform: scale(0.94);
 }
+/* 无可返回目标（已在主屏且无覆盖层）：置灰但保留占位——胶囊宽度不随面态跳，
+   也不给「能点」的假象；按压反馈一并撤掉 */
+.shell-floatnav-btn:disabled,
+.shell-floatnav-btn:disabled:active {
+  color: color-mix(in srgb, var(--mobile-text-primary) 34%, transparent);
+  background: none;
+  transform: none;
+}
 .shell-floatnav-divider {
   position: relative;
   z-index: 1;
@@ -792,7 +801,10 @@
   max-width: 214px;
   aspect-ratio: 3 / 4;
   min-width: 0;
-  border-radius: var(--shell-radius-lg);
+  /* 圆角单独一档（2026-11-06 用户反馈「太圆」）：`--shell-radius-lg` 是 18px 的
+     大圆角面口径，给多任务卡用显得像药丸。卡片用 12px，与桌面 .ts-card 的
+     10px 同一收紧口径，卡片边界更硬朗。卡片专用 token，不动其他面。 */
+  border-radius: var(--shell-radius-recents);
   /* 边框线不再显示（2026-10-25 用户裁决，对齐桌面 .ts-card 的强调口径）：
      保留 1px 宽度防内容抖动，颜色透明——卡片边界交给底色差与投影。 */
   border: 1px solid transparent;
@@ -893,7 +905,9 @@
 /* 缩略区 = 真实实例的当前页面（2026-10-30 用户裁决，与桌面同口径）。
    实例容器由注册表搬进来：固定整幅尺寸 + transform 等比缩放（布局不重排、
    滚动 / 输入原样），卡片 overflow:hidden 裁掉多余部分；contain 把实例的
-   绘制关在卡片里，普通 fixed / absolute 弹层也跟着缩进卡片。 */
+   绘制关在卡片里，普通 fixed / absolute 弹层也跟着缩进卡片。
+   **不留内边距**：缩略区必须整块交给实例（2026-11-06 用户裁决「内容应该跟着
+   卡片宽高铺满显示区域」），留 padding 会让画面四周空出一圈纸边。 */
 .shell-live {
   position: absolute;
   inset: 0;
@@ -901,7 +915,8 @@
   contain: layout paint;
   background: var(--mobile-bg-primary);
 }
-/* 品牌卡 fallback：与真实画面对齐同一盒子，切换不引起布局变化 */
+/* 品牌卡 fallback：与真实画面对齐同一盒子，切换不引起布局变化。
+   padding 只作用于 fallback 自身（图标 + 元信息的呼吸位），不影响实例画面。 */
 .shell-live-fallback {
   position: absolute;
   inset: 0;

@@ -233,7 +233,7 @@
             color: 'var(--mobile-error)',
             background: 'transparent',
           }"
-          @click="confirmRemove = true"
+          @click="confirmRemove = true; keepData = false"
         >
           {{ t('shell.detail.uninstall') }}
         </button>
@@ -259,7 +259,17 @@
       :cancel-text="t('shell.common.cancel')"
       @update:model-value="confirmRemove = $event"
       @confirm="handleRemove"
-    />
+    >
+      <label
+        class="mt-3 flex items-center gap-2.5 rounded-[10px] bg-[var(--mobile-input-bg)] px-3 py-2.5 shell-type-label text-[var(--mobile-text-primary)]"
+      >
+        <input v-model="keepData" type="checkbox" class="accent-[var(--mobile-accent)]" />
+        <span>{{ t('shell.detail.keepData') }}</span>
+      </label>
+      <p v-if="!keepData" class="mt-2 shell-type-caption text-[var(--mobile-error)]">
+        {{ t('shell.detail.deleteDataHint') }}
+      </p>
+    </ConfirmDialog>
     <!-- 系统服务停止确认（服务是常驻能力，误停影响面广；业务应用停用不弹） -->
     <ConfirmDialog
       :model-value="confirmStop"
@@ -441,6 +451,8 @@ const stateDot = computed(() => {
 const actionError = ref<string | null>(null)
 /** 卸载二次确认（复用平台 ConfirmDialog，见模板） */
 const confirmRemove = ref(false)
+/** 卸载时保留应用数据（缺省删除；勾选 = 保留私有库 + 存储） */
+const keepData = ref(false)
 /** 系统服务停止二次确认（复用平台 ConfirmDialog，见模板） */
 const confirmStop = ref(false)
 // 切换应用时清掉上一条的失败提示，避免张冠李戴；顺带读取自启偏好
@@ -501,7 +513,7 @@ async function handleApprove(): Promise<void> {
 async function handleRemove(): Promise<void> {
   confirmRemove.value = false
   if (!app.value) return
-  const ok = await removeApp(app.value.id)
+  const ok = await removeApp(app.value.id, keepData.value)
   if (ok) {
     toast.success(t('shell.apps.uninstallSuccess', { name: app.value.name }))
     nav.back()

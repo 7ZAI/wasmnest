@@ -16,7 +16,7 @@ import { computed, ref, type Component, type ComputedRef, type Ref } from 'vue'
 import i18n from '@/locales'
 import { logger } from '@/utils/frontendLogger'
 import { getShellRegistry } from '../registry'
-import type { ShellApp, ShellAppSource } from '../types'
+import type { ShellApp, ShellAppSource, ShellInstallRestoreDecider } from '../types'
 import { pushRecent } from './useShellRecent'
 import { disposeSurfaceApp, reconcileSurfaceApps } from '../surfaceRuntime'
 import { useAppSurfaces } from './useAppSurfaces'
@@ -338,10 +338,14 @@ function supportsInstall(): boolean {
 /**
  * 安装本地应用包
  *
+ * @param decideRestore 「旧数据是否恢复」询问回调（数据源在落盘前调用；
+ *        缺省不恢复）。壳层负责弹窗，数据源不碰 UI。
  * @returns 安装后的应用 id；null = 用户取消（调用方不弹错误）。
  *          失败由 catch 抛出，错误已由 lastError 暴露。
  */
-async function installFromLocalPackage(): Promise<string | null> {
+async function installFromLocalPackage(
+  decideRestore?: ShellInstallRestoreDecider,
+): Promise<string | null> {
   const source = registry
     .listSources()
     .find((s): s is ShellAppSource & Required<Pick<ShellAppSource, 'installFromLocalPackage'>> =>
@@ -352,7 +356,7 @@ async function installFromLocalPackage(): Promise<string | null> {
     return null
   }
   try {
-    const installedId = await source.installFromLocalPackage()
+    const installedId = await source.installFromLocalPackage(decideRestore)
     if (installedId !== null) {
       await refresh()
       // 安装成功的新应用名要到刷新后的清单里取（安装前注册表里还没有它）
@@ -408,8 +412,8 @@ async function setAutostart(appId: string, autostart: boolean): Promise<boolean>
   }
 }
 
-/** 卸载应用并删除数据 */
-async function removeApp(appId: string): Promise<boolean> {
+/** 卸载应用（L3）；`keepData` = 保留应用数据（私有库 + KV） */
+async function removeApp(appId: string, keepData = false): Promise<boolean> {
   const source = registry.getSourceOf(appId)
   const app = registry.getApp(appId)
   if (!source?.remove) {
@@ -419,7 +423,7 @@ async function removeApp(appId: string): Promise<boolean> {
   // 同停用的顺序契约：先 dispose UI（含清打开记录），再走插件卸载
   await disposeSurfaceApp(appId)
   try {
-    const ok = await source.remove(appId)
+    const ok = await source.remove(appId, keepData)
     if (ok) {
       registry.clearApp(appId)
       await refresh()

@@ -353,33 +353,40 @@ impl PluginManager {
 }
 
 impl PluginManager {
-    /// 卸载插件（仅用户安装的插件；内置插件拒绝）
+    /// 卸载插件（L3 应用；系统服务拒绝）
     ///
-    /// 停用 → 移除运行时实例 → 清理启用偏好与插件存储 → 删除插件目录
-    pub async fn uninstall(&self, plugin_id: &str) -> Result<()> {
-        {
+    /// `keep_data` = 保留应用数据（私有库 `plugin.db` 家族 + 主库 KV）。
+    /// - 用户安装应用：删代码文件，保留数据目录（无 `plugin.json`，loader 跳过）；
+    ///   重装时 downloader 把私有库搬进新包目录；
+    /// - **所有 L3 应用**都写 `plugins/.uninstalled/<id>` 标记（不止内置）：内置应用被
+    ///   zip 更新后来源会变成 `FileInstall` / `RemoteDownload`，按来源判定会漏写，卸载
+    ///   后下次启动解压器从 APK assets 重新解压 → 应用复活。安装 / 下载命令成功后清
+    ///   标记，因此对非内置 id 只是一枚无害的空标记。
+    /// 审批 / 授权记录始终撤销（数据可留，信任不继承）。
+    pub async fn uninstall(&self, plugin_id: &str, keep_data: bool) -> Result<()> {
+        let kind = {
             let plugins = self.plugins.read().await;
             let plugin = plugins
                 .get(plugin_id)
                 .ok_or_else(|| crate::AppError::Plugin(format!("Plugin not found: {}", plugin_id)))?;
-            if plugin.source == PluginSource::ApkAsset {
-                return Err(crate::AppError::Plugin(format!(
-                    "Builtin plugin cannot be uninstalled: {}",
-                    plugin_id
-                )));
-            }
-            // 系统服务（L1/L2）随宿主分发，卸载入口只为用户安装的 L3 应用保留。
+            // 系统服务（L1/L2）随宿主分发，卸载入口只为 L3 应用保留。
             // 判据 = manifest kind，不依赖来源标记（防绕过 apk-asset 标记的构造路径）。
-            if plugin.manifest.kind.is_role_driven() {
-                return Err(crate::AppError::Plugin(format!(
-                    "System service cannot be uninstalled: {}",
-                    plugin_id
-                )));
-            }
+            plugin.manifest.kind
+        };
+        if kind.is_role_driven() {
+            return Err(crate::AppError::Plugin(format!(
+                "System service cannot be uninstalled: {}",
+                plugin_id
+            )));
         }
 
         // 停用（若激活）并清理消息总线订阅
         self.deactivate(plugin_id).await?;
+
+        // 先落「已卸载」覆盖再动其它状态：写标记失败时插件必须保持完整（记录 / 目录 /
+        // 数据都在，只被停用），否则下次启动解压器查无标记会从 APK assets 重新解压。
+        // 顺序放在停用之后：停用失败要能干净返回，不留「已停用 + 有标记」的半态。
+        self.write_uninstalled_marker(plugin_id).await?;
 
         // 移除 WASM 实例与插件记录
         self.wasm_plugins.write().await.remove(plugin_id);
@@ -403,19 +410,119 @@ impl PluginManager {
         if let Err(e) = self.approvals.revoke(plugin_id).await {
             tracing::warn!(plugin_id = %plugin_id, error = %e, "Failed to revoke approval on uninstall");
         }
-        if let Err(e) = self.storage().clear_all(plugin_id).await {
-            tracing::warn!(plugin_id = %plugin_id, error = %e, "Failed to clear plugin storage on uninstall");
+        if !keep_data {
+            if let Err(e) = self.storage().clear_all(plugin_id).await {
+                tracing::warn!(plugin_id = %plugin_id, error = %e, "Failed to clear plugin storage on uninstall");
+            }
+        } else {
+            tracing::info!(plugin_id = %plugin_id, "Keeping plugin storage on uninstall (keep_data)");
         }
 
-        // 删除插件目录
+        // 删除插件目录（安装目录即数据目录）。keep_data 时只删代码文件，保留
+        // `plugin.db` 家族；目录因缺 plugin.json 不再被 loader 装载。
+        // 删除失败要回滚上面刚落的标记，否则应用会在下次启动里凭空消失。
         let plugin_dir = self.plugins_dir.join(plugin_id);
         if plugin_dir.exists() {
-            tokio::fs::remove_dir_all(&plugin_dir)
-                .await
-                .map_err(|e| crate::AppError::Plugin(format!("Failed to remove plugin dir: {}", e)))?;
+            let removed = if keep_data {
+                Self::remove_package_files_keep_db(&plugin_dir)
+                    .await
+                    .map_err(|e| crate::AppError::Plugin(format!("Failed to remove plugin package files: {}", e)))
+            } else {
+                tokio::fs::remove_dir_all(&plugin_dir)
+                    .await
+                    .map_err(|e| crate::AppError::Plugin(format!("Failed to remove plugin dir: {}", e)))
+            };
+            if let Err(e) = removed {
+                // 磁盘没删掉 → 撤回覆盖，否则应用会在下次启动里凭空消失
+                if let Err(clear_err) = self.clear_uninstalled_marker(plugin_id).await {
+                    tracing::warn!(
+                        plugin_id = %plugin_id,
+                        error = %clear_err,
+                        "Failed to roll back uninstall marker"
+                    );
+                }
+                return Err(e);
+            }
         }
 
-        tracing::info!(plugin_id = %plugin_id, "Plugin uninstalled");
+        tracing::info!(plugin_id = %plugin_id, keep_data, "Plugin uninstalled");
+        Ok(())
+    }
+
+    /// 该应用是否还有可恢复的旧数据（keep-data 卸载 / 重装残留）
+    ///
+    /// 判据 =「插件私有库 `plugin.db` 家族」（安装目录即数据目录）或「主库
+    /// `plugin_storage` 行」，与卸载 `keep_data` 的保留面一致；审批 / 授权记录在
+    /// 卸载时已撤销，不在此列。**只有 fresh install 的壳层提示消费本判定**——已安装
+    /// 应用的自身数据不算「旧数据」（壳层用 `installed` 区分）。
+    ///
+    /// 目录读失败按错误上抛（fail-visible）：静默当成「无数据」会让用户丢数据。
+    pub async fn has_retained_data(&self, plugin_id: &str) -> Result<bool> {
+        let dir = self.plugins_dir.join(plugin_id);
+        if dir.is_dir() {
+            let mut entries = tokio::fs::read_dir(&dir).await.map_err(|e| {
+                crate::AppError::Plugin(format!("Failed to inspect plugin data dir '{}': {}", dir.display(), e))
+            })?;
+            while let Some(entry) = entries.next_entry().await.map_err(|e| {
+                crate::AppError::Plugin(format!("Failed to inspect plugin data dir '{}': {}", dir.display(), e))
+            })? {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name == "plugin.db" || name.starts_with("plugin.db-") {
+                    return Ok(true);
+                }
+            }
+        }
+        self.storage()
+            .has_any(plugin_id)
+            .await
+            .map_err(|e| crate::AppError::Plugin(format!("Failed to inspect retained plugin storage: {}", e)))
+    }
+
+    /// 重装成功后清除内置应用的「已卸载」覆盖
+    pub async fn clear_uninstalled_marker(&self, plugin_id: &str) -> Result<()> {
+        let marker = self
+            .plugins_dir
+            .join(crate::system::constants::plugin::PLUGIN_UNINSTALLED_DIR)
+            .join(plugin_id);
+        if marker.exists() {
+            tokio::fs::remove_file(&marker)
+                .await
+                .map_err(|e| crate::AppError::Plugin(format!("Failed to clear uninstall marker: {}", e)))?;
+        }
+        Ok(())
+    }
+
+    /// 写内置应用「已卸载」覆盖（`plugins/.uninstalled/<plugin_id>` 空文件）
+    async fn write_uninstalled_marker(&self, plugin_id: &str) -> Result<()> {
+        let dir = self
+            .plugins_dir
+            .join(crate::system::constants::plugin::PLUGIN_UNINSTALLED_DIR);
+        tokio::fs::create_dir_all(&dir)
+            .await
+            .map_err(|e| crate::AppError::Plugin(format!("Failed to create uninstall marker dir: {}", e)))?;
+        tokio::fs::write(dir.join(plugin_id), b"")
+            .await
+            .map_err(|e| crate::AppError::Plugin(format!("Failed to write uninstall marker: {}", e)))?;
+        Ok(())
+    }
+
+    /// 删除安装目录中的代码文件，只保留插件私有库（`plugin.db` 家族）
+    async fn remove_package_files_keep_db(dir: &std::path::Path) -> std::io::Result<()> {
+        let mut entries = tokio::fs::read_dir(dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name == "plugin.db" || name.starts_with("plugin.db-") {
+                continue;
+            }
+            let path = entry.path();
+            if entry.file_type().await?.is_dir() {
+                tokio::fs::remove_dir_all(&path).await?;
+            } else {
+                tokio::fs::remove_file(&path).await?;
+            }
+        }
         Ok(())
     }
 }

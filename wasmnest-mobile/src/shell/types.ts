@@ -123,6 +123,14 @@ export interface ShellApp {
 }
 
 /**
+ * 本地包安装的「旧数据是否恢复」询问（fresh install 且同 id 留有 keep-data 旧数据时）
+ *
+ * 壳层负责呈现询问（默认不恢复，与卸载的「保留应用数据」口径对称）；
+ * 返回 true = 恢复并安装 / false = 丢弃旧数据后安装 / null = 取消安装。
+ */
+export type ShellInstallRestoreDecider = (info: { pluginId: string }) => Promise<boolean | null>
+
+/**
  * 应用数据源：宿主壳与具体应用形态之间的唯一耦合面。
  *
  * 新增形态（插件 / WASM 应用 / 内置能力）只需实现本接口并注册到 ShellRegistry，
@@ -160,15 +168,18 @@ export interface ShellAppSource {
   /**
    * 安装本地应用包（数据源自行完成选包与校验）。
    *
-   * @returns 安装后的应用 id；`null` = 用户取消选包（不是失败）。
+   * 同 id 留有 keep-data 卸载的旧数据时，数据源在**落盘前**回调 `decideRestore`
+   * （壳层负责呈现「是否恢复」询问，默认不恢复）：未提供决策者按不恢复处理。
+   *
+   * @returns 安装后的应用 id；`null` = 用户取消选包或取消恢复询问（不是失败）。
    *          未实现时宿主不渲染「安装本地包」入口——不提供点了没反应的按钮。
    */
-  installFromLocalPackage?(): Promise<string | null>
+  installFromLocalPackage?(decideRestore?: ShellInstallRestoreDecider): Promise<string | null>
   /**
-   * 卸载应用并删除其数据。
+   * 卸载应用；`keepData` = 保留应用数据（私有库 + KV），重装后继续使用。
    * 未实现时宿主不渲染「卸载」入口，同理不留死按钮。
    */
-  remove?(appId: string): Promise<boolean>
+  remove?(appId: string, keepData?: boolean): Promise<boolean>
   /**
    * 查询「启动时自动激活」偏好。
    * 未实现时宿主不渲染自启开关（能力诚实原则）。

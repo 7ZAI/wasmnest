@@ -59,7 +59,12 @@ export default {
       permissionCount: '{count} permissions',
       installSuccess: 'Installed — approve and start it from the list',
       installFailed: 'Install failed: {error}',
-      uninstallConfirm: 'Uninstall "{name}" and delete its data? This cannot be undone.',
+      installRestoreTitle: 'Restore old app data?',
+      installRestoreBody: 'Data from the previous install was kept (private database and storage). Check to restore it; installing without data (the default) permanently deletes the old data.',
+      installRestoreKeep: 'Restore old app data (reused after reinstall)',
+      installRestoreDiscardHint: 'Restore is unchecked: the old app data will be deleted. This cannot be undone.',
+      installRestoreConfirm: 'Install',
+      uninstallConfirm: 'Uninstall "{name}"? App data is deleted by default; check the box to keep it. Approval and auth records will be revoked.',
       uninstallSuccess: 'Uninstalled {name}',
       uninstallFailed: 'Uninstall failed: {error}',
       update: {
@@ -100,7 +105,9 @@ export default {
       stopService: 'Stop service',
       /** Stop-service confirmation (services are resident capabilities; a mistaken stop has wide impact) */
       stopServiceConfirm: 'Stop service "{name}"? It will stop providing its capability; restart it from App manager.',
-      uninstall: 'Uninstall and delete data',
+      uninstall: 'Uninstall app',
+      keepData: 'Keep app data (reused after reinstall)',
+      deleteDataHint: 'Keep app data is unchecked (default): the private database and storage will be deleted. This cannot be undone.',
       version: 'v{version}',
     },
     run: {
@@ -114,6 +121,7 @@ export default {
     },
     /** Floating navigation (stays above any page once enabled) */
     floatingNav: {
+      back: 'Back',
       home: 'Back home',
       recents: 'Switch apps',
       move: 'Floating navigation, draggable; use arrow keys to move',
@@ -191,7 +199,7 @@ export default {
         },
         uninstalled: {
           title: '{name} uninstalled',
-          body: 'The app and its data were deleted',
+          body: 'Removed from this device',
         },
         failed: {
           title: '{name} failed to start',
@@ -203,7 +211,7 @@ export default {
       title: 'Settings',
       navigation: 'Navigation',
       floatingNavLabel: 'Floating navigation',
-      floatingNavHint: 'Home and app switcher, draggable',
+      floatingNavHint: 'Back, Home and app switcher, draggable',
       platform: 'Platform',
       appearance: 'Appearance',
       appearanceHint: 'Theme and palette',

@@ -16,6 +16,12 @@ vi.mock('@/plugin/commands', () => ({
   pluginActivate: vi.fn(async () => {}),
   pluginDeactivate: vi.fn(async () => {}),
   pluginInstallFromFile: vi.fn(async () => 'installed-id'),
+  pluginPeekAppPackage: vi.fn(async () => ({
+    path: '/sdcard/app.zip',
+    pluginId: 'com.test.picked',
+    hasRetainedData: false,
+    installed: false,
+  })),
   pluginUninstall: vi.fn(async () => {}),
 }))
 
@@ -209,9 +215,75 @@ describe('能力诚实口径', () => {
     vi.mocked(dialogOpen).mockResolvedValueOnce('/sdcard/app.zip')
     const source = createPluginAppSource()
 
-    // 返回安装后的应用 id：壳要用它把「已安装」通知挂到正确的应用上
+    // 返回安装后的应用 id：壳要用它把「已安装」通知挂到正确的应用上。
+    // 无旧数据 = 不询问，按默认「不恢复」安装。
     await expect(source.installFromLocalPackage?.()).resolves.toBe('installed-id')
-    expect(cmds.pluginInstallFromFile).toHaveBeenCalledWith('/sdcard/app.zip')
+    expect(cmds.pluginInstallFromFile).toHaveBeenCalledWith('/sdcard/app.zip', false, false)
+  })
+
+  it('should_askBeforeInstalling_when_freshInstallHasRetainedData', async () => {
+    vi.mocked(dialogOpen).mockResolvedValueOnce('/sdcard/app.zip')
+    vi.mocked(cmds.pluginPeekAppPackage).mockResolvedValueOnce({
+      path: '/sdcard/app.zip',
+      pluginId: 'com.test.returning',
+      hasRetainedData: true,
+      installed: false,
+    })
+    const decideRestore = vi.fn(async () => true)
+    const source = createPluginAppSource()
+
+    await source.installFromLocalPackage?.(decideRestore)
+
+    // 询问发生在安装之前，且用户选择被带进安装命令（恢复 = 保留私有库 + KV）
+    expect(decideRestore).toHaveBeenCalledWith({ pluginId: 'com.test.returning' })
+    expect(cmds.pluginInstallFromFile).toHaveBeenCalledWith('/sdcard/app.zip', false, true)
+  })
+
+  it('should_discardRetainedData_when_userDeclinesRestore', async () => {
+    vi.mocked(dialogOpen).mockResolvedValueOnce('/sdcard/app.zip')
+    vi.mocked(cmds.pluginPeekAppPackage).mockResolvedValueOnce({
+      path: '/sdcard/app.zip',
+      pluginId: 'com.test.returning',
+      hasRetainedData: true,
+      installed: false,
+    })
+    const source = createPluginAppSource()
+
+    await source.installFromLocalPackage?.(async () => false)
+
+    expect(cmds.pluginInstallFromFile).toHaveBeenCalledWith('/sdcard/app.zip', false, false)
+  })
+
+  it('should_notInstall_when_userCancelsRestorePrompt', async () => {
+    vi.mocked(dialogOpen).mockResolvedValueOnce('/sdcard/app.zip')
+    vi.mocked(cmds.pluginPeekAppPackage).mockResolvedValueOnce({
+      path: '/sdcard/app.zip',
+      pluginId: 'com.test.returning',
+      hasRetainedData: true,
+      installed: false,
+    })
+    const source = createPluginAppSource()
+
+    // 取消询问 = 取消安装（不是「不恢复并继续」——那会在用户没确定时删数据）
+    await expect(source.installFromLocalPackage?.(async () => null)).resolves.toBeNull()
+    expect(cmds.pluginInstallFromFile).not.toHaveBeenCalled()
+  })
+
+  it('should_notAsk_when_appIsAlreadyInstalled', async () => {
+    vi.mocked(dialogOpen).mockResolvedValueOnce('/sdcard/app.zip')
+    vi.mocked(cmds.pluginPeekAppPackage).mockResolvedValueOnce({
+      path: '/sdcard/app.zip',
+      pluginId: 'com.test.installed',
+      hasRetainedData: true,
+      installed: true,
+    })
+    const decideRestore = vi.fn(async () => true)
+    const source = createPluginAppSource()
+
+    await source.installFromLocalPackage?.(decideRestore)
+
+    // 已安装应用的自身数据不是「旧数据」：不询问（重装走升级链路，恒保数据）
+    expect(decideRestore).not.toHaveBeenCalled()
   })
 
   it('should_callApproveCommand_when_approvingApp', async () => {
@@ -237,7 +309,7 @@ describe('卸载（运行期收口）', () => {
     // 卸载即结束运行期：前端对称拆解（注册表 / 事件 / 运行期 store 作用域 + 后端停用）
     // 必须先于后端删包——否则应用卸载后其运行面与 store 会残留在 WebView 直到重载
     expect(pluginLoader.deactivate).toHaveBeenCalledWith('com.test.app')
-    expect(cmds.pluginUninstall).toHaveBeenCalledWith('com.test.app')
+    expect(cmds.pluginUninstall).toHaveBeenCalledWith('com.test.app', false)
     const deactivateOrder = vi.mocked(pluginLoader.deactivate).mock.invocationCallOrder[0]
     const uninstallOrder = vi.mocked(cmds.pluginUninstall).mock.invocationCallOrder[0]
     expect(deactivateOrder).toBeLessThan(uninstallOrder)

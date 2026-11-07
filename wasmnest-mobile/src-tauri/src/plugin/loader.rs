@@ -64,6 +64,12 @@ impl PluginLoader {
             if id.starts_with('.') || !entry.path().is_dir() {
                 continue;
             }
+            // 用户卸载过的内置应用：由 Rust 写入覆盖标记，dev 重启不得重新复制
+            // （否则「卸载」在 dev 环境永远不生效）。
+            if plugins_data_dir.join(PLUGIN_UNINSTALLED_DIR).join(&id).exists() {
+                tracing::info!("[PluginLoader] Skipping uninstalled builtin plugin: {}", id);
+                continue;
+            }
             let dest = plugins_data_dir.join(&id);
             let marker = dest.join(PLUGIN_SOURCE_MARKER);
             if marker.exists() {

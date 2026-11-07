@@ -995,3 +995,47 @@ describe('C-S21 页头计数', () => {
     expect(wrapper.text()).not.toContain('shell.switcher.countUnit')
   })
 })
+
+describe('C-S25 卡片视觉口径（2026-11-06 用户反馈）', () => {
+  function readCss(): string {
+    return readFileSync(join(process.cwd(), 'src/shell/styles/shell.css'), 'utf8')
+  }
+
+  it('should_useTighterRadius_when_cardRendered', () => {
+    // 用户原话「卡片圆角太圆了」：18px 的 --shell-radius-lg 在大卡上像药丸，
+    // 卡片改用更紧的一档（与桌面 .ts-card 的 10px 同一收紧口径）
+    const css = readCss()
+    const card = cssBlock(css, '.shell-recents-card')
+    expect(card, '卡片必须用专用圆角 token（不复用 --shell-radius-lg）').toContain(
+      'border-radius: var(--shell-radius-recents)',
+    )
+    expect(card).not.toContain('border-radius: var(--shell-radius-lg)')
+    const token = css.match(/--shell-radius-recents:\s*(\d+)px/)
+    expect(token, '密级 token 必须存在').not.toBeNull()
+    const radius = Number(token?.[1])
+    expect(radius, '圆角必须明显小于旧值 18px').toBeLessThanOrEqual(12)
+    expect(radius, '但不能小到失去卡片形态').toBeGreaterThanOrEqual(8)
+  })
+
+  it('should_letInstanceFillThumb_when_cardRendered', () => {
+    // 用户原话「卡片里面的内容应该跟着卡片宽高铺满显示区域」：缩略区整块交给实例，
+    // 不给它加内边距（内边距会在画面四周顶出一圈纸边）
+    const css = readCss()
+    const live = cssBlock(css, '.shell-live')
+    expect(live, '实例层必须铺满缩略区').toContain('inset: 0')
+    expect(live, '实例层不能自带内边距').not.toContain('padding:')
+    expect(live, '实例层不能自带外边距').not.toContain('margin:')
+  })
+
+  it('should_keepContainScaling_when_instanceInCard', () => {
+    // 铺满由「缩略区比例 = 应用区比例」保证，不能靠改 cover 裁切换铺满：
+    // 裁掉应用右侧内容比留边更糟（桌面同为 Math.min 口径）
+    const src = readFileSync(
+      join(process.cwd(), 'src/shell/surfaceAppRegistry.ts'),
+      'utf8',
+    )
+    expect(src, '等比缩放必须取 Math.min（contain，整页可见）').toContain(
+      'Math.min(boxWidth / size.width, boxHeight / size.height)',
+    )
+  })
+})
