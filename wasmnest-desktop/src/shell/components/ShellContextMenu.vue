@@ -28,9 +28,9 @@
       <button class="it" role="menuitem" @click="act(perms)">
         <ShellIcon name="shield" :size="13" /> {{ t('shell.ctx.perms') }}
       </button>
-      <div v-if="userInstalled" class="sep"></div>
+      <div v-if="removable" class="sep"></div>
       <button
-        v-if="userInstalled"
+        v-if="removable"
         class="it danger"
         role="menuitem"
         :disabled="running"
@@ -70,7 +70,8 @@ const running = computed(
   () => app.value?.state === 'running' || app.value?.state === 'degraded',
 )
 const service = computed(() => isServiceKind(app.value?.kind))
-const userInstalled = computed(() => app.value?.source === 'user-installed')
+/** L3 业务应用可卸载（内置随包应用同样支持；服务不提供卸载面） */
+const removable = computed(() => Boolean(app.value) && !service.value)
 /** 贴边约束（菜单不超出视口） */
 const left = computed(() => {
   const m = menu.value

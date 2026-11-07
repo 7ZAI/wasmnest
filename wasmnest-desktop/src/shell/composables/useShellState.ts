@@ -45,12 +45,18 @@ const ctxMenu = ref<ShellCtxMenu | null>(null)
 const dialog = ref<ShellDialogKind | null>(null)
 /** 弹窗关联的应用 id（审批 / 卸载弹窗的目标） */
 const dialogAppId = ref<string | null>(null)
+/** 退出已确认：宿主正在有界优雅关闭；确认面是进度面，Esc / 返回不得收起 */
+const quitInProgress = ref(false)
 /** 策略二次确认的资源（授权策略切换弹窗预留） */
 const dialogResource = ref<string | null>(null)
 /** 主屏 type-to-search 查询串 */
 const homeQ = ref('')
-/** 待升级确认的外部应用包（选包识别结果；install-upgrade 弹窗的目标，确认 / 取消即清） */
-const installTarget = ref<{ path: string; pluginId: string } | null>(null)
+/** 待升级 / 待数据恢复确认的外部应用包（选包识别结果；确认 / 取消即清） */
+const installTarget = ref<{
+  path: string
+  pluginId: string
+  hasRetainedData: boolean
+} | null>(null)
 
 // ==================== 通知（机制面） ====================
 
@@ -350,6 +356,9 @@ function goHome(): void {
 /** 返回：覆层按 z 序先收，耗尽后全屏 → 主屏 */
 function goBack(): void {
   if (dialog.value) {
+    // 退出已确认：宿主正在优雅关闭，Esc / 返回不得收起进度面
+    // （与 ShellDialogLayer.close 的 quitting 守卫同一口径）。
+    if (quitInProgress.value && dialog.value === 'exit') return
     dialog.value = null
     return
   }
@@ -371,6 +380,26 @@ function goBack(): void {
   }
   if (screen.value !== 'home') goHome()
 }
+
+/**
+ * 是否有可返回的目标（工具栏返回键 / 悬浮导航返回的可用判据）
+ *
+ * 与 `goBack` 的消费序同源：覆层按 z 序 → 全屏面 → 主屏。放在这里而不是各组件
+ * 各写一份，免得两处判据漂移成「按钮亮着却说没东西可退」。
+ */
+const canGoBack = computed(() => {
+  // 退出已确认（宿主正在优雅关闭）：`goBack` 对该确认面是 no-op（见其守卫），
+  // 判据必须同步为 false，否则返回键亮着却点不动。
+  if (quitInProgress.value && dialog.value === 'exit') return false
+  return (
+    dialog.value !== null ||
+    ctxMenu.value !== null ||
+    panelOpen.value ||
+    quickSettingsOpen.value ||
+    recentsOpen.value ||
+    screen.value !== 'home'
+  )
+})
 
 /**
  * 全部关闭：一键清场——每个应用卡真停用（失败保留该卡并 toast），系统页卡直关；
@@ -459,10 +488,10 @@ async function stopApp(appId: string): Promise<boolean> {
   return ok
 }
 
-/** 卸载应用（含数据清理确认由 ShellDialogLayer uninstall 分支呈现） */
-async function uninstallApp(appId: string): Promise<void> {
+/** 卸载应用（`keepData` = 保留应用数据；确认面由 ShellDialogLayer uninstall 分支呈现） */
+async function uninstallApp(appId: string, keepData = false): Promise<void> {
   const apps = useShellApps()
-  const ok = await apps.uninstall(appId)
+  const ok = await apps.uninstall(appId, keepData)
   dialog.value = null
   dialogAppId.value = null
   if (ok) {
@@ -486,15 +515,19 @@ async function uninstallApp(appId: string): Promise<void> {
  * 现状裁决——新 id 直接安装；同 id 已装且可升级（user-installed、未运行）进
  * 就地升级确认（升级保数据，安装清数据，两条语义不混用）；内置应用 / 运行中
  * fail-visible 先行拦截（后端同判据兜底，前端拦截只为给出准确文案）。
+ *
+ * 新 id 若留有 keep-data 卸载的旧数据，先弹「是否恢复旧应用数据」（默认不恢复）——
+ * 两态都走正式安装；恢复把私有库 + KV 带进新装，不恢复则丢弃。
  * 用户取消选包 = 无事发生；安装/识别失败由 showUserError 统一提示。
  */
 async function installApp(): Promise<void> {
   const apps = useShellApps()
-  let picked: { path: string; pluginId: string } | null
+  let picked: { path: string; pluginId: string; hasRetainedData: boolean } | null
   try {
     picked = (await invoke('plugin_pick_app_package')) as {
       path: string
       pluginId: string
+      hasRetainedData: boolean
     } | null
   } catch (e) {
     showUserError(e)
@@ -503,6 +536,12 @@ async function installApp(): Promise<void> {
   if (!picked) return
   const existing = apps.appOf(picked.pluginId)
   if (!existing) {
+    if (picked.hasRetainedData) {
+      installTarget.value = picked
+      dialogAppId.value = picked.pluginId
+      dialog.value = 'install-restore-data'
+      return
+    }
     const ok = await apps.installFromZip(picked.path, false)
     if (ok) {
       toast.success(
@@ -548,6 +587,28 @@ async function confirmInstallUpgrade(): Promise<void> {
   }
 }
 
+/**
+ * 旧数据恢复确认（ShellDialogLayer install-restore-data 分支）：两者都是 fresh
+ * install，唯一差异是 `restore`——false（默认）丢弃旧私有库 + KV，true 保留。
+ * 失败保留确认面供重试，错误提示由 showUserError 统一发出。
+ */
+async function confirmInstallRestoreData(restore: boolean): Promise<void> {
+  const target = installTarget.value
+  if (!target) return
+  const apps = useShellApps()
+  const ok = await apps.installFromZip(target.path, false, restore)
+  if (ok) {
+    dialog.value = null
+    dialogAppId.value = null
+    installTarget.value = null
+    toast.success(
+      t('shell.dialog.install.success', {
+        name: apps.appOf(target.pluginId)?.name ?? target.pluginId,
+      }),
+    )
+  }
+}
+
 export function useShellState() {
   return {
     screen,
@@ -564,6 +625,7 @@ export function useShellState() {
     dialog,
     dialogAppId,
     dialogResource,
+    quitInProgress,
     homeQ,
     notifs,
     notifPulse,
@@ -578,6 +640,7 @@ export function useShellState() {
     closeCard,
     goHome,
     goBack,
+    canGoBack,
     stopAllCards,
     approveAndStart,
     stopApp,
@@ -585,6 +648,7 @@ export function useShellState() {
     installTarget,
     installApp,
     confirmInstallUpgrade,
+    confirmInstallRestoreData,
     cardTitleOf,
     syncFromRoute,
     routeOf,

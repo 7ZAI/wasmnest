@@ -71,6 +71,31 @@ describe('应用表面实例注册表', () => {
     expect(registry.attach('ghost', slot)).toBe(false)
   })
 
+  it('attach 以挂载槽实测为应用整幅尺寸：容器首帧高度偏小不污染预览比例', () => {
+    // 回归（2026-11-07）：容器是槽内的 flex 项，首帧 / 布局未稳时 clientHeight 可能
+    // 只有应用内容高度（实测 432 vs 应用区 820）。若把它当成「应用整幅」，多任务卡会
+    // 按错误比例缩放：缩略区又宽又扁，页面被裁掉下半截（用户看到的「卡片没显示界面」）。
+    fakeSize(host, 1280, 432)
+    fakeSize(slot, 1280, 820)
+    registry.register(APP, host, handle)
+
+    registry.attach(APP, slot)
+
+    expect(registry.get(APP)?.size, '槽是应用区唯一几何真源').toEqual({
+      width: 1280,
+      height: 820,
+    })
+  })
+
+  it('槽没有可用尺寸（无布局的测试环境 / 隐藏态）时退回量容器自身', () => {
+    fakeSize(host, 1280, 800)
+    registry.register(APP, host, handle)
+
+    registry.attach(APP, slot)
+
+    expect(registry.get(APP)?.size).toEqual({ width: 1280, height: 800 })
+  })
+
   it('detach 只摘槽不销毁：容器脱文档、实例仍在、通知后台', () => {
     registry.register(APP, host, handle)
     registry.attach(APP, slot)

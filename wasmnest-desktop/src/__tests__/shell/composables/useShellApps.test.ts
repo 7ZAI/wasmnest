@@ -280,6 +280,7 @@ describe('生命周期动作（真实命令面）', () => {
     expect(mockedInvoke).toHaveBeenCalledWith('plugin_uninstall', {
       pluginId: 'com.wasmnest.test-app',
       credential: expect.any(String),
+      keepData: false,
     })
 
     mockedInvoke

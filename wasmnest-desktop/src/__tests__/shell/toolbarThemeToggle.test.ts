@@ -78,6 +78,7 @@ beforeEach(() => {
     notifPulse: box(0),
     cardTitleOf: vi.fn(() => ''),
     goBack: vi.fn(),
+    canGoBack: box(false),
     goHome: vi.fn(),
     toggleRecents: vi.fn(),
     toggleQuickSettings: vi.fn(),

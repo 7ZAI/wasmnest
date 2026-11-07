@@ -607,6 +607,16 @@
     /* 只缩放图标按钮的视觉，不改胶囊位置（transform 由外层承担） */
     transform: scale(0.94);
   }
+  /* 无可返回目标（已在主屏且无覆层）：置灰但保留占位——胶囊宽度不随面态跳，
+     也不给「能点」的假象；悬停 / 按压反馈一并撤掉 */
+  .shell-floatnav-btn:disabled,
+  .shell-floatnav-btn:disabled:hover,
+  .shell-floatnav-btn:disabled:active {
+    color: color-mix(in srgb, var(--text-primary) 34%, transparent);
+    background: none;
+    transform: none;
+    cursor: default;
+  }
   .shell-floatnav-divider {
     position: relative;
     z-index: 1;

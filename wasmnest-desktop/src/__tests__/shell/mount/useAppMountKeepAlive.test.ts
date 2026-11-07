@@ -36,6 +36,7 @@ vi.mock('@/utils/invoke', () => ({
 import {
   MOUNT_CONTRACT,
   appViewportAspect,
+  attachAppSurface,
   detachAppBundle,
   disposeAppBundle,
   listAppSurfaces,
@@ -223,6 +224,25 @@ describe('应用区比例（多任务卡片形状的来源）', () => {
     appSurfaces.register('com.wasmnest.lifecycle.good', host, { unmount: async () => {} })
     appSurfaces.attach('com.wasmnest.lifecycle.good', slot)
 
+    expect(appViewportAspect()).toBeCloseTo(1.6, 5)
+  })
+
+  it('取挂载槽的实时尺寸：后台实例的旧尺寸不得决定卡片形状', () => {
+    const slot = createSlot()
+    fakeSize(slot, 1280, 800)
+
+    // 后台实例先注册：尺寸是切走那一刻的旧值（窗口 / 字号变过 → 与当前应用区不一致）
+    const bg = document.createElement('div')
+    appSurfaces.register('com.wasmnest.lifecycle.bg', bg, { unmount: async () => {} })
+    appSurfaces.get('com.wasmnest.lifecycle.bg')!.size = { width: 1280, height: 432 }
+
+    // 前台实例：经公开 attach 挂进槽 → 槽尺寸被记为当前应用区真值（1.6）
+    const fg = document.createElement('div')
+    fg.className = 'app-instance-host'
+    appSurfaces.register('com.wasmnest.lifecycle.fg', fg, { unmount: async () => {} })
+    attachAppSurface(slot, 'com.wasmnest.lifecycle.fg')
+
+    // 若按注册顺序 / 实例缓存取第一个，会拿到 1280/432 ≈ 2.96，整批卡片被解算成扁卡
     expect(appViewportAspect()).toBeCloseTo(1.6, 5)
   })
 })

@@ -90,13 +90,18 @@
                 class="ts-thumb"
                 :style="kindOf(key) === 'app' ? undefined : thumbStyle()"
               >
-                <!-- app 卡：保活实例本身（宿主搬进卡片并等比缩放；实例缺失 → 品牌卡 fallback） -->
+                <!-- app 卡：保活实例本身（宿主搬进卡片并等比缩放；实例缺失 → 品牌卡 fallback）。
+                     缩略区尺寸由解算结果直接传入（首帧即准，避免卡片带还没写成
+                     `--ts-card-w` 时先按兜底三等分缩一次再跳）；容器尺寸变化仍由
+                     AppSurfaceTile 的 ResizeObserver 按 DOM 实测量校正。 -->
                 <AppSurfaceTile
                   v-if="kindOf(key) === 'app'"
                   :app-id="idOf(key)"
                   :icon="entryOf(key)?.icon ?? 'grid'"
                   :icon-file="entryOf(key)?.iconFile"
                   :tone="toneOf(key)"
+                  :thumb-width="thumbSize.width"
+                  :thumb-height="thumbSize.height"
                 />
                 <!-- 系统页卡：没有 app bundle，保持品牌渐变 + 36px glyph -->
                 <span v-else class="glyph-box tone-system ts-sys-glyph">
@@ -176,9 +181,9 @@ import {
   RECENTS_MAX_COLS,
   RECENTS_MAX_VISIBLE_ROWS,
   normalizePreviewAspect,
-  recentsCardHeight,
   recentsCardPlacement,
-  recentsCardWidth,
+  recentsCardSize,
+  recentsThumbSize,
   recentsTrackCount,
   type RecentsBand,
   type RecentsCardMetrics,
@@ -228,24 +233,46 @@ const metrics = computed<RecentsCardMetrics>(() => {
     inset: cardChrome.value.inset,
   }
 })
-/** 单卡宽度；0 = 还没量到带尺寸 → 交给 CSS 兜底（三等分） */
-const cardWidth = computed(() =>
-  recentsCardWidth(state.cards.value.length, band.value, metrics.value),
+/**
+ * 单卡尺寸（高 + 宽同源解算）。
+ *
+ * 2026-11-06 用户裁决「卡片有最大最小高度限制，宽度稍微减少，高度加高」：
+ * 解算改成**高度优先**，宽度由高度派生（见 `recentsCardSize`）。这里必须一次拿到
+ * 高与宽两个值——高度优先下不存在「宽度 → 高度」的反解（旧的 `recentsCardHeight`
+ * 已随该口径退役），分开算必然对不上。
+ */
+const cardSize = computed(() =>
+  recentsCardSize(state.cards.value.length, band.value, metrics.value),
 )
-/** 卡高：缩略区按比例 + 信息条（显式喂给 grid-auto-rows，避免引擎把溢出的行压扁） */
-const cardHeight = computed(() => recentsCardHeight(cardWidth.value, metrics.value))
+/** 单卡宽度；0 = 还没量到带尺寸 → 交给 CSS 兜底（三等分） */
+const cardWidth = computed(() => cardSize.value.width)
+/** 卡高：显式喂给 grid-auto-rows，避免引擎把溢出的行压扁 */
+const cardHeight = computed(() => cardSize.value.height)
+/**
+ * 缩略区尺寸（px）——交给 `AppSurfaceTile` 做 contain 缩放。
+ *
+ * 取 `recentsThumbSize` 而非在组件里再算一遍：口径只能有一处（2026-11-07 修的是
+ * 「组件算卡宽−描边、导出函数返回收缩前的按比例宽」两套口径分叉，按后者接线会让
+ * 画面横向溢出 12%）。解算未就绪时返回 {0,0} → 交回 DOM 自量
+ * （`AppSurfaceTile` 的 ResizeObserver 兜底）。
+ */
+const thumbSize = computed(() =>
+  recentsThumbSize(state.cards.value.length, band.value, metrics.value),
+)
 /** 超过可视 2 行 → 改滚动：必须置顶对齐，否则居中的首行会被滚出可视区 */
 const scrolls = computed(
   () =>
     state.cards.value.length > 0 &&
     Math.ceil(state.cards.value.length / RECENTS_MAX_COLS) > RECENTS_MAX_VISIBLE_ROWS,
 )
-/** 注入 `--ts-card-w` / `--ts-card-h` / `--ts-tracks` / `--ts-card-aspect`：CSS 不重复尺寸算术 */
+/** 注入 `--ts-card-w` / `--ts-card-h` / `--ts-card-ratio` / `--ts-tracks` / `--ts-card-aspect`：CSS 不重复尺寸算术 */
 const bandStyle = computed<Record<string, string>>(() => {
   const style: Record<string, string> = { '--ts-card-aspect': `${metrics.value.aspect}` }
-  if (cardWidth.value > 0) {
+  if (cardWidth.value > 0 && cardHeight.value > 0) {
     style['--ts-card-w'] = `${cardWidth.value}px`
     style['--ts-card-h'] = `${cardHeight.value}px`
+    // 卡片自身比例（≠ 缩略区比例）：未测量时的 aspect-ratio 兜底必须与实测尺寸同比例
+    style['--ts-card-ratio'] = `${cardWidth.value} / ${cardHeight.value}`
     style['--ts-tracks'] = String(recentsTrackCount(state.cards.value.length))
   }
   return style
@@ -504,6 +531,14 @@ function close(): void {
   -webkit-backdrop-filter: blur(20px) saturate(120%);
   backdrop-filter: blur(20px) saturate(120%);
 }
+/* 不支持背景模糊时，58% 的半透明底只能压暗、压不住下层文字（实机能看到工具栏
+   透出，观感就是「全透明」）。没有模糊就必须回实心底：宁可少一点氛围，也不能让
+   全屏层失去遮挡。 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ts-scrim {
+    background: var(--bg-page);
+  }
+}
 
 .ts-inner {
   position: relative;
@@ -605,19 +640,22 @@ function close(): void {
   align-content: start;
 }
 
-/* 卡片：横版（顶部信息条 + 缩略区）——缩略区宽高比 = 应用区整幅宽高比
-   （默认 16:10，运行期由 `--ts-card-aspect` 注入；2026-11-04 用户裁决）。
-   缩略区里是真实实例按 contain 缩放（见 appSurfaceRegistry），比例一致时正好铺满，
-   不裁切也不留边；旧的竖版 3:4 卡（2026-11-01）配横版页面必然剩大片空白，已退役。
+/* 卡片：顶部信息条 + 缩略区。
+   缩略区宽高比 = 应用区整幅宽高比（默认 16:10，`--ts-card-aspect` 注入；2026-11-04），
+   缩略区里是真实实例按 contain 缩放（见 appSurfaceRegistry）：缩略区比例与实例比例
+   一致时正好铺满，不一致时居中留边、不裁切。
+   卡片比例 = 缩略区比例（2026-11-07 用户裁决「铺满优先」，外框收缩系数已退役）：
+   卡高有 [MIN, MAX] 上下限，卡宽由卡高按比例反解 + 描边，所以卡片与缩略区同比例。
+   `--ts-card-ratio` 仍单独表达（未测量时的兜底），**不要**复用 `--ts-card-aspect`：
+   前者是「卡宽 / 卡高」，后者是纯比例数值，两者混用会让引擎按缩略区比例反推卡宽
+   （实测 429 → 507，卡片横向溢出）。
    宽度 = 跨 2 个半列轨道（轨道宽由 `--ts-card-w` 注入，见 recentsLayout）：
-   少卡大、多卡小，最小到 2 行 3 列的格，第 7 张起整带滚动；兜底（首帧测量前 /
-   无 ResizeObserver）是三等分，保证未测量时也不会溢出。
+   少卡大、多卡小，第 7 张起整带滚动；兜底（首帧测量前 / 无 ResizeObserver）是
+   三等分，保证未测量时也不会溢出。
    卡高由 `--ts-card-h` 显式给出（行高同源）；未测量时用 aspect-ratio 兜底，
    量到后卡片按行高拉伸（`.ts-cards` 的 align-items: stretch），aspect-ratio 让位。
    末行不满 3 张时 `cardStyle` 注入起始轨把它整组居中；其余卡片自动排布。
    box-sizing 必须 border-box：卡宽含 1px 描边，否则轨宽按内容算会多 2px。
-   卡宽必须显式取 `--ts-card-w`（而不是只靠网格拉伸）：可 stretched 的宽度 + 几何高度
-   会让引擎优先用 aspect-ratio 反推宽度（实测 429 → 507，卡片横向溢出）。
    aspect-ratio 只在未测量时生效（那时宽高都还不是确定值）。 */
 .ts-card {
   position: relative;
@@ -625,10 +663,14 @@ function close(): void {
   min-width: 0;
   width: var(--ts-card-w, auto);
   grid-column: span 2;
-  aspect-ratio: var(--ts-card-aspect, 16 / 10);
+  aspect-ratio: var(--ts-card-ratio, 16 / 10);
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius-sheet);
+  /* 卡片圆角单独一档（2026-11-06 用户反馈「太圆」）：`--radius-sheet` 是 16–28px 的
+     大圆角面口径，给多任务大卡用显得像药丸。卡片用 10px，与信息条 / 缩略区的
+     直角关系更硬朗。**不复用 `--radius-sheet`**：它还被通知面板 / 弹窗 / 快捷设置
+     共用，改它会连带改那些面。 */
+  border-radius: 10px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-card);

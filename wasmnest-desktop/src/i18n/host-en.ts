@@ -65,6 +65,7 @@ export default {
     },
     /** Floating navigation (stays above any face once enabled; same keys and copy as mobile) */
     floatingNav: {
+      back: 'Back',
       home: 'Back home',
       recents: 'Switch apps',
       move: 'Floating navigation, draggable; focus it and use arrow keys to move',
@@ -148,7 +149,7 @@ export default {
       },
       uninstalled: {
         title: 'Uninstalled',
-        body: '{name} and its data removed',
+        body: '{name} was removed from this device',
       },
       approved: {
         title: 'Approved & started',
@@ -221,7 +222,9 @@ export default {
       },
       uninstall: {
         title: 'Uninstall "{name}"?',
-        body: 'Deletes install directory, plugin storage and enable state; not recoverable. Auth records are removed too.',
+        body: 'App data is deleted by default; check the box to keep it. Approval / auth records are always revoked, so reinstall requires a new approval.',
+        keepData: 'Keep app data (reused after reinstall)',
+        deleteDataHint: 'Keep app data is unchecked (default): the private database and storage will be deleted. This cannot be undone.',
         confirm: 'Confirm uninstall',
         success: '{name} uninstalled',
       },
@@ -233,6 +236,12 @@ export default {
         title: 'Upgrade "{name}"?',
         body: 'An app with the same id is already installed. Upgrading in place keeps its data (plugin storage and auth records); changed content requires re-approval on next launch.',
         confirm: 'Upgrade',
+      },
+      installRestore: {
+        title: 'Restore old app data?',
+        body: 'Data from the previous install was kept (private database and storage). Choose whether to restore it; installing without data (the default) permanently deletes the old data.',
+        discard: 'Install without data',
+        restore: 'Restore data & install',
       },
       stopService: {
         title: 'Stop service "{name}"?',
@@ -267,7 +276,7 @@ export default {
       nav: {
         title: 'Navigation',
         label: 'Floating navigation',
-        hint: 'A persistent capsule for Home and app switcher, draggable',
+        hint: 'A persistent capsule for Back, Home and app switcher, draggable',
       },
       ui: {
         title: 'Appearance',

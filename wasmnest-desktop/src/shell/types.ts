@@ -27,6 +27,7 @@ export type ShellDialogKind =
   | 'dir'
   | 'stop-service'
   | 'install-upgrade'
+  | 'install-restore-data'
 
 /**
  * 宿主通知（机制面）：宿主只承载来源 / 驻留 / 动作 / 时间，文案由来源方给出。

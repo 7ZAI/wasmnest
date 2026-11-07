@@ -390,12 +390,12 @@ async function approve(appId: string): Promise<boolean> {
   })
 }
 
-/** 卸载应用（含数据清理；后端仅未启用插件可卸） */
-async function uninstall(appId: string): Promise<boolean> {
+/** 卸载应用（L3；服务由宿主拒绝）。`keepData` 缺省 false（删除私有库 + KV） */
+async function uninstall(appId: string, keepData = false): Promise<boolean> {
   if (!appOf(appId)) return false
   return runAction(appId, 'uninstall', true, async () => {
     const credential = await ensureHostCredential()
-    await invoke('plugin_uninstall', { pluginId: appId, credential })
+    await invoke('plugin_uninstall', { pluginId: appId, credential, keepData })
     // 卸载同样回收通道令牌：清前端缓存，防残留死令牌
     invalidateChannelToken(appId)
   })
@@ -404,22 +404,43 @@ async function uninstall(appId: string): Promise<boolean> {
 /**
  * 安装 / 升级外部应用包（zip；无属主应用，不占 busyId，走 installing 置位）。
  *
- * `upgrade = false` 新装（同 id 已装由后端回滚并拒绝，壳层在安装前按注册表现状
- * 裁决分流）；`upgrade = true` 就地升级（宿主 install.rs：保留插件存储 / 授权
- * 记录 / 审批记录，仅换代码；内容哈希失配 → 下次激活落 NeedsApproval 重新批准）。
+ * `upgrade = false` 新装（同 id 已装由后端拒绝，壳层在安装前按注册表现状裁决
+ * 分流）；`upgrade = true` 就地升级（宿主 install.rs：保留插件存储 / 授权记录 /
+ * 审批记录，仅换代码；内容哈希失配 → 下次激活落 NeedsApproval 重新批准）。
+ *
+ * `restoreData` 只对 fresh install 生效：keep-data 卸载留下的旧数据是否恢复。
+ * 缺省 false = 丢弃（壳层在存在旧数据时先弹窗让用户选，默认也是不恢复）。
  */
-async function installFromZip(path: string, upgrade: boolean): Promise<boolean> {
+async function installFromZip(
+  path: string,
+  upgrade: boolean,
+  restoreData = false,
+): Promise<boolean> {
   installing.value = true
   try {
     const credential = await ensureHostCredential()
-    await invoke('plugin_install_from_file', { path, credential, upgrade })
+    const installedId = await invoke<string>('plugin_install_from_file', {
+      path,
+      credential,
+      upgrade,
+      restoreData,
+    })
+    // 重装 / 恢复内置应用：清掉「已卸载」覆盖，避免下次 boot 又把它摘掉。
+    // 清除失败不把安装判失败（包已落地），但必须留痕。
+    try {
+      await invoke('plugin_clear_uninstalled', { pluginId: installedId, credential })
+    } catch (e) {
+      logger.warn(`[Shell] clear uninstall override failed: appId=${installedId}`, e)
+    }
     lastError.value = null
     await refresh()
     return true
   } catch (e) {
     // 错误消费口径与 runAction 一致（ADR 0030）：toast 只出 errors.<code>，详情落日志
     const userError = showUserError(e)
-    logger.warn(`[Shell] installFromZip failed: upgrade=${upgrade} code=${userError.code}`)
+    logger.warn(
+      `[Shell] installFromZip failed: upgrade=${upgrade} restoreData=${restoreData} code=${userError.code}`,
+    )
     lastError.value = userError.code
     await refresh()
     return false

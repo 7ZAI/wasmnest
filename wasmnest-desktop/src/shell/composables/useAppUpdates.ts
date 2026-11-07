@@ -234,7 +234,19 @@ async function applyUpdate(appId: string): Promise<boolean> {
       sha256: apply.sha256,
       credential,
     })
-    await invoke('plugin_install_from_file', { path, credential, upgrade: true })
+    const installedId = await invoke<string>('plugin_install_from_file', {
+      path,
+      credential,
+      upgrade: true,
+    })
+    // 安装入口不止一处（此处绕过 `installFromZip`）：同样要清「已卸载」覆盖，
+    // 否则覆盖表若因清标记失败而残留（`installFromZip` 只 warn），更新成功后
+    // 下次 boot 仍会把应用摘掉。失败不判更新失败——包已落地。
+    try {
+      await invoke('plugin_clear_uninstalled', { pluginId: installedId, credential })
+    } catch (e) {
+      logger.warn(`[AppUpdates] clear uninstall override failed: appId=${installedId}`, e)
+    }
     st.apply = undefined
     st.reason = undefined
     st.status = 'up-to-date'

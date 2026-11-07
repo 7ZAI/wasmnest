@@ -8,11 +8,12 @@
  * | C-F1 | 开关 | 默认关闭；关闭时不渲染 | DOM 无悬浮条 |
  * | C-F2 | 回主屏 | 点 home = state.goHome（清覆层 + 路由回 '/'） | goHome 被调 |
  * | C-F3 | 多任务 | 点多任务 = state.toggleRecents（开 ShellTaskSwitcher） | toggleRecents 被调 |
+ * | C-F3b | 返回 | 点返回 = state.goBack；无可退时按钮置灰 | goBack 被调 / disabled 在场 |
  * | C-F4 | 拖动 | 越过阈值才判拖拽；抬手落归一化位置 | floatingNavPos 在 [0,1] |
  * | C-F5 | 拖拽余波 | 拖动抬手补的 click 在捕获阶段被吞没 | preventDefault 为真 |
  * | C-F6 | 键盘替代 | 拖动面聚焦后方向键移动并持久化（WCAG 2.2） | 位置左移 + 落偏好 |
  * | C-F7 | 底部让位 | bottomReserve（状态栏条带）计入可移动范围 | 最底只到状态栏上缘 |
- * | C-F8 | 可读名 | 两个按钮与拖动面都有 aria-label | 定位即断言 |
+ * | C-F8 | 可读名 | 三个按钮与拖动面都有 aria-label | 定位即断言 |
  * | C-F9 | 挂载点 | 挂 ShellHost、bareWindow 不渲染 | 源码装配锁 |
  * | C-F10 | 双语 | floatingNav 与 settings.nav key 两侧同步 | 读两份语言表 |
  */
@@ -24,6 +25,8 @@ import { ref, nextTick } from 'vue'
 
 const mockGoHome = vi.fn()
 const mockToggleRecents = vi.fn()
+const mockGoBack = vi.fn()
+const canGoBack = ref(false)
 
 const prefs = ref<{
   floatingNav?: boolean
@@ -37,7 +40,12 @@ vi.mock('vue-i18n', async (importOriginal) => {
   return { ...actual, useI18n: () => ({ t: (key: string) => key }) }
 })
 vi.mock('@/shell/composables/useShellState', () => ({
-  useShellState: () => ({ goHome: mockGoHome, toggleRecents: mockToggleRecents }),
+  useShellState: () => ({
+    goHome: mockGoHome,
+    toggleRecents: mockToggleRecents,
+    goBack: mockGoBack,
+    canGoBack,
+  }),
 }))
 vi.mock('@/shell/composables/useShellSettings', () => ({
   useShellSettings: () => ({ prefs }),
@@ -49,8 +57,8 @@ import hostEn from '@/i18n/host-en'
 
 /** 测试视口与悬浮条尺寸：位置换算依赖实测尺寸，happy-dom 默认给 0 */
 const VIEWPORT = { width: 1280, height: 800 }
-/** 与 shell.css 的胶囊尺寸同口径：5×2 padding + 42×2 按钮 + 10×2 间距 + 1 分隔线 */
-const NAV_SIZE = { width: 115, height: 44 }
+/** 与 shell.css 的胶囊尺寸同口径：5×2 padding + 42×3 按钮 + 10×2 间距 + 2 分隔线 */
+const NAV_SIZE = { width: 158, height: 44 }
 const EDGE_MARGIN = 12
 /** 状态栏条带（ShellHost 的 floatNavBottomReserve，与 .shell-statusbar 高度同口径） */
 const STATUSBAR_H = 26
@@ -81,6 +89,8 @@ function bounds(bottomReserve = 0) {
 beforeEach(() => {
   mockGoHome.mockClear()
   mockToggleRecents.mockClear()
+  mockGoBack.mockClear()
+  canGoBack.value = false
   prefs.value = { floatingNav: true, floatingNavPos: { x: 0.5, y: 1 } }
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: VIEWPORT.width })
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: VIEWPORT.height })
@@ -106,6 +116,7 @@ describe('C-F1 开关与渲染', () => {
     expect(bar.attributes('role'), '拖动面是语义分组').toBe('group')
     expect(bar.attributes('tabindex'), '拖动面可聚焦（方向键替代路径）').toBe('0')
     expect(bar.attributes('aria-label')).toBe('shell.floatingNav.move')
+    expect(wrapper.find('button[aria-label="shell.floatingNav.back"]').exists()).toBe(true)
     expect(wrapper.find('button[aria-label="shell.floatingNav.home"]').exists()).toBe(true)
     expect(wrapper.find('button[aria-label="shell.floatingNav.recents"]').exists()).toBe(true)
     wrapper.unmount()
@@ -113,6 +124,28 @@ describe('C-F1 开关与渲染', () => {
 })
 
 describe('C-F2..C-F3 导航动作', () => {
+  it('should_callGoBack_when_backClicked', async () => {
+    canGoBack.value = true
+    const { wrapper } = mountNav()
+    const back = wrapper.find('button[aria-label="shell.floatingNav.back"]')
+
+    expect(back.attributes('disabled'), '有可退项时返回键可点').toBeUndefined()
+    await back.trigger('click')
+
+    expect(mockGoBack).toHaveBeenCalledTimes(1)
+    expect(mockGoHome).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('should_disableBack_when_nothingToGoBackTo', () => {
+    // 主屏且无覆层 = 没有可退的东西：按钮保留占位（胶囊宽度不跳）但置灰
+    const { wrapper } = mountNav()
+    const back = wrapper.find('button[aria-label="shell.floatingNav.back"]')
+
+    expect(back.attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
   it('should_callGoHome_when_homeClicked', async () => {
     const { wrapper } = mountNav()
 
@@ -314,7 +347,7 @@ describe('C-F10 文案双语在场', () => {
         floatingNav?: Record<string, string>
         settings?: { nav?: Record<string, string> }
       }
-      for (const key of ['home', 'recents', 'move']) {
+      for (const key of ['back', 'home', 'recents', 'move']) {
         expect(typeof shellTree.floatingNav?.[key], `${locale} 缺 shell.floatingNav.${key}`).toBe(
           'string',
         )

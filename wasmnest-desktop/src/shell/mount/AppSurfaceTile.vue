@@ -33,7 +33,7 @@
  * 已知边界：应用若把弹层 Teleport 到 body，不在缩放容器内（与多任务层同层），
  * 可能盖在卡片之上；普通 fixed / absolute 弹层会被 transform 包含块留在卡片里。
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   fitAppSurfacePreview,
   leaveAppSurfacePreview,
@@ -50,6 +50,16 @@ const props = defineProps<{
   /** manifest.icon 里的文件名（缺省 icon.svg） */
   iconFile?: string
   tone: AppTone | 'system'
+  /**
+   * 缩略区尺寸（px，可选）：由 `recentsLayout` 的解算结果给出。
+   *
+   * 首帧按它算缩放，避免卡片带还没写成 `--ts-card-w` 时先按兜底三等分缩一次再跳。
+   * 但它不是唯一依据：实例容器自己的尺寸仍在变（窗口缩放 / 卡片数变化 / 字号档位
+   * 动了信息条高度），所以 ResizeObserver 必须常驻，尺寸变化时**以 DOM 实测为准**
+   * 重新校正。0 / 缺省 → 直接量容器。
+   */
+  thumbWidth?: number
+  thumbHeight?: number
 }>()
 
 /** 缩略区品牌渐变底：tone 档 → 语义色 token（与 shell.css 的 tone-* 同源） */
@@ -75,20 +85,43 @@ type LivePhase = 'fallback' | 'live'
 const phase = ref<LivePhase>('fallback')
 const surfaceEl = ref<HTMLElement | null>(null)
 
+/** 解算给的缩略区尺寸；0 / 缺省 → 回退到量容器 */
+function solvedBox(): { width: number; height: number } | null {
+  const width = props.thumbWidth ?? 0
+  const height = props.thumbHeight ?? 0
+  return width > 0 && height > 0 ? { width, height } : null
+}
+
+/** 重算缩放：优先用解算尺寸（首帧即准），没有就让它量容器 */
+function fit(): void {
+  const box = solvedBox()
+  if (box) fitAppSurfacePreview(props.appId, box)
+  else fitAppSurfacePreview(props.appId)
+}
+
 /** 卡片尺寸随窗口 / 卡片数变化：容器尺寸变了就重算缩放（实例布局尺寸不变） */
 let observer: ResizeObserver | null = null
 
 onMounted(() => {
   const box = surfaceEl.value
   if (!box) return
-  if (!presentAppSurfaceInPreview(props.appId, box)) return
+  if (!presentAppSurfaceInPreview(props.appId, box, solvedBox() ?? undefined)) return
   phase.value = 'live'
   if (typeof ResizeObserver === 'undefined') return
-  observer = new ResizeObserver(() => {
-    fitAppSurfacePreview(props.appId)
-  })
+  // 解算尺寸只保证**首帧**：它来自卡片带的测量结果，而卡片盒子的真实尺寸还会因
+  // 窗口缩放 / 卡片增减 / 字号档位（信息条高度）变化。观察器必须常驻，并用 DOM
+  // 实测值重算（fit() 走解算值，观察器走实测值）——否则首帧算错一次就永久错下去。
+  observer = new ResizeObserver(() => fitAppSurfacePreview(props.appId))
   observer.observe(box)
 })
+
+// 卡片数 / 窗口尺寸变化 → 解算结果变化 → 重算缩放（不必等 ResizeObserver）
+watch(
+  () => [props.thumbWidth, props.thumbHeight] as const,
+  () => {
+    if (phase.value === 'live') fit()
+  },
+)
 
 onBeforeUnmount(() => {
   observer?.disconnect()

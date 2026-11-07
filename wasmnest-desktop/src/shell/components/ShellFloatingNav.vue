@@ -1,7 +1,7 @@
 <template>
-  <!-- 悬浮导航（回主屏 / 多任务）：默认关闭，开启后由 ShellHost 常驻渲染。
+  <!-- 悬浮导航（返回 / 回主屏 / 多任务）：默认关闭，开启后由 ShellHost 常驻渲染。
        位置只写 transform：拖动时每帧只改合成属性，不触发布局重排。
-       整个胶囊是拖动面，两个按钮仍是普通点击目标——位移超过阈值才判为拖拽，
+       整个胶囊是拖动面，三个按钮仍是普通点击目标——位移超过阈值才判为拖拽，
        并在捕获阶段吞掉拖拽抬手后浏览器补的那次 click。 -->
   <div
     v-if="enabled"
@@ -21,6 +21,18 @@
     @keydown="onKeydown"
     @contextmenu.prevent
   >
+    <button
+      type="button"
+      class="shell-floatnav-btn"
+      :disabled="!state.canGoBack.value"
+      :aria-label="t('shell.floatingNav.back')"
+      @click="state.goBack()"
+    >
+      <ShellIcon name="back" :size="16" />
+    </button>
+
+    <span class="shell-floatnav-divider" aria-hidden="true" />
+
     <button
       type="button"
       class="shell-floatnav-btn"
@@ -59,6 +71,10 @@
  * 比例重算，胶囊不会被甩出窗口。拖拽只写像素，抬手才落偏好，避免拖动过程
  * 反复写 localStorage。bottomReserve 由 ShellHost 传入（状态栏可见时让出
  * 状态栏条带），默认落位是底部居中、状态栏正上方。
+ *
+ * 返回按钮与工具栏同一个可用判据（`state.canGoBack`）与同一个动作
+ * （`state.goBack`）：覆层按 z 序先收，耗尽后全屏面 → 主屏；没东西可退时按钮
+ * 置灰但仍占位，胶囊宽度不因面态变化而跳。
  *
  * 无拖拽替代路径（WCAG 2.2 Dragging Movements）：拖动面本身可聚焦，
  * 方向键按 8px（Shift 32px）移动并持久化——位置不是只能靠拖。

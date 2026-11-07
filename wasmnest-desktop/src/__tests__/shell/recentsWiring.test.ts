@@ -141,6 +141,7 @@ beforeEach(() => {
     openApp: vi.fn(),
     openSys: vi.fn(),
     goBack: vi.fn(),
+    canGoBack: ref(false),
     goHome: vi.fn(),
     toggleRecents: vi.fn(),
     toggleQuickSettings: vi.fn(),

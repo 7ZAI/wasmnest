@@ -109,7 +109,7 @@
           </button>
         </template>
         <button
-          v-if="app.source === 'user-installed' && !isServiceKind(app.kind)"
+          v-if="!isServiceKind(app.kind)"
           class="shell-btn danger ghost"
           :disabled="busy(app.id) || app.state === 'running' || app.state === 'degraded'"
           :title="t('shell.apps.uninstallDisabled')"

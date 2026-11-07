@@ -17,6 +17,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 const mocks = vi.hoisted(() => ({
   dialog: { value: null as string | null },
   dialogAppId: { value: null as string | null },
+  quitInProgress: { value: false },
   installTarget: { value: null as unknown },
   plugins: { value: [] as Array<{ id: string; state: string }> },
   windowLabel: 'main',
@@ -42,6 +43,7 @@ vi.mock('@/shell/composables/useShellState', () => ({
   useShellState: () => ({
     dialog: mocks.dialog,
     dialogAppId: mocks.dialogAppId,
+    quitInProgress: mocks.quitInProgress,
     installTarget: mocks.installTarget,
   }),
 }))
@@ -79,6 +81,7 @@ function buttonByText(wrapper: ReturnType<typeof mountLayer>, text: string) {
 beforeEach(() => {
   mocks.dialog.value = null
   mocks.dialogAppId.value = null
+  mocks.quitInProgress.value = false
   mocks.installTarget.value = null
   mocks.windowLabel = 'main'
   mocks.closeHandler = null

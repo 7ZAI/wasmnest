@@ -1,11 +1,14 @@
 /**
- * 桌面壳「安装升级确认」弹窗行为锁（2026-10-28）
+ * 桌面壳「安装升级 / 旧数据恢复」弹窗行为锁（2026-10-28 / 2026-11-07）
  *
- * 契约（真源 = ShellDialogLayer install-upgrade 分支 + useShellState.confirmInstallUpgrade）：
- * - 安装外部应用包命中已装同 id（user-installed、未运行）时先进本弹窗，
- *   确认 = confirmInstallUpgrade（就地升级保数据；新装不经弹窗）；
- * - 升级成功收起弹窗并清 installTarget；失败保留确认面供重试 / 取消；
- * - 取消只收弹窗，不触发升级。
+ * 契约（真源 = ShellDialogLayer install-upgrade / install-restore-data 分支 +
+ * useShellState.confirmInstallUpgrade / confirmInstallRestoreData）：
+ * - 安装外部应用包命中已装同 id（user-installed、未运行）时先进升级弹窗，
+ *   确认 = confirmInstallUpgrade（就地升级保数据；新装不经该弹窗）；
+ * - 新装同 id 留有 keep-data 旧数据时先进恢复弹窗，**默认动作 = 不恢复**，
+ *   两态都走 confirmInstallRestoreData（false / true 显式传参）；
+ * - 成功收起弹窗并清 installTarget；失败保留确认面供重试 / 取消；
+ * - 取消只收弹窗，不触发安装。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -13,9 +16,12 @@ import { flushPromises, mount } from '@vue/test-utils'
 const mocks = vi.hoisted(() => ({
   dialog: { value: null as string | null },
   dialogAppId: { value: null as string | null },
-  installTarget: { value: null as { path: string; pluginId: string } | null },
+  installTarget: {
+    value: null as { path: string; pluginId: string; hasRetainedData: boolean } | null,
+  },
   installing: { value: false },
   confirmInstallUpgrade: vi.fn(() => Promise.resolve()),
+  confirmInstallRestoreData: vi.fn(() => Promise.resolve()),
   appOf: vi.fn((id: string) => ({
     id,
     pluginId: id,
@@ -30,6 +36,7 @@ vi.mock('@/shell/composables/useShellState', () => ({
     dialogAppId: mocks.dialogAppId,
     installTarget: mocks.installTarget,
     confirmInstallUpgrade: mocks.confirmInstallUpgrade,
+    confirmInstallRestoreData: mocks.confirmInstallRestoreData,
   }),
 }))
 
@@ -60,7 +67,21 @@ const APP_ID = 'com.wasmnest.third-party'
 function openUpgradeDialog(): void {
   mocks.dialog.value = 'install-upgrade'
   mocks.dialogAppId.value = APP_ID
-  mocks.installTarget.value = { path: '/tmp/pkg.zip', pluginId: APP_ID }
+  mocks.installTarget.value = {
+    path: '/tmp/pkg.zip',
+    pluginId: APP_ID,
+    hasRetainedData: false,
+  }
+}
+
+function openRestoreDialog(): void {
+  mocks.dialog.value = 'install-restore-data'
+  mocks.dialogAppId.value = APP_ID
+  mocks.installTarget.value = {
+    path: '/tmp/pkg.zip',
+    pluginId: APP_ID,
+    hasRetainedData: true,
+  }
 }
 
 function mountLayer() {
@@ -80,6 +101,8 @@ beforeEach(() => {
   mocks.installing.value = false
   mocks.confirmInstallUpgrade.mockReset()
   mocks.confirmInstallUpgrade.mockResolvedValue(undefined)
+  mocks.confirmInstallRestoreData.mockReset()
+  mocks.confirmInstallRestoreData.mockResolvedValue(undefined)
 })
 
 describe('ShellDialogLayer：安装升级确认', () => {
@@ -125,5 +148,54 @@ describe('ShellDialogLayer：安装升级确认', () => {
     await flushPromises()
 
     expect(mocks.confirmInstallUpgrade).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('ShellDialogLayer：旧数据恢复确认', () => {
+  it('默认动作 = 不恢复：点击「不恢复并安装」→ confirmInstallRestoreData(false)', async () => {
+    openRestoreDialog()
+    const wrapper = mountLayer()
+
+    const discard = buttonByText(wrapper, 'shell.dialog.installRestore.discard')
+    expect(discard, '不恢复按钮必须在位（默认动作用主按钮）').toBeDefined()
+    await discard!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.confirmInstallRestoreData).toHaveBeenCalledWith(false)
+  })
+
+  it('选择恢复 → confirmInstallRestoreData(true)', async () => {
+    openRestoreDialog()
+    const wrapper = mountLayer()
+
+    await buttonByText(wrapper, 'shell.dialog.installRestore.restore')!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.confirmInstallRestoreData).toHaveBeenCalledWith(true)
+  })
+
+  it('安装进行中（installing）→ 两个动作都禁用', () => {
+    openRestoreDialog()
+    mocks.installing.value = true
+    const wrapper = mountLayer()
+
+    expect(
+      buttonByText(wrapper, 'shell.dialog.installRestore.discard')!.attributes('disabled'),
+    ).toBeDefined()
+    expect(
+      buttonByText(wrapper, 'shell.dialog.installRestore.restore')!.attributes('disabled'),
+    ).toBeDefined()
+  })
+
+  it('取消 → 只收弹窗并作废选包目标，不触发安装', async () => {
+    openRestoreDialog()
+    const wrapper = mountLayer()
+
+    await buttonByText(wrapper, 'shell.dialog.cancel')!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.confirmInstallRestoreData).not.toHaveBeenCalled()
+    expect(mocks.dialog.value).toBeNull()
+    expect(mocks.installTarget.value, '选包目标必须随取消作废').toBeNull()
   })
 })

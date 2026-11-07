@@ -37,7 +37,7 @@ import type { AppUpdateCheckResult } from '@binblink/wasmnest-plugin-sdk-desktop
 import { logger } from '@/utils/frontendLogger'
 import { ensureHostCredential } from '@/utils/appCommands'
 import { invoke } from '@/utils/invoke'
-import { appSurfaces, type AppSurfaceHandle } from './appSurfaceRegistry'
+import { appSurfaces, type AppSurfaceHandle, type PreviewBoxSize } from './appSurfaceRegistry'
 
 // ==================== 挂载契约（宿主面声明；各 app entry.ts 同形重复——drift 锁钉住） ====================
 
@@ -270,10 +270,28 @@ export function listAppSurfaces(): string[] {
 /** 最近一次把实例放进挂载槽的槽元素（多任务普通收起时把前台实例送回去） */
 let lastSlotEl: HTMLElement | null = null
 
+/** 挂载槽最近一次**可见时**的实测尺寸（主屏打开多任务时槽隐藏，量不到布局） */
+let lastViewportSize: { width: number; height: number } | null = null
+
+/**
+ * 记下槽的可见尺寸。
+ *
+ * 槽是应用区的唯一几何真源（所有应用共用同一个槽）。多任务层收起后槽会被
+ * `v-show` 隐藏（clientWidth/Height = 0），所以在每次可见的时机记住它，供
+ * 主屏打开多任务时定卡片形状。
+ */
+function rememberViewport(slotEl: HTMLElement | null): void {
+  if (!slotEl) return
+  const width = slotEl.clientWidth
+  const height = slotEl.clientHeight
+  if (width > 0 && height > 0) lastViewportSize = { width, height }
+}
+
 /** 把保活实例放回挂载槽（切回来）；返回 false = 没有实例（应走 mountAppBundle） */
 export function attachAppSurface(slotEl: HTMLElement, appId: string): boolean {
   if (!appSurfaces.attach(appId, slotEl)) return false
   lastSlotEl = slotEl
+  rememberViewport(slotEl)
   return true
 }
 
@@ -284,13 +302,17 @@ export function attachAppSurface(slotEl: HTMLElement, appId: string): boolean {
  *
  * @returns false = 没有保活实例（例如装载失败 / 已被停用）→ 卡片回退品牌卡
  */
-export function presentAppSurfaceInPreview(appId: string, boxEl: HTMLElement): boolean {
-  return appSurfaces.attachPreview(appId, boxEl)
+export function presentAppSurfaceInPreview(
+  appId: string,
+  boxEl: HTMLElement,
+  boxSize?: PreviewBoxSize,
+): boolean {
+  return appSurfaces.attachPreview(appId, boxEl, boxSize)
 }
 
 /** 卡片尺寸变化（窗口缩放 / 卡片数变化）：重算等比缩放 */
-export function fitAppSurfacePreview(appId: string): boolean {
-  return appSurfaces.fitPreview(appId)
+export function fitAppSurfacePreview(appId: string, boxSize?: PreviewBoxSize): boolean {
+  return appSurfaces.fitPreview(appId, boxSize)
 }
 
 /** 卡片卸载：把实例从卡片摘下（保留实例，回后台不渲染） */
@@ -309,11 +331,26 @@ export function returnAppSurfaceToSlot(appId: string): boolean {
  *
  * 多任务卡片用它定缩略区形状（`recentsLayout.RecentsCardMetrics.aspect`）：缩略区比例
  * 与应用页一致时，卡片里的实例按 contain 缩放正好铺满、不留边也不裁切。
- * 取任一保活实例最近一次实测的尺寸（同一挂载槽里的应用区尺寸对每个应用都相同）。
+ *
+ * 取**挂载槽**的实测尺寸，不是某个实例的缓存尺寸：
+ * - 多任务打开时前台实例已经被搬进卡片（`location = 'preview'`），按实例找「前台」
+ *   会落空，只能拿到后台实例在切走那一刻的旧尺寸；
+ * - 窗口缩放 / 字号档位变化后，后台实例的旧尺寸与当前应用区不一致，整批卡片会按
+ *   过期比例解算（缩略区变扁），看起来就是「卡片没显示应用界面」。
+ *
+ * 槽可见时用实时尺寸（顺手刷新缓存）；主屏隐藏时用最近一次可见尺寸。
  *
  * @returns 0 = 还没量到任何实例（首帧 / 全部已停用）→ 调用方用默认 16:10
  */
 export function appViewportAspect(): number {
+  // 槽节点被拆除（壳重挂 / 测试回收）：缓存随之失效，不能拿上一份壳的尺寸去算比例
+  if (lastSlotEl && !lastSlotEl.isConnected) {
+    lastSlotEl = null
+    lastViewportSize = null
+  }
+  rememberViewport(lastSlotEl)
+  if (lastViewportSize) return lastViewportSize.width / lastViewportSize.height
+  // 还没有槽尺寸（首帧 / 从未挂载）：退回任一实例的最近实测
   for (const appId of appSurfaces.list()) {
     const size = appSurfaces.get(appId)?.size
     if (size && size.width > 0 && size.height > 0) return size.width / size.height

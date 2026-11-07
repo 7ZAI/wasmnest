@@ -60,6 +60,7 @@ export default {
     },
     /** 悬浮导航（开关开启后常驻在任意面之上；与移动端同键名同文案） */
     floatingNav: {
+      back: '返回',
       home: '回主屏',
       recents: '切换应用',
       move: '悬浮导航，可拖动；聚焦后可用方向键移动',
@@ -143,7 +144,7 @@ export default {
       },
       uninstalled: {
         title: '已卸载',
-        body: '{name} 及其数据已移除',
+        body: '{name} 已从本机移除',
       },
       approved: {
         title: '已批准并启动',
@@ -214,7 +215,9 @@ export default {
       },
       uninstall: {
         title: '卸载「{name}」？',
-        body: '将删除安装目录、插件存储与启用状态，不可恢复。授权记录随之清除。',
+        body: '默认删除应用数据；勾选可保留。审批 / 授权记录始终撤销，重装后需重新批准。',
+        keepData: '保留应用数据（重装后继续使用）',
+        deleteDataHint: '未勾选「保留应用数据」：将同时删除应用私有数据库与存储，不可恢复。',
         confirm: '确认卸载',
         success: '{name} 已卸载',
       },
@@ -226,6 +229,12 @@ export default {
         title: '升级「{name}」？',
         body: '已安装同 id 应用。就地升级保留其数据（插件存储与授权记录）；包内容变更后，下次启动需重新审批。',
         confirm: '升级',
+      },
+      installRestore: {
+        title: '恢复旧应用数据？',
+        body: '该应用上次卸载时保留了数据（私有库与存储）。可在此选择恢复；不恢复（默认）会删除旧数据，且不可撤销。',
+        discard: '不恢复并安装',
+        restore: '恢复数据并安装',
       },
       stopService: {
         title: '停止服务「{name}」？',
@@ -258,7 +267,7 @@ export default {
       nav: {
         title: '导航',
         label: '悬浮导航',
-        hint: '回主屏与切换应用的常驻胶囊，可拖动',
+        hint: '返回、回主屏与切换应用的常驻胶囊，可拖动',
       },
       ui: {
         title: '界面',

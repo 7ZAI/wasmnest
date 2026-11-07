@@ -44,7 +44,7 @@
     <nav class="flex items-center gap-0.5 ml-2.5 shrink-0" aria-label="导航">
       <button
         class="tb-btn"
-        :disabled="!canBack"
+        :disabled="!state.canGoBack.value"
         :title="t('shell.nav.backTitle')"
         :aria-label="t('shell.nav.back')"
         @click="state.goBack()"
@@ -190,16 +190,6 @@ const where = computed(() =>
     品牌旁再写一遍同一个词是纯重复。role=status 区域保留（视觉隐藏在 .sr-only 里，
     读屏仍会播报当前位置变化）。 */
 const hasWhere = computed(() => state.screen.value === 'card')
-
-/** 有可收的覆层或不在主屏 → 返回可用 */
-const canBack = computed(
-  () =>
-    state.screen.value !== 'home' ||
-    state.dialog.value !== null ||
-    state.ctxMenu.value !== null ||
-    state.panelOpen.value ||
-    state.recentsOpen.value,
-)
 
 /** 当前生效暗色（system 跟随系统偏好） */
 const isDark = computed(() =>

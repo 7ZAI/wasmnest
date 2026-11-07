@@ -36,6 +36,17 @@ export interface AppSurfaceSize {
   height: number
 }
 
+/**
+ * 卡片缩略区的已知尺寸（px）
+ *
+ * 由 `recentsLayout.recentsThumbSize` 解算得到——缩略区比例恒等于应用区比例，
+ * 所以 contain 缩放正好铺满、零留边（见 `fitPreviewStyle` 的说明）。
+ */
+export interface PreviewBoxSize {
+  width: number
+  height: number
+}
+
 /** 一个应用表面实例（跨挂载槽 / 多任务卡移动，生命周期跟着应用运行态） */
 export interface AppSurfaceRecord {
   appId: string
@@ -58,9 +69,9 @@ export interface AppSurfaceRegistry {
   /** 把实例容器放回挂载槽（幂等）；返回 false = 没有该实例 */
   attach(appId: string, slotEl: HTMLElement): boolean
   /** 把实例容器搬进多任务卡缩略区（等比缩放、不改前台语义）；返回 false = 没有该实例 */
-  attachPreview(appId: string, boxEl: HTMLElement): boolean
+  attachPreview(appId: string, boxEl: HTMLElement, boxSize?: PreviewBoxSize): boolean
   /** 卡片尺寸变化后重算缩放；返回 false = 实例不在预览态 */
-  fitPreview(appId: string): boolean
+  fitPreview(appId: string, boxSize?: PreviewBoxSize): boolean
   /** 把实例容器从卡片缩略区摘下（不销毁）；返回 false = 实例不在预览态 */
   detachPreview(appId: string): boolean
   /** 把实例容器从挂载槽移除（不销毁）；返回 false = 没有该实例 */
@@ -89,11 +100,31 @@ function notifyActive(handle: AppSurfaceHandle, active: boolean): void {
   }
 }
 
-/** 在文档里时实测整幅尺寸（脱离文档的节点量不到布局，保留旧值） */
+/**
+ * 在文档里时实测应用整幅尺寸。
+ *
+ * **优先量挂载槽**（实例容器的父元素），其次才退回容器自身。原因：容器是
+ * `.app-mount-slot > :deep(*)` 的 flex 项，正常应由槽的确定高度拉伸；但首帧 / 布局
+ * 未稳时它的 clientHeight 可能只是应用内容的高度（实测带应用壳 432，而应用区真实
+ * 高度 820）。把内容高度当成「应用整幅」会让多任务卡按错误比例缩放：缩略区被算得
+ * 又宽又扁，正常比例的应用只能缩成一小块、或按错误尺寸重排后裁掉下半截——看起来
+ * 就是「卡片没有显示应用当前的界面」。
+ *
+ * 槽是应用区的唯一几何真源（所有应用共用同一个槽，切换只搬容器），量它永远对；
+ * 无布局的测试环境（槽没有尺寸）再退回容器自身。
+ */
 function measureInDocument(surface: AppSurfaceRecord): void {
-  if (!surface.host.isConnected) return
-  const width = surface.host.clientWidth
-  const height = surface.host.clientHeight
+  const host = surface.host
+  if (!host.isConnected) return
+  const slot = host.parentElement
+  const slotWidth = slot?.clientWidth ?? 0
+  const slotHeight = slot?.clientHeight ?? 0
+  if (slotWidth > 0 && slotHeight > 0) {
+    surface.size = { width: slotWidth, height: slotHeight }
+    return
+  }
+  const width = host.clientWidth
+  const height = host.clientHeight
   if (!(width > 0) || !(height > 0)) return
   surface.size = { width, height }
 }
@@ -107,23 +138,48 @@ function measureInDocument(surface: AppSurfaceRecord): void {
  * contain 取较小比例，比例不一致时上下或左右留出等宽边带（居中对齐），不裁切。
  * 与移动端多任务卡同一口径（`wasmnest-mobile/src/shell/surfaceAppRegistry.ts`）。
  *
- * 尺寸没量到（首次布局前 / 测试环境）时保持上次的 transform：卡片尺寸变化会由
- * 调用方（ResizeObserver）再调一次，不在这里猜。
+ * 「零留边」由**卡片解算**保证，不由这里改缩放策略：`recentsLayout` 把缩略区比例
+ * 定成与应用区比例相同（`recentsThumbSize`），于是 `Math.min` 与 `Math.max` 同值，
+ * contain 正好铺满。这里若改成 cover，比例一旦有偏差就会裁掉应用内容——不可逆的
+ * 信息丢失，比留边更糟。
+ *
+ * `box` 显式给出时用给定尺寸（调用方已解算好缩略区大小，首帧就准确）；缺省则量
+ * 容器（首个 ResizeObserver 回调前 / 无布局的测试环境）。两者都拿不到时保持上次的
+ * transform，不在这里猜。
  */
-function fitPreviewStyle(surface: AppSurfaceRecord, boxEl: HTMLElement): void {
+export function computePreviewTransform(
+  surfaceSize: AppSurfaceSize,
+  boxWidth: number,
+  boxHeight: number,
+): { x: number; y: number; scale: number } {
+  const scale = Math.min(boxWidth / surfaceSize.width, boxHeight / surfaceSize.height)
+  return {
+    x: (boxWidth - surfaceSize.width * scale) / 2,
+    y: (boxHeight - surfaceSize.height * scale) / 2,
+    scale,
+  }
+}
+
+function fitPreviewStyle(
+  surface: AppSurfaceRecord,
+  boxEl: HTMLElement,
+  boxSize?: PreviewBoxSize,
+): void {
   const size = surface.size
   if (!size) return
-  const boxWidth = boxEl.clientWidth
-  const boxHeight = boxEl.clientHeight
+  const boxWidth = boxSize && boxSize.width > 0 ? boxSize.width : boxEl.clientWidth
+  const boxHeight = boxSize && boxSize.height > 0 ? boxSize.height : boxEl.clientHeight
   if (!(boxWidth > 0) || !(boxHeight > 0)) return
-  const scale = Math.min(boxWidth / size.width, boxHeight / size.height)
-  const x = (boxWidth - size.width * scale) / 2
-  const y = (boxHeight - size.height * scale) / 2
+  const { x, y, scale } = computePreviewTransform(size, boxWidth, boxHeight)
   surface.host.style.transform = `translate(${x}px, ${y}px) scale(${scale})`
 }
 
 /** 进入预览态：固定整幅尺寸 + 内联缩放 + inert（卡片里的实例不可交互 / 不可聚焦） */
-function applyPreviewStyle(surface: AppSurfaceRecord, boxEl: HTMLElement): void {
+function applyPreviewStyle(
+  surface: AppSurfaceRecord,
+  boxEl: HTMLElement,
+  boxSize?: PreviewBoxSize,
+): void {
   const host = surface.host
   host.style.position = 'absolute'
   host.style.left = '0'
@@ -134,7 +190,7 @@ function applyPreviewStyle(surface: AppSurfaceRecord, boxEl: HTMLElement): void 
     host.style.transformOrigin = '0 0'
   }
   host.inert = true
-  fitPreviewStyle(surface, boxEl)
+  fitPreviewStyle(surface, boxEl, boxSize)
 }
 
 /** 离开预览态：清掉预览内联样式，让 `.app-instance-host` 的 100% 尺寸规则重新生效 */
@@ -184,14 +240,14 @@ export function createAppSurfaceRegistry(): AppSurfaceRegistry {
       return true
     },
 
-    attachPreview(appId, boxEl) {
+    attachPreview(appId, boxEl, boxSize) {
       const surface = surfaces.get(appId)
       if (!surface) return false
       // 前台实例仍在槽里：先量整幅尺寸，再改写容器尺寸（否则量到的是卡片盒子）
       measureInDocument(surface)
       boxEl.appendChild(surface.host)
       surface.location = 'preview'
-      applyPreviewStyle(surface, boxEl)
+      applyPreviewStyle(surface, boxEl, boxSize)
       if (surface.active) {
         surface.active = false
         notifyActive(surface.handle, false)
@@ -199,12 +255,12 @@ export function createAppSurfaceRegistry(): AppSurfaceRegistry {
       return true
     },
 
-    fitPreview(appId) {
+    fitPreview(appId, boxSize) {
       const surface = surfaces.get(appId)
       if (!surface || surface.location !== 'preview') return false
       const boxEl = surface.host.parentElement
       if (!boxEl) return false
-      fitPreviewStyle(surface, boxEl)
+      fitPreviewStyle(surface, boxEl, boxSize)
       return true
     },
 

@@ -84,6 +84,11 @@
             </div>
             <div class="dlg-b">
               <p class="note">{{ t('shell.dialog.uninstall.body') }}</p>
+              <label class="keep-data">
+                <input v-model="keepData" type="checkbox" />
+                <span>{{ t('shell.dialog.uninstall.keepData') }}</span>
+              </label>
+              <p v-if="!keepData" class="note">{{ t('shell.dialog.uninstall.deleteDataHint') }}</p>
               <div class="perm-line mono">{{ app?.pluginId }}</div>
             </div>
             <div class="dlg-f">
@@ -140,6 +145,38 @@
             </div>
           </template>
 
+          <!-- ==================== 旧数据恢复确认（fresh install；默认不恢复） ==================== -->
+          <template v-else-if="dialog === 'install-restore-data'">
+            <div class="dlg-h">
+              <span class="dlg-ic"><ShellIcon name="plus" :size="15" /></span>
+              <span class="t">{{ t('shell.dialog.installRestore.title') }}</span>
+              <button class="dlg-x" :aria-label="t('shell.dialog.close')" @click="close">
+                <ShellIcon name="x" :size="13" />
+              </button>
+            </div>
+            <div class="dlg-b">
+              <p class="note">{{ t('shell.dialog.installRestore.body') }}</p>
+              <div class="perm-line mono">{{ restoreTargetId }}</div>
+            </div>
+            <div class="dlg-f">
+              <button class="shell-btn ghost" @click="close">{{ t('shell.dialog.cancel') }}</button>
+              <button
+                class="shell-btn ghost"
+                :disabled="installing"
+                @click="confirmInstallRestore(true)"
+              >
+                {{ t('shell.dialog.installRestore.restore') }}
+              </button>
+              <button
+                class="shell-btn"
+                :disabled="installing"
+                @click="confirmInstallRestore(false)"
+              >
+                <ShellIcon name="plus" :size="13" /> {{ t('shell.dialog.installRestore.discard') }}
+              </button>
+            </div>
+          </template>
+
           <!-- 策略二次确认（授权策略切换弹窗；预留扩展点） -->
           <template v-else-if="dialog === 'strategy-confirm'">
             <div class="dlg-h">
@@ -176,6 +213,8 @@
  *   确认 = stopApp（服务是常驻能力，误停影响面广；业务应用停用保持即时生效）。
  * - 安装升级确认（2026-10-28）：安装外部应用包命中已装同 id（user-installed、
  *   未运行）时先确认，确认 = confirmInstallUpgrade（就地升级保数据；新装不经弹窗）。
+ * - 旧数据恢复确认（2026-11-07）：新装同 id 留有 keep-data 卸载的旧数据时先确认，
+ *   确认 = confirmInstallRestoreData（默认不恢复；恢复才保留私有库 + KV）。
  * 窗口关闭按钮与 requestClose 统一走退出确认，避免绕过会话关窗守卫。
  * 宿主侧会话守卫拦截关窗时广播 `window-close-requested`（存活 PTY 场景），
  * 本组件在主窗口自监听并打开确认面；确认后调 `confirm_window_close` 启动
@@ -183,7 +222,7 @@
  * ——会话守卫会再次拦截，形成「点仍然退出没反应」的循环（2026-11-05 用户缺陷）。
  * 确认后进入 quitting 态：保持进度可见、禁止关闭弹窗/重复触发；命令失败才恢复。
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
@@ -201,8 +240,19 @@ const appsStore = useShellApps()
 /** 宿主关窗守卫广播的 unlisten（仅主窗口装配；独立终端窗口不消费退出确认） */
 let unlistenWindowClose: UnlistenFn | null = null
 
-/** 已确认退出：宿主正在有界优雅关闭，禁止关闭弹窗 / 重复触发 */
+/**
+ * 已确认退出：宿主正在有界优雅关闭，禁止关闭弹窗 / 重复触发。
+ *
+ * UI 态留在组件（模板消费）；同一事实同步到壳状态 `quitInProgress`，
+ * 供 `goBack()` 拦截 Esc / 返回——守卫不能只在 `close()` 里，否则键盘会
+ * 直接把进度面收掉。
+ */
 const quitting = ref(false)
+/** 同步退出态到壳状态（goBack 在组件外消费） */
+function setQuitting(next: boolean): void {
+  quitting.value = next
+  state.quitInProgress.value = next
+}
 
 onMounted(async () => {
   // 独立终端窗口同样挂载壳根（bareWindow），但退出确认只属于主窗口。
@@ -249,6 +299,15 @@ const busy = computed(() =>
 /** 安装/升级进行中（installFromZip 不占 busyId；升级确认按钮据此禁用） */
 const installing = computed(() => appsStore.installing.value)
 
+/** 待恢复旧数据的应用 id（fresh install 尚无注册表条目，不能走 `app` 投影） */
+const restoreTargetId = computed(() => state.installTarget.value?.pluginId ?? '')
+
+/** 卸载时保留应用数据（缺省删除；勾选 = 保留私有库 + 存储） */
+const keepData = ref(false)
+watch(dialog, (next) => {
+  if (next === 'uninstall') keepData.value = false
+})
+
 const dlgTitle = computed(() => {
   switch (dialog.value) {
     case 'exit':
@@ -261,6 +320,8 @@ const dlgTitle = computed(() => {
       return t('shell.dialog.stopService.title', { name: app.value?.name ?? '' })
     case 'install-upgrade':
       return t('shell.dialog.installUpgrade.title', { name: app.value?.name ?? '' })
+    case 'install-restore-data':
+      return t('shell.dialog.installRestore.title')
     case 'strategy-confirm':
       return t('shell.dialog.strategy.title')
     default:
@@ -281,14 +342,14 @@ async function confirmExit() {
   if (quitting.value) return
   // 先进入 quitting 态再 invoke：宿主命令只负责启动有界优雅关闭，命令返回时
   // 进程可能仍在跑 hooks；确认面保持可见并显示进度，直到窗口随进程退出。
-  quitting.value = true
+  setQuitting(true)
   try {
     // 会话守卫会拦截普通 window.close()；用户已确认，先走宿主优雅关闭
     // （hooks 有总预算，超过后由宿主 watchdog 强制退出）。
     await invoke('confirm_window_close')
   } catch (e) {
     // 命令失败必须显性：恢复确认面供重试，详情进日志。
-    quitting.value = false
+    setQuitting(false)
     logger.error('[Shell] confirm exit failed:', e)
   }
 }
@@ -299,10 +360,15 @@ function confirmApprove() {
   void state.approveAndStart(state.dialogAppId.value)
 }
 
-/** 卸载确认（数据清理不可恢复，正文已写明） */
+/** 卸载确认（`keepData` 决定应用数据是否保留；审批 / 授权始终清除） */
 function confirmUninstall() {
   if (!state.dialogAppId.value) return
-  void state.uninstallApp(state.dialogAppId.value)
+  void state.uninstallApp(state.dialogAppId.value, keepData.value)
+}
+
+/** 旧数据恢复确认：`restore=false`（默认）= 丢弃旧数据后安装 */
+function confirmInstallRestore(restore: boolean) {
+  void state.confirmInstallRestoreData(restore)
 }
 
 /**
@@ -398,6 +464,23 @@ function confirmInstallUpgrade() {
 .perm-line {
   font-size: calc(11.5px * var(--ui-scale));
   color: var(--text-tertiary);
+}
+/* 保留数据勾选：与弹窗内记录行同一块状语言（可点整行，不只点 checkbox） */
+.keep-data {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: var(--radius-button);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-size: calc(12.5px * var(--ui-scale));
+  cursor: pointer;
+  user-select: none;
+}
+.keep-data input {
+  accent-color: var(--color-danger-ink);
+  flex-shrink: 0;
 }
 .mono {
   font-family: var(--font-mono);
