@@ -44,7 +44,7 @@
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
-            stroke-width="1.75"
+            stroke-width="2"
             d="M3 7.5 6 4.5l3 3"
           />
         </svg>
@@ -61,7 +61,7 @@
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
-            stroke-width="1.75"
+            stroke-width="2"
             d="M3 4.5 6 7.5l3-3"
           />
         </svg>
@@ -144,6 +144,11 @@ const emit = defineEmits<{
   /** 输入结束，携带钳制后的最终值——落盘时机 */
   (e: 'commit', value: number): void
 }>()
+
+/** 尺寸类：模板 `:class` 直接引用；**必须**有定义，缺了它框体只剩内容高度
+ *  （12.5px 字 + 行高 ≈ 17px），步进箭头跟着被压成一条，设置页里就是「输入框和
+ *  上下箭头都小得不成比例」（2026-11-06 修复：此前 sizeCls 悬空，sm/md 两档样式从未生效）。 */
+const sizeCls = computed(() => `wb-nf-${props.size}`)
 
 /** 用户正在编辑的原始文本；非编辑态跟随 modelValue 格式化回显 */
 const draft = ref<string>(props.modelValue === null ? '' : String(props.modelValue))
@@ -297,13 +302,9 @@ function onBlur() {
   opacity: 0.5;
 }
 
-/* 尺寸：sm = 插件设置页紧凑行（与既有 h-8 / 12px 控件同高） */
+/* 尺寸：sm = 插件设置页紧凑行（与既有 h-8 / 12.5px 控件同高） */
 .wb-nf-sm {
   height: 32px;
-}
-
-.wb-nf-sm .wb-nf-input {
-  font-size: 12px;
 }
 
 /* md = 宿主表单默认高度，字号与 Select(md) 对齐 */
@@ -317,18 +318,23 @@ function onBlur() {
 }
 
 .wb-nf-md .wb-nf-steppers {
-  width: 24px;
+  width: 28px;
+}
+
+.wb-nf-md .wb-nf-btn svg {
+  width: 13px;
+  height: 13px;
 }
 
 .wb-nf-input {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 10px;
   border: 0;
   outline: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.2;
 }
 
@@ -336,12 +342,13 @@ function onBlur() {
   text-align: right;
 }
 
-/* 右侧竖排步进按钮：各占半高，可点区域远大于原生 spinner 的 6px 小箭头 */
+/* 右侧竖排步进按钮：各占半高，可点区域远大于原生 spinner 的 6px 小箭头
+   （24px 列宽是下限：20px 时 12px 字形只剩 4px 内边距，箭头看起来像装饰而不是控件） */
 .wb-nf-steppers {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  width: 20px;
+  width: 24px;
   border-left: 1px solid var(--border-input);
 }
 
@@ -353,7 +360,8 @@ function onBlur() {
   border: 0;
   padding: 0;
   background: transparent;
-  color: var(--text-tertiary);
+  /* 用 secondary 而不是 tertiary：12px 字形下 tertiary 太淡，看不清是可点的箭头 */
+  color: var(--text-secondary);
   cursor: pointer;
   transition:
     background-color 0.12s ease,
@@ -361,8 +369,8 @@ function onBlur() {
 }
 
 .wb-nf-btn svg {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
 .wb-nf-btn:hover:not(:disabled) {

@@ -2,7 +2,8 @@
  * NumberField 行为契约（取代原生 `<input type="number">` 的共享数字输入）
  *
  * 契约来源：原生 number 输入的既有语义（应用仓「原生 UI 禁令」下不得让浏览器自绘
- * spinner），加上本组件对外的两个出口。只断言外部行为，不测 class 与 DOM 结构。
+ * spinner），加上本组件对外的两个出口。只断言外部行为，不测 class 与 DOM 结构
+ * （唯一例外是 C8：尺寸类本身就是组件对外公开的尺寸契约）。
  *
  * - C1 回显：`modelValue` 渲染进输入框；受控回写立即生效
  * - C2 步进：点右侧上/下按钮或按 ↑/↓ 各走一个 step
@@ -11,6 +12,7 @@
  * - C5 提交时机：合法值失焦 / 回车各提交一次；清空不提交（保留调用方原值）
  * - C6 禁用态：disabled / readonly 下按钮不可点
  * - C7 受控一致性：键入合法值后失焦，框内文本与提交值一致（不回退成旧值）
+ * - C8 尺寸变体：`sm` / `md` 类落到根元素（尺寸样式全挂在这两个类上，悬空即塌）
  */
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -132,6 +134,22 @@ describe('NumberField（共享数字输入）', () => {
 
     expect(wrapper.emitted('commit')?.at(-1)).toEqual([600])
     expect(inputValue(wrapper)).toBe('600')
+  })
+
+  /**
+   * C8 尺寸类必须落到根元素。
+   *
+   * 这一条破例断言 class：高度 / 字号 / 步进列宽全部挂在 `wb-nf-sm|md` 上，模板里
+   * `:class="[sizeCls, ...]"` 一度引用了一个不存在的标识符（Vue 只发 warn、不报错），
+   * 于是两档尺寸样式从未生效，框体塌成内容高度（≈17px），箭头被压成一条。
+   */
+  it('C8 尺寸变体：框体带 wb-nf-sm / wb-nf-md', () => {
+    // 取输入框父元素（框体本身）：模板首个节点是注释，`wrapper.classes()` 拿不到它
+    const boxClasses = (wrapper: Wrapper) =>
+      Array.from((input(wrapper).element as HTMLInputElement).parentElement!.classList)
+
+    expect(boxClasses(mountField())).toContain('wb-nf-sm')
+    expect(boxClasses(mountField({ size: 'md' }))).toContain('wb-nf-md')
   })
 
   it('过滤非法字符：字母被丢弃，纯数字留下', async () => {

@@ -10,7 +10,7 @@ export interface NumberFieldProps {
   max?: number
   /** 每次点击 / 方向键的变化量，默认 1 */
   step?: number
-  /** sm：插件紧凑行（32px/12px）；md：宿主表单默认（--input-height 36px） */
+  /** sm：插件紧凑行（32px 高 / 12.5px 字 / 24px 步进列）；md：宿主表单默认（--input-height 36px / 28px 步进列） */
   size?: 'sm' | 'md'
   /** 文本对齐；设置页右侧控件用 right（默认），表单字段用 left */
   align?: 'left' | 'right'
