@@ -92,6 +92,15 @@
         }
       }
     },
+    "com.wasmnest.lanbitou": {
+      "path": "apps/lanbitou",
+      "version": "0.0.1",
+      "ends": {
+        "desktop": {
+          "artifact": "wasmnest_plugin_lanbitou.wasm"
+        }
+      }
+    },
     "com.wasmnest.monitor": {
       "path": "servers/monitor",
       "version": "0.0.1",
