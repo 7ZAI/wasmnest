@@ -224,7 +224,7 @@ fn background_transport_lease_follows_runtime_not_surface() {
     let commands = read("src/commands.rs");
     let close_at = pos(&commands, "pub async fn plugin_surface_close(", "commands.rs");
     let close_body = &commands[close_at..];
-    let guard = pos(close_body, "declares_background_transport(&app_id)", "commands.rs");
+    let guard = pos(close_body, "declares_background_transport(app_id)", "commands.rs");
     let release = pos(close_body, "release_for_surface", "commands.rs");
     assert!(
         guard < release,
@@ -234,7 +234,7 @@ fn background_transport_lease_follows_runtime_not_surface() {
     assert!(
         commands.contains("pub async fn plugin_surface_open(")
             && commands[pos(&commands, "pub async fn plugin_surface_open(", "commands.rs")..]
-                .contains("declares_background_transport(&app_id)"),
+                .contains("declares_background_transport(app_id)"),
         "plugin_surface_open 也必须识别运行期租约应用（不重复记账）"
     );
 

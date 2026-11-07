@@ -232,7 +232,11 @@ const REQUIRED_DOWNWARD_EDGES: &[(&str, &str)] = &[
 /// 只有组合根：`wasmnest_server_core::app::serve` 只认 `TransportFace`，两个面的
 /// face 实现各自随面下沉，把 faces 交给 `serve` 这一步只有一处。新增条目必须同时
 /// 回答「为什么不能在组合根之外接线」。
-const BOTH_FACES_ALLOWLIST: &[&str] = &["src/server/composition.rs"];
+///
+/// `src/commands.rs` 是唯一例外：`get_link_crypto_app_policies` **只读**地枚举
+/// HTTP / WS 端点注册表（`list_all()`）来展示「哪些应用当前有暴露面」，不装配面、
+/// 不调 `serve()`——审计读模型不是接线点（新增写面 / 装配面后仍必须回组合根）。
+const BOTH_FACES_ALLOWLIST: &[&str] = &["src/server/composition.rs", "src/commands.rs"];
 
 /// 宿主源码里**允许**调 `ports::init`（装全局端口注册表）的文件（断言 ⑤ 的登记表）
 ///
@@ -575,12 +579,24 @@ fn required_downward_edges_exist_in_production_deps() {
     }
 }
 
+/// 拆分产物里**不要求宿主直接声明**的嵌套底座
+///
+/// 登记表（能力仓 `crate_boundary_lock::SPLIT_CRATES`）同时服务「退役面扫描」与
+/// 「宿主接线」两个目的。`wasmnest-p2p-engine` 是 `wasmnest-server-peer-net` 的
+/// libp2p 传输底座：宿主经 peer-net 间接消费、不直接命名它；要求宿主清单声明一条
+/// 没人用的 git 依赖，反而会把「宿主直接依赖」这个语义写坏（旧 lib tag 里甚至还没
+/// 有这个 crate，发布形态要等下一次 tag 才能解析）。
+const HOST_NESTED_SPLIT_CRATES: &[&str] = &["wasmnest-p2p-engine"];
+
 /// 断言③：宿主清单声明全部拆分产物
 #[test]
 fn host_manifest_declares_every_server_lib_crate() {
     let manifest = read_file(&crate_root().join("Cargo.toml"));
     let deps = dep_keys(&manifest, ALL_DEP_SECTIONS);
     for crate_name in split_crate_names() {
+        if HOST_NESTED_SPLIT_CRATES.contains(&crate_name) {
+            continue;
+        }
         assert!(
             deps.iter().any(|k| k == crate_name),
             "宿主依赖清单缺少 `{crate_name}`——拆分产物没被接线（表：{SPLIT_CRATES:?}）"
