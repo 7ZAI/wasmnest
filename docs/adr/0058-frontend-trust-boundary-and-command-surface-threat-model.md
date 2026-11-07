@@ -141,9 +141,9 @@ Tauri 命令都必须按任意前端 JS 可调用设防」，实施盘点发现�
 2. **移动端同判据落地**（F3 证据面只盘了 lib api_bridge 桌面面；实施时发现移动
    宿主自有命令面 `plugin/commands.rs` **完全无凭证机制**，威胁同型且更大）：
    移动持独立 `FrontendChannelRegistry` state + 同名命令
-   `plugin_frontend_loader_session` + on_page_load 域重置；八条管理命令接门
-   （上述 6 条 + 移动特有的 `plugin_download` 远程安装 / `reload_wasm_plugin`
-   热重载）。前端 `ensureHostCredential()` 在 `loader.ts loadAll()` 首行 bootstrap
+   `plugin_frontend_loader_session` + on_page_load 域重置；管理命令接门
+   （上述 6 条 + 移动特有的 `plugin_peek_app_package` 包预读 /
+   `plugin_download_package` 远程下载 / `reload_wasm_plugin` 热重载）。前端 `ensureHostCredential()` 在 `loader.ts loadAll()` 首行 bootstrap
    （先于任何插件模块 import，域内首个调用者生效）。
 3. **桌面 `env.invoke` 收窄白名单代理**（审计/DX 面，非安全边界，F2 不变）：
    白名单真源 = 桌面 `src-tauri APP_FRONTEND_INVOKE_WHITELIST`（4 条，来源 =

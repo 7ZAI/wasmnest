@@ -15,6 +15,7 @@
 | 0057 | 桌面挂载形态「机制 B」：同窗口全屏挂载独立构建的应用包 | 已实施（现行形态）；**正文未成文** | 出处见下节 |
 | 0058 | 前端信任边界与命令面威胁模型（后端按应用沙箱，前端同可信域） | 已裁决（2026-10-24，按 spec §13 Q1 推荐项） | [0058-frontend-trust-boundary-and-command-surface-threat-model.md](0058-frontend-trust-boundary-and-command-surface-threat-model.md) |
 | 0059 | 主题预设吸收「皮肤」，并把透明边界收成跨主题不变量 | 已实施（2026-10-27，用户确认推荐方案） | [0059-theme-presets-absorb-skins-and-glass-boundary.md](0059-theme-presets-absorb-skins-and-glass-boundary.md) |
+| 0060 | 桌面壳快捷键的 capture 抢占契约 | 已实施（2026-10-28） | [0060-host-shortcuts-capture-contract.md](0060-host-shortcuts-capture-contract.md) |
 | 0061 | WIT 按包拆分与按包版本化（发布门禁从 lib tag 全等改为逐包对齐） | 已裁决（2026-11-07）；A/B 阶段已落地，全量重建随发布执行 | [0061-wit-package-split.md](0061-wit-package-split.md) |
 
 ## 0055–0057 出处登记（正文未成文，编号仅被引用）
