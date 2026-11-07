@@ -19,12 +19,15 @@
 //!    保证进程一定能退出——**不能**因为优雅 hooks 已完成就假定进程已经结束。
 //! 4. 强制退出前尽力回收 PTY，避免 agent 子进程成为孤儿；回收本身有 1s 上限，
 //!    锁被卡住也不拖住强制退出。
+//! 5. 隐式退出（系统关窗 / 托盘）先隐藏主窗口再跑 hooks，避免「点了没反应」的
+//!    观感；用户确认退出（前端已有进度面）保留窗口展示进度。
 
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::Duration;
 
 use futures_util::FutureExt;
+use tauri::Manager;
 
 /// 所有 shutdown hooks 的总预算（正常退出远小于此值）。
 pub const GRACEFUL_SHUTDOWN_TIMEOUT_SECS: u64 = 10;
@@ -35,6 +38,15 @@ pub const GRACEFUL_SHUTDOWN_TIMEOUT_SECS: u64 = 10;
 /// `app.exit(0)` / Tauri 关窗留出收尾窗口；超过此值不再等待。
 pub const FORCE_EXIT_TIMEOUT_SECS: u64 = 15;
 
+/// 退出入口的反馈形态：决定 hooks 执行期间主窗口是否保留。
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ShutdownFeedback {
+    /// 保留窗口：前端已有退出进度面（用户在应用内确认退出）。
+    KeepWindow,
+    /// 立即隐藏主窗口：系统关窗 / 托盘等隐式退出，先给用户「窗口已关」的即时反馈。
+    HideWindow,
+}
+
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Phase {
@@ -43,32 +55,81 @@ enum Phase {
     Done = 2,
 }
 
-static PHASE: AtomicU8 = AtomicU8::new(Phase::Idle as u8);
-static WATCHDOG_ARMED: AtomicBool = AtomicBool::new(false);
+/// 退出阶段闸门：收口「hooks 只跑一次 / watchdog 只武装一次 / Done 后放行」。
+///
+/// 独立成结构（而非散落的 static）是为了语义可单测——退出协调器是用户可见
+/// 「到底能不能退出」的最后一道闸门，不能只靠常量大小断言。
+struct ShutdownGate {
+    phase: AtomicU8,
+    watchdog_armed: AtomicBool,
+}
+
+impl ShutdownGate {
+    const fn new() -> Self {
+        Self {
+            phase: AtomicU8::new(Phase::Idle as u8),
+            watchdog_armed: AtomicBool::new(false),
+        }
+    }
+
+    /// Idle → Graceful；只有首个调用者拿到 true（hooks 只执行一次）。
+    fn try_begin(&self) -> bool {
+        self.phase
+            .compare_exchange(
+                Phase::Idle as u8,
+                Phase::Graceful as u8,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            )
+            .is_ok()
+    }
+
+    /// hooks 结束（成功 / 超时 / panic）后置 Done；`ExitRequested` 从此放行。
+    ///
+    /// Done 是终态：重复调用不回退阶段，避免 `app.exit(0)` 触发的
+    /// `ExitRequested` 被再次拦截。
+    fn mark_done(&self) {
+        self.phase.store(Phase::Done as u8, Ordering::SeqCst);
+    }
+
+    /// 优雅关闭是否已完成（`ExitRequested` 可以放行）。
+    fn should_allow_exit(&self) -> bool {
+        self.phase.load(Ordering::SeqCst) == Phase::Done as u8
+    }
+
+    /// 武装 watchdog；只有首个调用者拿到 true。
+    fn try_arm_watchdog(&self) -> bool {
+        !self.watchdog_armed.swap(true, Ordering::SeqCst)
+    }
+}
+
+static GATE: ShutdownGate = ShutdownGate::new();
 
 /// 优雅关闭是否已完成（`ExitRequested` 可以放行）。
 pub fn should_allow_exit() -> bool {
-    PHASE.load(Ordering::SeqCst) == Phase::Done as u8
+    GATE.should_allow_exit()
 }
 
 /// 启动优雅关闭（幂等）。完成后请求 Tauri 正常退出。
 ///
 /// 只应由「用户已确认退出」或「关窗守卫已允许关闭」的路径调用；
 /// 通用的 `app.exit(0)` 仍由 `RunEvent::ExitRequested` 兜底转入本函数。
-pub fn begin_graceful_shutdown(app_handle: &tauri::AppHandle) {
+pub fn begin_graceful_shutdown(app_handle: &tauri::AppHandle, feedback: ShutdownFeedback) {
     arm_force_exit_watchdog();
 
     // Idle → Graceful；已在跑 / 已完成则直接返回，保证 hooks 只执行一次。
-    if PHASE
-        .compare_exchange(
-            Phase::Idle as u8,
-            Phase::Graceful as u8,
-            Ordering::SeqCst,
-            Ordering::SeqCst,
-        )
-        .is_err()
-    {
+    if !GATE.try_begin() {
         return;
+    }
+
+    // 旧实现直接 destroy 主窗口；改为有界优雅关闭后窗口会存活到 hooks 结束。
+    // 隐式退出路径先隐藏，给用户即时反馈；确认退出路径保留窗口展示进度。
+    if feedback == ShutdownFeedback::HideWindow {
+        if let Some(window) = app_handle.get_webview_window("main") {
+            if let Err(e) = window.hide() {
+                tracing::warn!(error = %e, "Failed to hide main window before graceful shutdown");
+            }
+        }
     }
 
     tracing::info!(
@@ -91,16 +152,14 @@ pub fn begin_graceful_shutdown(app_handle: &tauri::AppHandle) {
             Ok(Ok(())) => tracing::info!("Graceful shutdown hooks completed"),
             Ok(Err(_)) => tracing::error!(
                 timeout_secs = GRACEFUL_SHUTDOWN_TIMEOUT_SECS,
-                "Graceful shutdown hooks timed out; requesting forced exit"
+                "Graceful shutdown hooks timed out; requesting app exit"
             ),
-            Err(_) => {
-                tracing::error!("Graceful shutdown hooks panicked; requesting forced exit")
-            }
+            Err(_) => tracing::error!("Graceful shutdown hooks panicked; requesting app exit"),
         }
 
         // 先置 Done 再请求退出：即便上面超时/panic，`ExitRequested` 也不应再次
         // 拦截。主线程若被卡死，watchdog 会在 FORCE_EXIT_TIMEOUT_SECS 硬兜底。
-        PHASE.store(Phase::Done as u8, Ordering::SeqCst);
+        GATE.mark_done();
         tracing::info!("Requesting app exit after graceful shutdown");
         app.exit(0);
     });
@@ -130,7 +189,7 @@ fn force_exit(reason: &str) -> ! {
 
 /// 武装强制退出 watchdog（幂等）。
 fn arm_force_exit_watchdog() {
-    if WATCHDOG_ARMED.swap(true, Ordering::SeqCst) {
+    if !GATE.try_arm_watchdog() {
         return;
     }
 
@@ -154,5 +213,40 @@ mod tests {
             FORCE_EXIT_TIMEOUT_SECS > GRACEFUL_SHUTDOWN_TIMEOUT_SECS,
             "强制退出兜底必须晚于优雅关闭总预算，否则正常退出会被误杀"
         );
+    }
+
+    #[test]
+    fn gate_runs_hooks_once() {
+        let gate = ShutdownGate::new();
+        assert!(gate.try_begin(), "首次启动应拿到执行权");
+        assert!(!gate.try_begin(), "已启动 / 已完成不得重复执行 hooks");
+    }
+
+    #[test]
+    fn gate_blocks_exit_until_hooks_done() {
+        let gate = ShutdownGate::new();
+        assert!(!gate.should_allow_exit(), "Idle 阶段必须拦住退出，先跑 hooks");
+        assert!(gate.try_begin());
+        assert!(!gate.should_allow_exit(), "hooks 执行中必须继续拦住 ExitRequested");
+        gate.mark_done();
+        assert!(gate.should_allow_exit());
+    }
+
+    #[test]
+    fn gate_done_is_terminal() {
+        let gate = ShutdownGate::new();
+        assert!(gate.try_begin());
+        gate.mark_done();
+        // 超时 / panic 后也会 mark_done：再次 begin 不得把阶段拉回 Graceful，
+        // 否则 app.exit(0) 触发的 ExitRequested 会被再次拦截，进程卡住。
+        assert!(!gate.try_begin());
+        assert!(gate.should_allow_exit());
+    }
+
+    #[test]
+    fn watchdog_arms_once() {
+        let gate = ShutdownGate::new();
+        assert!(gate.try_arm_watchdog(), "首次启动应武装 watchdog");
+        assert!(!gate.try_arm_watchdog(), "重复 begin 不得重复开线程");
     }
 }

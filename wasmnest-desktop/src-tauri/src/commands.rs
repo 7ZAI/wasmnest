@@ -434,10 +434,15 @@ pub fn get_app_version() -> String {
 /// 用户已明确确认，先启动**有界优雅关闭**（shutdown hooks）；hooks 完成后再
 /// `app.exit(0)`，超时/主线程卡死由 shutdown 协调器 watchdog 强制结束进程
 /// （先优雅、实在不行再强制，2026-11-05 用户裁决）。
+///
+/// 保留主窗口：前端退出确认面会展示「正在优雅关闭」进度，直到窗口随进程退出。
 #[tauri::command]
 pub fn confirm_window_close(app_handle: tauri::AppHandle) -> Result<()> {
     tracing::info!("User confirmed exit; starting graceful shutdown");
-    crate::system::shutdown::begin_graceful_shutdown(&app_handle);
+    crate::system::shutdown::begin_graceful_shutdown(
+        &app_handle,
+        crate::system::shutdown::ShutdownFeedback::KeepWindow,
+    );
     Ok(())
 }
 

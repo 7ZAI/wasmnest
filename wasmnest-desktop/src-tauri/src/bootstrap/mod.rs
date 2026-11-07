@@ -674,6 +674,9 @@ pub fn run() {
             // 2026-10-20 裁决）。
             let lifecycle = Arc::new(plugin::lifecycle::PluginLifecycleManager::new(plugin_host.clone()));
             app.manage(lifecycle.clone());
+            // 已卸载覆盖表先于 autostart 生效：随包内置应用被用户卸载后，宿主更新
+            // 不能把它重新拉起；boot 只摘运行时记录（资源目录 / 数据保留）。
+            tauri::async_runtime::block_on(lifecycle.apply_uninstalled_tombstones());
             tauri::async_runtime::block_on(lifecycle.apply_autostart());
             app.manage(plugin_host.wasm_runtime().fs_auth().clone());
             // 网络出站授权应答通道（票 05）：与 fs 应答同一形态——前端弹窗经
@@ -759,7 +762,11 @@ pub fn run() {
                             // 主窗口关闭 = 退出整个应用。先走有界优雅关闭：
                             // hooks 完成后再 app.exit(0)，超时由 shutdown 协调器 watchdog
                             // 强制结束进程（2026-11-05 用户裁决：先优雅，实在不行再强制）。
-                            system::shutdown::begin_graceful_shutdown(&ah);
+                            // 隐式关窗没有前端进度面，先隐藏窗口给出即时反馈。
+                            system::shutdown::begin_graceful_shutdown(
+                                &ah,
+                                system::shutdown::ShutdownFeedback::HideWindow,
+                            );
                         } else {
                             // 有运行中会话，通知前端弹窗确认。payload = 插件登记域视图
                             // 数组原样透传（`session-list {filter:"running"}`）——「哪些状态
@@ -876,7 +883,9 @@ pub fn run() {
             commands::plugin_frontend_loader_session,
             commands::plugin_channel_token,
             commands::plugin_install_from_file,
-            commands::plugin_uninstall,
+            // 卸载覆盖 api_bridge 裸臂：带 keepData 数据保留策略 + 内置应用 tombstone
+            plugin::lifecycle::plugin_uninstall,
+            plugin::lifecycle::plugin_clear_uninstalled,
             // 应用更新链路（plugin_updates.rs：GitHub Release 检查 + 校验下载；
             // 安装复用 plugin_install_from_file 升级模式，兼容判断在壳前端）
             plugin_updates::plugin_check_app_update,
@@ -945,7 +954,7 @@ pub fn run() {
                 // 繁忙时 main-thread block_on 死锁；完成后再请求一次退出。
                 api.prevent_exit();
                 tracing::info!("WasmNest Desktop exit requested; waiting for graceful shutdown");
-                system::shutdown::begin_graceful_shutdown(app_handle);
+                system::shutdown::begin_graceful_shutdown(app_handle, system::shutdown::ShutdownFeedback::HideWindow);
             }
         }
         tauri::RunEvent::Exit { .. } => {
