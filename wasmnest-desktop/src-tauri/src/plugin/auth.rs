@@ -56,7 +56,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "auth";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-auth-center"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:auth-center@0.0.1/host-auth-center"];
 
 /// 本域的权限位（必须与 `wasmnest.wit` / SDK 权限表逐字一致；全域单权限位 `auth`）
 pub const MODULE_PERMISSIONS: &[&str] = &["auth"];
@@ -80,7 +80,7 @@ impl HostModule for AuthModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_auth_center::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::auth_center::host_auth_center::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -99,7 +99,7 @@ inventory::submit! {
 
 /// 属主 = 调用方插件实例的 plugin_id（本 impl 自 store state 派生，guest 无法伪造）；
 /// 权限门 + 主库持久化 + 明文不落日志 + 记录面白名单全部在下方域函数内实现。
-impl wasmnest::plugin::host_auth_center::Host for WasmPluginState {
+impl wasmnest::auth_center::host_auth_center::Host for WasmPluginState {
     fn secret_get(&mut self, key: String) -> Result<Option<String>, String> {
         auth_secret_get(ctx_of(self), ctx_of(self), ctx_of(self), &self.plugin_id, &key)
     }
@@ -851,7 +851,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "auth", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.2/host-auth-center"],
+            &["wasmnest:auth-center@0.0.1/host-auth-center"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

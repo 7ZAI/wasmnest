@@ -42,7 +42,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "crypto";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-crypto"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:crypto@0.0.1/host-crypto"];
 
 /// 本域的权限位（必须与 `wasmnest.wit` / SDK 权限表逐字一致）
 pub const MODULE_PERMISSIONS: &[&str] = &["crypto:aead", "crypto:asym", "crypto:kdf"];
@@ -66,7 +66,7 @@ impl HostModule for CryptoModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_crypto::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::crypto::host_crypto::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -85,7 +85,7 @@ inventory::submit! {
 
 /// 属主 = 调用方插件实例的 plugin_id（自 store state 派生，guest 无法伪造）；
 /// 权限门在域函数内（下方），本层只做取上下文 → 转发 → 按 WIT `result` 形状返回。
-impl wasmnest::plugin::host_crypto::Host for WasmPluginState {
+impl wasmnest::crypto::host_crypto::Host for WasmPluginState {
     fn aead_encrypt(
         &mut self,
         algorithm: String,
@@ -480,7 +480,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "crypto", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.2/host-crypto"],
+            &["wasmnest:crypto@0.0.1/host-crypto"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

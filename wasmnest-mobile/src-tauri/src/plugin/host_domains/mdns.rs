@@ -235,7 +235,7 @@ mod tests {
         );
         assert_eq!(
             wasmnest_discovery_engine::MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.2/host-mdns"],
+            &["wasmnest:mdns@0.0.1/host-mdns"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(
@@ -245,7 +245,7 @@ mod tests {
         );
         // 宿主自身不得再声明该接口（两份 add_to_linker ⇒ 装配期 defined twice）
         assert!(
-            !super::super::MODULE_INTERFACES.contains(&"wasmnest:plugin@0.0.2/host-mdns"),
+            !super::super::MODULE_INTERFACES.contains(&"wasmnest:mdns@0.0.1/host-mdns"),
             "host-mdns 已由能力 lib 自报，宿主 mobile-host-core 不得重复声明"
         );
     }

@@ -1,7 +1,7 @@
 //! 契约结构锁（ADR 0052 · domain-owned-contracts 票 05）：core 机制纯净 / 域契约组合 /
 //! 能力域端中立——三把静态断言，改坏即红。
 //!
-//! 背景：ADR 0052 把契约面重划为三层——core 只收机制必需（8 import + 4 export）、
+//! 背景：ADR 0052 把契约面重划为三层——core 只收机制必需（10 import + 5 export）、
 //! 双端功能级交集住能力域 crate 的 `wit/<domain>.wit`（由端清单 `compose.json` 的 caps
 //! 直接消费）、端独有功能住端 `wit-src/cap-*.wit`。这三条边界若只靠注释约定，任何一次
 //! 「顺手放回 core / 塞进能力域 crate」都能全绿通过——本文件把它们变成可执行判据。
@@ -9,9 +9,9 @@
 //! ## 判据
 //!
 //! - [`core_wit_stays_mechanism_only`]：`core.wit` 的 interface 定义集 == 机制白名单
-//!   （storage / plugin-database / log / config / events / bus / fs / platform +
-//!   command / lifecycle / manifest / events-binary），`world core` 的 import/export
-//!   集逐项钉死；业务能力 interface 回流即红并点名。
+//!   （storage / plugin-database / log / config / events / bus / fs / platform / metrics / worker +
+//!   command / lifecycle / manifest / events-binary / events-worker），`world core` 的
+//!   import/export 集逐项钉死；业务能力 interface 回流即红并点名。
 //! - [`compose_caps_map_to_the_right_contract_houses`]：双端 caps 值逐条对照「域契约
 //!   真源 = 能力域 crate 的 wit 文件；端扩展 = 端点 wit-src」；移动 caps 不含任何端扩展 /
 //!   桌面独有键（组合了无人实现的接口 ⇒ 移动实例化必炸）。
@@ -72,7 +72,7 @@ fn world_members(src: &str, world: &str, kind: &str) -> BTreeSet<String> {
 
 // ==================== ① core 机制纯净锁 ====================
 
-/// `core.wit` 的机制 interface 白名单（ADR 0052 D1）：9 import + 4 export
+/// `core.wit` 的机制 interface 白名单（ADR 0052 D1）：10 import + 5 export
 const CORE_IMPORTS: &[&str] = &[
     "host-storage",
     "host-plugin-database",
@@ -85,9 +85,18 @@ const CORE_IMPORTS: &[&str] = &[
     // host-metrics：monitor 只读运行指标机制（90ba559 随 monitor 并 dev 时补录；
     // 只返回数值计数与 plugin_id / 枚举键，无业务内容——机制白名单内）。
     "host-metrics",
+    // host-worker：worker 调度机制（ADR 0059；宿主中介内嵌 worker 子资源，
+    // 受理 / 取消是引擎面原语，不含业务语义）。
+    "host-worker",
 ];
-/// export 白名单（`events-binary` 是可选导出，定义在文件内但不在 `world core`）
-const CORE_EXPORTS: &[&str] = &["command", "lifecycle", "manifest", "events-binary"];
+/// export 白名单（`events-binary` / `events-worker` 是可选导出，定义在文件内但不在 `world core`）
+const CORE_EXPORTS: &[&str] = &[
+    "command",
+    "lifecycle",
+    "manifest",
+    "events-binary",
+    "events-worker",
+];
 
 #[test]
 fn core_wit_stays_mechanism_only() {
@@ -105,11 +114,11 @@ fn core_wit_stays_mechanism_only() {
     let missing: Vec<&String> = expected.difference(&actual).collect();
     assert!(
         missing.is_empty(),
-        "core.wit 缺机制 interface {missing:?}（白名单是 9 import + 4 export，ADR 0052 D1）"
+        "core.wit 缺机制 interface {missing:?}（白名单是 10 import + 5 export，ADR 0052 D1）"
     );
 
     // ② world core 成员逐项钉死：
-    //    import = 9 机制域；export = 3 必选（events-binary 不在 world 内，可选导出）
+    //    import = 10 机制域；export = 3 必选（events-binary / events-worker 不在 world 内，可选导出）
     let imports = world_members(&src, "core", "import");
     let expected_imports: BTreeSet<String> = CORE_IMPORTS.iter().map(|s| s.to_string()).collect();
     assert_eq!(imports, expected_imports, "world core 的 import 集漂移（机制白名单）");
@@ -134,9 +143,13 @@ const DOMAIN_CONTRACT_HOUSES: &[(&str, &str)] = &[
     ("http", "../wasmnest-lib/wasmnest-server-http/wit/http.wit"),
     ("ws", "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit"),
     ("notify", "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit"),
+    ("clipboard", "../wasmnest-lib/wasmnest-clipboard-engine/wit/clipboard.wit"),
 ];
 
 /// 桌面端扩展（声明与实现都在端宿主）→ 端 wit-src
+///
+/// ADR 0061 拆包后每个端扩展 interface 各一包（一个 caps 键一个文件），不再有
+/// 聚合的 `cap-desktop.wit`。
 const DESKTOP_END_CAPS: &[(&str, &str)] = &[
     (
         "http-endpoint",
@@ -147,17 +160,72 @@ const DESKTOP_END_CAPS: &[(&str, &str)] = &[
         "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-ws.wit",
     ),
     (
-        "desktop",
-        "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-desktop.wit",
+        "api-call",
+        "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-api-call.wit",
+    ),
+    (
+        "app",
+        "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-app.wit",
+    ),
+    (
+        "auth-center",
+        "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-auth-center.wit",
+    ),
+    (
+        "connection-registry",
+        "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-connection-registry.wit",
+    ),
+    (
+        "crypto",
+        "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-crypto.wit",
+    ),
+    (
+        "fs-desktop",
+        "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-fs-desktop.wit",
+    ),
+    (
+        "platform-desktop",
+        "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-platform-desktop.wit",
+    ),
+    (
+        "process",
+        "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-process.wit",
+    ),
+    (
+        "task",
+        "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-task.wit",
+    ),
+    (
+        "timer",
+        "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-timer.wit",
     ),
 ];
 
 /// 移动端扩展 → 端 wit-src
-const MOBILE_END_CAPS: &[(&str, &str)] = &[(
-    "mobile",
-    "wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit-src/cap-mobile.wit",
-)];
+const MOBILE_END_CAPS: &[(&str, &str)] = &[
+    (
+        "notify-mobile",
+        "wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit-src/cap-notify-mobile.wit",
+    ),
+    (
+        "fs-mobile",
+        "wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit-src/cap-fs-mobile.wit",
+    ),
+    (
+        "terminal-stream",
+        "wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit-src/cap-terminal-stream.wit",
+    ),
+    (
+        "connection-target",
+        "wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit-src/cap-connection-target.wit",
+    ),
+    (
+        "auth-client",
+        "wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit-src/cap-auth-client.wit",
+    ),
+];
 
+/// 读端清单 caps 的 `key → file`（compose v2 schema：值为 `{ file, package }`）
 fn caps_of(manifest_rel: &str) -> std::collections::BTreeMap<String, String> {
     let raw = read(manifest_rel);
     let m: serde_json::Value =
@@ -169,8 +237,9 @@ fn caps_of(manifest_rel: &str) -> std::collections::BTreeMap<String, String> {
         .map(|(k, v)| {
             (
                 k.clone(),
-                v.as_str()
-                    .unwrap_or_else(|| panic!("{manifest_rel} caps.{k} 非字符串"))
+                v["file"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{manifest_rel} caps.{k}.file 缺失（compose v2 schema）"))
                     .to_string(),
             )
         })
@@ -189,7 +258,7 @@ fn compose_caps_map_to_the_right_contract_houses() {
             Some(*path),
             "桌面 caps.{key} 必须指向能力域 crate 的契约分片（ADR 0052 D2，pty 先例）"
         );
-        if *key != "pty" {
+        if *key != "pty" && *key != "clipboard" {
             assert_eq!(
                 mobile.get(*key).map(String::as_str),
                 Some(*path),

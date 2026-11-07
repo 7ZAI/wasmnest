@@ -6,7 +6,7 @@
 //! file-transfer 双端共享一份 wasm 产物（按桌面 `world plugin` 构建）。该产物的
 //! import 面 = core 子集 + **`host-api-call`**（auth_center 互调认证中心）+
 //! **`host-platform-desktop`**（reveal-in-dir 等桌面平台事实）——后两者只存在于桌面
-//! cap 分片，移动宿主的 `world plugin`（core + cap-mobile）不提供。组件模型**没有
+//! cap 分片，移动宿主的 `world plugin`（core + plugin-face + 各能力域包）不提供。组件模型**没有
 //! 「缺省 import」**：import 不闭合即实例化失败。
 //!
 //! 故本模块为这两个 interface 提供 **fail-visible 桩**：全部函数显性
@@ -19,7 +19,7 @@
 //! ## 绑定来源（跨端读桌面 wit 生成物）
 //!
 //! 本模块 `bindgen!` 的是**桌面 SDK 的 wit 目录**（`compose-wit.mjs` 生成物）的
-//! `world desktop-compat`——该 world 定义在桌面 wit-src `cap-desktop.wit`
+//! `world desktop-compat`——该 world 定义在桌面 wit-src `plugin-face.wit`
 //! （binding-only，同 `plugin-binary` 先例）。桌面 wit 演进时本模块的 `Host` impl
 //! 若漏跟，**编译期**即红（生成 trait 多方法而 impl 缺失）——契约同步是编译错误
 //! 而非运行期断链。移动 SDK / 移动 wit / 移动插件契约面**零变更**。
@@ -30,7 +30,7 @@ use wasmtime::component::bindgen;
 bindgen!({
     // 桌面 wit 生成物目录（相对本 crate 根 `wasmnest-mobile/src-tauri`）；
     // `desktop-compat` world = import host-api-call + import host-platform-desktop
-    // （定义见桌面 wit-src cap-desktop.wit，compose 后进生成物）。
+    // （定义见桌面 wit-src plugin-face.wit，compose 后进生成物）。
     path: "../../wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit",
     world: "desktop-compat",
 });
@@ -47,7 +47,7 @@ fn unsupported(api: &str) -> String {
     )
 }
 
-impl wasmnest::plugin::host_api_call::Host for WasmPluginState {
+impl wasmnest::api_call::host_api_call::Host for WasmPluginState {
     /// 插件互调（桌面认证中心路径）：移动不提供——共享产物的 `ConsentGate`
     /// 移动实现走宿主原语直答，不经互调
     fn call(&mut self, _request_topic: String, _payload_json: String, _timeout_ms: u64) -> Result<String, String> {
@@ -55,7 +55,7 @@ impl wasmnest::plugin::host_api_call::Host for WasmPluginState {
     }
 }
 
-impl wasmnest::plugin::host_platform_desktop::Host for WasmPluginState {
+impl wasmnest::platform_desktop::host_platform_desktop::Host for WasmPluginState {
     /// WSL 发行版枚举：桌面专属平台事实，移动不提供
     fn wsl_distros(&mut self) -> Result<String, String> {
         Err(unsupported("host-platform-desktop.wsl-distros"))
@@ -79,8 +79,8 @@ pub const MODULE_NAME: &str = "mobile-desktop-compat";
 
 /// 本模块提供的 WIT 接口（桌面兼容面；移动宿主 world 本身不 import 它们）
 pub const MODULE_INTERFACES: &[&str] = &[
-    "wasmnest:plugin@0.0.2/host-api-call",
-    "wasmnest:plugin@0.0.2/host-platform-desktop",
+    "wasmnest:api-call@0.0.1/host-api-call",
+    "wasmnest:platform-desktop@0.0.1/host-platform-desktop",
 ];
 
 /// 本模块读写的权限位：**空**——桩不放行任何能力，调用即拒
@@ -112,8 +112,8 @@ impl HostModule for MobileDesktopCompatModule {
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
         type D = wasmtime::component::HasSelf<WasmPluginState>;
-        wasmnest::plugin::host_api_call::add_to_linker::<WasmPluginState, D>(linker, |s| s)?;
-        wasmnest::plugin::host_platform_desktop::add_to_linker::<WasmPluginState, D>(linker, |s| s)?;
+        wasmnest::api_call::host_api_call::add_to_linker::<WasmPluginState, D>(linker, |s| s)?;
+        wasmnest::platform_desktop::host_platform_desktop::add_to_linker::<WasmPluginState, D>(linker, |s| s)?;
         Ok(())
     }
 }

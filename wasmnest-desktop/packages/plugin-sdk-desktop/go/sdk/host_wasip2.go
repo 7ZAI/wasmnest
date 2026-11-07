@@ -2,7 +2,7 @@
 
 // 宿主能力 Go 惯用包装——core.wit 九个内核机制接口（Rust 侧 `WasmHost` /
 // `HostApi` 的对等物，issue #21 User Story 3）。能力域接口（ws / peer / pty /
-// mdns / notify / …）首期经 gen 包直用（`gen/wasmnest/plugin/host-*`），惯用
+// mdns / notify / …）首期经 gen 包直用（`gen/wasmnest/<pkg>/host-*`，ADR 0061 每域一包），惯用
 // 包装随消费面出现再补（http 已落，见 host_http_wasip2.go）——不为没有调用者
 // 的面预制 API。
 //

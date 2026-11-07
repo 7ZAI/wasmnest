@@ -1,11 +1,16 @@
-package wasmnest:plugin@0.0.2;
+package wasmnest:plugin@0.1.0;
 
 world plugin {
     include core;
-    include cap-mobile;
-    include cap-mdns;
-    include cap-peer;
-    include cap-http;
-    include cap-ws;
-    include cap-notify;
+    include plugin-face;
+    include wasmnest:mdns/cap-mdns@0.0.1;
+    include wasmnest:peer/cap-peer@0.0.1;
+    include wasmnest:http/cap-http@0.0.1;
+    include wasmnest:ws/cap-ws@0.0.1;
+    include wasmnest:notify/cap-notify@0.0.1;
+    include wasmnest:notify-mobile/cap-notify-mobile@0.0.1;
+    include wasmnest:fs-mobile/cap-fs-mobile@0.0.1;
+    include wasmnest:terminal-stream/cap-terminal-stream@0.0.1;
+    include wasmnest:connection-target/cap-connection-target@0.0.1;
+    include wasmnest:auth-client/cap-auth-client@0.0.1;
 }

@@ -1,36 +1,31 @@
-//! WIT 包版本单点化锁（ADR 0051 D3/D4 · `wit-package-semver` 票 02）
+//! WIT 按包版本化锁（ADR 0061：单包 → 插件面 + 每能力域/端扩展一包）
 //!
-//! 契约版本的唯一手写处 = 能力仓 `wasmnest-contract` crate 的 `src/lib.rs`
-//! （Rust 常量，`PACKAGE_NAME` + `PACKAGE_VERSION`；票 03 由 JSON 迁为 Rust 常量——
-//! 能力域 crate 的 `inventory` 静态自报要求编译期常量，JSON 只能运行期解析）。
-//! 双端 `compose.json` 的 `package` 字段只声明**包名**（不持版本字面量——否则
-//! bump 要改三处且清单退化成第二真源）；端生成物 `wasmnest.wit` 的 package 行由
-//! `scripts/compose-wit.mjs` 按真源拼装；WIT 源文件（11 个）自带版本字面量并被
-//! 逐字拷贝进生成物。
+//! 版本真源分两层，本锁把两层钉在一起：
 //!
-//! ## 为什么 `--check` 的 sha256 漂移锁抓不到，要另立本锁
+//! 1. `wasmnest:plugin`（插件面）——唯一手写处 = 能力仓 `wasmnest-contract` crate 的
+//!    `src/lib.rs`（`PACKAGE_NAME` / `PACKAGE_VERSION` / `PACKAGE`）。双端
+//!    `compose.json` 的 `package` 只声明**包名**；`core.wit` / `plugin-face.wit`
+//!    的 package 行必须与真源同版本；生成物 `wasmnest.wit` 的 package 行由
+//!    `scripts/compose-wit.mjs` 注入。
+//! 2. 其余每个能力域/端扩展包——版本真源 = 该分片 `.wit` 文件首行
+//!    `package <name>@<x.y.z>;`；`compose.json` 的 `caps.*.package` 只声明包名，
+//!    生成物 `deps/<pkg>/<file>` 是源文件的逐字拷贝。
 //!
-//! 漂移锁只比「生成物 vs 真源现算」：源文件手写的版本若与仓根常量不一致，重拼后
-//! 一切自洽、漂移锁 9/9 全绿，但双端 import 名会带上与常量不同的版本——**编译面全绿、
-//! 运行期实例化才炸**。版本一致性是唯一能挡住这个方向的门禁。
+//! ## 为什么 `--check` 的 sha256 漂移锁不够
 //!
-//! ## 判据
+//! 漂移锁只比「生成物 vs 真源现算」：源文件手写的版本若写错，重拼后一切自洽、
+//! 漂移锁全绿，但 import 名会带错误版本——**编译面全绿、运行期实例化才炸**。
+//! 本锁另加两件漂移锁不做的事：
 //!
-//! 1. **真源形状**：`wasmnest-contract/src/lib.rs` 在场，`PACKAGE_NAME` 为
-//!    `wasmnest:<ns>` 形态、`PACKAGE_VERSION` 为三段 semver（防把版本写成 `0.1` /
-//!    `v0.1.0` / 空串这类 linker 不认的形态）、`PACKAGE` 与前两者自洽；并断言**能力域
-//!    crate 的 const 导出名清单**（`routing.rs` 的 `EXPORTS`，inventory 静态自报要求
-//!    编译期常量、字面量无法跨文件派生）与真源逐字一致。
-//! 2. **端清单只声明包名**：双端 `compose.json` 的 `package` == 真源 `name` 且**不含
-//!    `@`**（版本回写清单 = 第二真源）。
-//! 3. **11 个源文件 package 行 == 真源整行**（`package wasmnest:plugin@<version>;`）。
-//! 4. **生成物 package 行 == 真源整行**：清单驱动派生（`out` + `core` + 各
-//!    `cap-<key>`），新增分片无需改锁；漏重拼即红。
+//! - **源文件 package 行 ↔ 清单声明包名**（清单写错包名时重拼同样自洽）；
+//! - **生成物目录文件集合 == 清单声明集合**（残留文件会让 `wit-parser` 解析失败，
+//!   而 sha 比对只覆盖「声明的文件」）。
 //!
-//! 共享产物场景（file-transfer 双端单产物，ADR 0050）另由
-//! 应用仓 `apps/file-transfer/rust/src/wiring_lock.rs` 断言双端版本对齐——本锁管
+//! 共享产物场景（file-transfer 双端单产物，ADR 0050）另由应用仓
+//! `apps/file-transfer/rust/src/wiring_lock.rs` 断言双端版本对齐——本锁管
 //! 「单点一致性」，那把锁管「共享产物跨端一致性」，两者互补。
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -39,42 +34,14 @@ fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// 能力仓 WIT 包版本真源（ADR 0051 D3）——零依赖契约 crate 的常量文件
-///
-/// 能力仓经 sibling `../wasmnest-lib` 入图（平台仓已删除 `packages/` submodule 挂载点）；契约常量随 crate 边界走，
-/// 不再悬在仓根（`include!` 跨目录形态已退役）。
+/// 能力仓 WIT 包版本真源（wasmnest:plugin 轴）——零依赖契约 crate 的常量文件
 const PACKAGE_SOURCE: &str = "../wasmnest-lib/wasmnest-contract/src/lib.rs";
 
-/// 能力域 crate 里必须与真源逐字一致的 const 导出名清单（inventory 静态自报，
-/// 字面量无法经 `contract::export_item` 派生，故由本锁钉住）
+/// 能力域 crate 里必须与自身分片 package 行逐字一致的 const 导出名清单
+/// （`inventory` 静态自报要求编译期常量，字面量无法经派生函数生成，故由本锁钉住）
 const DOMAIN_EXPORT_LITERALS: &[&str] = &["../wasmnest-lib/wasmnest-discovery-engine/src/routing.rs"];
 
-/// 生产 WIT 源文件（11 个）——`package` 行必须与真源逐字一致
-///
-/// 构成：共享核心真源 1（`core_binding.rs` 直接绑它，不能改绑生成物）+ 能力域自持分片
-/// 6（pty / http / ws / peer / mdns / notify；provider 侧 bindgen 或仅契约房
-/// 消费，注册名须与 guest import 名逐字一致）+ 端 cap-src 4（compose 逐字拷贝进生成物）。
-///
-/// 分片去向（ADR 0052 D2）：`pty` 由桌面 compose 消费；`mdns` / `peer` / `http` / `ws` /
-/// `notify` 由双端 compose 消费（客户端域契约真源 = `ws-client-engine` 分片；
-/// `server-websocket` 已删自家副本、provider 绑定直接指它，不再单列；notify 是
-/// 轻量契约房（只持 WIT，实现按端住宿主），不入 provider bindgen 面）。两类都要在本
-/// 锁在场，否则 provider 侧与 guest 侧版本漂移无人拦。
-const WIT_SOURCES: &[&str] = &[
-    "../wasmnest-lib/wasmnest-wasm-core/wit/core.wit",
-    "../wasmnest-lib/wasmnest-pty-engine/wit/pty.wit",
-    "../wasmnest-lib/wasmnest-server-http/wit/http.wit",
-    "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit",
-    "../wasmnest-lib/wasmnest-server-peer-net/wit/peer.wit",
-    "../wasmnest-lib/wasmnest-discovery-engine/wit/mdns.wit",
-    "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit",
-    "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-http.wit",
-    "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-ws.wit",
-    "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-desktop.wit",
-    "wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit-src/cap-mobile.wit",
-];
-
-/// 双端端清单（`package` 只声明包名）
+/// 双端端清单
 const END_MANIFESTS: &[&str] = &[
     "wasmnest-desktop/packages/plugin-sdk-desktop/compose.json",
     "wasmnest-mobile/packages/plugin-sdk-mobile/compose.json",
@@ -85,9 +52,6 @@ fn read(path: &Path) -> String {
 }
 
 /// 取文件里首个 `package …;` 声明行（trim 后整行）
-///
-/// 判据用**整行**比对而非只抽版本段：缺版本、版本段写法异常、包名漂移三种形态
-/// 一次拦住，避免「只比版本」时漏掉 `package wasmnest:plugin;` 这种未版本化形态。
 fn package_line(path: &Path) -> String {
     read(path)
         .lines()
@@ -97,10 +61,29 @@ fn package_line(path: &Path) -> String {
         .to_string()
 }
 
-/// 读真源并做形状校验（与拼装脚本 `readPackage()` 同判据：fail-visible，不猜默认值）
-///
-/// 真源是 Rust 常量文件（不是 JSON）：能力域的 `inventory` 静态自报要求编译期常量，
-/// JSON 只能运行期解析。抽取只认 `pub const <NAME>: &str = "<值>";` 形态。
+/// `package ns:name@x.y.z;` → `("ns:name", "x.y.z")`（缺失 / 非三段 semver 即红）
+fn split_package_line(line: &str, path: &Path) -> (String, String) {
+    let body = line
+        .trim()
+        .strip_prefix("package ")
+        .and_then(|l| l.strip_suffix(';'))
+        .unwrap_or_else(|| panic!("{} 的 package 行形状异常：{line}", path.display()));
+    let (name, version) = body
+        .rsplit_once('@')
+        .unwrap_or_else(|| panic!("{} 的 package 行缺版本段：{line}", path.display()));
+    let parts: Vec<&str> = version.split('.').collect();
+    assert!(
+        parts.len() == 3
+            && parts
+                .iter()
+                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())),
+        "{} 的包版本应为三段 semver（0.0.1 形态），实际 {version}",
+        path.display()
+    );
+    (name.to_string(), version.to_string())
+}
+
+/// 读 `wasmnest:plugin` 真源并做形状校验（与拼装脚本 `readPackage()` 同判据）
 fn package_source() -> (String, String, String) {
     let path = repo_root().join(PACKAGE_SOURCE);
     let raw = read(&path);
@@ -142,23 +125,43 @@ fn package_source() -> (String, String, String) {
     (name, version, full)
 }
 
-/// 真源拼出的期望 package 行
-fn expected_package_line() -> String {
-    let (name, version, _) = package_source();
-    format!("package {name}@{version};")
+/// 包名 → 生成物 `deps/` 目录名（`wasmnest:http-endpoint` → `http-endpoint`）
+fn deps_slug(package: &str) -> &str {
+    package
+        .split_once(':')
+        .map(|(_, name)| name)
+        .unwrap_or_else(|| panic!("包名应为「namespace:name」形态，实际 {package}"))
 }
 
-/// ① 真源形状：name / version 字段在场且写法合法（防空转：字段缺失时后续判据会假绿）
+/// 递归列出目录下文件（相对 `out`，`/` 分隔）
+fn walk(dir: &Path, base: &Path, out: &mut BTreeSet<String>) {
+    for entry in fs::read_dir(dir).unwrap_or_else(|e| panic!("{} 不可读: {e}", dir.display())) {
+        let entry = entry.expect("目录项");
+        let path = entry.path();
+        if path.is_dir() {
+            walk(&path, base, out);
+        } else {
+            out.insert(
+                path.strip_prefix(base)
+                    .expect("相对 out")
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+            );
+        }
+    }
+}
+
+/// ① 真源形状：name / version 字段在场且写法合法（防空转）
 #[test]
 fn package_source_is_wellformed() {
     let (name, version, _) = package_source();
     assert_eq!(
         name, "wasmnest:plugin",
-        "包名真源应保持 wasmnest:plugin（双端 world / world plugin 引用它）"
+        "包名真源应保持 wasmnest:plugin（双端 world / 导出面引用它）"
     );
-    assert!(
-        !version.is_empty(),
-        "版本不得为空——空版本会让 import 名退回无版本形态而漂移锁全绿"
+    assert_eq!(
+        version, "0.1.0",
+        "拆包是破坏性变更：wasmnest:plugin 必须升 0.1.0（旧 0.0.2 产物按版本被拒）"
     );
 }
 
@@ -181,77 +184,129 @@ fn compose_manifests_declare_package_name_only() {
         );
         assert!(
             !declared.contains('@'),
-            "{} 的 package 不应持版本字面量 `{declared}`——版本真源单点化在 {PACKAGE_SOURCE}，\
-             版本回写端清单会退化成第二真源",
+            "{} 的 package 不应持版本字面量 `{declared}`——版本真源单点化在 {PACKAGE_SOURCE}",
             path.display()
         );
-    }
-}
-
-/// ③ 11 个 WIT 源文件的 package 行 == 真源整行
-#[test]
-fn wit_source_package_lines_match_source_of_truth() {
-    assert!(!WIT_SOURCES.is_empty(), "源文件清单为空会让本判据空转");
-    let expected = expected_package_line();
-    for rel in WIT_SOURCES {
-        let path = repo_root().join(rel);
-        assert_eq!(
-            package_line(&path),
-            expected,
-            "{} 的 package 行与契约真源 {} 漂移——版本化后 import 名逐字匹配，\
-             源文件版本漂移＝运行期实例化失败（编译面不会红）",
-            path.display(),
-            PACKAGE_SOURCE
-        );
-    }
-}
-
-/// ④ 生成物 package 行 == 真源整行（清单驱动派生；漏重拼 / 手改生成物即红）
-#[test]
-fn generated_package_lines_match_source_of_truth() {
-    let expected = expected_package_line();
-    let mut count = 0usize;
-    for rel in END_MANIFESTS {
-        let manifest_path = repo_root().join(rel);
-        let m: serde_json::Value = serde_json::from_str(&read(&manifest_path))
-            .unwrap_or_else(|e| panic!("{} JSON 不可解析: {e}", manifest_path.display()));
-        let out = m["out"]
-            .as_str()
-            .unwrap_or_else(|| panic!("{} 缺 out 字段", manifest_path.display()));
-        let caps = m["caps"]
-            .as_object()
-            .unwrap_or_else(|| panic!("{} 缺 caps 对象", manifest_path.display()));
-
-        let mut files = vec![format!("{out}/wasmnest.wit"), format!("{out}/core.wit")];
-        for key in caps.keys() {
-            files.push(format!("{out}/cap-{key}.wit"));
-        }
-        for rel_file in files {
-            let path = repo_root().join(&rel_file);
-            assert_eq!(
-                package_line(&path),
-                expected,
-                "生成物 {} 的 package 行与真源漂移——重跑 `node scripts/compose-wit.mjs --all`",
+        for (key, spec) in m["caps"].as_object().expect("caps 是对象") {
+            let pkg = spec["package"]
+                .as_str()
+                .unwrap_or_else(|| panic!("{} caps.{key}.package 缺失", path.display()));
+            assert!(
+                !pkg.contains('@'),
+                "{} caps.{key}.package 不应持版本字面量 `{pkg}`——版本真源=分片 .wit 的 package 行",
                 path.display()
             );
-            count += 1;
         }
     }
+}
+
+/// ③ 源文件 package 行 ↔ 清单声明 ↔ 生成物（逐字 + 文件集合）
+#[test]
+fn source_and_generated_packages_match_declarations() {
+    let (contract_name, contract_version, contract_full) = package_source();
+    let root = repo_root();
+    let mut checked = 0usize;
+
+    for rel in END_MANIFESTS {
+        let manifest_path = root.join(rel);
+        let m: serde_json::Value = serde_json::from_str(&read(&manifest_path))
+            .unwrap_or_else(|e| panic!("{} JSON 不可解析: {e}", manifest_path.display()));
+        let out_rel = m["out"].as_str().expect("缺 out 字段");
+        let out = root.join(out_rel);
+
+        // 契约包（core / face）：package 行 == 真源整行；生成物逐字等于源文件
+        for (label, key) in [("core", "core"), ("face", "face")] {
+            let src_rel = m[key].as_str().unwrap_or_else(|| panic!("缺 {key} 字段"));
+            let src = root.join(src_rel);
+            let expected = format!("package {contract_name}@{contract_version};");
+            assert_eq!(
+                package_line(&src),
+                expected,
+                "{src_rel} 的 package 行与契约真源 {PACKAGE_SOURCE} 漂移——\
+                 顶层文件必须同属 {contract_full}（wit-parser 要求）",
+            );
+            let generated = out.join(if label == "core" { "core.wit" } else { "plugin-face.wit" });
+            assert_eq!(
+                read(&generated),
+                read(&src),
+                "{} 与源文件 {src_rel} 不逐字一致——重跑 `node scripts/compose-wit.mjs --all`",
+                generated.display()
+            );
+            checked += 1;
+        }
+
+        // 生成物 wasmnest.wit 的 package 行 == 真源整行
+        assert_eq!(
+            package_line(&out.join("wasmnest.wit")),
+            format!("package {contract_name}@{contract_version};"),
+            "生成物 wasmnest.wit 的 package 行漂移（重跑拼装）"
+        );
+
+        // 能力域/端扩展包：清单声明名 == 源文件包名；生成物 = 源文件逐字拷贝
+        let mut expected_files: BTreeSet<String> =
+            ["core.wit", "plugin-face.wit", "wasmnest.wit"].iter().map(|s| s.to_string()).collect();
+        for (key, spec) in m["caps"].as_object().expect("caps 是对象") {
+            let src_rel = spec["file"]
+                .as_str()
+                .unwrap_or_else(|| panic!("caps.{key}.file 缺失（compose v2 schema）"));
+            let declared = spec["package"]
+                .as_str()
+                .unwrap_or_else(|| panic!("caps.{key}.package 缺失（compose v2 schema）"));
+            let src = root.join(src_rel);
+            let (src_name, src_version) = split_package_line(&package_line(&src), &src);
+            assert_eq!(
+                src_name, declared,
+                "caps.{key}.package 声明 `{declared}`，但分片真源 {src_rel} 的 package 行是 `{src_name}`"
+            );
+            let rel_gen = format!(
+                "deps/{}/{}",
+                deps_slug(&src_name),
+                src.file_name().expect("源文件名").to_string_lossy()
+            );
+            let generated = out.join(&rel_gen);
+            assert_eq!(
+                read(&generated),
+                read(&src),
+                "{} 与分片真源 {src_rel} 不逐字一致——重跑 `node scripts/compose-wit.mjs --all`",
+                generated.display()
+            );
+            expected_files.insert(rel_gen);
+            // 版本三段已在 split_package_line 内断言；这里只做「非空」见证
+            assert!(!src_version.is_empty(), "{src_rel} 版本为空");
+            checked += 1;
+        }
+
+        // ④ 生成物目录文件集合 == 清单声明集合（残留旧扁平 cap-*.wit 即红）
+        let mut actual: BTreeSet<String> = BTreeSet::new();
+        walk(&out, &out, &mut actual);
+        let missing: Vec<&String> = expected_files.difference(&actual).collect();
+        let extra: Vec<&String> = actual.difference(&expected_files).collect();
+        assert!(
+            missing.is_empty(),
+            "生成物缺文件 {missing:?}——重跑 `node scripts/compose-wit.mjs --all`"
+        );
+        assert!(
+            extra.is_empty(),
+            "生成物目录存在未声明文件 {extra:?}（旧扁平布局残留 / 手放文件）；\
+             重跑拼装会清空重建"
+        );
+    }
     assert!(
-        count >= 12,
-        "生成物只遍历到 {count} 个（桌面 11 + 移动 8 = 19），清单字段读取可能已漂移"
+        checked >= 33,
+        "只检查了 {checked} 个分片（双端 core+face 4 + caps 29 = 33），清单读取可能已漂移"
     );
 }
 
-/// ⑤ 能力域 crate 的 const 导出名清单 == 真源派生的期望值
+/// ⑤ 能力域 crate 的 const 导出名清单 == 自身分片 package 行（版本 + 包名）
 ///
-/// 这一面**无法**经 `contract::export_item` 派生：`inventory` 静态自报
-/// （`static ROUTE` + `submit_routable_capability!`）要求编译期常量，而字面量不能跨
-/// 文件派生（Rust 无跨文件字面量导入）。故它是「散落副本」，由本锁钉住——与 10 个 WIT
-/// 源文件各写 package 行同款：真源单点 + 锁兜底。
+/// 拆包后 `host-mdns` 属 `wasmnest:mdns` 包：字面量前缀必须换成该包、版本换成该包
+/// 的版本（不再跟 `wasmnest:plugin` 版本）。前缀/版本都从分片文件现场读取，
+/// bump 只改 `.wit` 一处即可。
 #[test]
-fn domain_const_export_literals_match_source_of_truth() {
-    let (name, version, _) = package_source();
+fn domain_const_export_literals_match_their_own_package() {
+    let mdns_src = repo_root().join("../wasmnest-lib/wasmnest-discovery-engine/wit/mdns.wit");
+    let (name, version) = split_package_line(&package_line(&mdns_src), &mdns_src);
+    assert_eq!(name, "wasmnest:mdns", "host-mdns 应属独立能力域包 wasmnest:mdns");
     let expected_prefix = format!("{name}/host-mdns.");
     let expected_suffix = format!("@{version}");
     for rel in DOMAIN_EXPORT_LITERALS {
@@ -272,8 +327,8 @@ fn domain_const_export_literals_match_source_of_truth() {
         for lit in literals {
             assert!(
                 lit.ends_with(&expected_suffix),
-                "{} 的导出名 `{lit}` 缺版本后缀 `{expected_suffix}`——无版本写法对版本化\
-                 产物恒不命中（组件导出实例键 = `ns:pkg/iface@version`）",
+                "{} 的导出名 `{lit}` 缺版本后缀 `{expected_suffix}`——无版本/错版本写法对\
+                 版本化产物恒不命中（组件导出实例键 = `ns:pkg/iface@version`）",
                 path.display()
             );
         }

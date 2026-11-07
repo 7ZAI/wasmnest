@@ -30,6 +30,7 @@ wit_bindgen::generate!({
     path: "wit",
     world: "plugin",
     pub_export_macro: true,
+    generate_all,
     default_bindings_module: "$crate::wasm",
 });
 

@@ -21,13 +21,34 @@ use crate::host::{
     HostPty, HostStorage, HostTask, HostWebsocket, NotifyOptions, PeerNodeConfig,
     ProcessSyncResult, PtyRingFetch,
 };
-use crate::wasm::wasmnest::plugin::{
-    host_app, host_auth_center, host_bus, host_clipboard, host_config, host_connection_registry,
-    host_crypto, host_events, host_fs, host_fs_desktop, host_http, host_http_endpoint, host_log,
-    host_metrics, host_mdns, host_notify, host_peer, host_platform, host_platform_desktop,
-    host_plugin_database, host_process, host_pty, host_storage, host_task, host_timer,
-    host_websocket, host_websocket_server,
-};
+use crate::wasm::wasmnest::app::host_app;
+use crate::wasm::wasmnest::auth_center::host_auth_center;
+use crate::wasm::wasmnest::plugin::host_bus;
+use crate::wasm::wasmnest::clipboard::host_clipboard;
+use crate::wasm::wasmnest::plugin::host_config;
+use crate::wasm::wasmnest::connection_registry::host_connection_registry;
+use crate::wasm::wasmnest::crypto::host_crypto;
+use crate::wasm::wasmnest::plugin::host_events;
+use crate::wasm::wasmnest::plugin::host_fs;
+use crate::wasm::wasmnest::fs_desktop::host_fs_desktop;
+use crate::wasm::wasmnest::http::host_http;
+use crate::wasm::wasmnest::http_endpoint::host_http_endpoint;
+use crate::wasm::wasmnest::plugin::host_log;
+use crate::wasm::wasmnest::plugin::host_metrics;
+use crate::wasm::wasmnest::mdns::host_mdns;
+use crate::wasm::wasmnest::notify::host_notify;
+use crate::wasm::wasmnest::peer::host_peer;
+use crate::wasm::wasmnest::plugin::host_platform;
+use crate::wasm::wasmnest::platform_desktop::host_platform_desktop;
+use crate::wasm::wasmnest::plugin::host_plugin_database;
+use crate::wasm::wasmnest::process::host_process;
+use crate::wasm::wasmnest::pty::host_pty;
+use crate::wasm::wasmnest::plugin::host_storage;
+use crate::wasm::wasmnest::task::host_task;
+use crate::wasm::wasmnest::timer::host_timer;
+use crate::wasm::wasmnest::ws::host_websocket;
+use crate::wasm::wasmnest::ws_server::host_websocket_server;
+
 
 /// 宿主 API 绑定（WASM 插件侧）
 ///

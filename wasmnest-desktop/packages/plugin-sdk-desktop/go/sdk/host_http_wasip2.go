@@ -10,7 +10,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/7zai/wasmnest-plugin-sdk-go/gen/wasmnest/plugin/host-http"
+	"github.com/7zai/wasmnest-plugin-sdk-go/gen/wasmnest/http/host-http"
 )
 
 // HostHTTPFetch 经宿主代理发起 HTTP 请求（需要 network:http 权限）。

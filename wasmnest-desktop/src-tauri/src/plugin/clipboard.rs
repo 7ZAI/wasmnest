@@ -28,7 +28,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "clipboard";
 
 /// 本域提供的 WIT 接口
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-clipboard"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:clipboard@0.0.1/host-clipboard"];
 
 /// 本域的权限位（读 / 写分域）
 pub const MODULE_PERMISSIONS: &[&str] = &[PERMISSION_CLIPBOARD_READ, PERMISSION_CLIPBOARD_WRITE];
@@ -53,7 +53,7 @@ impl HostModule for ClipboardModule {
         &self,
         linker: &mut wasmtime::component::Linker<WasmPluginState>,
     ) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_clipboard::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::clipboard::host_clipboard::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -67,7 +67,7 @@ inventory::submit! {
 
 // ==================== WIT 层（import 接口 → 域函数转发） ====================
 
-impl wasmnest::plugin::host_clipboard::Host for WasmPluginState {
+impl wasmnest::clipboard::host_clipboard::Host for WasmPluginState {
     fn read_text(&mut self) -> Result<Option<String>, String> {
         require_clipboard_read(ctx_of(self), &self.plugin_id)?;
         clipboard_read_text(ctx_of(self))
@@ -178,7 +178,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "clipboard");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.2/host-clipboard"],
+            &["wasmnest:clipboard@0.0.1/host-clipboard"],
             "接口路径必须与 WIT 契约逐字一致"
         );
         assert_eq!(

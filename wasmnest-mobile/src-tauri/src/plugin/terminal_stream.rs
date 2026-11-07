@@ -33,8 +33,8 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 /// 能力模块名
 pub const MODULE_NAME: &str = "mobile-terminal-stream";
 
-/// 本域提供的 WIT 接口（必须与 `cap-mobile.wit` 逐字一致）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-terminal-stream"];
+/// 本域提供的 WIT 接口（必须与生成物 `deps/terminal-stream/` 分片逐字一致）
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:terminal-stream@0.0.1/host-terminal-stream"];
 
 /// 本域的权限位（与 WIT / SDK 权限表逐字一致）
 pub const MODULE_PERMISSIONS: &[&str] = &["terminal:output"];
@@ -63,7 +63,7 @@ impl HostModule for TerminalStreamModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_terminal_stream::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::terminal_stream::host_terminal_stream::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -257,7 +257,7 @@ impl TerminalStreamGateway {
 
 // ==================== WIT 层（import 接口 → 域逻辑） ====================
 
-impl wasmnest::plugin::host_terminal_stream::Host for WasmPluginState {
+impl wasmnest::terminal_stream::host_terminal_stream::Host for WasmPluginState {
     fn forward_output(&mut self, session_id: String, data: Vec<u8>) -> Result<(), String> {
         // 权限门在空 id 校验之前（与迁入前同序）
         if !check_permission(self, PERMISSION_TERMINAL_OUTPUT, "host_terminal_stream_forward_output") {

@@ -17,8 +17,8 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 /// 能力模块名
 pub const MODULE_NAME: &str = "mobile-fs";
 
-/// 本域提供的 WIT 接口（必须与 `cap-mobile.wit` 逐字一致）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-fs-mobile"];
+/// 本域提供的 WIT 接口（必须与生成物 `deps/fs-mobile/` 分片逐字一致）
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:fs-mobile@0.0.1/host-fs-mobile"];
 
 /// 本域的权限位（与 WIT / SDK 权限表逐字一致）
 pub const MODULE_PERMISSIONS: &[&str] = &["fs:write"];
@@ -47,7 +47,7 @@ impl HostModule for FsMobileModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_fs_mobile::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::fs_mobile::host_fs_mobile::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -93,7 +93,7 @@ fn saf_io_checked(
 
 // ==================== WIT 层（import 接口 → 域逻辑） ====================
 
-impl wasmnest::plugin::host_fs_mobile::Host for WasmPluginState {
+impl wasmnest::fs_mobile::host_fs_mobile::Host for WasmPluginState {
     fn write_media_downloads(
         &mut self,
         src_path: String,

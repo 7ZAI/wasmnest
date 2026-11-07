@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(module_name, "discovery", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             wasmnest_discovery_engine::MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.2/host-mdns"],
+            &["wasmnest:mdns@0.0.1/host-mdns"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

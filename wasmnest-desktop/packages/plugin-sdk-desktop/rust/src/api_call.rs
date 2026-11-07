@@ -22,7 +22,7 @@
 //! 超时后迟到的旧回复落在旧 reply topic 上，与新调用的 topic 不冲突。
 
 use crate::host::HostBus;
-use crate::wasm::wasmnest::plugin::host_api_call;
+use crate::wasm::wasmnest::api_call::host_api_call;
 
 // 道前缀词汇与宿主共用单源（`host::bus`：本模块在 `wasm` feature 下，宿主读不到，
 // 故定义落在宿主也能链接的 `host::bus`，此处再导出保持插件侧 import 路径不变）

@@ -9,8 +9,9 @@
  *     -wit-package` 输入（应用不重生成绑定，gen/ 随 SDK 模块分发）。
  *
  * 三路输入（契约真源仍在能力仓 WIT / wit-src，本脚本不重复拼装）：
- *   1. 拼装产物 `../rust/wit/*.wit`（compose-wit.mjs 维护——core + 全部 cap 分片
- *      + world plugin）；
+ *   1. 拼装产物 `../rust/wit/**`（compose-wit.mjs 维护——ADR 0061 拆包后布局为
+ *      顶层 `core.wit` / `plugin-face.wit` / `wasmnest.wit` + `deps/<pkg>/…`，
+ *      本脚本把顶层与 `deps/` 一并带出）；
  *   2. 本端 world 真源 `../rust/wit-src/go-plugin.wit`（world go-plugin = plugin +
  *      wasi:cli/command，见文件头注）；
  *   3. TinyGo 发行版自带 wasi-cli WIT（`lib/wasi-cli/wit/`）——按 wasm-tools
@@ -23,7 +24,7 @@
  * 用法：node tools/assemble-wit.mjs --out <dir>（幂等，全量重建）
  */
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -71,10 +72,26 @@ export function assembleWit(outDir) {
 
   const composedDir = join(SDK_DIR, "rust", "wit");
   const composed = readdirSync(composedDir).filter((f) => f.endsWith(".wit"));
-  if (!composed.includes("core.wit") || !composed.includes("wasmnest.wit")) {
-    throw new Error(`拼装产物不完整 ${composedDir}：缺 core.wit / wasmnest.wit（先跑 compose-wit.mjs --all）`);
+  if (!composed.includes("core.wit") || !composed.includes("wasmnest.wit") || !composed.includes("plugin-face.wit")) {
+    throw new Error(
+      `拼装产物不完整 ${composedDir}：缺 core.wit / plugin-face.wit / wasmnest.wit（先跑 compose-wit.mjs --all）`,
+    );
   }
   for (const f of composed) cpSync(join(composedDir, f), join(out, f));
+  // ADR 0061 拆包后的能力域包（`deps/<pkg>/`）随顶层一并带出；WASI 包稍后并入
+  // 同一 `deps/`（目录名不冲突：能力域包名 vs wasi 包名）。
+  const composedDeps = join(composedDir, "deps");
+  if (existsSync(composedDeps)) {
+    for (const name of readdirSync(composedDeps)) {
+      const src = join(composedDeps, name);
+      if (!statSync(src).isDirectory()) continue;
+      const dst = join(out, "deps", name);
+      mkdirSync(dst, { recursive: true });
+      for (const f of readdirSync(src).filter((f) => f.endsWith(".wit"))) {
+        cpSync(join(src, f), join(dst, f));
+      }
+    }
+  }
 
   const goWorld = join(SDK_DIR, "rust", "wit-src", "go-plugin.wit");
   if (!existsSync(goWorld)) throw new Error(`world 真源缺失 ${goWorld}`);

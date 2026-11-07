@@ -59,7 +59,7 @@ import {
 } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { deflateRawSync } from 'node:zlib'
-import { dirname, join, resolve, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { platform, tmpdir } from 'node:os'
 import {
@@ -443,6 +443,17 @@ function crateTarball(t, c, expectedVersion) {
   return crateFile
 }
 
+/** 递归列出目录下文件（相对路径，`/` 分隔，排序） */
+function listFilesRecursive(dir, base = dir) {
+  const out = []
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const p = join(dir, entry.name)
+    if (entry.isDirectory()) out.push(...listFilesRecursive(p, base))
+    else out.push(relative(base, p).split('\\').join('/'))
+  }
+  return out
+}
+
 // 自带 zip 实现（CRC32 + store/deflate 自适应 + 目录条目显式）
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256)
@@ -633,9 +644,15 @@ for (const t of targets()) {
   }))
   const sdkDirName = `plugin-sdk-${t}`
   const readmeSrc = join(dir, 'README.md')
-  const witSrc = join(dir, 'rust', 'wit', 'wasmnest.wit')
+  // ADR 0061 拆包后 WIT 生成物是「顶层 + deps/<pkg>/」多包布局：附件必须整目录
+  // 带出（只放 wasmnest.wit 会让消费方拿到无法解析的 include 列表）。
+  const witDir = join(dir, 'rust', 'wit')
   if (existsSync(readmeSrc)) zipEntries.push({ name: 'README.md', data: readFileSync(readmeSrc) })
-  if (existsSync(witSrc)) zipEntries.push({ name: 'wit/wasmnest.wit', data: readFileSync(witSrc) })
+  if (existsSync(witDir)) {
+    for (const rel of listFilesRecursive(witDir)) {
+      zipEntries.push({ name: `wit/${rel}`, data: readFileSync(join(witDir, rel)) })
+    }
+  }
 
   // 索引说明（版本 + 产物清单 + sha256），便于 release 附件的消费方核对
   const sumsLines = collected.map((f) => `${sha256File(f)}  artifacts/${basename(f)}`).join('\n')

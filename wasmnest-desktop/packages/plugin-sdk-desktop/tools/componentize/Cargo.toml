@@ -13,3 +13,6 @@ path = "src/main.rs"
 # 与宿主 src-tauri dev-dep 同版本（spike 实证 0.256 编码产物 00 61 73 6d 0d 00 01 00），
 # 保证编码行为一致；与 wit-bindgen 版本无锁（独立演进，见迁移 spec §4 S2）
 wit-component = "=0.256.0"
+# `--list-packages` 需要遍历 decoded resolve 的 world 成员类型（WorldKey / WorldItem）；
+# 必须与 wit-component 同一 wit-parser 版本，否则类型不是同一个 crate（编译期即红）
+wit-parser = "=0.256.0"

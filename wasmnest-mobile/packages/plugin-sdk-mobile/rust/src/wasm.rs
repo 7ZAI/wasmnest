@@ -25,11 +25,12 @@
 use crate::types::PluginManifest;
 
 wit_bindgen::generate!({
-    // 票 03：端 `wit/` 是生成物目录（core.wit + cap-mobile.wit + wasmnest.wit 同
+    // 票 03：端 `wit/` 是生成物目录（ADR 0061：顶层 core.wit / plugin-face.wit /
     // package 拼装），path 指目录让 wit-bindgen 以 push_dir 加载合成 package。
     path: "wit",
     world: "plugin",
     pub_export_macro: true,
+    generate_all,
     default_bindings_module: "$crate::wasm",
 });
 

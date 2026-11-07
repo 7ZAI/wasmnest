@@ -6,10 +6,10 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.1.0".
 
-//go:wasmexport wasmnest:plugin/command@0.0.2#invoke
-//export wasmnest:plugin/command@0.0.2#invoke
+//go:wasmexport wasmnest:plugin/command@0.1.0#invoke
+//export wasmnest:plugin/command@0.1.0#invoke
 func wasmexport_Invoke(name0 *uint8, name1 uint32, argsJson0 *uint8, argsJson1 uint32) (result *string) {
 	name := cm.LiftString[string]((*uint8)(name0), (uint32)(name1))
 	argsJSON := cm.LiftString[string]((*uint8)(argsJson0), (uint32)(argsJson1))

@@ -18,7 +18,8 @@
 use wasmtime::component::bindgen;
 
 bindgen!({
-    // 移动端 `wit/` 是生成物目录（core.wit + cap-mobile.wit + wasmnest.wit 同
+    // 移动端 `wit/` 是生成物目录（ADR 0061：顶层 core.wit / plugin-face.wit /
+    // wasmnest.wit 同包，能力域包在 deps/<pkg>/；由 compose-wit.mjs 拼装）
     // package 拼装，compose-wit.mjs 产物）；相对本 crate 根定位
     path: "../packages/plugin-sdk-mobile/rust/wit",
     world: "plugin",

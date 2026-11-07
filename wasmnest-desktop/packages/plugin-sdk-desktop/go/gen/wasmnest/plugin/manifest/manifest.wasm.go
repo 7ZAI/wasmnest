@@ -2,10 +2,10 @@
 
 package manifest
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.1.0".
 
-//go:wasmexport wasmnest:plugin/manifest@0.0.2#get
-//export wasmnest:plugin/manifest@0.0.2#get
+//go:wasmexport wasmnest:plugin/manifest@0.1.0#get
+//export wasmnest:plugin/manifest@0.1.0#get
 func wasmexport_Get() (result *string) {
 	result_ := Exports.Get()
 	result = &result_

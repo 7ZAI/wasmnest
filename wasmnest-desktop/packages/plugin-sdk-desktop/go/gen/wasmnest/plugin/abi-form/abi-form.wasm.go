@@ -2,10 +2,10 @@
 
 package abiform
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.1.0".
 
-//go:wasmexport wasmnest:plugin/abi-form@0.0.2#form
-//export wasmnest:plugin/abi-form@0.0.2#form
+//go:wasmexport wasmnest:plugin/abi-form@0.1.0#form
+//export wasmnest:plugin/abi-form@0.1.0#form
 func wasmexport_Form() (result0 uint32) {
 	result := Exports.Form()
 	result0 = (uint32)(result)

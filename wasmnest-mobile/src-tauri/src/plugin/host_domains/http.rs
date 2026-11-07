@@ -30,7 +30,7 @@ use wasmnest_server_http::plugin_binding::ports::{
 
 use crate::plugin::bindings::wasmnest;
 
-impl wasmnest::plugin::host_http::Host for WasmPluginState {
+impl wasmnest::http::host_http::Host for WasmPluginState {
     fn fetch(&mut self, request_json: String) -> Result<Option<String>, String> {
         http_fetch(self, &request_json)
     }

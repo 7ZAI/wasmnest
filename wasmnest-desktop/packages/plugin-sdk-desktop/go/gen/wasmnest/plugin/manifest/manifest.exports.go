@@ -2,7 +2,7 @@
 
 package manifest
 
-// Exports represents the caller-defined exports from "wasmnest:plugin/manifest@0.0.2".
+// Exports represents the caller-defined exports from "wasmnest:plugin/manifest@0.1.0".
 var Exports struct {
 	// Get represents the caller-defined, exported function "get".
 	//

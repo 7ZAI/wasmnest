@@ -48,7 +48,7 @@ use wasmnest_wasm_core::runtime_util::spawn_with_error_boundary_on;
 
 use crate::plugin::bindings::wasmnest;
 
-impl wasmnest::plugin::host_websocket::Host for WasmPluginState {
+impl wasmnest::ws::host_websocket::Host for WasmPluginState {
     fn connect(&mut self, config_json: String) -> Result<String, String> {
         ws_connect(self, &config_json)
     }

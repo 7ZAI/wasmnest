@@ -2,24 +2,24 @@
 
 package hostlog
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.1.0".
 
-//go:wasmimport wasmnest:plugin/host-log@0.0.2 info
+//go:wasmimport wasmnest:plugin/host-log@0.1.0 info
 //go:noescape
 func wasmimport_Info(message0 *uint8, message1 uint32)
 
-//go:wasmimport wasmnest:plugin/host-log@0.0.2 debug
+//go:wasmimport wasmnest:plugin/host-log@0.1.0 debug
 //go:noescape
 func wasmimport_Debug(message0 *uint8, message1 uint32)
 
-//go:wasmimport wasmnest:plugin/host-log@0.0.2 warn
+//go:wasmimport wasmnest:plugin/host-log@0.1.0 warn
 //go:noescape
 func wasmimport_Warn(message0 *uint8, message1 uint32)
 
-//go:wasmimport wasmnest:plugin/host-log@0.0.2 error
+//go:wasmimport wasmnest:plugin/host-log@0.1.0 error
 //go:noescape
 func wasmimport_Error(message0 *uint8, message1 uint32)
 
-//go:wasmimport wasmnest:plugin/host-log@0.0.2 mark-plugin-error
+//go:wasmimport wasmnest:plugin/host-log@0.1.0 mark-plugin-error
 //go:noescape
 func wasmimport_MarkPluginError(error0 *uint8, error1 uint32)

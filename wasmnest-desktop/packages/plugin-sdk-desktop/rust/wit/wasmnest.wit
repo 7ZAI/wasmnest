@@ -1,15 +1,25 @@
-package wasmnest:plugin@0.0.2;
+package wasmnest:plugin@0.1.0;
 
 world plugin {
     include core;
-    include cap-pty;
-    include cap-mdns;
-    include cap-peer;
-    include cap-http;
-    include cap-ws;
-    include cap-notify;
-    include cap-clipboard;
-    include cap-http-endpoint;
-    include cap-ws-server;
-    include cap-desktop;
+    include plugin-face;
+    include wasmnest:pty/cap-pty@0.0.1;
+    include wasmnest:mdns/cap-mdns@0.0.1;
+    include wasmnest:peer/cap-peer@0.0.1;
+    include wasmnest:http/cap-http@0.0.1;
+    include wasmnest:ws/cap-ws@0.0.1;
+    include wasmnest:notify/cap-notify@0.0.1;
+    include wasmnest:clipboard/cap-clipboard@0.0.1;
+    include wasmnest:http-endpoint/cap-http-endpoint@0.0.1;
+    include wasmnest:ws-server/cap-ws-server@0.0.1;
+    include wasmnest:api-call/cap-api-call@0.0.1;
+    include wasmnest:app/cap-app@0.0.1;
+    include wasmnest:auth-center/cap-auth-center@0.0.1;
+    include wasmnest:connection-registry/cap-connection-registry@0.0.1;
+    include wasmnest:crypto/cap-crypto@0.0.1;
+    include wasmnest:fs-desktop/cap-fs-desktop@0.0.1;
+    include wasmnest:platform-desktop/cap-platform-desktop@0.0.1;
+    include wasmnest:process/cap-process@0.0.1;
+    include wasmnest:task/cap-task@0.0.1;
+    include wasmnest:timer/cap-timer@0.0.1;
 }

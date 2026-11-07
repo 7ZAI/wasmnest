@@ -6,7 +6,7 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// Exports represents the caller-defined exports from "wasmnest:plugin/lifecycle@0.0.2".
+// Exports represents the caller-defined exports from "wasmnest:plugin/lifecycle@0.1.0".
 var Exports struct {
 	// Activate represents the caller-defined, exported function "activate".
 	//

@@ -240,8 +240,14 @@ test("双端 compose.json 声明的 WIT 路径真实存在", () => {
     const manifestPath = join(ROOT, rel);
     assert.ok(existsSync(manifestPath), `端清单缺失: ${rel}`);
     const manifest = readJson(manifestPath);
-    const declared = [["core", manifest.core], ...Object.entries(manifest.caps ?? {})];
-    assert.ok(declared.length >= 2, `${rel} 的 core/caps 声明为空（判据会空转）`);
+    // compose v2（ADR 0061）：`core` / `face` 是路径字符串，`caps.*` 是
+    // `{ file, package }`（package 只声明包名，版本在分片 .wit 里）
+    const declared = [
+      ["core", manifest.core],
+      ["face", manifest.face],
+      ...Object.entries(manifest.caps ?? {}).map(([k, v]) => [k, v?.file]),
+    ];
+    assert.ok(declared.length >= 3, `${rel} 的 core/face/caps 声明为空（判据会空转）`);
     for (const [key, value] of declared) {
       assert.equal(typeof value, "string", `${rel} 的 ${key} 应为路径字符串`);
       const abs = resolve(ROOT, value);

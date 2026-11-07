@@ -261,7 +261,7 @@ app.mount(container)
 
 插件后端编译为 **WASM 组件（Component Model）**，契约真源在
 `../wasmnest-lib/wasmnest-wasm-core/wit/core.wit`（机制必需面，8 import + 4 export）+ 能力域
-`../wasmnest-lib/wasmnest-*/wit/<domain>.wit` + 端 `rust/wit-src/cap-mobile.wit`；端生成物
+`../wasmnest-lib/wasmnest-*/wit/<domain>.wit` + 端 `rust/wit-src/cap-*.wit`（每域一文件）/ `plugin-face.wit`；端生成物
 `packages/plugin-sdk-mobile/rust/wit/wasmnest.wit` 由 `compose.json` 驱动
 `scripts/compose-wit.mjs` 拼装（`world plugin` = `include` core + 6 个 cap），
 **禁止手改生成物**（漂移锁：平台仓根 `pnpm run check:wit` + husky pre-commit）。
@@ -380,6 +380,6 @@ SAF 选择器、系统通知）仍需真机验证。首次运行自动安装 dev
 | 宿主壳（平台机制） | `wasmnest-mobile/src/shell/`（运行面挂载 / 权限总览与审批 / 通知栏 / 设置）——壳内不落业务页面（ADR 0046） |
 | Kotlin 解压桥 | `wasmnest-mobile/src-tauri/gen/android/.../PluginAssetExtractor.kt` |
 | 机制整核与能力域 crate | 能力仓 `../wasmnest-lib/wasmnest-wasm-core` 与 `../wasmnest-lib/wasmnest-*` |
-| WIT 契约真源 | `../wasmnest-lib/wasmnest-wasm-core/wit/core.wit` + 能力域 `../wasmnest-lib/wasmnest-*/wit/<domain>.wit` + 端 `rust/wit-src/cap-mobile.wit`；改契约后跑 `pnpm run check:wit`（平台仓根） |
+| WIT 契约真源 | `../wasmnest-lib/wasmnest-wasm-core/wit/core.wit` + 能力域 `../wasmnest-lib/wasmnest-*/wit/<domain>.wit` + 端 `rust/wit-src/cap-*.wit` / `plugin-face.wit`；改契约后跑 `pnpm run check:wit`（平台仓根） |
 | 开发约束清单 | [`../../docs/knowledge/wasm-app-development-checklist.md`](../../docs/knowledge/wasm-app-development-checklist.md)（权限 / 存储 / 事件 / 认证中心 / HTTP 面等红线） |
 | 桌面端指南 | [`../../wasmnest-desktop/docs/wasm-app-dev-desktop.md`](../../wasmnest-desktop/docs/wasm-app-dev-desktop.md) |

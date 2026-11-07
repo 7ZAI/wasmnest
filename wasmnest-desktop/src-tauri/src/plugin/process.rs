@@ -43,7 +43,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "process";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-process"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:process@0.0.1/host-process"];
 
 /// 本域的权限位（必须与 `wasmnest.wit` / SDK 权限表逐字一致）
 pub const MODULE_PERMISSIONS: &[&str] = &["process:run"];
@@ -67,7 +67,7 @@ impl HostModule for ProcessModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_process::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::process::host_process::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -415,7 +415,7 @@ fn ctx_of(state: &WasmPluginState) -> &WasmHostContext {
     downcast_host::<WasmHostContext>(state.host.as_ref())
 }
 
-impl wasmnest::plugin::host_process::Host for WasmPluginState {
+impl wasmnest::process::host_process::Host for WasmPluginState {
     fn run(&mut self, request_json: String) -> Result<String, String> {
         process_run(ctx_of(self), ctx_of(self), ctx_of(self), &self.plugin_id, &request_json)
     }
@@ -639,7 +639,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "process", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.2/host-process"],
+            &["wasmnest:process@0.0.1/host-process"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

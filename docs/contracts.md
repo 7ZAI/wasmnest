@@ -8,7 +8,8 @@
 - **谁写**：平台仓发布流程；**谁读**：装配校验、各仓 release、CI。一致性判据（`pnpm run check:manifest`，逐条可复现）：
   1. `product` == 平台仓 `package.json` 版本；
   2. `repos.lib.tag` == 能力仓 `../wasmnest-lib` HEAD 的**精确 tag**（tag 漂移或工作树脏即红）；
-  3. `contract.version` == `../wasmnest-lib/wasmnest-contract/src/lib.rs` 的 `PACKAGE_VERSION`；
+  3. `contract.version` == `../wasmnest-lib/wasmnest-contract/src/lib.rs` 的 `PACKAGE_VERSION`（`wasmnest:plugin` 公共轴）；
+  3b. `contract.packages` == 双端生成物里出现过的**全部** WIT 包 → 版本（并集；同名包双版本即红），且 `packages['wasmnest:plugin']` == `contract.version`（ADR 0061 逐包兼容判据的真源）；
   4. `contract.witSha256` == 双端组合 WIT 产物指纹（`node scripts/check-release-manifest.mjs --print-hash` 重算）；
   5. `apps` 段覆盖应用仓**全部** `apps/<slug>/<end>/plugin.json`（end 感知，`ends.<end>.artifact` == 该端 `rustLibrary + '.wasm'`）；每个 app 必填 `version`（semver），`ends.desktop` 必填 `package`（`<slug>-desktop-v<version>.zip`，应用仓 `app-release.yml` 的固定命名）与 `sha256`（64 位 hex）—— 发布时由 `scripts/vendor-apps.mjs` 按这两项下载并校验成品包；
   6. `repos.apps.tag` == 应用仓 HEAD 精确 tag（发布装配口径）；
@@ -19,29 +20,36 @@
 
 ```text
 真源（能力仓 sibling `../wasmnest-lib`）：
-  wasmnest-wasm-core/wit/core.wit                # 核心机制面
-  各能力域 wit/<domain>.wit                      # 例如 wasmnest-pty-engine/wit/pty.wit
-  wasmnest-contract/src/lib.rs                   # 包名与版本唯一手写处（零依赖 crate；PACKAGE_NAME / PACKAGE_VERSION / PACKAGE）
+  wasmnest-wasm-core/wit/core.wit                # 核心机制面（包 wasmnest:plugin）
+  各能力域 wit/<domain>.wit                      # 例如 wasmnest-pty-engine/wit/pty.wit（各自独立包）
+  wasmnest-contract/src/lib.rs                   # wasmnest:plugin 包名/版本唯一手写处（PACKAGE_NAME / PACKAGE_VERSION / PACKAGE）
+  各能力域 crate 的 WIT_PACKAGE 常量             # 与该域 .wit 的 package 行互相加锁
         │
-端清单（本仓，声明「组合了什么」）：
-  wasmnest-desktop/packages/plugin-sdk-desktop/compose.json   # core + 各 cap 分片（含端独有 wit-src/cap-*.wit）
+端清单 v2（本仓，声明「组合了什么」）：
+  wasmnest-desktop/packages/plugin-sdk-desktop/compose.json   # core / face / caps.{key}.{file,package}
   wasmnest-mobile/packages/plugin-sdk-mobile/compose.json
-        │  node scripts/compose-wit.mjs --all（版本注入唯一发生在这里）
+        │  node scripts/compose-wit.mjs --all（先清空 out，再落 deps/ 布局）
         ▼
 生成物（本仓，**入库但禁止手改**，漂移由 husky / CI / 测试锁钉）：
-  wasmnest-{desktop,mobile}/packages/plugin-sdk-{desktop,mobile}/rust/wit/**
+  wasmnest-{desktop,mobile}/packages/plugin-sdk-{desktop,mobile}/rust/wit/
+    core.wit / plugin-face.wit / wasmnest.wit          # 顶层只放 wasmnest:plugin 包
+    deps/<pkg>/<file>.wit                             # 每个能力域/端扩展一包
 ```
 
-**bump 政策**（ADR 0051 D4）：任何 WIT 变更（含函数级追加）→ patch；interface 增删 / 签名变 → minor。bump 后必须：重拼双端 WIT → 重建**受影响应用**的 wasm 产物（版本进入 import 名，宿主与 guest 不等即实例化失败，失败信息点名版本）→ 同步 manifest 的 `contract.version` / `witSha256` → `pnpm run check:wit` 与 `pnpm run check:manifest` 双绿。
+**拆包口径**（ADR 0061）：`wasmnest:plugin` = core import + 全部 guest 导出面（公共轴）；
+每个能力域 / 端扩展各一包。顶层目录只能放同一 package 的文件（`wit-parser` 要求），
+其余包一律 `deps/`。
+
+**bump 政策**（ADR 0051 D4 + ADR 0061）：任何 WIT 变更（含函数级追加）→ patch；interface 增删 / 签名变 → minor；**只 bump 被改的包**，禁止为「对齐」把所有包一起 bump。`wasmnest:plugin` 改动仍需全部应用重建（有意边界）；其余包只要求**真正 import 它**的应用重建。bump 后必须：重拼双端 WIT → 重建受影响应用 → 同步 manifest 的 `contract.version` / `contract.packages` / `witSha256` → `pnpm run check:wit` 与 `pnpm run check:manifest` 双绿。
 
 ## 3. WIT / ABI 变更流程（改契约不在本仓生成物里改）
 
-1. 改能力仓真源（`../wasmnest-lib`）：`wasmnest-wasm-core/wit/core.wit` 或能力域 `wit/<domain>.wit`；按 bump 政策改 `wasmnest-contract/src/lib.rs` 的 `PACKAGE_VERSION`。
-2. 能力仓提交 + 打 tag（`lib-vX.Y.Z`）；平台仓同步 `release-manifest.json`（`repos.lib.tag` / `contract.version`），不移动任何 submodule 指针（平台直接读 sibling 工作树）。
-3. `node scripts/compose-wit.mjs --all` 重拼双端生成物 → `pnpm run check:wit`。
-4. 受影响端更新 SDK 侧 Rust / TS 面（`packages/plugin-sdk-*/`），跑 SDK 测试。
-5. 应用仓按当前 SDK **全量重建**受影响 app 产物（版本进入 import 名，旧产物实例化期被点名）。
-6. `node scripts/check-release-manifest.mjs --print-hash` 更新 `contract.witSha256` → `pnpm run check:manifest` 全绿。
+1. 改能力仓真源（`../wasmnest-lib`）：`wasmnest-wasm-core/wit/core.wit`（→ 改 `wasmnest-contract` 的 `PACKAGE_VERSION`）或能力域 `wit/<domain>.wit`（→ **只改该分片的 `package` 行版本**，并同步该 crate 的 `WIT_PACKAGE` 常量）。
+2. 能力仓提交 + 打 tag（`lib-vX.Y.Z`）；平台仓同步 `release-manifest.json`（`repos.lib.tag` / `contract.version` / `contract.packages`），不移动任何 submodule 指针（平台直接读 sibling 工作树）。
+3. `node scripts/compose-wit.mjs --all` 重拼双端生成物（顶层 + `deps/`）→ `pnpm run check:wit`。
+4. 受影响端更新 SDK 侧 Rust / TS 面（`packages/plugin-sdk-*/`）：`generate!` 必须 `generate_all`；import 路径为 `wasm::wasmnest::<pkg>::host_*`；跑 SDK 测试。
+5. 应用仓：按当前 SDK 重建**受影响 app**（`wasmnest:plugin` 改动 = 全部；单包改动 = 其 `compat.witPackages` 含该包者）。`compat.witPackages` 由构建期 `componentize --list-packages` 从组件二进制提取，禁止手填。
+6. `node scripts/check-release-manifest.mjs --print-hash` 更新 `contract.witSha256` → `pnpm run check:manifest`；vendor 门禁（`scripts/vendor-apps.mjs`）按 `compat.witVersion` + `compat.witPackages` 逐包判定，`source.libRef` 只溯源。
 7. 涉及行为的改动补测试（含失败路径）；不留「兼容旧产物」的冗余路径（研发起步期，无 ABI 兼容义务）。
 
 ## 4. 权限

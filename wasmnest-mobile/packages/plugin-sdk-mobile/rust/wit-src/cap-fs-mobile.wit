@@ -1,0 +1,17 @@
+package wasmnest:fs-mobile@0.0.1;
+
+// 移动端能力域分片（WIT 按包拆分，ADR 0061）：一个能力域 = 一个独立包，
+// 版本独立演进——本包 WIT 变更只 bump 本包，不波及未 import 它的应用。
+// 端 `plugin` world 经 `include wasmnest:fs-mobile/cap-fs-mobile@0.0.1;` 并入本接口。
+
+interface host-fs-mobile {
+    /// 移动端特有：把已授权文件拷入系统媒体下载目录（SAF/MediaStore；
+    /// 参数与 core ABI 一致：源文件路径 + 显示名 + MIME）
+    write-media-downloads: func(src-path: string, display-name: string, mime-type: string) -> result<_, string>;
+    /// 移动端特有：弹系统保存对话框把已授权文件存入用户选择的位置
+    save-to-document: func(src-path: string, display-name: string, mime-type: string) -> result<_, string>;
+}
+
+world cap-fs-mobile {
+    import host-fs-mobile;
+}

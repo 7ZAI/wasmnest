@@ -32,7 +32,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "notify";
 
 /// 本域提供的 WIT 接口（必须与 `cap-notify.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-notify"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:notify@0.0.1/host-notify"];
 
 /// 本域的权限位（`notify` 域函数的门禁落点；与移动端同名同判据）
 pub const MODULE_PERMISSIONS: &[&str] = &[PERMISSION_NOTIFY];
@@ -57,7 +57,7 @@ impl HostModule for NotifyModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_notify::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::notify::host_notify::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -74,7 +74,7 @@ inventory::submit! {
 
 // ==================== WIT 层（import 接口 → 域函数转发） ====================
 
-impl wasmnest::plugin::host_notify::Host for WasmPluginState {
+impl wasmnest::notify::host_notify::Host for WasmPluginState {
     fn notify(&mut self, title: String, body: String, options_json: String) -> Result<(), String> {
         // 权限门先于一切副作用（含载荷解析）：未声明 `notify` 的插件连「参数是否合法」
         // 都不该被告知——错误面只留一条，避免用报错文案探测域契约
@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "notify", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.2/host-notify"],
+            &["wasmnest:notify@0.0.1/host-notify"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

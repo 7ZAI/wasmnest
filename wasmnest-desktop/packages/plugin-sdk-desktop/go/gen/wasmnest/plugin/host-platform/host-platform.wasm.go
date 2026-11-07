@@ -6,16 +6,16 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.1.0".
 
-//go:wasmimport wasmnest:plugin/host-platform@0.0.2 pick-files
+//go:wasmimport wasmnest:plugin/host-platform@0.1.0 pick-files
 //go:noescape
 func wasmimport_PickFiles(result *cm.Result[string, string, string])
 
-//go:wasmimport wasmnest:plugin/host-platform@0.0.2 pick-folders
+//go:wasmimport wasmnest:plugin/host-platform@0.1.0 pick-folders
 //go:noescape
 func wasmimport_PickFolders(result *cm.Result[string, string, string])
 
-//go:wasmimport wasmnest:plugin/host-platform@0.0.2 platform
+//go:wasmimport wasmnest:plugin/host-platform@0.1.0 platform
 //go:noescape
 func wasmimport_Platform(result *string)

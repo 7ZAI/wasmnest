@@ -18,8 +18,8 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 /// 能力模块名
 pub const MODULE_NAME: &str = "mobile-connection";
 
-/// 本域提供的 WIT 接口（必须与 `cap-mobile.wit` 逐字一致）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-connection-target"];
+/// 本域提供的 WIT 接口（必须与生成物 `deps/connection-target/` 分片逐字一致）
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:connection-target@0.0.1/host-connection-target"];
 
 /// 本域无权限门（ADR 0022 已登记的例外，见模块头注）
 pub const MODULE_PERMISSIONS: &[&str] = &[];
@@ -48,7 +48,7 @@ impl HostModule for ConnectionModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_connection_target::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::connection_target::host_connection_target::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -62,7 +62,7 @@ inventory::submit! {
 
 // ==================== WIT 层（import 接口 → 域逻辑） ====================
 
-impl wasmnest::plugin::host_connection_target::Host for WasmPluginState {
+impl wasmnest::connection_target::host_connection_target::Host for WasmPluginState {
     fn primary_target(&mut self) -> Result<String, String> {
         let engine = ctx_of(self).ports.connection_engine();
         let Some((target, connected)) = block_on_async(async move { engine.primary_target().await })

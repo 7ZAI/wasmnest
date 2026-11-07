@@ -6,24 +6,24 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.1.0".
 
-//go:wasmimport wasmnest:plugin/host-bus@0.0.2 publish
+//go:wasmimport wasmnest:plugin/host-bus@0.1.0 publish
 //go:noescape
 func wasmimport_Publish(topic0 *uint8, topic1 uint32, payloadJson0 *uint8, payloadJson1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport wasmnest:plugin/host-bus@0.0.2 publish-binary
+//go:wasmimport wasmnest:plugin/host-bus@0.1.0 publish-binary
 //go:noescape
 func wasmimport_PublishBinary(topic0 *uint8, topic1 uint32, payload0 *uint8, payload1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport wasmnest:plugin/host-bus@0.0.2 subscribe
+//go:wasmimport wasmnest:plugin/host-bus@0.1.0 subscribe
 //go:noescape
 func wasmimport_Subscribe(topic0 *uint8, topic1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport wasmnest:plugin/host-bus@0.0.2 subscribe-binary
+//go:wasmimport wasmnest:plugin/host-bus@0.1.0 subscribe-binary
 //go:noescape
 func wasmimport_SubscribeBinary(topic0 *uint8, topic1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport wasmnest:plugin/host-bus@0.0.2 unsubscribe
+//go:wasmimport wasmnest:plugin/host-bus@0.1.0 unsubscribe
 //go:noescape
 func wasmimport_Unsubscribe(topic0 *uint8, topic1 uint32, result *cm.Result[string, struct{}, string])

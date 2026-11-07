@@ -77,6 +77,12 @@ const SCANNED_CRATES: &[&str] = &[
     // 通知域轻量契约房（2026-10-13 domain-owned-contracts 票 04）：只持 WIT 契约
     // （实现按端住宿主），零产品语义；抽根即入扫描面。
     "wasmnest-notify-engine",
+    // 系统剪贴板契约房（a426faf）：WIT 契约 + 权限词汇，实现按端住宿主，零产品语义；
+    // 新建即入扫描面（本锁 2026-11-07 补登记，ADR 0061 拆包时发现漏桶）。
+    "wasmnest-clipboard-engine",
+    // CLI 能力域机制骨架（3a811f1）：CLI 调用契约 / manifest cli 段，零产品语义；
+    // 同上补登记。
+    "wasmnest-cli-engine",
     // libp2p 机制引擎（P1 传输栈换轨引入：身份桥 / swarm 生命周期 / 准入闸门 /
     // 具名流协议；纯机制、零产品语义，新建即入扫描面）。
     "wasmnest-p2p-engine",

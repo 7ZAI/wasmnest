@@ -1,0 +1,42 @@
+package wasmnest:notify-mobile@0.0.1;
+
+// 移动端能力域分片（WIT 按包拆分，ADR 0061）：一个能力域 = 一个独立包，
+// 版本独立演进——本包 WIT 变更只 bump 本包，不波及未 import 它的应用。
+// 端 `plugin` world 经 `include wasmnest:notify-mobile/cap-notify-mobile@0.0.1;` 并入本接口。
+
+/// 移动端通知权限与反馈原语（移动扩展；`notify` 本体在共享 `host-notify`）
+///
+/// 覆盖 Android 原生桥的「非通知框」触达原语：通知权限
+/// （POST_NOTIFICATIONS）状态查询与请求、即时震动反馈、提示音播放。
+/// 全部是「离宿主无法实现」的平台交互原语，零业务语义（ADR 0022）：
+/// 文案 / 时机 / 触发条件由插件决定，宿主只负责投递。
+///
+/// **与共享 `host-notify` 的关系**（2026-10-13，ADR 0052 D3 功能级统一）：
+/// `notify` 本体是双端功能级交集 → 共享契约房
+/// `packages/wasmnest-notify-engine/wit/notify.wit`（双端 caps 各消费同一份；
+/// 桌面 `host-events-desktop` 随之退役）；本接口 4 条是移动独有功能
+/// （桌面无通知权限 / 震动 / 提示音概念），按「只有一端提供 → 端 cap」留本端。
+///
+/// 权限位 `notify`（fail-closed，未声明即拒）：通知 / 震动 / 声音是用户打扰面
+/// （高频弹通知或狂震会骚扰用户），独立成位，不与既有能力混位；
+/// 共享 `host-notify.notify` 在移动端同样经此位门控（见该契约文档）。
+interface host-notify-mobile {
+    /// 通知权限是否已授予（Android 13+ 需 POST_NOTIFICATIONS 且系统通知总开关
+    /// 开启；Android 12 及以下恒 true）。供插件在发通知前对账；发送本身不因
+    /// 无权限而报错（系统静默丢弃，宿主不代为降级）
+    check-permission: func() -> result<bool, string>;
+    /// 请求通知权限：未授权时弹系统授权框并阻塞至用户响应，返回最新状态；
+    /// 已授权 / 低版本立即返回 true。须在用户交互语境调用（后台触发可能被
+    /// 系统忽略）
+    request-permission: func() -> result<bool, string>;
+    /// 立即震动一次（毫秒，直接走 Vibrator 服务、不经通知渠道，无需通知权限）。
+    /// 用于「无需可见通知的轻量触觉反馈」。时长钳制到 [1, 5000] ms
+    vibrate: func(duration-ms: u32) -> result<_, string>;
+    /// 播放系统默认通知提示音（USAGE_NOTIFICATION 流；重复触发先停上一次，
+    /// 避免叠音）。用于「无需可见通知的听觉反馈」
+    play-sound: func() -> result<_, string>;
+}
+
+world cap-notify-mobile {
+    import host-notify-mobile;
+}

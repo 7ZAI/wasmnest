@@ -103,11 +103,11 @@ fn code_lines(content: &str) -> impl Iterator<Item = (usize, &str)> {
 /// `host-notify`，其移动实现 + 移动扩展 `host-notify-mobile` 同住宿主 notify.rs）：
 /// wasm-core 里不得再有这些域的 `Host` impl
 const MOBILE_ONLY_TRAITS: [&str; 5] = [
-    "wasmnest::plugin::host_notify::Host for",
-    "wasmnest::plugin::host_fs_mobile::Host for",
-    "wasmnest::plugin::host_terminal_stream::Host for",
-    "wasmnest::plugin::host_connection_target::Host for",
-    "wasmnest::plugin::host_auth_client::Host for",
+    "wasmnest::notify::host_notify::Host for",
+    "wasmnest::fs_mobile::host_fs_mobile::Host for",
+    "wasmnest::terminal_stream::host_terminal_stream::Host for",
+    "wasmnest::connection_target::host_connection_target::Host for",
+    "wasmnest::auth_client::host_auth_client::Host for",
 ];
 
 /// 迁移后宿主 adapter 的落点（正向钉住：能力在宿主侧仍可达）
@@ -317,7 +317,14 @@ fn peer_and_mdns_wit_bindings_live_in_capability_lib() {
         // （`use wasmnest_server_peer_net as _;`）。两形态不能共用同一字面量。
         let crate_name_as_ident = crate_name.replace('-', "_");
         let binding = read(&root.join(crate_dir).join(binding_rel));
-        let impl_needle = format!("impl wasmnest::plugin::host_{iface}::Host for WasmPluginState");
+        // ADR 0061 拆包后每个能力域是独立 WIT 包：`host-peer` →
+        // `wasmnest:peer`，`host-mdns` → `wasmnest:mdns`
+        let pkg = match iface {
+            "peer" => "peer",
+            "mdns" => "mdns",
+            other => panic!("未登记的能力域包：{other}"),
+        };
+        let impl_needle = format!("impl wasmnest::{pkg}::host_{iface}::Host for WasmPluginState");
 
         // 1. lib 侧绑定层在场（能力去宿主化 ≠ 能力消失）
         assert!(
@@ -372,8 +379,8 @@ fn peer_and_mdns_wit_bindings_live_in_capability_lib() {
         let content = read(&path);
         for (idx, line) in code_lines(&content) {
             for needle in [
-                "impl wasmnest::plugin::host_peer::Host",
-                "impl wasmnest::plugin::host_mdns::Host",
+                "impl wasmnest::peer::host_peer::Host",
+                "impl wasmnest::mdns::host_mdns::Host",
             ] {
                 assert!(
                     !line.contains(needle),
@@ -455,7 +462,7 @@ fn mobile_only_mechanisms_and_retired_shims_stay_out_of_wasm_core() {
     let host = read(&mobile_plugin_dir().join("terminal_stream.rs"));
     for needle in [
         "pub fn terminal_stream_gateway()",
-        "impl wasmnest::plugin::host_terminal_stream::Host for",
+        "impl wasmnest::terminal_stream::host_terminal_stream::Host for",
     ] {
         assert!(
             host.contains(needle),

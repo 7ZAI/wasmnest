@@ -29,7 +29,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "connection";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-connection-registry"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:connection-registry@0.0.1/host-connection-registry"];
 
 /// 本域的权限位（必须与 `wasmnest.wit` / SDK 权限表逐字一致）
 pub const MODULE_PERMISSIONS: &[&str] = &["connection:read"];
@@ -54,7 +54,7 @@ impl HostModule for ConnectionModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_connection_registry::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::connection_registry::host_connection_registry::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -77,7 +77,7 @@ fn ctx_of(state: &WasmPluginState) -> &WasmHostContext {
     downcast_host::<WasmHostContext>(state.host.as_ref())
 }
 
-impl wasmnest::plugin::host_connection_registry::Host for WasmPluginState {
+impl wasmnest::connection_registry::host_connection_registry::Host for WasmPluginState {
     fn connections_list(&mut self) -> Result<String, String> {
         connection_list(ctx_of(self), &self.plugin_id)
     }
@@ -231,7 +231,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "connection", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.2/host-connection-registry"],
+            &["wasmnest:connection-registry@0.0.1/host-connection-registry"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

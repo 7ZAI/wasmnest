@@ -80,13 +80,14 @@ pub fn purge_for_plugin(plugin_id: &str) -> usize {
 pub const MODULE_NAME: &str = "mobile-host-core";
 
 /// 本模块提供的 WIT 接口（移动独有 / 端差异能力域；契约真源在各能力域 crate 的 wit 分片，
-/// 接口名与拼装 package 内定义逐字一致；版本随契约 0.0.2，落后会让跨端回退判据失配）
+/// 接口名与包版本按 ADR 0061 逐包独立、与拼装 `deps/` 内定义逐字一致；包版本落后会让
+/// 跨端回退判据失配）
 ///
 /// host-peer / host-mdns 由能力 lib 的 `common-host` 绑定层自报，**不在此列**
 /// （fallback 跳过是整模块粒度：这里若仍声明同名接口，http / websocket 会被一起跳过）
 pub const MODULE_INTERFACES: &[&str] = &[
-    "wasmnest:plugin@0.0.2/host-http",
-    "wasmnest:plugin@0.0.2/host-websocket",
+    "wasmnest:http@0.0.1/host-http",
+    "wasmnest:ws@0.0.1/host-websocket",
 ];
 
 /// 本模块读写的权限位（各域权限门的并集；装载期一致性核对用）
@@ -120,8 +121,8 @@ impl HostModule for MobileHostCoreModule {
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
         type D = wasmtime::component::HasSelf<WasmPluginState>;
         for iface in [
-            wasmnest::plugin::host_http::add_to_linker::<WasmPluginState, D>,
-            wasmnest::plugin::host_websocket::add_to_linker::<WasmPluginState, D>,
+            wasmnest::http::host_http::add_to_linker::<WasmPluginState, D>,
+            wasmnest::ws::host_websocket::add_to_linker::<WasmPluginState, D>,
         ] {
             iface(linker, |s| s)?;
         }

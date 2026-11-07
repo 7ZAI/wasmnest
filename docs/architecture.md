@@ -61,7 +61,7 @@
 ## 4. 双端差异与锁步（勿把桌面结论套到移动端）
 
 - **单形态运行时（单一 crate · 一份壳）**：机制内核 = 能力仓 `../wasmnest-lib/wasmnest-wasm-core`（**无 common/bare 形态之分**）。桌面开 `desktop-assembly` 装配面；移动 `default-features = false` 拿统一机制 + 运行时壳。**WIT 绑定、端事实与端 SDK 依赖全部在各端宿主**（`src-tauri/src/plugin/**`）：宿主各域实现经统一注册汇入 Linker，`AbiPolicy` 由宿主装配时注入（桌面要求组件形态 `abi-form`，移动不约束）。
-- **双端契约各自演进（compose 组合，不做 union）**：核心 WIT + 能力域分片可被任意端组合；端独有功能的声明与实现都住端宿主（桌面端：`cap-desktop.wit` 等端 cap；移动端：`cap-mobile.wit`）。**移动不跟演**桌面部分 ABI 破坏性变更；但**跨端协议（HTTP / WS / QR / 认证）改动必须两端同步部署**（§6）。
+- **双端契约各自演进（compose 组合，不做 union）**：核心 WIT + 能力域分片可被任意端组合；端独有功能的声明与实现都住端宿主（桌面端 / 移动端各一目录的 `wit-src/cap-*.wit`，ADR 0061 一域一文件）。**移动不跟演**桌面部分 ABI 破坏性变更；但**跨端协议（HTTP / WS / QR / 认证）改动必须两端同步部署**（§6）。
 - **WASI 面是共享机制**：双端默认全开，开 / 关走运行期配置，不要把它当形态差异轴。
 - **双端单产物（file-transfer）**：移动宿主为桌面专属 interface 提供 **fail-visible 桩**（`desktop-compat`，`Err("unsupported on mobile: …")`）——桩只为 import 闭合，**不是「移动端实现桌面能力」**；真实调用 = 平台探测失效，错误当场点名。
 - **共享模块形态不同**：桌面挂载包**自带全部依赖**（无 externals；宿主锁禁止 `__WASMNEST_SHARED__`）；移动共享 vue / vue-i18n / pinia 于宿主全局 `__WASMNEST_SHARED__`（经 SDK 代理访问，插件不直接操作全局）。

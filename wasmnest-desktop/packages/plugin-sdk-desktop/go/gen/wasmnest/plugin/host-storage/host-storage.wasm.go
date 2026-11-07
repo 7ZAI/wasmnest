@@ -6,16 +6,16 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.1.0".
 
-//go:wasmimport wasmnest:plugin/host-storage@0.0.2 get
+//go:wasmimport wasmnest:plugin/host-storage@0.1.0 get
 //go:noescape
 func wasmimport_Get(key0 *uint8, key1 uint32, result *cm.Result[OptionStringShape, cm.Option[string], string])
 
-//go:wasmimport wasmnest:plugin/host-storage@0.0.2 set
+//go:wasmimport wasmnest:plugin/host-storage@0.1.0 set
 //go:noescape
 func wasmimport_Set(key0 *uint8, key1 uint32, value0 *uint8, value1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport wasmnest:plugin/host-storage@0.0.2 delete
+//go:wasmimport wasmnest:plugin/host-storage@0.1.0 delete
 //go:noescape
 func wasmimport_Delete(key0 *uint8, key1 uint32, result *cm.Result[string, struct{}, string])

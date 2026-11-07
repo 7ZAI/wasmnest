@@ -40,6 +40,7 @@
 - 改宿主 Rust → 该端 `cd src-tauri && cargo test` 全绿（含锁测试）；需要随包产物的 e2e 先构建。
 - 改 SDK → 该端 SDK `test:run`；涉及发布 → `scripts/package-sdks.mjs` 全链绿。
 - 改 WIT / 契约 / 版本 → docs/contracts.md §3 全链：`check:wit` + 受影响 app 重建 + `check:manifest` 全绿。
+- **改 WIT 包身份 / 拆包（ADR 0061）→ 最小验证集**：能力仓各 crate `cargo test --lib`（`WIT_PACKAGE` ↔ package 行锁）→ `node scripts/compose-wit.mjs --all` + `pnpm run check:wit`（含文件集合）→ 桌面 `cargo test --test wit_package_version_lock --test domain_contract_structure_locks` + `cargo test --lib plugin::bindings` → 移动 `cargo test --test mobile_wit_composition_lock --test retired_mobile_host_terminal_hooks_lock` → 根 `pnpm run test:run`（含 vendor-apps 逐包门禁反例）→ 应用仓 `pnpm run test:scripts`。全量重建 app 属发布动作。
 - 改权限 / 清单 / 应用注册表 → `manifest-gen` / `manifest-validate` 通过；`check:manifest` 通过（涉及 id / rustLibrary / 端变化时）；相关边界锁同步更新并跑绿。
 - **新增 / 收紧权限门（含能力位与 wasm 权限位）→ 同批检查「被门拦住的既有调用方」**（2026-11-03 审核教训）：
   1. 测试夹具的默认授予清单（`../wasmnest-lib/wasmnest-wasm-core/src/test_support/common.rs` 的 `all_permissions`、`packages/plugin-sdk-fixtures/plugin.json` 的 `permissions`）——漏改会让夹具用例从「测到域函数内部行为」退化成「被入口门直接拒」，断言失配（实例：`notify` 补门后 `sdk_e2e` 直接红）；

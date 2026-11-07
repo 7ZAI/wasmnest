@@ -6,7 +6,7 @@
 //!   `notify` 本体是双端功能级交集 → 统一签名 `notify(title, body, options-json)`，
 //!   双端 caps 各消费同一份契约。移动端就地在 `-mobile` 模块内实现（同一份
 //!   Android 桥，行为与统一前逐字一致）。
-//! - **`host-notify-mobile`（移动扩展，cap-mobile）**：权限查询 / 请求、即时震动、
+//! - **`host-notify-mobile`（移动扩展，`deps/notify-mobile/`）**：权限查询 / 请求、即时震动、
 //!   提示音 4 条——桌面无对应平台概念，不归交集。
 //!
 //! 两个 interface 共用一个能力模块与权限位 `notify`（fail-closed，**门在平台分支
@@ -35,11 +35,11 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 /// 能力模块名（白名单键 = 装载期日志与错误文案里的模块名）
 pub const MODULE_NAME: &str = "mobile-notify";
 
-/// 本域提供的 WIT 接口（必须与生成物 `cap-notify.wit` + `cap-mobile.wit` 逐字一致；
+/// 本域提供的 WIT 接口（必须与生成物 `deps/notify/` + `deps/notify-mobile/` 分片逐字一致；
 /// 改错即 guest import 失配）
 pub const MODULE_INTERFACES: &[&str] = &[
-    "wasmnest:plugin@0.0.2/host-notify",
-    "wasmnest:plugin@0.0.2/host-notify-mobile",
+    "wasmnest:notify@0.0.1/host-notify",
+    "wasmnest:notify-mobile@0.0.1/host-notify-mobile",
 ];
 
 /// 本域的权限位（两个 interface 同门；必须与 WIT / SDK 权限表逐字一致）
@@ -69,8 +69,8 @@ impl HostModule for NotifyModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_notify::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)?;
-        wasmnest::plugin::host_notify_mobile::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::notify::host_notify::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)?;
+        wasmnest::notify_mobile::host_notify_mobile::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -119,7 +119,7 @@ fn parse_notify_options(options_json: &str) -> Result<(bool, bool), String> {
 // ==================== WIT 层（import 接口 → 域逻辑） ====================
 
 /// 共享 `host-notify`：notify 本体（与桌面同一份契约）
-impl wasmnest::plugin::host_notify::Host for WasmPluginState {
+impl wasmnest::notify::host_notify::Host for WasmPluginState {
     fn notify(&mut self, title: String, body: String, options_json: String) -> Result<(), String> {
         require_notify(self)?;
         let (vibrate, sound) = parse_notify_options(&options_json)?;
@@ -147,7 +147,7 @@ impl wasmnest::plugin::host_notify::Host for WasmPluginState {
 }
 
 /// 移动扩展 `host-notify-mobile`：权限查询 / 请求、震动、提示音
-impl wasmnest::plugin::host_notify_mobile::Host for WasmPluginState {
+impl wasmnest::notify_mobile::host_notify_mobile::Host for WasmPluginState {
     fn check_permission(&mut self) -> Result<bool, String> {
         require_notify(self)?;
         let plugin_id = self.plugin_id.clone();

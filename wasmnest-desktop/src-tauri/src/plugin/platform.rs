@@ -24,7 +24,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "platform-desktop";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-platform-desktop"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:platform-desktop@0.0.1/host-platform-desktop"];
 
 /// 本域的权限位：空——`wsl-distros` / `local-ipv4-addresses` / `reveal-in-dir`
 /// 全是平台事实 / 平台交互动作，不叠加权限门（ADR 0022 裁剪线，真源在
@@ -51,7 +51,7 @@ impl HostModule for PlatformDesktopModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_platform_desktop::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::platform_desktop::host_platform_desktop::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -68,7 +68,7 @@ inventory::submit! {
 
 // ==================== WIT 层（import 接口 → 域函数转发） ====================
 
-impl wasmnest::plugin::host_platform_desktop::Host for WasmPluginState {
+impl wasmnest::platform_desktop::host_platform_desktop::Host for WasmPluginState {
     fn wsl_distros(&mut self) -> Result<String, String> {
         platform_wsl_distros()
     }
@@ -228,7 +228,7 @@ mod tests {
         );
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.2/host-platform-desktop"],
+            &["wasmnest:platform-desktop@0.0.1/host-platform-desktop"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

@@ -19,12 +19,26 @@ use crate::host::{
     HostPlatform, HostPluginDatabase, HostStorage, HostTerminalStream, HostWs, NotifyOptions,
     PeerNodeConfig,
 };
-use crate::wasm::wasmnest::plugin::{
-    host_auth_client, host_bus, host_config, host_connection_target, host_events, host_fs,
-    host_fs_mobile, host_http, host_log, host_mdns, host_metrics, host_notify, host_notify_mobile,
-    host_peer, host_platform, host_plugin_database, host_storage, host_terminal_stream,
-    host_websocket,
-};
+use crate::wasm::wasmnest::auth_client::host_auth_client;
+use crate::wasm::wasmnest::plugin::host_bus;
+use crate::wasm::wasmnest::plugin::host_config;
+use crate::wasm::wasmnest::connection_target::host_connection_target;
+use crate::wasm::wasmnest::plugin::host_events;
+use crate::wasm::wasmnest::plugin::host_fs;
+use crate::wasm::wasmnest::fs_mobile::host_fs_mobile;
+use crate::wasm::wasmnest::http::host_http;
+use crate::wasm::wasmnest::plugin::host_log;
+use crate::wasm::wasmnest::mdns::host_mdns;
+use crate::wasm::wasmnest::plugin::host_metrics;
+use crate::wasm::wasmnest::notify::host_notify;
+use crate::wasm::wasmnest::notify_mobile::host_notify_mobile;
+use crate::wasm::wasmnest::peer::host_peer;
+use crate::wasm::wasmnest::plugin::host_platform;
+use crate::wasm::wasmnest::plugin::host_plugin_database;
+use crate::wasm::wasmnest::plugin::host_storage;
+use crate::wasm::wasmnest::terminal_stream::host_terminal_stream;
+use crate::wasm::wasmnest::ws::host_websocket;
+
 
 /// 宿主 API 绑定（WASM 插件侧）
 ///

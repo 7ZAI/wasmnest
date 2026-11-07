@@ -11,6 +11,8 @@
  *  2. `repos.lib.tag` == 能力仓（兄弟目录 `../wasmnest-lib`，或 `WASMNEST_LIB_ROOT`）HEAD
  *     的精确 tag；工作树脏同样红——发布装配要求能力仓处于干净的 tag 提交；
  *  3. `contract.version` == 能力仓 `wasmnest-contract/src/lib.rs` 的 `PACKAGE_VERSION`；
+ *     `contract.packages`（ADR 0061 按包版本化）= 双端生成物里出现过的**全部**包 → 版本
+ *     （并集；同名包版本冲突即红），且 `packages['wasmnest:plugin']` == `contract.version`；
  *  4. `contract.witSha256` == 双端组合 WIT 产物指纹：对
  *     `wasmnest-{desktop,mobile}/packages/plugin-sdk-{desktop,mobile}/rust/wit/**` 全部文件
  *     按仓内相对路径升序，逐文件喂 `relpath \0 content \0` 的 sha256（十六进制）；
@@ -92,6 +94,34 @@ export function witFingerprint(root = ROOT) {
     h.update('\0')
   }
   return { hash: h.digest('hex'), files }
+}
+
+/** 单个 .wit 文本的 package 行（拆包后一个包名一个版本；同一生成物目录内可重复） */
+const PACKAGE_LINE_RE = /^package\s+([A-Za-z0-9_.:-]+)@(\d+\.\d+\.\d+);\s*$/m
+
+/**
+ * 双端生成物里出现过的全部 WIT 包 → 版本（ADR 0061 `contract.packages` 的真源）。
+ *
+ * 口径：遍历 `WIT_DIRS` 下**全部** `.wit`（含 `deps/**`），取每个文件的 `package` 行；
+ * 同名包在任一处出现不同版本即抛（拆包后同名包只能有一个版本——否则 linker 解析
+ * 时就已失败，清单侧同样不允许「两个版本共存」）。WASI 包不进生成物目录，天然不入表。
+ */
+export function witPackages(root = ROOT) {
+  const map = new Map()
+  for (const relDir of WIT_DIRS) {
+    for (const rel of listFiles(relDir, root)) {
+      if (!rel.endsWith('.wit')) continue
+      const m = PACKAGE_LINE_RE.exec(readFileSync(join(root, rel), 'utf8'))
+      if (!m) throw new Error(`${rel} 缺 \`package <name>@<x.y.z>;\` 行（WIT 生成物形状漂移）`)
+      const [, name, version] = m
+      const prev = map.get(name)
+      if (prev && prev !== version) {
+        throw new Error(`同名 WIT 包出现两个版本：${name}@${prev} 与 ${name}@${version}（${rel}）`)
+      }
+      map.set(name, version)
+    }
+  }
+  return Object.fromEntries([...map.entries()].sort(([a], [b]) => a.localeCompare(b)))
 }
 
 /**
@@ -206,6 +236,10 @@ export function runManifestCheck({ root = ROOT } = {}) {
   requireField(manifest.contract?.package, '缺 contract.package')
   requireField(manifest.contract?.version, '缺 contract.version')
   requireField(manifest.contract?.witSha256, '缺 contract.witSha256')
+  requireField(
+    manifest.contract?.packages && typeof manifest.contract.packages === 'object' && !Array.isArray(manifest.contract.packages),
+    '缺 contract.packages（ADR 0061：全包 → 版本映射）',
+  )
   requireField(manifest.apps && Object.keys(manifest.apps).length > 0, '缺 apps 段（或为空）')
 
   const pkgJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
@@ -274,6 +308,32 @@ export function runManifestCheck({ root = ROOT } = {}) {
     )
   } catch (e) {
     fail(`WIT 指纹计算失败: ${e.message}`)
+  }
+
+  // ==================== 4b. contract.packages == 双端生成物现算包表 ====================
+  try {
+    const actual = witPackages(root)
+    const declared = manifest.contract?.packages
+    if (declared && typeof declared === 'object' && !Array.isArray(declared)) {
+      for (const name of Object.keys(actual)) {
+        if (!(name in declared)) {
+          fail(`contract.packages 缺 ${name}@${actual[name]}（生成物里存在，清单未登记）`)
+        } else if (declared[name] !== actual[name]) {
+          fail(
+            `contract.packages["${name}"]=${declared[name]} 与生成物实际 ${actual[name]} 不一致`,
+          )
+        }
+      }
+      for (const name of Object.keys(declared)) {
+        if (!(name in actual)) fail(`contract.packages 多写 ${name}（双端生成物里不存在该包）`)
+      }
+    }
+    requireField(
+      actual['wasmnest:plugin'] === manifest.contract?.version,
+      `contract.version=${manifest.contract?.version} 必须等于 wasmnest:plugin 包版本=${actual['wasmnest:plugin']}`,
+    )
+  } catch (e) {
+    fail(`contract.packages 校验失败: ${e.message}`)
   }
 
   // ==================== 5. apps 段覆盖应用仓全部端 ====================

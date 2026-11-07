@@ -16,6 +16,7 @@ wit_bindgen::generate!({
     // 票 04：端 `wit/` 是生成物目录（同 package 拼装），path 指目录 push_dir 加载
     path: "../plugin-sdk-mobile/rust/wit",
     world: "plugin",
+    generate_all,
 });
 
 // world 导出 → `exports::wasmnest::plugin::*::Guest` trait；world 全部导出接口
@@ -101,7 +102,7 @@ impl CommandGuest for ComponentTestPlugin {
             match args["op"].as_str() {
                 Some("ws-connect") => {
                     let config = serde_json::json!({ "url": args["url"] }).to_string();
-                    match wasmnest::plugin::host_websocket::connect(&config) {
+                    match wasmnest::ws::host_websocket::connect(&config) {
                         Ok(handle) => {
                             return serde_json::json!({ "ok": true, "handle": handle }).to_string()
                         }
@@ -111,14 +112,14 @@ impl CommandGuest for ComponentTestPlugin {
                 Some("ws-send-text") => {
                     let handle = args["handle"].as_str().unwrap_or_default();
                     let text = args["text"].as_str().unwrap_or_default();
-                    match wasmnest::plugin::host_websocket::send_text(handle, text) {
+                    match wasmnest::ws::host_websocket::send_text(handle, text) {
                         Ok(()) => return serde_json::json!({ "ok": true }).to_string(),
                         Err(e) => return serde_json::json!({ "ok": false, "error": e }).to_string(),
                     }
                 }
                 Some("ws-close") => {
                     let handle = args["handle"].as_str().unwrap_or_default();
-                    match wasmnest::plugin::host_websocket::close(handle, "{}") {
+                    match wasmnest::ws::host_websocket::close(handle, "{}") {
                         Ok(hit) => {
                             return serde_json::json!({ "ok": true, "hit": hit }).to_string()
                         }
@@ -127,7 +128,7 @@ impl CommandGuest for ComponentTestPlugin {
                 }
                 Some("ws-is-connected") => {
                     let handle = args["handle"].as_str().unwrap_or_default();
-                    match wasmnest::plugin::host_websocket::is_connected(handle) {
+                    match wasmnest::ws::host_websocket::is_connected(handle) {
                         Ok(open) => {
                             return serde_json::json!({ "ok": true, "open": open }).to_string()
                         }
@@ -155,7 +156,7 @@ impl CommandGuest for ComponentTestPlugin {
                         "autoReconnect": { "baseMs": 1000, "maxMs": 30000 },
                     })
                     .to_string();
-                    match wasmnest::plugin::host_websocket::connect(&config) {
+                    match wasmnest::ws::host_websocket::connect(&config) {
                         Ok(handle) => {
                             // 订阅帧（协议编排在 guest——终端协议事实源 = 桌面
                             // ws_terminal.rs；本夹具模拟真插件的调用序）
@@ -164,7 +165,7 @@ impl CommandGuest for ComponentTestPlugin {
                                 "type": "subscribe", "sessionId": sid, "mode": "live"
                             })
                             .to_string();
-                            let send = wasmnest::plugin::host_websocket::send_text(&handle, &frame);
+                            let send = wasmnest::ws::host_websocket::send_text(&handle, &frame);
                             return serde_json::json!({
                                 "ok": send.is_ok(),
                                 "handle": handle,
@@ -180,7 +181,7 @@ impl CommandGuest for ComponentTestPlugin {
                     let handle = args["handle"].as_str().unwrap_or_default();
                     let frame = serde_json::json!({ "type": "ack", "offset": args["offset"] })
                         .to_string();
-                    match wasmnest::plugin::host_websocket::send_text(handle, &frame) {
+                    match wasmnest::ws::host_websocket::send_text(handle, &frame) {
                         Ok(()) => return serde_json::json!({ "ok": true }).to_string(),
                         Err(e) => return serde_json::json!({ "ok": false, "error": e }).to_string(),
                     }
@@ -188,7 +189,7 @@ impl CommandGuest for ComponentTestPlugin {
                 // close（取消 auto-reconnect 的显式关闭路径）
                 Some("ts-close") => {
                     let handle = args["handle"].as_str().unwrap_or_default();
-                    match wasmnest::plugin::host_websocket::close(handle, "{}") {
+                    match wasmnest::ws::host_websocket::close(handle, "{}") {
                         Ok(hit) => return serde_json::json!({ "ok": true, "hit": hit }).to_string(),
                         Err(e) => return serde_json::json!({ "ok": false, "error": e }).to_string(),
                     }
@@ -201,7 +202,7 @@ impl CommandGuest for ComponentTestPlugin {
                         .as_array()
                         .map(|a| a.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect())
                         .unwrap_or_default();
-                    match wasmnest::plugin::host_terminal_stream::forward_output(sid, &data) {
+                    match wasmnest::terminal_stream::host_terminal_stream::forward_output(sid, &data) {
                         Ok(()) => ws_probe::record(serde_json::json!({ "kind": "forward", "ok": true })),
                         Err(e) => {
                             ws_probe::record(serde_json::json!({ "kind": "forward", "ok": false, "error": e }))
@@ -211,7 +212,7 @@ impl CommandGuest for ComponentTestPlugin {
                 }
                 // 主连接事实读取（票 13 复用同一原语；无头测试断言其可调用性）
                 Some("ts-primary-target") => {
-                    match wasmnest::plugin::host_connection_target::primary_target() {
+                    match wasmnest::connection_target::host_connection_target::primary_target() {
                         Ok(json) => {
                             return serde_json::json!({ "ok": true, "target": json }).to_string()
                         }

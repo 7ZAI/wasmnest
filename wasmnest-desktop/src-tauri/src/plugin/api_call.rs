@@ -27,7 +27,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "api_call";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-api-call"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:api-call@0.0.1/host-api-call"];
 
 /// 本域的权限位（必须与 `wasmnest.wit` / SDK 权限表逐字一致）
 ///
@@ -55,7 +55,7 @@ impl HostModule for ApiCallModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_api_call::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::api_call::host_api_call::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -78,7 +78,7 @@ fn ctx_of(state: &WasmPluginState) -> &WasmHostContext {
     downcast_host::<WasmHostContext>(state.host.as_ref())
 }
 
-impl wasmnest::plugin::host_api_call::Host for WasmPluginState {
+impl wasmnest::api_call::host_api_call::Host for WasmPluginState {
     fn call(&mut self, request_topic: String, payload_json: String, timeout_ms: u64) -> Result<String, String> {
         // caller = 本实例 plugin_id（Caller state 派生，guest 无法伪造）；编排
         // （门禁 / 回复订阅 / 属主校验 / 清理）全部在内核 `api_call`——本层零逻辑。
@@ -110,7 +110,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "api_call", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.2/host-api-call"],
+            &["wasmnest:api-call@0.0.1/host-api-call"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert!(

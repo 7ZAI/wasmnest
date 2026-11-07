@@ -34,7 +34,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "task";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.2/host-task"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:task@0.0.1/host-task"];
 
 /// 本域的权限位（必须与 `wasmnest.wit` / SDK 权限表逐字一致）
 pub const MODULE_PERMISSIONS: &[&str] = &["task:run"];
@@ -58,7 +58,7 @@ impl HostModule for TaskModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_task::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::task::host_task::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -75,7 +75,7 @@ inventory::submit! {
 
 // ==================== WIT 层（import 接口 → 域函数转发） ====================
 
-impl wasmnest::plugin::host_task::Host for WasmPluginState {
+impl wasmnest::task::host_task::Host for WasmPluginState {
     fn execute_batch(&mut self, plan_json: String) -> Result<String, String> {
         execute_batch(ctx_of(self), &self.plugin_id, &plan_json)
     }
@@ -216,7 +216,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "task", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.2/host-task"],
+            &["wasmnest:task@0.0.1/host-task"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

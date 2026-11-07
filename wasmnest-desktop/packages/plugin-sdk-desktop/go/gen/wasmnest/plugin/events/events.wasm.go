@@ -6,10 +6,10 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.1.0".
 
-//go:wasmexport wasmnest:plugin/events@0.0.2#on-message
-//export wasmnest:plugin/events@0.0.2#on-message
+//go:wasmexport wasmnest:plugin/events@0.1.0#on-message
+//export wasmnest:plugin/events@0.1.0#on-message
 func wasmexport_OnMessage(topic0 *uint8, topic1 uint32, sender0 *uint8, sender1 uint32, payloadJson0 *uint8, payloadJson1 uint32) (result *cm.Result[string, struct{}, string]) {
 	topic := cm.LiftString[string]((*uint8)(topic0), (uint32)(topic1))
 	sender := cm.LiftString[string]((*uint8)(sender0), (uint32)(sender1))
@@ -19,8 +19,8 @@ func wasmexport_OnMessage(topic0 *uint8, topic1 uint32, sender0 *uint8, sender1 
 	return
 }
 
-//go:wasmexport wasmnest:plugin/events@0.0.2#on-process-done
-//export wasmnest:plugin/events@0.0.2#on-process-done
+//go:wasmexport wasmnest:plugin/events@0.1.0#on-process-done
+//export wasmnest:plugin/events@0.1.0#on-process-done
 func wasmexport_OnProcessDone(payloadJson0 *uint8, payloadJson1 uint32) (result *cm.Result[string, struct{}, string]) {
 	payloadJSON := cm.LiftString[string]((*uint8)(payloadJson0), (uint32)(payloadJson1))
 	result_ := Exports.OnProcessDone(payloadJSON)
@@ -28,8 +28,8 @@ func wasmexport_OnProcessDone(payloadJson0 *uint8, payloadJson1 uint32) (result 
 	return
 }
 
-//go:wasmexport wasmnest:plugin/events@0.0.2#on-bus-message
-//export wasmnest:plugin/events@0.0.2#on-bus-message
+//go:wasmexport wasmnest:plugin/events@0.1.0#on-bus-message
+//export wasmnest:plugin/events@0.1.0#on-bus-message
 func wasmexport_OnBusMessage(topic0 *uint8, topic1 uint32, payloadJson0 *uint8, payloadJson1 uint32) (result *cm.Result[string, struct{}, string]) {
 	topic := cm.LiftString[string]((*uint8)(topic0), (uint32)(topic1))
 	payloadJSON := cm.LiftString[string]((*uint8)(payloadJson0), (uint32)(payloadJson1))
@@ -38,16 +38,16 @@ func wasmexport_OnBusMessage(topic0 *uint8, topic1 uint32, payloadJson0 *uint8, 
 	return
 }
 
-//go:wasmexport wasmnest:plugin/events@0.0.2#on-auth-success
-//export wasmnest:plugin/events@0.0.2#on-auth-success
+//go:wasmexport wasmnest:plugin/events@0.1.0#on-auth-success
+//export wasmnest:plugin/events@0.1.0#on-auth-success
 func wasmexport_OnAuthSuccess() (result *cm.Result[string, struct{}, string]) {
 	result_ := Exports.OnAuthSuccess()
 	result = &result_
 	return
 }
 
-//go:wasmexport wasmnest:plugin/events@0.0.2#on-disconnect
-//export wasmnest:plugin/events@0.0.2#on-disconnect
+//go:wasmexport wasmnest:plugin/events@0.1.0#on-disconnect
+//export wasmnest:plugin/events@0.1.0#on-disconnect
 func wasmexport_OnDisconnect(reason0 *uint8, reason1 uint32) (result *cm.Result[string, struct{}, string]) {
 	reason := cm.LiftString[string]((*uint8)(reason0), (uint32)(reason1))
 	result_ := Exports.OnDisconnect(reason)
@@ -55,8 +55,8 @@ func wasmexport_OnDisconnect(reason0 *uint8, reason1 uint32) (result *cm.Result[
 	return
 }
 
-//go:wasmexport wasmnest:plugin/events@0.0.2#on-session-created
-//export wasmnest:plugin/events@0.0.2#on-session-created
+//go:wasmexport wasmnest:plugin/events@0.1.0#on-session-created
+//export wasmnest:plugin/events@0.1.0#on-session-created
 func wasmexport_OnSessionCreated(sessionId0 *uint8, sessionId1 uint32) (result *cm.Result[string, struct{}, string]) {
 	sessionID := cm.LiftString[string]((*uint8)(sessionId0), (uint32)(sessionId1))
 	result_ := Exports.OnSessionCreated(sessionID)
@@ -64,8 +64,8 @@ func wasmexport_OnSessionCreated(sessionId0 *uint8, sessionId1 uint32) (result *
 	return
 }
 
-//go:wasmexport wasmnest:plugin/events@0.0.2#on-session-stopped
-//export wasmnest:plugin/events@0.0.2#on-session-stopped
+//go:wasmexport wasmnest:plugin/events@0.1.0#on-session-stopped
+//export wasmnest:plugin/events@0.1.0#on-session-stopped
 func wasmexport_OnSessionStopped(sessionId0 *uint8, sessionId1 uint32) (result *cm.Result[string, struct{}, string]) {
 	sessionID := cm.LiftString[string]((*uint8)(sessionId0), (uint32)(sessionId1))
 	result_ := Exports.OnSessionStopped(sessionID)

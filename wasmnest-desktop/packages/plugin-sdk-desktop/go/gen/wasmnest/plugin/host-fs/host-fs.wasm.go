@@ -6,28 +6,28 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.0.2".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:plugin@0.1.0".
 
-//go:wasmimport wasmnest:plugin/host-fs@0.0.2 read
+//go:wasmimport wasmnest:plugin/host-fs@0.1.0 read
 //go:noescape
 func wasmimport_Read(path0 *uint8, path1 uint32, result *cm.Result[OptionStringShape, cm.Option[string], string])
 
-//go:wasmimport wasmnest:plugin/host-fs@0.0.2 write
+//go:wasmimport wasmnest:plugin/host-fs@0.1.0 write
 //go:noescape
 func wasmimport_Write(path0 *uint8, path1 uint32, data0 *uint8, data1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport wasmnest:plugin/host-fs@0.0.2 copy
+//go:wasmimport wasmnest:plugin/host-fs@0.1.0 copy
 //go:noescape
 func wasmimport_Copy(src0 *uint8, src1 uint32, dst0 *uint8, dst1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport wasmnest:plugin/host-fs@0.0.2 delete
+//go:wasmimport wasmnest:plugin/host-fs@0.1.0 delete
 //go:noescape
 func wasmimport_Delete(path0 *uint8, path1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport wasmnest:plugin/host-fs@0.0.2 exists
+//go:wasmimport wasmnest:plugin/host-fs@0.1.0 exists
 //go:noescape
 func wasmimport_Exists(path0 *uint8, path1 uint32, result *cm.Result[string, bool, string])
 
-//go:wasmimport wasmnest:plugin/host-fs@0.0.2 request-auth
+//go:wasmimport wasmnest:plugin/host-fs@0.1.0 request-auth
 //go:noescape
 func wasmimport_RequestAuth(pathsJson0 *uint8, pathsJson1 uint32, result *cm.Result[string, bool, string])

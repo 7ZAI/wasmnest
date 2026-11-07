@@ -7,7 +7,7 @@
 //! world（它只绑 core 交集，见 `../wasmnest-lib/wasmnest-wasm-core/src/manager/runtime/
 //! core_binding.rs`），cap 扩展 interface 的 trait 由本文件生成，各能力 crate
 //! （provider 侧）则 bindgen 各自的 `wit/<domain>.wit` 分片。三方生成的
-//! `wasmnest::plugin::host_*::Host` **同名但不同类型**。
+//! `wasmnest::<pkg>::host_*::Host` **同名但不同类型**（ADR 0061 拆包后每域一包）。
 //!
 //! ## 纪律（批次 04/05 的路径 B 域）
 //!
@@ -45,7 +45,7 @@ mod tests {
     //!      宿主 Cargo.toml 依赖即编译期证明），cap 真源指向 crate 的 `wit/<domain>.wit`；
     //!   ② 端扩展 / 宿主路径 B 域（`http-endpoint` / `ws-server` / `desktop`）——
     //!      真源在宿主 `wit-src/`，MODULE_INTERFACES 在宿主 `src/plugin/`。
-    //! - cap-desktop.wit 的 world cap-desktop import 名集合 == 宿主路径 B 域
+    //! - 各端 cap 分片（ADR 0061 一域一文件的 `world cap-<key>`）import 名集合 == 宿主路径 B 域
     //!   MODULE_INTERFACES 的 host-* 名并集（11 个）。
     //! - 版本一致性（票 05 替代原 abi.version 双查）：端清单 package 名 == 能力仓
     //!   `wasmnest-contract` crate 的 `PACKAGE_NAME`，桌面 WIT 源文件 package 行 ==
@@ -96,13 +96,48 @@ mod tests {
         (name, version)
     }
 
-    /// 从 WIT 文本提取顶层 import 声明名（`import <name>;`）
-    fn wit_imports(text: &str) -> Vec<&str> {
-        text.lines()
-            .map(|l| l.trim())
-            .filter(|l| l.starts_with("import ") && l.ends_with(';'))
-            .map(|l| l.trim_start_matches("import ").trim_end_matches(';').trim())
-            .collect()
+    /// 读端清单里一个分片真源的 package 行（`package <name>@<x.y.z>;`）
+    fn slice_package_line(path: &std::path::Path) -> String {
+        std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("{} 不可读: {e}", path.display()))
+            .lines()
+            .map(str::trim)
+            .find(|l| l.starts_with("package "))
+            .unwrap_or_else(|| panic!("{} 缺 package 声明行", path.display()))
+            .to_string()
+    }
+
+    /// 端清单声明的全部包（core + face → 契约包；caps → 各自 package 字段）。
+    ///
+    /// 返回 `(包名@版本 -> 来源描述)`；同名包版本冲突即红（拆包后同名包只能有一个版本）。
+    fn declared_packages(m: &serde_json::Value) -> std::collections::BTreeMap<String, String> {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
+        let (pkg_name, pkg_version) = package_source();
+        let mut out = std::collections::BTreeMap::new();
+        out.insert(
+            format!("{pkg_name}@{pkg_version}"),
+            "wasmnest-contract（core / face）".to_string(),
+        );
+        for (key, spec) in m["caps"].as_object().expect("caps 是对象") {
+            let rel = spec["file"].as_str().unwrap_or_else(|| panic!("caps.{key}.file 缺失"));
+            let declared = spec["package"]
+                .as_str()
+                .unwrap_or_else(|| panic!("caps.{key}.package 缺失"));
+            let line = slice_package_line(&root.join(rel));
+            let full = line
+                .trim_start_matches("package ")
+                .trim_end_matches(';')
+                .to_string();
+            let name = full.rsplit_once('@').map(|(n, _)| n).unwrap_or(&full);
+            assert_eq!(
+                name, declared,
+                "caps.{key} 声明包名 `{declared}`，但分片真源 {rel} 的 package 行是 `{full}`"
+            );
+            if let Some(prev) = out.insert(full.clone(), format!("caps.{key}（{rel}）")) {
+                panic!("同名包只能有一个版本：{full} 同时出现在 {prev} 与 caps.{key}");
+            }
+        }
+        out
     }
 
     #[test]
@@ -110,6 +145,7 @@ mod tests {
         let raw = std::fs::read_to_string(manifest_path()).unwrap_or_else(|e| panic!("端清单缺失: {e}"));
         let m: serde_json::Value =
             serde_json::from_str(&raw).expect("端清单 JSON 可解析（compose-wit.mjs 的消费前提）");
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
 
         assert_eq!(m["world"], "plugin", "主 world 名是组合装配面");
         assert_eq!(
@@ -118,29 +154,45 @@ mod tests {
              wasmnest-contract 注入（ADR 0051 D3 单点化），清单回写版本=第二真源"
         );
 
-        let mut caps: Vec<&str> = m["caps"].as_object().unwrap().keys().map(|s| s.as_str()).collect();
-        caps.sort();
-        assert_eq!(caps, vec!["clipboard", "desktop", "http", "http-endpoint", "mdns", "notify", "peer", "pty", "ws", "ws-server"],
-            "caps 键漂移：能力域七片（pty/mdns/peer/http/ws/notify/clipboard）+ 端扩展三片（http-endpoint/ws-server/desktop）是当前唯一答案（ADR 0052 D2/D4）");
+        // compose v2（ADR 0061）：caps 值 = { file, package }，package 只写包名。
+        let caps = m["caps"].as_object().expect("caps 是对象");
+        let mut keys: Vec<&str> = caps.keys().map(|s| s.as_str()).collect();
+        keys.sort();
+        assert_eq!(
+            keys,
+            vec![
+                "api-call", "app", "auth-center", "clipboard", "connection-registry", "crypto",
+                "fs-desktop", "http", "http-endpoint", "mdns", "notify", "peer", "platform-desktop",
+                "process", "pty", "task", "timer", "ws", "ws-server",
+            ],
+            "caps 键漂移：能力域七片（pty/mdns/peer/http/ws/notify/clipboard）+ 端扩展十二片 \
+             （http-endpoint/ws-server/api-call/app/auth-center/connection-registry/crypto/ \
+             fs-desktop/platform-desktop/process/task/timer）是当前唯一答案（ADR 0061 §3.2）"
+        );
+        for (key, spec) in caps {
+            let rel = spec["file"]
+                .as_str()
+                .unwrap_or_else(|| panic!("caps.{key} 必须是 {{ file, package }}（compose v2 schema）"));
+            assert!(
+                root.join(rel).exists(),
+                "caps.{key} 的 file 真源缺失: {rel}"
+            );
+            let declared = spec["package"].as_str().expect("caps.*.package 是字符串");
+            assert!(
+                !declared.contains('@'),
+                "caps.{key}.package 不得含版本（版本真源=分片 .wit 的 package 行）"
+            );
+        }
 
-        for key in [
-            "pty",
-            "mdns",
-            "peer",
-            "http",
-            "ws",
-            "notify",
-            "clipboard",
-            "http-endpoint",
-            "ws-server",
-            "desktop",
-        ] {
-            let src = m["caps"][key].as_str().expect("caps 值为字符串路径");
-            let abs = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("..")
-                .join("..")
-                .join(src);
-            assert!(abs.exists(), "cap 真源缺失: {src}");
+        for rel in [m["core"].as_str().expect("core 为路径"), m["face"].as_str().expect("face 为路径")] {
+            let line = slice_package_line(&root.join(rel));
+            let (pkg_name, pkg_version) = package_source();
+            assert_eq!(
+                line,
+                format!("package {pkg_name}@{pkg_version};"),
+                "{rel} 的 package 行与契约真源 wasmnest-contract/src/lib.rs 漂移——\
+                 顶层文件必须同属 wasmnest:plugin 且同版本（wit-parser 要求）"
+            );
         }
 
         let mut worlds: Vec<&str> = m["worlds"]
@@ -150,90 +202,49 @@ mod tests {
             .map(|v| v.as_str().unwrap())
             .collect();
         worlds.sort();
-        assert_eq!(worlds, vec!["desktop-compat", "plugin", "plugin-auth-policy", "plugin-binary",
-            "plugin-system", "plugin-task", "plugin-ws"],
-            "worlds 漂移：桌面 7 个 world 是合成 package 的完整面（desktop-compat = file-transfer 单产物的移动宿主桩绑定面，binding-only）");
-
-        // 版本一致性检查（票 05 替代原 abi.version 双查；票 02 新锁口径）：compose
-        // package 版本 == 桌面 WIT 源文件 package 行。版本真源 = 能力仓
-        // wasmnest-contract crate（票 03 单点化）；`abi.version` 是票 04 的退役面，
-        // 本判据不读它。
-        let (pkg_name, pkg_version) = package_source();
         assert_eq!(
-            m["package"], pkg_name,
-            "端清单 package 与仓根版本真源 name 漂移（ADR 0051 D3 单点化）"
+            worlds,
+            vec!["desktop-compat", "plugin", "plugin-auth-policy", "plugin-binary",
+                "plugin-system", "plugin-task", "plugin-ws"],
+            "worlds 漂移：桌面 7 个 world 是合成 package 的完整面（desktop-compat = file-transfer 单产物的移动宿主桩绑定面，binding-only）"
         );
-        let expected_pkg = format!("package {pkg_name}@{pkg_version};");
-        for rel in [
-            "../wasmnest-lib/wasmnest-wasm-core/wit/core.wit",
-            "../wasmnest-lib/wasmnest-pty-engine/wit/pty.wit",
-            "../wasmnest-lib/wasmnest-discovery-engine/wit/mdns.wit",
-            "../wasmnest-lib/wasmnest-server-peer-net/wit/peer.wit",
-            "../wasmnest-lib/wasmnest-server-http/wit/http.wit",
-            "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit",
-            "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit",
-            "../wasmnest-lib/wasmnest-clipboard-engine/wit/clipboard.wit",
-            "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-http.wit",
-            "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-ws.wit",
-            "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-desktop.wit",
-        ] {
-            let path = repo_root().join(rel);
-            let line = std::fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("{path:?} 不可读: {e}"))
-                .lines()
-                .map(str::trim)
-                .find(|l| l.starts_with("package "))
-                .unwrap_or_else(|| panic!("{} 缺 package 声明行", path.display()))
-                .to_string();
-            assert_eq!(
-                line, expected_pkg,
-                "{rel} 的 package 行与契约真源 wasmnest-contract/src/lib.rs 漂移——\
-                 版本化后 import 名逐字匹配，源文件版本漂移＝运行期实例化失败（编译面不红）"
-            );
-        }
+
+        // 包表自洽（同名包不得双版本）；顺带保证每个 caps 分片都可读。
+        let packages = declared_packages(&m);
+        assert!(
+            packages.len() == caps.len() + 1,
+            "包表条数 {} != caps {} + 契约包 1（同名包被合并或缺失）",
+            packages.len(),
+            caps.len()
+        );
     }
 
+    /// 宿主白名单字面量的 `<pkg>@<ver>` 必须与端清单声明的包表逐字一致（ADR 0061）
+    ///
+    /// 拆包后宿主 `MODULE_INTERFACES` 跨多个包，接口名相同但版本不同的写法在编译面
+    /// 完全合法、运行期探测恒 None。此锁是「宿主字面量 ↔ compose 声明」的对偶面。
     #[test]
-    fn cap_desktop_imports_match_host_path_b_modules() {
-        let cap = std::fs::read_to_string(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../packages/plugin-sdk-desktop/rust/wit/cap-desktop.wit"),
-        )
-        .unwrap_or_else(|e| panic!("cap-desktop.wit 缺失: {e}"));
-
-        let world_body = cap
-            .split("world cap-desktop {")
-            .nth(1)
-            .expect("cap-desktop.wit 含 world cap-desktop")
-            .split('}')
-            .next()
-            .unwrap();
-        let mut imports = wit_imports(world_body);
-        imports.sort();
-        imports.dedup();
-
-        // 宿主路径 B 域 MODULE_INTERFACES 并集（10 个 host-* 名）；能力域
-        // （pty/http/websocket/peer/mdns/notify）interface 在各自 cap-*.wit，不在本文件。
-        // 票 04：`host-fs` 交集 6 收拢进共享核心 core.wit，cap-desktop 不再 import 它。
-        // 票 05 随元数据对齐修正：`host-auth` → `host-auth-center`（ADR 0031 认证中心）、
-        // `host-connection` → `host-connection-registry`（连接清单机制化）。
-        // 2026-10-13（domain-owned-contracts 票 04）：`host-events-desktop` 退役
-        // （notify 进共享域 host-notify，cap `notify` 归能力域分片）。
-        let expected = [
-            "host-api-call",
-            "host-app",
-            "host-auth-center",
-            "host-connection-registry",
-            "host-crypto",
-            "host-fs-desktop",
-            "host-platform-desktop",
-            "host-process",
-            "host-task",
-            "host-timer",
-        ];
-        assert_eq!(
-            imports, expected,
-            "cap-desktop.wit 的 import 面漂移：与宿主路径 B 域 MODULE_INTERFACES 并集不一致"
-        );
+    fn host_module_interface_packages_match_compose_declaration() {
+        let raw = std::fs::read_to_string(manifest_path()).unwrap_or_else(|e| panic!("端清单缺失: {e}"));
+        let m: serde_json::Value = serde_json::from_str(&raw).expect("端清单 JSON 可解析");
+        let declared = declared_packages(&m);
+        let registry = wasmnest_host_kit::ModuleRegistry::collected();
+        let mut checked = 0usize;
+        for desc in registry.descs() {
+            for iface in desc.interfaces {
+                let (package, _) = iface
+                    .split_once('/')
+                    .unwrap_or_else(|| panic!("接口路径应形如 ns:pkg@ver/iface，实际 {iface}"));
+                assert!(
+                    declared.contains_key(package),
+                    "宿主模块 `{}` 声明的接口 {iface} 指向包 `{package}`，但端清单未声明该包 \
+                     （能力域拆包后版本段各不相同，逐字不匹配＝运行期探测恒 None）",
+                    desc.name
+                );
+                checked += 1;
+            }
+        }
+        assert!(checked >= 10, "白名单接口只检查到 {checked} 条，锁可能空转");
     }
 
     // ==================== 票 07 批次 02：组合面 / 装配面动态锁 ====================
@@ -369,7 +380,7 @@ mod tests {
     #[test]
     fn compose_caps_and_host_module_interfaces_cover_each_other() {
         let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        // ① 装配面：白名单模块 → interface 名（`wasmnest:plugin@0.0.2/host-x` → `host-x`，
+        // ① 装配面：白名单模块 → interface 名（`wasmnest:<pkg>@<ver>/host-x` → `host-x`，
         //    rsplit('/') 剥版本后缀——版本化契约下天然免疫，与 WIT world import 的
         //    纯接口名两侧对得上）
         let registry = wasmnest_host_kit::ModuleRegistry::collected();
@@ -394,7 +405,7 @@ mod tests {
         let caps = m["caps"].as_object().expect("caps 是对象");
         let mut cap_worlds: Vec<(String, String)> = Vec::new(); // (cap key, 真源内容)
         for (key, v) in caps {
-            let path = repo_root.join(v.as_str().expect("cap 值为路径"));
+            let path = repo_root.join(v["file"].as_str().expect("caps.*.file 是路径"));
             let src =
                 std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cap 真源不可读 {}: {e}", path.display()));
             cap_worlds.push((key.clone(), src));

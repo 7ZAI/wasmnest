@@ -5,7 +5,7 @@
 //! - **`host-notify`（共享域契约，真源 `packages/wasmnest-notify-engine/wit/notify.wit`）**：
 //!   `notify` 本体是双端功能级交集 → 统一签名 `notify(title, body, options)`，
 //!   桌面/移动各消费同一份契约；移动端权限位 `notify`（fail-closed）。
-//! - **`host-notify-mobile`（移动扩展，cap-mobile）**：通知权限查询 / 请求 +
+//! - **`host-notify-mobile`（移动扩展，`deps/notify-mobile/`）**：通知权限查询 / 请求 +
 //!   即时震动 + 提示音（桌面无对应平台概念，不归交集）。
 //!
 //! 全部是「离宿主无法实现」的平台交互原语（零业务语义，ADR 0022）——文案 /
@@ -49,7 +49,7 @@ pub trait HostNotify {
     fn notify(&self, title: &str, body: &str, options: &NotifyOptions) -> Result<(), HostError>;
 }
 
-/// 移动端通知扩展（`host-notify-mobile`，cap-mobile；权限位同 `notify`）
+/// 移动端通知扩展（`host-notify-mobile`，`deps/notify-mobile/`；权限位同 `notify`）
 pub trait HostNotifyMobile {
     /// 通知权限是否已授予（Android 13+ 需 POST_NOTIFICATIONS 且系统通知
     /// 总开关开启；Android 12 及以下恒 true）
