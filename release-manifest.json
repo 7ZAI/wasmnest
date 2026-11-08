@@ -12,12 +12,13 @@
   "contract": {
     "package": "wasmnest:plugin",
     "version": "0.1.0",
-    "witSha256": "abb406754cfee66069f86c8759dde7554bf58f99ea01b92ffa584e8ff620ad7f",
+    "witSha256": "a0b7f220251e6a2213299fa51e0bfb860f4b1a9690b1744e6bb9248779ae95bb",
     "packages": {
       "wasmnest:plugin": "0.1.0",
       "wasmnest:pty": "0.0.1",
       "wasmnest:mdns": "0.0.1",
       "wasmnest:peer": "0.0.1",
+      "wasmnest:tunnel": "0.0.1",
       "wasmnest:http": "0.0.1",
       "wasmnest:ws": "0.0.1",
       "wasmnest:notify": "0.0.1",

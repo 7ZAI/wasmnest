@@ -22,4 +22,5 @@ world plugin {
     include wasmnest:process/cap-process@0.0.1;
     include wasmnest:task/cap-task@0.0.1;
     include wasmnest:timer/cap-timer@0.0.1;
+    include wasmnest:tunnel/cap-tunnel@0.0.1;
 }

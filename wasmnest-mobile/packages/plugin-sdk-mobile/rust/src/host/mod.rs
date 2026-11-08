@@ -30,6 +30,8 @@ pub mod peer;
 pub mod platform;
 pub mod storage;
 pub mod terminal_stream;
+/// 内网穿透通道（`host-tunnel`，T06）
+pub mod tunnel;
 pub mod ws;
 
 pub use auth::HostAuth;
@@ -48,6 +50,7 @@ pub use peer::{HostPeer, PeerNodeConfig};
 pub use platform::HostPlatform;
 pub use storage::HostStorage;
 pub use terminal_stream::HostTerminalStream;
+pub use tunnel::{HostTunnel, TunnelConfig, TunnelExposeConfig};
 pub use ws::{
     parse_ws_frame, ws_event_topic, ws_message_topic, HostWs, WsIncomingFrame, WS_CLOSE, WS_ERROR,
     WS_MESSAGE, WS_OPEN, WS_RECONNECT_SCHEDULED,
@@ -174,6 +177,7 @@ pub trait HostApi:
     + HostConfig
     + HostWs
     + HostMetrics
+    + HostTunnel
 {
 }
 
@@ -196,5 +200,6 @@ impl<T> HostApi for T where
         + HostConfig
         + HostWs
         + HostMetrics
+        + HostTunnel
 {
 }

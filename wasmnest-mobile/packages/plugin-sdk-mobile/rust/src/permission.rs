@@ -50,6 +50,16 @@ pub const PERMISSION_NOTIFY: &str = "notify";
 /// 只读、只含计数与 plugin_id；但可读**全局**插件维度，能推断其他应用活跃度，
 /// 故单独立位、fail-closed（无前端 API 面，宿主在 host fn 层仲裁）。
 pub const PERMISSION_METRICS_READ: &str = "metrics:read";
+/// 内网穿透·服务端（T06）：`host-tunnel` 的 expose / unexpose / issue-pairing-ticket
+///
+/// 移动端当前是纯拨号方（T09），本位为与 core 真源集合相等而登记；未声明本位的
+/// 应用永远 lan-only。`allowWan` 是应用设置经 `tunnel.configure` 写入的通道配置。
+pub const PERMISSION_TUNNEL_SERVE: &str = "tunnel:serve";
+/// 内网穿透·客户端（T06）：`host-tunnel` 的 connect / close
+///
+/// 客户端只在本机 `127.0.0.1` 起临时端口（不变量 1），但会把远端端口映射成
+/// 本机可访问面，且拨号可消耗中继带宽；故与应用侧配对语义分开授权。
+pub const PERMISSION_TUNNEL_CONNECT: &str = "tunnel:connect";
 
 /// 权限词汇全量表（pub：宿主机制层〔wasm-core-mobile 权限漂移锁〕与生成物
 /// 校验消费；新增权限必须在此登记，否则 grant 静默丢弃）
@@ -72,6 +82,8 @@ pub static VALID_PERMISSIONS: &[&str] = &[
     PERMISSION_AUTH,
     PERMISSION_NOTIFY,
     PERMISSION_METRICS_READ,
+    PERMISSION_TUNNEL_SERVE,
+    PERMISSION_TUNNEL_CONNECT,
 ];
 
 /// 已退役权限位（票 2026-10-10 批次 C2）：`ui:toolbox` / `ui:navtab` / `ui:input`
@@ -153,6 +165,14 @@ static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
     (PERMISSION_NOTIFY, &[]),
     // 运行监控（WASM-only：宿主 `host-metrics.snapshot`，无前端调用点）
     (PERMISSION_METRICS_READ, &["metrics.snapshot"]),
+    // 内网穿透（T06）：服务端 / 客户端分域授权。`status` 与 `configure` 允许
+    // 任一权限——只读投影与通道配置不单独构成暴露面（门禁在 lib 的
+    // `tunnel/plugin_binding.rs::require_either`）。
+    (
+        PERMISSION_TUNNEL_SERVE,
+        &["tunnel.expose", "tunnel.unexpose", "tunnel.issuePairingTicket"],
+    ),
+    (PERMISSION_TUNNEL_CONNECT, &["tunnel.connect", "tunnel.close"]),
 ];
 
 pub struct PermissionManager {

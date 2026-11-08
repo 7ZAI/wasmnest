@@ -16,8 +16,8 @@
 use crate::host::{
     ConfigKey, HostAuth, HostBus, HostConfig, HostConnection, HostError, HostEvents,
     HostFs, HostHttp, HostLog, HostMdns, HostMetrics, HostNotify, HostNotifyMobile, HostPeer,
-    HostPlatform, HostPluginDatabase, HostStorage, HostTerminalStream, HostWs, NotifyOptions,
-    PeerNodeConfig,
+    HostPlatform, HostPluginDatabase, HostStorage, HostTerminalStream, HostTunnel, HostWs,
+    NotifyOptions, PeerNodeConfig, TunnelConfig, TunnelExposeConfig,
 };
 use crate::wasm::wasmnest::auth_client::host_auth_client;
 use crate::wasm::wasmnest::plugin::host_bus;
@@ -37,6 +37,7 @@ use crate::wasm::wasmnest::plugin::host_platform;
 use crate::wasm::wasmnest::plugin::host_plugin_database;
 use crate::wasm::wasmnest::plugin::host_storage;
 use crate::wasm::wasmnest::terminal_stream::host_terminal_stream;
+use crate::wasm::wasmnest::tunnel::host_tunnel;
 use crate::wasm::wasmnest::ws::host_websocket;
 
 
@@ -584,5 +585,62 @@ impl HostWs for WasmHost {
 
     fn ws_is_connected(&self, handle: &str) -> Result<bool, HostError> {
         host_websocket::is_connected(handle).map_err(|e| host_err("ws_is_connected", e))
+    }
+}
+
+// ==================== HostTunnel（内网穿透，T06） ====================
+
+impl HostTunnel for WasmHost {
+    fn tunnel_configure(&self, config: &TunnelConfig) -> Result<bool, HostError> {
+        let relay_addrs_json = serde_json::to_string(&config.relay_addrs)
+            .map_err(|e| host_err("tunnel_configure", format!("relayAddrs 序列化失败：{e}")))?;
+        host_tunnel::configure(&host_tunnel::TunnelConfig {
+            allow_wan: config.allow_wan,
+            relay_addrs_json,
+        })
+        .map_err(|e| host_err("tunnel_configure", e))
+    }
+
+    fn tunnel_expose(&self, config: &TunnelExposeConfig) -> Result<String, HostError> {
+        host_tunnel::expose(&host_tunnel::ExposeConfig {
+            port: config.port,
+            kind: config.kind.clone(),
+            label: config.label.clone(),
+            allowed_peers: config.allowed_peers.clone(),
+        })
+        .map_err(|e| host_err("tunnel_expose", e))
+    }
+
+    fn tunnel_unexpose(&self, rule_id: &str) -> Result<bool, HostError> {
+        host_tunnel::unexpose(rule_id).map_err(|e| host_err("tunnel_unexpose", e))
+    }
+
+    fn tunnel_connect(
+        &self,
+        node_id: &str,
+        port: u16,
+        kind: &str,
+        addrs: &[String],
+        pairing_ticket: Option<String>,
+    ) -> Result<serde_json::Value, HostError> {
+        let addrs_json = serde_json::to_string(addrs)
+            .map_err(|e| host_err("tunnel_connect", format!("addrs 序列化失败：{e}")))?;
+        let raw = host_tunnel::connect(node_id, port, kind, &addrs_json, pairing_ticket)
+            .map_err(|e| host_err("tunnel_connect", e))?;
+        parse_json("tunnel_connect", raw)
+    }
+
+    fn tunnel_close(&self, handle: &str) -> Result<bool, HostError> {
+        host_tunnel::close(handle).map_err(|e| host_err("tunnel_close", e))
+    }
+
+    fn tunnel_issue_pairing_ticket(&self, port: u16, ttl_secs: u32) -> Result<String, HostError> {
+        host_tunnel::issue_pairing_ticket(port, ttl_secs)
+            .map_err(|e| host_err("tunnel_issue_pairing_ticket", e))
+    }
+
+    fn tunnel_status(&self) -> Result<serde_json::Value, HostError> {
+        let raw = host_tunnel::status().map_err(|e| host_err("tunnel_status", e))?;
+        parse_json("tunnel_status", raw)
     }
 }

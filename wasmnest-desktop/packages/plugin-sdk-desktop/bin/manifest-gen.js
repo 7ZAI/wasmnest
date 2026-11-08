@@ -92,6 +92,10 @@ const RUST_PERMISSION_RULES = [
   { re: /\bplugin_db_\w+\b/, perm: 'storage' },
   // 运行监控（WIT `host-metrics.snapshot`）：只读、全局可见（一次授权看全部插件）
   { re: /\bmetrics_snapshot\b/, perm: 'metrics:read' },
+  // 内网穿透（T06）：服务端 / 客户端分域；`configure` / `status` 是共用面
+  // （任一权限即可），不单独推导，避免给应用注入它没声明的位。
+  { re: /\btunnel_(expose|unexpose|issue_pairing_ticket)\b/, perm: 'tunnel:serve' },
+  { re: /\btunnel_(connect|close)\b/, perm: 'tunnel:connect' },
 ]
 
 /**
