@@ -96,6 +96,22 @@ pub async fn clear_persisted_activation_snapshot(storage: &PluginStorage) -> Res
     Ok(())
 }
 
+/// 宿主壳清单条目（注册表投影 + 偏好同位）
+///
+/// `flatten` 让 wire 形状仍是「插件字段平铺 + enabled/autostart」——与逐应用偏好
+/// 查询的结果合并后同形，前端不必区分两种清单。应用前端消费的
+/// `plugin_list_loaded`（能力仓 `HostPluginInfo`）形状不受影响。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostShellPluginInfo {
+    #[serde(flatten)]
+    pub plugin: HostPluginInfo,
+    /// 主屏入口可见性偏好（缺省 true；`false` = 用户停用 → 主屏 / 搜索隐藏入口）
+    pub enabled: bool,
+    /// 启动时自动激活偏好（缺省按装配角色：L1/L2 开、L3 关）
+    pub autostart: bool,
+}
+
 /// 桌面宿主侧插件生命周期编排层
 ///
 /// 命令面（`lib.rs` 注册）与壳（`wasm-apps/bedcode/src/shell/useShellApps.ts`）
@@ -124,6 +140,33 @@ impl PluginLifecycleManager {
     /// 已加载插件清单（含运行态，供壳注册表投影）
     pub async fn list_loaded(&self) -> Vec<HostPluginInfo> {
         self.host.list_plugins().await
+    }
+
+    /// 已加载插件清单 + 两个偏好同位返回（壳主屏投影一次性取齐）
+    ///
+    /// 为什么把偏好并进清单：壳主屏每次刷新都要 `enabled` / `autostart`，逐应用
+    /// 两条命令在随包 6 应用时就是 1+2N 次串行 IPC（动作后还会再全量刷一轮）。
+    /// 偏好真源在本编排层（`plugin.enabled.*` / `plugin.autostart.*` 的系统分区行），
+    /// 只有平台侧知道 key 语义——由本层在进程内合并，壳只付一次往返。
+    ///
+    /// 缺省取向与 [`Self::is_enabled`] / [`Self::is_autostart`] 逐字一致（enabled 缺省
+    /// 可见、autostart 按装配角色），不另立第二套判据。
+    pub async fn list_loaded_with_prefs(&self) -> Vec<HostShellPluginInfo> {
+        // 先取完清单再逐条读偏好：`is_autostart` 内部要 `get_plugin`（再取一次
+        // 插件表读锁），不能与 `list_plugins` 的读锁嵌套（tokio 公平锁下有写者
+        // 排队时可能自锁）
+        let infos = self.list_loaded().await;
+        let mut out = Vec::with_capacity(infos.len());
+        for info in infos {
+            let enabled = self.is_enabled(&info.id).await;
+            let autostart = self.is_autostart(&info.id).await;
+            out.push(HostShellPluginInfo {
+                plugin: info,
+                enabled,
+                autostart,
+            });
+        }
+        out
     }
 
     /// 单个插件信息
@@ -588,6 +631,18 @@ pub async fn plugin_mark_error(
     Ok(())
 }
 
+/// 宿主壳应用清单（注册表投影 + 偏好同位；壳 `useShellApps` 的唯一清单来源）
+///
+/// 与逐应用 `plugin_is_enabled` / `plugin_is_autostart` 并存不冲突：那两条仍是
+/// 「单点查询 / 设置页回读」的命令面，本命令只服务「一次刷新取齐」。应用前端拿不到
+/// 本命令（它不在 `APP_FRONTEND_INVOKE_WHITELIST`），清单面仍走 `plugin_list_loaded`。
+#[tauri::command]
+pub async fn plugin_list_with_prefs(
+    manager: State<'_, Arc<PluginLifecycleManager>>,
+) -> Result<Vec<HostShellPluginInfo>> {
+    Ok(manager.list_loaded_with_prefs().await)
+}
+
 /// 查询插件启用状态（主屏入口可见性偏好：缺省 true = 显示；不是启动触发器）
 #[tauri::command]
 pub async fn plugin_is_enabled(plugin_id: String, manager: State<'_, Arc<PluginLifecycleManager>>) -> Result<bool> {
@@ -685,6 +740,50 @@ mod tests {
             .await
             .expect("write false");
         assert!(!read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.a", true).await);
+    }
+
+    /// 壳清单 wire 形状（F1）：插件字段**平铺** + enabled/autostart 同位
+    ///
+    /// 前端 `HostShellPluginInfo` 按这个形状读（`info.enabled` / `info.autostart`），
+    /// 包一层 `{ plugin: {...} }` 会让投影静默丢掉全部字段（TS 侧不看错字段）。
+    #[test]
+    fn shell_list_wire_shape_flattens_plugin_fields_with_prefs() {
+        use wasmnest_wasm_core::manifest::{PluginContributes, PluginKind, PluginState, PluginType};
+        let info = HostPluginInfo {
+            id: "com.wasmnest.test".into(),
+            name: "Test".into(),
+            version: "1.0.0".into(),
+            description: String::new(),
+            author: String::new(),
+            main: "index.js".into(),
+            plugin_type: PluginType::Frontend,
+            kind: PluginKind::BusinessApp,
+            background_transport: false,
+            update: None,
+            rust_library: String::new(),
+            permissions: vec!["storage".into()],
+            state: PluginState::Activated,
+            extension_path: "/tmp/plugin".into(),
+            contributes: PluginContributes::default(),
+            icon: None,
+            source: "wasm".into(),
+            size_bytes: 0,
+            installed_at: None,
+        };
+        let json = serde_json::to_value(HostShellPluginInfo {
+            plugin: info,
+            enabled: true,
+            autostart: false,
+        })
+        .expect("serialize");
+        assert_eq!(json["id"], "com.wasmnest.test");
+        assert_eq!(json["pluginType"], "frontend");
+        assert_eq!(json["enabled"], true);
+        assert_eq!(json["autostart"], false);
+        assert!(
+            json.get("plugin").is_none(),
+            "壳清单必须平铺（前端按顶层字段读），不得包一层 plugin"
+        );
     }
 
     #[test]

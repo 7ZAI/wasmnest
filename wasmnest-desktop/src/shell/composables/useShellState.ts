@@ -404,12 +404,16 @@ const canGoBack = computed(() => {
 /**
  * 全部关闭：一键清场——每个应用卡真停用（失败保留该卡并 toast），系统页卡直关；
  * 全部成功后回主屏 + 落一条事件通知。
+ *
+ * 逐张停用用 `refresh: false`，循环后统一刷一次清单：否则 N 张卡各触发一轮全量
+ * 清单拉取（O(N²) 往返，且每轮都重建整张卡列表）。
  */
 async function stopAllCards(): Promise<void> {
   const keys = [...cards.value]
   if (!keys.length) return
   const apps = useShellApps()
   let closedCount = 0
+  let stoppedAny = false
   const remaining: CardKey[] = []
   for (const key of keys) {
     if (cardKind(key) === 'sys') {
@@ -417,13 +421,15 @@ async function stopAllCards(): Promise<void> {
       continue
     }
     const appId = cardId(key)
-    const ok = await apps.deactivate(appId)
+    const ok = await apps.deactivate(appId, { refresh: false })
+    stoppedAny = true
     if (ok) {
       closedCount += 1
       // 实例停用 = 应用被关掉：页面记忆随之作废
       forgetAppRoute(appId)
     } else remaining.push(key)
   }
+  if (stoppedAny) await apps.refresh()
   cards.value = remaining
   if (closedCount > 0) {
     pushNotif({

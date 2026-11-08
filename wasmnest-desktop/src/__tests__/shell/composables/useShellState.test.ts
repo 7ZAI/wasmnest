@@ -233,7 +233,7 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       ]
       await s.stopAllCards()
       expect(apps.deactivate, '服务型应用无卡，不被全部关闭触达').toHaveBeenCalledTimes(1)
-      expect(apps.deactivate).toHaveBeenCalledWith(TERMINAL_PLUGIN_ID)
+      expect(apps.deactivate).toHaveBeenCalledWith(TERMINAL_PLUGIN_ID, { refresh: false })
       expect(apps.deactivate).not.toHaveBeenCalledWith(MONITOR_ID)
     })
   })
@@ -425,7 +425,8 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       await s.openApp(TERMINAL_PLUGIN_ID)
       s.openSys('settings')
       await s.stopAllCards()
-      expect(apps.deactivate).toHaveBeenCalledWith(TERMINAL_PLUGIN_ID)
+      // 批量关闭逐张停用且关掉逐张刷新（收尾统一刷一次，F1）
+      expect(apps.deactivate).toHaveBeenCalledWith(TERMINAL_PLUGIN_ID, { refresh: false })
       expect(s.cards.value).toEqual([])
       expect(s.screen.value).toBe('home')
       expect(router.push).toHaveBeenLastCalledWith('/')

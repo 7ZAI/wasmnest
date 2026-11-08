@@ -37,13 +37,13 @@ import {
   mapDisplayState,
   pluginIdOfAppRoute,
   useShellApps,
-  type HostPluginInfo,
+  type HostShellPluginInfo,
 } from '@/shell/composables/useShellApps'
 
 const mockedInvoke = vi.mocked(invoke)
 
-/** 构造一条宿主插件信息（缺省运行中） */
-function info(overrides: Partial<HostPluginInfo> = {}): HostPluginInfo {
+/** 构造一条宿主壳清单条目（缺省运行中 + 偏好缺省：启用可见 / 不自启） */
+function info(overrides: Partial<HostShellPluginInfo> = {}): HostShellPluginInfo {
   return {
     id: 'com.wasmnest.test-app',
     name: 'Test App',
@@ -59,6 +59,8 @@ function info(overrides: Partial<HostPluginInfo> = {}): HostPluginInfo {
     contributes: {},
     source: 'wasm',
     sizeBytes: 1234,
+    enabled: true,
+    autostart: false,
     ...overrides,
   }
 }
@@ -74,28 +76,25 @@ describe('注册表投影（plugin_list_loaded 真通道）', () => {
     apps.lastError.value = null
   })
 
-  it('清单投影：id = pluginId，运行态归并，路由表覆盖全部有前端界面的应用（机制 B）', async () => {
-    mockedInvoke
-      .mockResolvedValueOnce([
-        info({ id: TERMINAL_PLUGIN_ID, name: 'BedCode' }),
-        info({ id: 'com.wasmnest.ai-chatbox', name: 'AI Chatbox' }),
-        info({
-          id: 'com.wasmnest.file-transfer',
-          name: 'File Transfer',
-          state: { state: 'deactivated' },
-        }),
-      ])
-      .mockResolvedValueOnce(true) // bedcode enabled
-      .mockResolvedValueOnce(false) // bedcode autostart
-      .mockResolvedValueOnce(false) // ai-chatbox enabled
-      .mockResolvedValueOnce(false) // ai-chatbox autostart
-      .mockResolvedValueOnce(false) // file-transfer enabled
-      .mockResolvedValueOnce(false) // file-transfer autostart
+  it('清单投影：id = pluginId，运行态归并，同形字段随清单同位返回（机制 B）', async () => {
+    mockedInvoke.mockResolvedValueOnce([
+      info({ id: TERMINAL_PLUGIN_ID, name: 'BedCode' }),
+      info({ id: 'com.wasmnest.ai-chatbox', name: 'AI Chatbox' }),
+      info({
+        id: 'com.wasmnest.file-transfer',
+        name: 'File Transfer',
+        state: { state: 'deactivated' },
+        enabled: false,
+        autostart: true,
+      }),
+    ])
 
     const apps = useShellApps()
     await apps.load()
 
-    expect(mockedInvoke.mock.calls[0][0]).toBe('plugin_list_loaded') // 首个 invoke = 清单真通道
+    expect(mockedInvoke.mock.calls[0][0]).toBe('plugin_list_with_prefs') // 首个 invoke = 清单真通道
+    // F1 锁：清单 + 偏好一次取齐（1 次 IPC，而不再是对每个应用 2 次偏好查询）
+    expect(mockedInvoke).toHaveBeenCalledTimes(1)
     const list = apps.plugins.value
     expect(list.length).toBe(3)
     expect(list[0].id).toBe(TERMINAL_PLUGIN_ID)
@@ -107,6 +106,8 @@ describe('注册表投影（plugin_list_loaded 真通道）', () => {
     expect(list[2].state).toBe('dormant') // deactivated → 未启动
     expect(list[0].enabled).toBe(true)
     expect(list[0].autostart).toBe(false)
+    expect(list[2].enabled).toBe(false)
+    expect(list[2].autostart).toBe(true)
     expect(apps.listReady.value).toBe(true)
     expect(apps.lastError.value).toBeNull()
   })
@@ -115,7 +116,7 @@ describe('注册表投影（plugin_list_loaded 真通道）', () => {
     const infos = Array.from({ length: 256 }, (_, i) =>
       info({ id: `com.wasmnest.scale.manifest${String(i).padStart(3, '0')}` }),
     )
-    mockedInvoke.mockResolvedValueOnce(infos).mockResolvedValue(false)
+    mockedInvoke.mockResolvedValueOnce(infos)
 
     const apps = useShellApps()
     await apps.load()
@@ -136,26 +137,28 @@ describe('注册表投影（plugin_list_loaded 真通道）', () => {
     expect(apps.lastError.value).toBe('host.internal')
   })
 
-  it('偏好查询失败不影响清单投影（按各 key 缺省取向容错：enabled 可见 / autostart 关）', async () => {
-    mockedInvoke
-      .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })])
-      .mockRejectedValueOnce(new Error('pref backend down'))
-      .mockRejectedValueOnce(new Error('pref backend down'))
+  it('清单缺偏好字段时按保守缺省容错（enabled 可见 / autostart 关），不再重试单点查询', async () => {
+    // 后端总带这两个字段；万一旧宿主 / 手工 payload 缺失，按「入口可见、不自启」投影，
+    // 且绝不回落到逐应用查询（否则又变回 1+2N 次 IPC）
+    const bare = { ...info({ id: 'com.wasmnest.test-app' }) } as Record<string, unknown>
+    delete bare.enabled
+    delete bare.autostart
+    mockedInvoke.mockResolvedValueOnce([bare])
     const apps = useShellApps()
     await apps.load()
-    expect(apps.plugins.value.length).toBe(1)
     expect(apps.plugins.value[0].enabled).toBe(true)
     expect(apps.plugins.value[0].autostart).toBe(false)
-    expect(apps.lastError.value).toBeNull() // 清单成功，偏好失败不污染主错误
+    expect(mockedInvoke).toHaveBeenCalledTimes(1)
+    expect(mockedInvoke).not.toHaveBeenCalledWith('plugin_is_enabled', expect.anything())
+    expect(mockedInvoke).not.toHaveBeenCalledWith('plugin_is_autostart', expect.anything())
+    expect(apps.lastError.value).toBeNull()
   })
 
   it('approvalApps 派生：只取展示态 approval 的应用', async () => {
-    mockedInvoke
-      .mockResolvedValueOnce([
-        info({ id: 'com.wasmnest.a', state: { state: 'needsApproval' } }),
-        info({ id: 'com.wasmnest.b', state: { state: 'activated' } }),
-      ])
-      .mockResolvedValue(false)
+    mockedInvoke.mockResolvedValueOnce([
+      info({ id: 'com.wasmnest.a', state: { state: 'needsApproval' } }),
+      info({ id: 'com.wasmnest.b', state: { state: 'activated' } }),
+    ])
     const apps = useShellApps()
     await apps.load()
     expect(apps.approvalApps.value.map((a) => a.id)).toEqual(['com.wasmnest.a'])
@@ -199,9 +202,7 @@ describe('生命周期动作（真实命令面）', () => {
     apps.listReady.value = false
     apps.loading.value = false
     apps.lastError.value = null
-    mockedInvoke
-      .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })]) // load 清单
-      .mockResolvedValue(false) // 偏好查询
+    mockedInvoke.mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })]) // load 清单
   })
 
   async function seeded() {
@@ -216,7 +217,6 @@ describe('生命周期动作（真实命令面）', () => {
       .mockResolvedValueOnce(undefined) // preauthorize
       .mockResolvedValueOnce(undefined) // activate
       .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app', state: { state: 'activated' } })]) // refresh 清单
-      .mockResolvedValue(false)
     const ok = await apps.activate('com.wasmnest.test-app')
     expect(ok).toBe(true)
     expect(mockedInvoke).toHaveBeenCalledWith('plugin_preauthorize', {
@@ -236,7 +236,6 @@ describe('生命周期动作（真实命令面）', () => {
       // 宿主真实形状：AppError 序列化后的信封对象（不是 Error）
       .mockRejectedValueOnce({ code: 'host.plugin.activate', request_id: 'req-1' })
       .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })]) // activate 失败后的清单刷新
-      .mockResolvedValue(false)
     const ok = await apps.activate('com.wasmnest.test-app')
     expect(ok).toBe(false)
     // lastError = 信封 code（供分支判断）；展示文案由 showUserError 走 errors.<code>
@@ -252,7 +251,6 @@ describe('生命周期动作（真实命令面）', () => {
       .mockResolvedValueOnce([
         info({ id: 'com.wasmnest.test-app', state: { state: 'deactivated' } }),
       ])
-      .mockResolvedValue(false)
     const ok = await apps.deactivate('com.wasmnest.test-app')
     expect(ok).toBe(true)
     expect(mockedInvoke).toHaveBeenCalledWith('plugin_deactivate', {
@@ -268,14 +266,13 @@ describe('生命周期动作（真实命令面）', () => {
     mockedInvoke
       .mockResolvedValueOnce(['storage'])
       .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })])
-      .mockResolvedValue(false)
     expect(await apps.approve('com.wasmnest.test-app')).toBe(true)
     expect(mockedInvoke).toHaveBeenCalledWith('plugin_approve', {
       pluginId: 'com.wasmnest.test-app',
       credential: expect.any(String),
     })
 
-    mockedInvoke.mockResolvedValueOnce(undefined).mockResolvedValueOnce([]).mockResolvedValue(false)
+    mockedInvoke.mockResolvedValueOnce(undefined).mockResolvedValueOnce([])
     expect(await apps.uninstall('com.wasmnest.test-app')).toBe(true)
     expect(mockedInvoke).toHaveBeenCalledWith('plugin_uninstall', {
       pluginId: 'com.wasmnest.test-app',
@@ -286,7 +283,6 @@ describe('生命周期动作（真实命令面）', () => {
     mockedInvoke
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })])
-      .mockResolvedValue(false)
     expect(await apps.setEnabled('com.wasmnest.test-app', true)).toBe(true)
     expect(mockedInvoke).toHaveBeenCalledWith('plugin_set_enabled', {
       pluginId: 'com.wasmnest.test-app',
@@ -297,7 +293,6 @@ describe('生命周期动作（真实命令面）', () => {
     mockedInvoke
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })])
-      .mockResolvedValue(false)
     expect(await apps.setAutostart('com.wasmnest.test-app', true)).toBe(true)
     expect(mockedInvoke).toHaveBeenCalledWith('plugin_set_autostart', {
       pluginId: 'com.wasmnest.test-app',
@@ -322,7 +317,6 @@ describe('生命周期动作（真实命令面）', () => {
     expect(apps.busyId.value).toBe('com.wasmnest.test-app')
     release()
     mockedInvoke.mockResolvedValueOnce([info({ id: 'com.wasmnest.test-app' })])
-    mockedInvoke.mockResolvedValue(false)
     expect(await p).toBe(true)
     expect(apps.lastError.value).toBeNull()
     expect(apps.busyId.value).toBeNull()

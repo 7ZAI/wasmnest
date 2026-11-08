@@ -771,6 +771,9 @@ pub fn run() {
             commands::plugin_frontend_load_report,
             // 生命周期偏好/状态（D3：桌面补移动端同款缺失臂，语义逐字一致；编排层在
             // plugin/lifecycle.rs，与 api_bridge 的清单/启停/审批/卸载臂并存）
+            // 壳主屏清单（注册表投影 + enabled/autostart 同位，一次 IPC 取齐）；
+            // 应用前端消费的 plugin_list_loaded 形状不变
+            plugin::lifecycle::plugin_list_with_prefs,
             plugin::lifecycle::plugin_is_enabled,
             plugin::lifecycle::plugin_set_enabled,
             plugin::lifecycle::plugin_is_autostart,

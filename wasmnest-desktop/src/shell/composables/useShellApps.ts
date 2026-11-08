@@ -2,7 +2,8 @@
  * 壳应用面（注册表投影 + 生命周期动作收口）
  *
  * 2026-10-17 lifecycle-sync 改造后：**静态面目录改为注册表投影**——应用清单经
- * `plugin_list_loaded` 真通道从宿主拉取（命令面已有），每个应用卡片的运行态 /
+ * `plugin_list_with_prefs` 真通道从宿主拉取（注册表 + enabled/autostart 偏好同位，
+ * 一次 IPC），每个应用卡片的运行态 /
  * 待审批 / 错误都来自真实 `PluginState`；「打开 / 关闭 / 审批 / 卸载 / 启用 /
  * 自启」动作经宿主命令面驱动真实生命周期（D2/D3）。
  *
@@ -60,6 +61,20 @@ export interface PluginUpdateDecl {
   repo?: string
   tagPrefix?: string
   slug?: string
+}
+
+/**
+ * 宿主壳清单条目：`plugin_list_with_prefs` 的返回形状
+ *
+ * = 插件字段平铺（与 `HostPluginInfo` 同形）+ 本次装配的两个偏好。偏好由宿主
+ * 编排层在进程内合并（真源 = 系统分区 `plugin.enabled.*` / `plugin.autostart.*`），
+ * 壳一次 IPC 取齐——逐应用两条命令在随包 6 应用时是 1+12 次串行往返。
+ */
+export interface HostShellPluginInfo extends HostPluginInfo {
+  /** 主屏入口可见性偏好（缺省 true） */
+  enabled: boolean
+  /** 启动时自动激活偏好（缺省按装配角色：L1/L2 开、L3 关） */
+  autostart: boolean
 }
 
 /** 壳主屏的业务应用条目（注册表投影；id = pluginId，宿主 manifest 单一事实源） */
@@ -215,7 +230,7 @@ function shellIconForApp(pluginId: string): string {
   return SET[h % SET.length]
 }
 
-/** 注册表投影：HostPluginInfo → ShellAppEntry（enabled/autostart 另查命令面） */
+/** 注册表投影：HostShellPluginInfo → ShellAppEntry（偏好随清单同位返回） */
 function toEntry(info: HostPluginInfo, enabled: boolean, autostart: boolean): ShellAppEntry {
   return {
     id: info.id,
@@ -266,23 +281,13 @@ async function refresh(): Promise<void> {
   if (loading.value) return
   loading.value = true
   try {
-    const infos = (await invoke('plugin_list_loaded')) as HostPluginInfo[]
-    // 偏好逐应用查询（命令面真通道；失败按各 key 的缺省取向容错——enabled 缺省
-    // 可见 / autostart 缺省关，与宿主 read_bool_pref 的 fallback 一致，不影响清单投影）
-    const entries: ShellAppEntry[] = []
-    for (const info of infos) {
-      const pluginId = info.id
-      let enabled = true
-      let autostart = false
-      try {
-        enabled = (await invoke('plugin_is_enabled', { pluginId })) as boolean
-        autostart = (await invoke('plugin_is_autostart', { pluginId })) as boolean
-      } catch (e) {
-        logger.warn(`[Shell] pref query failed: pluginId=${pluginId}`, e)
-      }
-      entries.push(toEntry(info, enabled, autostart))
-    }
-    plugins.value = entries
+    // 清单与偏好一次取齐（宿主 `plugin_list_with_prefs`；偏好缺省取向仍归后端：
+    // enabled 缺省可见 / autostart 按装配角色）。字段缺失按各 key 的保守取向容错
+    // （enabled 可见 / autostart 关），不影响清单投影。
+    const infos = (await invoke('plugin_list_with_prefs')) as HostShellPluginInfo[]
+    plugins.value = infos.map((info) =>
+      toEntry(info, info.enabled !== false, info.autostart === true),
+    )
     // 刷新不清 lastError：动作的成功路径在调用 refresh 之前已清空错误；
     // 若刷新本身失败（清单拉取断链），由下方 catch 写入——不互相覆盖
   } catch (e) {
@@ -324,18 +329,22 @@ const tones = computed<Record<string, AppTone>>(() => {
  * lastError 并刷新 / 失败落 lastError 并刷新（refresh 不清 lastError，失败后重新
  * 投影让调用方按终态分流——如激活失败落 NeedsApproval 需读最新清单）→ finally
  * 复位 busyId。每个动作只剩「命令调用」这一个事实（invoke 名 + 参数），骨架只此一份。
+ *
+ * `refreshAfter = false` 供批量动作使用（如「全部关闭」逐张停用）：收尾由调用方
+ * 统一刷一次，避免 N 张卡各刷一轮全量清单（O(N²) 往返）。
  */
 async function runAction(
   appId: string,
   label: string,
   busy: boolean,
   run: () => Promise<void>,
+  refreshAfter = true,
 ): Promise<boolean> {
   if (busy) busyId.value = appId
   try {
     await run()
     lastError.value = null
-    await refresh()
+    if (refreshAfter) await refresh()
     return true
   } catch (e) {
     // ADR 0030：Tauri 的 rejection 是 `{code, request_id, params?}` 信封（普通对象，
@@ -344,7 +353,7 @@ async function runAction(
     const userError = showUserError(e)
     logger.warn(`[Shell] ${label} failed: appId=${appId} code=${userError.code}`)
     lastError.value = userError.code
-    await refresh()
+    if (refreshAfter) await refresh()
     return false
   } finally {
     if (busy) busyId.value = null
@@ -370,15 +379,22 @@ async function activate(appId: string): Promise<boolean> {
 }
 
 /** 关闭应用：deactivate（**真停用**；持久化停用态，下次 boot 不复活） */
-async function deactivate(appId: string): Promise<boolean> {
+async function deactivate(appId: string, options: { refresh?: boolean } = {}): Promise<boolean> {
   if (!appOf(appId)) return false
-  return runAction(appId, 'deactivate', true, async () => {
-    const credential = await ensureHostCredential()
-    await invoke('plugin_deactivate', { pluginId: appId, credential })
-    // 停用即回收通道令牌（宿主 frontend_channel 同口径）：同步清前端缓存，
-    // 防止同页后续调用带着已作废令牌（挂载路径另有强制换发兜底）
-    invalidateChannelToken(appId)
-  })
+  return runAction(
+    appId,
+    'deactivate',
+    true,
+    async () => {
+      const credential = await ensureHostCredential()
+      await invoke('plugin_deactivate', { pluginId: appId, credential })
+      // 停用即回收通道令牌（宿主 frontend_channel 同口径）：同步清前端缓存，
+      // 防止同页后续调用带着已作废令牌（挂载路径另有强制换发兜底）
+      invalidateChannelToken(appId)
+    },
+    // 批量停用（「全部关闭」）关掉逐张刷新：调用方收尾统一刷一次
+    options.refresh !== false,
+  )
 }
 
 /** 批准应用权限（整单：全部声明权限 + 内容哈希钉扎；批准后仍需显式激活） */
