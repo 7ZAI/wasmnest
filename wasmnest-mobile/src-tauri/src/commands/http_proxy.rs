@@ -174,6 +174,17 @@ pub fn should_encrypt(path: &str) -> bool {
     is_http_encryption_active() && !path.starts_with(AUTH_PATH_PREFIX) && path != "/api/health" && path != "/health"
 }
 
+/// 对端显式拒绝的稳定码（`X-WasmNest-Crypto-Error`，内网穿透 T07）
+///
+/// 响应头名大小写不敏感（reqwest 归一小写）；值只认共享 crate 登记的两个码，
+/// 其他字符串返回 `None`——对端自报的任意值不得变成本地错误分类。
+pub fn crypto_refusal_code(headers: &HashMap<String, String>) -> Option<&'static str> {
+    headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(wasmnest_link_crypto::ERROR_HEADER))
+        .and_then(|(_, value)| wasmnest_link_crypto::parse_code(value))
+}
+
 // ==================== 核心命令 ====================
 
 /// 统一 HTTP 代理命令（D1：invoke promise 路由回调用方）
@@ -455,6 +466,18 @@ pub async fn execute_proxy(
                 })
             }
             _ => {
+                // 对端显式拒绝（带稳定码，内网穿透 T07）：这是「有名字的拒绝」，
+                // 不是需要容忍的降级——没有载荷可交付，两种 strict 档资都报同一个码，
+                // 应用按码给「升级对端」或「检查链路身份 / 重新配对」的出路。
+                // 码只认共享 crate 登记值，对端自报的任意串不得变成本地错误分类。
+                if let Some(code) = crypto_refusal_code(&resp_headers) {
+                    tracing::error!(
+                        request_id = %request_id,
+                        code,
+                        "http proxy: link crypto request refused by peer"
+                    );
+                    return Err(AppError::Egress(code.to_string()));
+                }
                 // 预期加密而响应明文（downgrade）：strict 断连报错；非 strict 明文续跑
                 let strict = crate::state::get_link_crypto_context().strict_mode;
                 if strict {
@@ -624,5 +647,28 @@ mod tests {
         assert!(!has_request_body("head"));
         assert!(has_request_body("POST"));
         assert!(has_request_body("delete"));
+    }
+
+    /// 拒绝码头只认登记值：旧客户端（`encryption-unsupported`）与坏协商
+    /// （`encryption-required`）必须可区分，杂头不得被当成码
+    #[test]
+    fn crypto_refusal_code_reads_only_registered_codes() {
+        let mut headers = HashMap::new();
+        headers.insert(
+            wasmnest_link_crypto::ERROR_HEADER.to_ascii_lowercase(),
+            wasmnest_link_crypto::CODE_ENCRYPTION_UNSUPPORTED.to_string(),
+        );
+        assert_eq!(
+            crypto_refusal_code(&headers),
+            Some(wasmnest_link_crypto::CODE_ENCRYPTION_UNSUPPORTED)
+        );
+
+        headers.insert(
+            wasmnest_link_crypto::ERROR_HEADER.to_ascii_lowercase(),
+            "some-other-reason".to_string(),
+        );
+        assert_eq!(crypto_refusal_code(&headers), None, "非登记码不得被采信");
+
+        assert_eq!(crypto_refusal_code(&HashMap::new()), None, "无头 = 无码");
     }
 }
