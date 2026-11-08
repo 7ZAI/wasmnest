@@ -62,6 +62,8 @@ pub mod pty;
 pub mod services;
 pub mod task;
 pub mod timer;
+/// 内网穿透（`host-tunnel`，T06）：端口 adapter + 对等面启动器 + 装配自报
+pub mod tunnel;
 pub mod ws;
 
 /// 宿主面凭证门（ADR 0058 方案 A：管理类命令只认宿主前端凭证）
