@@ -130,6 +130,16 @@ function simulateForBrowser(): PlatformInfo {
   }
 }
 
+/**
+ * 平台事实快照（**不注册 onMounted**）
+ *
+ * 供纯函数 / 无组件作用域的路径读取：`usePlatform()` 会注册挂载探测，在没有
+ * 组件实例的地方调用它只有 dev 警告，拿到的是同一份全局事实。
+ */
+export function readPlatformInfo(): PlatformInfo {
+  return readonly(platformInfo).value
+}
+
 export function usePlatform() {
   async function detectPlatform() {
     if (initialized) {

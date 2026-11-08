@@ -46,6 +46,19 @@ function cleanupTheme() {
   }
 }
 
+/**
+ * 当前生效的暗色状态（**纯读，不注册 watcher**）
+ *
+ * 供「无组件作用域」的动作路径使用：壳快捷键的 `theme.toggle` 此前在 keydown
+ * 回调里现调 `useTheme()`，每按一次就多注册一个永不销毁的主题 watcher，此后每次
+ * 切主题都会重复 `cleanupTheme + setupTheme`（重挂 matchMedia + 写 DOM）。
+ * 组件里照旧用 `useTheme().isDark`（computed 复用本函数，判据只有一份）。
+ */
+export function currentThemeIsDark(): boolean {
+  const theme = useSettingsStore().settings.ui.theme
+  return theme === 'dark' || (theme === 'system' && isSystemDark.value)
+}
+
 export function useTheme() {
   const settingsStore = useSettingsStore()
 
@@ -63,10 +76,7 @@ export function useTheme() {
   })
 
   /** 当前生效的暗色状态（system 时跟随系统偏好；主题据此合并 darkTokens） */
-  const isDark = computed(() => {
-    const theme = settingsStore.settings.ui.theme
-    return theme === 'dark' || (theme === 'system' && isSystemDark.value)
-  })
+  const isDark = computed(currentThemeIsDark)
 
   // 主题切换通过 :root.dark CSS 变量自动生效，无需 dark: 前缀
   const themeClasses = computed(() => ({

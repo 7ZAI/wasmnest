@@ -81,13 +81,17 @@
           class="bg-[var(--bg-card)] border border-[var(--border)] rounded-[10px] divide-y divide-[var(--border)] overflow-hidden"
         >
           <!-- data-testid：渲染契约测试的行锚点（本页唯一的测试钩子） -->
-          <div v-for="app in sortedApps" :key="app.pluginId" data-testid="auth-app-row">
+          <div
+            v-for="{ app, icon, records } in rows"
+            :key="app.pluginId"
+            data-testid="auth-app-row"
+          >
             <div class="flex items-center gap-3 px-4 py-3">
               <ShellAppTile
-                :icon="appIconOf(app.pluginId).icon"
+                :icon="icon.icon"
                 :plugin-id="app.pluginId"
-                :icon-file="appIconOf(app.pluginId).iconFile"
-                :tone="appIconOf(app.pluginId).tone"
+                :icon-file="icon.iconFile"
+                :tone="icon.tone"
                 :size="40"
               />
               <div class="flex-1 min-w-0">
@@ -213,14 +217,14 @@
                   {{ $t(`settings.authorization.records.${resource}Title`) }}
                 </p>
                 <p
-                  v-if="resourceRecords(app, resource).length === 0"
+                  v-if="records[resource].length === 0"
                   class="mt-1.5 text-[calc(11px*var(--ui-scale))] text-[var(--text-tertiary)]"
                 >
                   {{ $t(`settings.authorization.records.${resource}Empty`) }}
                 </p>
                 <div v-else class="mt-1.5 space-y-1.5">
                   <div
-                    v-for="record in resourceRecords(app, resource)"
+                    v-for="record in records[resource]"
                     :key="record.id"
                     data-testid="auth-record-row"
                     class="flex items-center gap-2"
@@ -384,6 +388,7 @@ import Button from '@/components/Button.vue'
 import Modal from '@/components/Modal.vue'
 import ShellAppTile from '@/shell/components/ShellAppTile.vue'
 import { isServiceKind, useShellApps } from '@/shell/composables/useShellApps'
+import type { AppTone } from '@/shell/composables/state'
 import AuthFirstPartyRow from '@/shell/auth/AuthFirstPartyRow.vue'
 import ShellIcon from '@/shell/components/ShellIcon.vue'
 import { authOverview, authRemoveRecord, authRevoke, authSetStrategy } from '@/utils/appCommands'
@@ -438,14 +443,6 @@ const router = useRouter()
 const { t } = useI18n()
 // 应用图标与主屏同源（注册表 manifest.icon），避免本页退化成字母头像
 const appsStore = useShellApps()
-function appIconOf(pluginId: string) {
-  const p = appsStore.plugins.value.find((x) => x.id === pluginId)
-  return {
-    icon: p?.icon ?? 'app',
-    iconFile: p?.iconFile,
-    tone: appsStore.tones.value[pluginId] ?? 'system',
-  }
-}
 const toast = useToast()
 
 /** 读模型数据（已按 plugin_id 去重，宿主保证一个应用一条） */
@@ -467,6 +464,41 @@ const visibleApps = computed(() => apps.value.filter((a) => !serviceIds.value.ha
 
 /** 按风险排序的展示序列（始终允许置顶；排序语义见 shell/auth/authPolicy） */
 const sortedApps = computed(() => sortAppsByRisk(visibleApps.value))
+
+/** 表格行视图模型：应用 + 图标 + 按资源分好的记录（模板只读字段） */
+interface AuthAppRow {
+  app: PluginAuthOverview
+  icon: { icon: string; iconFile?: string; tone: AppTone | 'system' }
+  records: Record<string, AuthRecord[]>
+}
+
+/**
+ * 展开态的整表视图模型：一次算好图标与各资源记录
+ *
+ * 模板里逐行调用会在任一 busyKey / loading / expanded 变化时重建整表——
+ * `resourceRecords` 在 v-if 与 v-for 各调一次（每次 filter + sort），`appIconOf`
+ * 每行 3 次 `.find`（F10）。记录按目录 / origin 累积，N 可达数百，重算 O(N log N)。
+ * 排序口径保持原样（已授权在前、硬拒绝在后，同组按落账时间）。
+ */
+const rows = computed<AuthAppRow[]>(() => {
+  const plugins = appsStore.plugins.value
+  const iconOf = new Map(plugins.map((p) => [p.id, p]))
+  const tones = appsStore.tones.value
+  return sortedApps.value.map((app) => {
+    const records: Record<string, AuthRecord[]> = {}
+    for (const resource of RECORD_RESOURCES) records[resource] = resourceRecords(app, resource)
+    const plugin = iconOf.get(app.pluginId)
+    return {
+      app,
+      icon: {
+        icon: plugin?.icon ?? 'app',
+        iconFile: plugin?.iconFile,
+        tone: tones[app.pluginId] ?? 'system',
+      },
+      records,
+    }
+  })
+})
 
 /** 返回设置页（本页是设置页的二级入口，返回目标确定，不用 history.back） */
 function goBack(): void {

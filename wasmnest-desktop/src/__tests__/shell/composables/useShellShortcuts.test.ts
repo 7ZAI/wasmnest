@@ -13,7 +13,10 @@ const mocks = vi.hoisted(() => ({
   prefs: null as unknown as Ref<Record<string, unknown>>,
   state: null as unknown as Record<string, unknown>,
   settingsStore: null as unknown as Record<string, unknown>,
-  setupFontSize: vi.fn(),
+  applyCurrentFontSize: vi.fn(),
+  /** 泄漏回归探针：动作路径若现调 composable，这两个注册器会被命中 */
+  useTheme: vi.fn(),
+  useFontSize: vi.fn(),
 }))
 
 vi.mock('@/shell/composables/useShellSettings', async () => {
@@ -36,15 +39,24 @@ vi.mock('@/stores/settings', () => ({
   useSettingsStore: vi.fn(() => mocks.settingsStore),
 }))
 
-vi.mock('@/composables/useTheme', () => ({
-  useTheme: vi.fn(() => ({ isDark: ref(false) })),
-}))
+vi.mock('@/composables/useTheme', async (importOriginal) => {
+  // currentThemeIsDark 走真实（读 mock 的 settings store）+ 桩掉会注册 watcher 的 useTheme
+  const actual = await importOriginal<typeof import('@/composables/useTheme')>()
+  return {
+    ...actual,
+    useTheme: (...args: unknown[]) => mocks.useTheme(...args),
+  }
+})
 
 vi.mock('@/composables/useFontSize', async (importOriginal) => {
   // FONT_SIZE_LEVELS / fontSizeLevelIndex / NORMAL_FONT_SIZE 走真实导出——
-  // 桩只为隔离 setupFontSize 的 DOM 副作用
+  // 桩只为隔离 --ui-scale 的 DOM 副作用与 watcher 注册
   const actual = await importOriginal<typeof import('@/composables/useFontSize')>()
-  return { ...actual, useFontSize: () => ({ setupFontSize: mocks.setupFontSize }) }
+  return {
+    ...actual,
+    useFontSize: (...args: unknown[]) => mocks.useFontSize(...args),
+    applyCurrentFontSize: (...args: unknown[]) => mocks.applyCurrentFontSize(...args),
+  }
 })
 
 import { useShellShortcuts } from '@/shell/composables/useShellShortcuts'
@@ -72,6 +84,8 @@ function freshState(overrides: Record<string, unknown> = {}): Record<string, unk
 let teardown: (() => void) | null = null
 
 beforeEach(() => {
+  // 动作探针（applyCurrentFontSize / useTheme / useFontSize）跨用例保留，先清调用记录
+  vi.clearAllMocks()
   mocks.state = freshState()
   mocks.settingsStore = {
     settings: { ui: { theme: 'light', font_size: 12 } },
@@ -158,13 +172,28 @@ describe('动作分发', () => {
   it('字号档位：12 → 增大 14 / 减小 11；到头 no-op', () => {
     press({ code: 'Equal', ctrlKey: true, shiftKey: true })
     expect(mocks.settingsStore.settings.ui.font_size).toBe(14)
-    expect(mocks.setupFontSize).toHaveBeenCalled()
+    expect(mocks.applyCurrentFontSize).toHaveBeenCalled()
     press({ code: 'Minus', ctrlKey: true, shiftKey: true })
     expect(mocks.settingsStore.settings.ui.font_size).toBe(12)
 
     mocks.settingsStore.settings.ui.font_size = 16 // 顶级再增大 = no-op
     press({ code: 'Equal', ctrlKey: true, shiftKey: true })
     expect(mocks.settingsStore.settings.ui.font_size).toBe(16)
+  })
+
+  it('主题 / 字号动作不注册 watcher（无作用域泄漏回归锁）', () => {
+    // 背景：动作在 keydown 回调里跑，没有 effect scope。早先实现现调
+    // useTheme() / useFontSize()，每按一次就多一份永不销毁的 watcher。
+    // 现在动作只消费 watcher-free 的纯读原语：两个注册器都不得被调用。
+    for (let i = 0; i < 3; i++) {
+      press({ code: 'KeyD', ctrlKey: true, shiftKey: true })
+      press({ code: 'Equal', ctrlKey: true, shiftKey: true })
+    }
+    expect(mocks.useTheme).not.toHaveBeenCalled()
+    expect(mocks.useFontSize).not.toHaveBeenCalled()
+    // 纯读原语替代它们生效：12→14→16 两档后到顶（no-op 不再调用）
+    expect(mocks.settingsStore.settings.ui.theme).toBe('dark')
+    expect(mocks.applyCurrentFontSize).toHaveBeenCalledTimes(2)
   })
 })
 

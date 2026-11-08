@@ -267,9 +267,39 @@ function onPointerMove(event: PointerEvent): void {
   }
   event.preventDefault()
   const { minX, maxX, minY, maxY } = bounds.value
-  positionPx.value = {
+  // 合帧：指针事件可能高于屏幕刷新率（120Hz+），而这条悬浮条带卡通模糊
+  // （backdrop-filter），逐事件写 ref 会让每个事件都重渲染 + 重采样模糊。
+  // 一帧只落一次位置；抬手时先 flush，落盘的比例仍是最新值。
+  queueDragPosition({
     x: clamp(origin.left + dx, minX, maxX),
     y: clamp(origin.top + dy, minY, maxY),
+  })
+}
+
+/** 待落位的拖动位置（rAF 合帧；null = 无在途位移） */
+let pendingDragPx: { x: number; y: number } | null = null
+/** 在途合帧句柄 */
+let dragRaf: number | null = null
+
+/** 把最新拖动位置排到下一帧（一帧只写一次 ref，见 onPointerMove） */
+function queueDragPosition(next: { x: number; y: number }): void {
+  pendingDragPx = next
+  if (dragRaf !== null) return
+  dragRaf = requestAnimationFrame(() => {
+    dragRaf = null
+    flushDragPosition()
+  })
+}
+
+/** 立即落位在途位置（抬手落盘 / 复位前调用，保证读到的是最新坐标） */
+function flushDragPosition(): void {
+  if (dragRaf !== null) {
+    cancelAnimationFrame(dragRaf)
+    dragRaf = null
+  }
+  if (pendingDragPx) {
+    positionPx.value = pendingDragPx
+    pendingDragPx = null
   }
 }
 
@@ -279,10 +309,13 @@ function onPointerUp(event?: PointerEvent): void {
   // 只结束本次手势的指针：第二指针抬起不应打断正在进行的拖动
   if (event && event.pointerId !== origin.pointerId) return
   const moved = dragMoved
+  // 先落最后一帧再复位：落盘比例不能停在上一帧（合帧会把最后一次 move 留在队列里）
+  flushDragPosition()
+  const finalPx = { ...positionPx.value }
   resetDrag()
   if (!moved) return
   // 抬手才落偏好：拖动过程不反复写 localStorage
-  prefs.value.floatingNavPos = ratioFromPx(positionPx.value)
+  prefs.value.floatingNavPos = ratioFromPx(finalPx)
   // 浏览器在同一个任务里补发 click（拖拽余波）之后才轮到 0ms 定时器：
   // 用定时器清标记，既吞掉余波，也不会误伤之后（含键盘触发）的点击。
   clearDragClickGuard()
@@ -317,7 +350,17 @@ function onCaptureClick(event: MouseEvent): void {
   event.preventDefault()
 }
 
+/** 丢弃在途位移帧（取消 / 新起手）：不把上一轮的最后一帧带到这一轮 */
+function dropDragFrame(): void {
+  if (dragRaf !== null) {
+    cancelAnimationFrame(dragRaf)
+    dragRaf = null
+  }
+  pendingDragPx = null
+}
+
 function resetDrag(): void {
+  dropDragFrame()
   releasePointer()
   unlistenWindowRelease()
   clearDragClickGuard()

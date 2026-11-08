@@ -12,7 +12,7 @@
  */
 import { watch } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
-import { usePlatform } from '@/composables/usePlatform'
+import { readPlatformInfo, usePlatform } from '@/composables/usePlatform'
 
 /** "正常"档位对应的基准字号（px），即当前代码中的默认界面文字大小 */
 export const NORMAL_FONT_SIZE = 12
@@ -68,42 +68,43 @@ function applyFontSize(size: number, isLinux: boolean) {
   document.documentElement.style.setProperty('--ui-scale', String(scale), 'important')
 }
 
+/**
+ * 把当前设置字号应用到 `--ui-scale`（**不注册 watcher**）
+ *
+ * 供无组件作用域的动作路径使用（壳快捷键改字号）：`useFontSize()` 会注册两个
+ * watcher，在 keydown 回调里现调等于每按一次多一份永不销毁的监听。
+ *
+ * platformInfo 未初始化（platform === null）时不设置 `--ui-scale`，交给 CSS
+ * 默认值（splash 期）；`initPlatform` 就绪后由组件侧 watcher 重算。
+ */
+export function applyCurrentFontSize(): void {
+  const info = readPlatformInfo()
+  if (info.platform === null) return
+  const settingsStore = useSettingsStore()
+  applyFontSize(settingsStore.settings.ui.font_size || NORMAL_FONT_SIZE, info.isLinux)
+}
+
 export function useFontSize() {
   const settingsStore = useSettingsStore()
   const { platformInfo } = usePlatform()
-
-  function currentFontSize(): number {
-    return settingsStore.settings.ui.font_size || NORMAL_FONT_SIZE
-  }
-
-  // platformInfo 未初始化（platform === null）时不设置 --ui-scale，交给 CSS 默认
-  // 值（splash 期）；platform 解析就绪后重算，消除与 main.ts initPlatform 的竞态。
-  function recompute() {
-    if (platformInfo.value.platform === null) return
-    applyFontSize(currentFontSize(), platformInfo.value.isLinux)
-  }
-
-  function setupFontSize() {
-    recompute()
-  }
 
   // 监听全局字体大小设置变化（终端字体由终端设置独立控制，不在此列）
   watch(
     () => settingsStore.settings.ui.font_size,
     (newSize) => {
       if (newSize) {
-        recompute()
+        applyCurrentFontSize()
       }
     },
   )
 
-  // platform 解析完成后重算（含 Linux 基线因子）
+  // platform 解析完成后重算（含 Linux 基线因子）；消除与 main.ts initPlatform 的竞态
   watch(
     () => platformInfo.value.platform,
-    () => recompute(),
+    () => applyCurrentFontSize(),
   )
 
   return {
-    setupFontSize,
+    setupFontSize: applyCurrentFontSize,
   }
 }

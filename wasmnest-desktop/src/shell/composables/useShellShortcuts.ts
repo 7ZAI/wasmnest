@@ -22,12 +22,12 @@ import {
   type ShortcutActionId,
 } from './shortcutsModel'
 import { useSettingsStore } from '@/stores/settings'
-import { useTheme } from '@/composables/useTheme'
+import { currentThemeIsDark } from '@/composables/useTheme'
 import {
   FONT_SIZE_LEVELS,
   NORMAL_FONT_SIZE,
+  applyCurrentFontSize,
   fontSizeLevelIndex,
-  useFontSize,
 } from '@/composables/useFontSize'
 
 /**
@@ -84,6 +84,13 @@ export function useShellShortcuts() {
   }
 
   // ==================== 动作执行器（全部现成壳原语） ====================
+  //
+  // 动作在 keydown 回调里跑（无组件作用域）：这里**只能消费纯读原语**。
+  // 早先 `theme.toggle` / `font.*` 现调 `useTheme()` / `useFontSize()`，每按一次
+  // 快捷键就多注册 1~3 个永不销毁的 watcher，此后每次改主题 / 字号都会重复
+  // `cleanupTheme + setupTheme`（重挂 matchMedia + 写 DOM）。
+  // 判据（currentThemeIsDark / applyCurrentFontSize）是 watcher-free 的，组件侧
+  // composable 复用同一份实现，不另立第二套。
 
   async function runAction(action: ShortcutActionId): Promise<void> {
     const state = useShellState()
@@ -114,10 +121,9 @@ export function useShellShortcuts() {
         state.openSys('apps')
         return
       case 'theme.toggle': {
-        // ShellToolbar.toggleTheme 同款（useTheme.isDark 处理 system 档）
+        // ShellToolbar.toggleTheme 同款（currentThemeIsDark 处理 system 档）
         const settingsStore = useSettingsStore()
-        const { isDark } = useTheme()
-        settingsStore.settings.ui.theme = isDark.value ? 'light' : 'dark'
+        settingsStore.settings.ui.theme = currentThemeIsDark() ? 'light' : 'dark'
         void settingsStore.saveSettings({ ui: settingsStore.settings.ui })
         return
       }
@@ -129,7 +135,7 @@ export function useShellShortcuts() {
         const next = cur + (action === 'font.increase' ? 1 : -1)
         if (next < 0 || next >= FONT_SIZE_LEVELS.length) return
         settingsStore.settings.ui.font_size = FONT_SIZE_LEVELS[next].px
-        useFontSize().setupFontSize()
+        applyCurrentFontSize()
         void settingsStore.saveSettings({ ui: settingsStore.settings.ui })
         return
       }

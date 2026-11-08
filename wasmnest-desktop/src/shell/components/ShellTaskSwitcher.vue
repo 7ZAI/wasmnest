@@ -314,13 +314,36 @@ function measureBand(): void {
   const el = bandEl.value
   if (!el) return
   const cs = getComputedStyle(el)
-  band.value = {
+  const next: RecentsBand = {
     width: el.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight),
     height: el.clientHeight - px(cs.paddingTop) - px(cs.paddingBottom),
     gap: px(cs.columnGap) || px(cs.rowGap),
   }
+  // 等值短路：数值没变就不写回（否则一次「窗口没变」的 resize 也会让
+  // cardSize / thumbSize 全量重算并重渲染整片卡片，F9）
+  if (next.width !== band.value.width || next.height !== band.value.height || next.gap !== band.value.gap) {
+    band.value = next
+    // 比例来自运行期实测的应用区（非响应式），带宽变化才需要重新取一次
+    metricsTick.value += 1
+  }
   measureCardChrome()
-  metricsTick.value += 1
+}
+
+/**
+ * resize / ResizeObserver 合帧：一帧只量一次
+ *
+ * 两个入口都会在拖窗口时高频触发；`measureBand` 里有 `getComputedStyle` +
+ * `clientWidth/Height` 的强制同步布局，逐事件跑等于每帧多次全量测量（F9）。
+ * 打开态的首次测量仍走同步 `measureBand()`（`syncBandAndFocus`），保证首帧就有尺寸。
+ */
+let measureRaf: number | null = null
+
+function scheduleMeasureBand(): void {
+  if (measureRaf !== null) return
+  measureRaf = requestAnimationFrame(() => {
+    measureRaf = null
+    measureBand()
+  })
 }
 
 /**
@@ -334,9 +357,13 @@ function measureCardChrome(): void {
   const meta = card?.querySelector<HTMLElement>('.ts-meta')
   if (!card || !meta) return
   const cs = getComputedStyle(card)
-  cardChrome.value = {
+  const next = {
     chrome: meta.offsetHeight + px(cs.borderTopWidth) + px(cs.borderBottomWidth),
     inset: px(cs.borderLeftWidth) + px(cs.borderRightWidth),
+  }
+  // 等值短路：数值没变就不触发下游 computed 重算（F9）
+  if (next.chrome !== cardChrome.value.chrome || next.inset !== cardChrome.value.inset) {
+    cardChrome.value = next
   }
 }
 
@@ -347,7 +374,7 @@ function observeBand(): void {
   unobserveBand()
   const el = bandEl.value
   if (!el || typeof ResizeObserver === 'undefined') return
-  bandObserver = new ResizeObserver(() => measureBand())
+  bandObserver = new ResizeObserver(() => scheduleMeasureBand())
   bandObserver.observe(el)
 }
 
@@ -425,13 +452,17 @@ function restoreOriginAfterClose(): void {
 watch(open, syncBandAndFocus, { flush: 'post' })
 
 onMounted(() => {
-  window.addEventListener('resize', measureBand)
+  window.addEventListener('resize', scheduleMeasureBand)
   // 覆盖「挂载时全屏层已经打开」的形态（immediate 观感上拿不到 ref，交给挂载钩子）
   syncBandAndFocus()
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', measureBand)
+  window.removeEventListener('resize', scheduleMeasureBand)
+  if (measureRaf !== null) {
+    cancelAnimationFrame(measureRaf)
+    measureRaf = null
+  }
   unobserveBand()
 })
 
