@@ -111,7 +111,9 @@ const HOST_CRATE: &str = "wasmnest-desktop-runtime";
 /// 引用，否则会耦成一体，违背「按需组合不同核心」的前提）。
 const ALLOWED_DOWNWARD_EDGES: &[(&str, &[&str])] = &[
     ("wasmnest-server-base", &[]),
-    ("wasmnest-crypto-engine", &["wasmnest-server-base"]),
+    // 2026-11-08（能力仓 P0）：crypto-engine 自带 `CryptoError`，不再向上取 base 的
+    // `AppError`（中性算法原语不背宿主错误信封）——它是本表里唯一零内部依赖的引擎域。
+    ("wasmnest-crypto-engine", &[]),
     (
         "wasmnest-server-core",
         &["wasmnest-server-base", "wasmnest-crypto-engine"],
@@ -184,7 +186,8 @@ const ALLOWED_DOWNWARD_EDGES: &[(&str, &[&str])] = &[
 /// 明确禁止的形态。`base` 出现在每一条里，因为它是端口 traits / 错误 / 网络配置
 /// 的定义处（`ports::get()` 唯一的合法来源）。
 const REQUIRED_DOWNWARD_EDGES: &[(&str, &str)] = &[
-    ("wasmnest-crypto-engine", "wasmnest-server-base"),
+    // 2026-11-08（能力仓 P0）：`crypto-engine → server-base` 必填边摘除——crypto-engine
+    // 自带 `CryptoError`、零内部 crate 依赖；base 也不再为 `From<CryptoError>` 反向认识它。
     ("wasmnest-server-core", "wasmnest-server-base"),
     ("wasmnest-server-core", "wasmnest-crypto-engine"),
     ("wasmnest-server-http", "wasmnest-server-base"),

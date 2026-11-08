@@ -181,8 +181,19 @@ fn audit(plugin_id: &str, api: &str, algorithm: &str) {
 /// 注册表/提供器错误带上操作上下文（H-09）：`to_string()` 丢掉类型化错误与
 /// 操作名，WIT 边界处多种函数共享同一泛错——故障时连是哪一步、哪个算法都
 /// 说不清。统一加 `api[algorithm]` 前缀。
-fn crypto_err(api: &str, algorithm: &str, e: impl std::fmt::Display) -> String {
-    format!("{api}[{algorithm}]: {e}")
+///
+/// **文案兼容（2026-11-08，能力仓 P0）**：`wasmnest-crypto-engine` 改自带
+/// `CryptoError`（不再复用 `AppError`）。它的 `Display` 只给 detail 原文，旧文案里的
+/// `Invalid input:` / `Internal error:` 前缀是 `AppError` 变体带来的——插件看到的错误串
+/// 属可观察面，故在本边界按变体语义补回前缀，**逐字与改造前一致**
+/// （判据同能力仓 `server-core::link_crypto` 的映射）。
+fn crypto_err(api: &str, algorithm: &str, e: &wasmnest_crypto_engine::CryptoError) -> String {
+    let detail = if e.is_invalid_input() {
+        format!("Invalid input: {e}")
+    } else {
+        format!("Internal error: {e}")
+    };
+    format!("{api}[{algorithm}]: {detail}")
 }
 
 /// AEAD 加密（`crypto:aead`）
@@ -198,10 +209,10 @@ fn aead_encrypt(
     if !check_permission(perm, plugin_id, PERMISSION_CRYPTO_AEAD, "host_crypto_aead_encrypt") {
         return Err("permission denied: crypto:aead".to_string());
     }
-    let provider = resolve_aead(algorithm).map_err(|e| crypto_err("aead_encrypt", algorithm, e))?;
+    let provider = resolve_aead(algorithm).map_err(|e| crypto_err("aead_encrypt", algorithm, &e))?;
     let out = provider
         .encrypt(key, nonce, plaintext, aad)
-        .map_err(|e| crypto_err("aead_encrypt", algorithm, e))?;
+        .map_err(|e| crypto_err("aead_encrypt", algorithm, &e))?;
     audit(plugin_id, "host_crypto_aead_encrypt", algorithm);
     Ok(out)
 }
@@ -219,10 +230,10 @@ fn aead_decrypt(
     if !check_permission(perm, plugin_id, PERMISSION_CRYPTO_AEAD, "host_crypto_aead_decrypt") {
         return Err("permission denied: crypto:aead".to_string());
     }
-    let provider = resolve_aead(algorithm).map_err(|e| crypto_err("aead_decrypt", algorithm, e))?;
+    let provider = resolve_aead(algorithm).map_err(|e| crypto_err("aead_decrypt", algorithm, &e))?;
     let out = provider
         .decrypt(key, nonce, ciphertext, aad)
-        .map_err(|e| crypto_err("aead_decrypt", algorithm, e))?;
+        .map_err(|e| crypto_err("aead_decrypt", algorithm, &e))?;
     audit(plugin_id, "host_crypto_aead_decrypt", algorithm);
     Ok(out)
 }
@@ -233,7 +244,7 @@ fn aead_generate_key(perm: &dyn PermissionScope, plugin_id: &str, algorithm: &st
         return Err("permission denied: crypto:aead".to_string());
     }
     let key = resolve_aead(algorithm)
-        .map_err(|e| crypto_err("aead_generate_key", algorithm, e))?
+        .map_err(|e| crypto_err("aead_generate_key", algorithm, &e))?
         .generate_key();
     audit(plugin_id, "host_crypto_aead_generate_key", algorithm);
     Ok(key)
@@ -250,7 +261,7 @@ fn aead_generate_nonce(perm: &dyn PermissionScope, plugin_id: &str, algorithm: &
         return Err("permission denied: crypto:aead".to_string());
     }
     let nonce = resolve_aead(algorithm)
-        .map_err(|e| crypto_err("aead_generate_nonce", algorithm, e))?
+        .map_err(|e| crypto_err("aead_generate_nonce", algorithm, &e))?
         .generate_nonce();
     audit(plugin_id, "host_crypto_aead_generate_nonce", algorithm);
     Ok(nonce)
@@ -269,10 +280,10 @@ fn kdf_derive(
     if !check_permission(perm, plugin_id, PERMISSION_CRYPTO_KDF, "host_crypto_kdf_derive") {
         return Err("permission denied: crypto:kdf".to_string());
     }
-    let provider = resolve_kdf(algorithm).map_err(|e| crypto_err("kdf_derive", algorithm, e))?;
+    let provider = resolve_kdf(algorithm).map_err(|e| crypto_err("kdf_derive", algorithm, &e))?;
     let out = provider
         .derive(salt, ikm, info, length as usize)
-        .map_err(|e| crypto_err("kdf_derive", algorithm, e))?;
+        .map_err(|e| crypto_err("kdf_derive", algorithm, &e))?;
     // 审计（H-08）：KDF 派生与密钥协商返回派生秘密，同样必须落审计——
     // 合规监控不能只记加解密而漏记最敏感的派生/协商面
     audit(plugin_id, "host_crypto_kdf_derive", algorithm);
@@ -295,7 +306,7 @@ fn key_agreement_generate(perm: &dyn PermissionScope, plugin_id: &str, algorithm
     ) {
         return Err("permission denied: crypto:asym".to_string());
     }
-    let provider = resolve_key_agreement(algorithm).map_err(|e| crypto_err("key_agreement_generate", algorithm, e))?;
+    let provider = resolve_key_agreement(algorithm).map_err(|e| crypto_err("key_agreement_generate", algorithm, &e))?;
     let (private, public) = provider.generate_keypair();
     let mut out = Vec::with_capacity(private.len() + public.len());
     out.extend_from_slice(&private);
@@ -320,10 +331,10 @@ fn key_agreement_shared(
     ) {
         return Err("permission denied: crypto:asym".to_string());
     }
-    let provider = resolve_key_agreement(algorithm).map_err(|e| crypto_err("key_agreement_shared", algorithm, e))?;
+    let provider = resolve_key_agreement(algorithm).map_err(|e| crypto_err("key_agreement_shared", algorithm, &e))?;
     let out = provider
         .compute_shared(local_private, peer_public)
-        .map_err(|e| crypto_err("key_agreement_shared", algorithm, e))?;
+        .map_err(|e| crypto_err("key_agreement_shared", algorithm, &e))?;
     // 审计（H-08）：密钥协商派生共享秘密，与 KDF 同属敏感面，必须落审计
     audit(plugin_id, "host_crypto_keyagreement_shared", algorithm);
     Ok(out)
@@ -463,6 +474,31 @@ mod tests {
         grant_permissions(&ctx, "p1", &[PERMISSION_CRYPTO_ASYM]);
         let err = key_agreement_shared(ctx.as_ref(), "p1", "x25519", &[0u8; 16], &[0u8; 32]).unwrap_err();
         assert!(err.contains("私钥长度"), "非法私钥长度必须显式拒绝: {err}");
+    }
+
+    // ==================== 错误文案兼容（能力仓 P0：crypto-engine 自带 CryptoError） ====================
+
+    /// 文案锁：`CryptoError` 的 `Display` 只给 detail，旧文案的
+    /// `Invalid input:` / `Internal error:` 前缀由本边界按变体语义补回——
+    /// 插件可见错误串逐字与改造前一致（改这条 = 改插件可观察面）。
+    #[test]
+    fn crypto_error_text_keeps_legacy_app_error_prefix() {
+        assert_eq!(
+            crypto_err(
+                "aead_encrypt",
+                "aes-256-gcm",
+                &wasmnest_crypto_engine::CryptoError::invalid_key_length("密钥长度必须为 32 字节，收到 31"),
+            ),
+            "aead_encrypt[aes-256-gcm]: Invalid input: 密钥长度必须为 32 字节，收到 31"
+        );
+        assert_eq!(
+            crypto_err(
+                "aead_decrypt",
+                "aes-256-gcm",
+                &wasmnest_crypto_engine::CryptoError::operation_failed("AES-256-GCM 解密失败: aead::Error"),
+            ),
+            "aead_decrypt[aes-256-gcm]: Internal error: AES-256-GCM 解密失败: aead::Error"
+        );
     }
 
     // ==================== 白名单 / 自报三件一致（与 pty/ws/mdns/peer/http 样板同款） ====================

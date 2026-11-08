@@ -154,7 +154,13 @@ sysinfo = "0.33"
 wasmnest-link-crypto = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1" }
 # server-lib-split：桌面 server 基础层（错误/常量/错误边界/系统信息/网络配置/
 # 连接身份/端口 traits）与加密引擎（算法实现 + 注册表）
-wasmnest-server-base = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1" }
+# 三个 feature **显式开启**（不靠传递 feature 合并）：base 自 2026-11-08（能力仓 P0）
+# 起默认关 `tauri-compat` / `mdns` / `system-info`——桌面宿主是全量消费方，缺任一个
+# 都表现为「impl 不存在 / 端口类型不存在 / 采集函数不存在」的编译错。
+#   tauri-compat → From<tauri::Error> for AppError
+#   mdns         → MdnsPort / MdnsTypeSubscription / ServerPorts.mdns
+#   system-info  → SystemInfo::collect() / local_ipv4_addresses()
+wasmnest-server-base = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["tauri-compat", "mdns", "system-info"] }
 # 插件宿主机制内核（能力仓 `../wasmnest-lib`，双端共享锚点，wasm-core-lib-split 票 03）：
 # 插件实例状态 `WasmPluginState` + 能力模块契约 + 自动注册表 + Store 上限与指标值对象。
 # 它必须独立于宿主 bin crate —— 否则能力 crate 无法命名 `WasmPluginState`

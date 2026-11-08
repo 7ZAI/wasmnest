@@ -120,7 +120,12 @@ android_logger = "0.14"
 wasmnest-server-peer-net = { path = "../../../wasmnest-lib/wasmnest-server-peer-net", features = ["common-host"] }
 # 端口 trait 词汇（BusPort / EventSink / PathsPort / SystemInfoPort / MdnsPort）
 # ——能力域端口面与宿主适配层共用同一套 trait，不新造第二套
-wasmnest-server-base = { path = "../../../wasmnest-lib/wasmnest-server-base" }
+# `mdns` **显式声明**（不靠 peer-net 的传递 feature 合并）：移动宿主在
+# `peer/ports.rs` 直接实现 `MdnsPort` / 使用 `MdnsTypeSubscription`，base 自
+# 2026-11-08（能力仓 P0）起默认不编译 mdns-sd / flume。
+# 不开 `tauri-compat`（移动端不走 Tauri 错误转换）与 `system-info`（移动端自持
+# 异步 SystemInfo 采集，不用 base 的同步采集实现）。
+wasmnest-server-base = { path = "../../../wasmnest-lib/wasmnest-server-base", features = ["mdns"] }
 # 出站 HTTP 能力域（票 05 收口：host-http 的 WIT 实现随绑定层迁入宿主
 # `plugin/host_domains/http.rs`，执行本体仍在 serve-http 的 plugin_binding::egress）
 wasmnest-server-http = { path = "../../../wasmnest-lib/wasmnest-server-http" }
