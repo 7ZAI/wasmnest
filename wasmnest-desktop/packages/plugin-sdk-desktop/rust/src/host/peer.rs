@@ -41,6 +41,15 @@ pub trait HostPeer {
     fn peer_list_trusted(&self) -> Result<serde_json::Value, HostError>;
     /// 撤销对指定节点的信任（返回是否删除了条目）
     fn peer_revoke_trusted(&self, node_id: &str) -> Result<bool, HostError>;
+    /// 登记可信对端（T07/T08：隧道配对成功落信任的唯一写入原语）。
+    /// `node_id` 必须是宿主已验证的对端身份（peer face 注入的 `peerNodeId`），
+    /// 不得传客户端自报值；`display_name` 为空串按缺省处理。返回是否为新加入
+    /// （幂等：已信任 false）
+    fn peer_trust_node(
+        &self,
+        node_id: &str,
+        display_name: Option<&str>,
+    ) -> Result<bool, HostError>;
     /// 向单个对端发送一批文件（扇出 = 对多个对端各调一次）。paths 元素双形态：
     /// 纯 string 或 `{ path, encrypt? }` 对象（任一元素 encrypt=true → 本批强制
     /// 加密）。返回传输句柄（batch-id 字符串）；仅接受 session 句柄寻址，

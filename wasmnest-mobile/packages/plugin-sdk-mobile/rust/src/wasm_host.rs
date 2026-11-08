@@ -412,6 +412,14 @@ impl HostPeer for WasmHost {
         host_peer::revoke_trusted(node_id).map_err(|e| host_err("peer_revoke_trusted", e))
     }
 
+    fn peer_trust_node(
+        &self,
+        node_id: &str,
+        display_name: Option<&str>,
+    ) -> Result<bool, HostError> {
+        host_peer::trust_node(node_id, display_name).map_err(|e| host_err("peer_trust_node", e))
+    }
+
     fn peer_send_files(
         &self,
         session: &str,
