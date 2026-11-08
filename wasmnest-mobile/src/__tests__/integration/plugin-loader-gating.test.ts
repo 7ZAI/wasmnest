@@ -2,7 +2,8 @@
  * 插件启动加载门禁测试（spec §3.5 / issue 02）
  *
  * 被测行为（loader.ts 实际实现）：
- * - isAutostart（持久化自启动偏好，缺省关）= false → 跳过（移动端启动不启动应用）
+ * - autostart（持久化自启动偏好，随清单同位返回；缺省按装配角色）false → 跳过
+ *   （移动端启动不启动应用）
  * - Activating 中间态 → 跳过（等最终态轮询兜底）
  * - pluginType: 'backend' → 跳过（无前端产物，后端自管）
  * - 其余状态（Activated / Degraded / Loaded / Error / NeedsApproval / Deactivated）
@@ -26,11 +27,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { logger } from '@/utils/frontendLogger'
 import { pluginLoader } from '@/plugin/loader'
+import type { PluginInfo } from '@/plugin/types'
+import type { PluginShellInfo } from '@/plugin/commands'
 import {
   makePluginInfo,
   makeDegradedPluginInfo,
   makeActivatingPluginInfo,
 } from '@/__tests__/fixtures'
+
+/** 壳清单条目 = 清单字段 + 自启偏好同位（后端 `MobileShellPluginInfo`） */
+function shell(info: PluginInfo, autostart: boolean): PluginShellInfo {
+  return { ...info, autostart }
+}
 
 // ==================== mock Tauri 边界 ====================
 
@@ -56,7 +64,7 @@ let consoleErrorSpy: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
   vi.clearAllMocks()
-  // 默认 mock 行为：所有命令静默返回，plugin_is_autostart=true
+  // 默认 mock 行为：所有命令静默返回（清单为空）
   mockInvoke.mockImplementation((cmd: string) => {
     switch (cmd) {
       case 'plugin_frontend_loader_session':
@@ -64,8 +72,6 @@ beforeEach(() => {
         return Promise.resolve('test-host-loader-session-credential')
       case 'plugin_list_loaded':
         return Promise.resolve([])
-      case 'plugin_is_autostart':
-        return Promise.resolve(true)
       case 'plugin_mark_error':
         return Promise.resolve(undefined)
       default:
@@ -107,48 +113,69 @@ describe('pluginLoader.loadAll 启动加载门禁', () => {
       }
       if (cmd === 'plugin_list_loaded') {
         return Promise.resolve([
-          makePluginInfo({
-            id: 'com.wasmnest.gate-ok',
-            name: 'Gate Ok',
-            state: { state: 'activated' },
-          }),
-          makeDegradedPluginInfo({
-            id: 'com.wasmnest.gate-degraded',
-            name: 'Gate Degraded',
-            error: DEGRADED_REASON,
-          }),
-          makeActivatingPluginInfo({ id: 'com.wasmnest.gate-activating', name: 'Gate Activating' }),
-          makePluginInfo({
-            id: 'com.wasmnest.gate-loaded',
-            name: 'Gate Loaded',
-            state: { state: 'loaded' },
-          }),
-          makePluginInfo({
-            id: 'com.wasmnest.gate-error',
-            name: 'Gate Error',
-            state: { state: 'error', error: 'boom' },
-          }),
-          makePluginInfo({
-            id: 'com.wasmnest.gate-approval',
-            name: 'Gate Approval',
-            state: { state: 'needsApproval' },
-          }),
-          makePluginInfo({
-            id: 'com.wasmnest.gate-off',
-            name: 'Gate Off',
-            state: { state: 'deactivated' },
-          }),
+          shell(
+            makePluginInfo({
+              id: 'com.wasmnest.gate-ok',
+              name: 'Gate Ok',
+              state: { state: 'activated' },
+            }),
+            true,
+          ),
+          shell(
+            makeDegradedPluginInfo({
+              id: 'com.wasmnest.gate-degraded',
+              name: 'Gate Degraded',
+              error: DEGRADED_REASON,
+            }),
+            true,
+          ),
+          shell(
+            makeActivatingPluginInfo({ id: 'com.wasmnest.gate-activating', name: 'Gate Activating' }),
+            true,
+          ),
+          shell(
+            makePluginInfo({
+              id: 'com.wasmnest.gate-loaded',
+              name: 'Gate Loaded',
+              state: { state: 'loaded' },
+            }),
+            true,
+          ),
+          shell(
+            makePluginInfo({
+              id: 'com.wasmnest.gate-error',
+              name: 'Gate Error',
+              state: { state: 'error', error: 'boom' },
+            }),
+            true,
+          ),
+          shell(
+            makePluginInfo({
+              id: 'com.wasmnest.gate-approval',
+              name: 'Gate Approval',
+              state: { state: 'needsApproval' },
+            }),
+            true,
+          ),
+          shell(
+            makePluginInfo({
+              id: 'com.wasmnest.gate-off',
+              name: 'Gate Off',
+              state: { state: 'deactivated' },
+            }),
+            true,
+          ),
           // backend 形态：无前端产物，后端自管，跳过（loader.ts 自启动门禁）
-          makePluginInfo({
-            id: 'com.wasmnest.gate-backend',
-            name: 'Gate Backend',
-            pluginType: 'backend',
-            state: { state: 'activated' },
-          }),
+          shell(
+            makePluginInfo({
+              id: 'com.wasmnest.gate-backend',
+              name: 'Gate Backend',
+              pluginType: 'backend',
+              state: { state: 'activated' },
+            }),
+            true,
+          ),
         ])
-      }
-      if (cmd === 'plugin_is_autostart') {
-        return Promise.resolve(true)
       }
       return Promise.resolve(undefined)
     })
@@ -178,30 +205,46 @@ describe('pluginLoader.loadAll 启动加载门禁', () => {
     )
     expect(degradedWarn).toBeTruthy()
     expect(degradedWarn!).toContain(DEGRADED_REASON)
+
+    // F2 锁：自启偏好随清单同位返回，loader 不再逐插件查询
+    expect(
+      mockInvoke.mock.calls.filter(([c]) => c === 'plugin_is_autostart'),
+    ).toHaveLength(0)
   })
 
-  it('isAutostart=false 门禁：跳过前端加载（持久化 ≠ 自启动）', async () => {
+  it('autostart=false 门禁：跳过前端加载（持久化 ≠ 自启动，偏好随清单同位）', async () => {
     // 同一批插件中：开了自启动的放行、未开的跳过（与运行时状态无关）
-    const autostartMap: Record<string, boolean> = {
-      'com.wasmnest.gate-on': true,
-      'com.wasmnest.gate-off': false,
-      'com.wasmnest.gate-off-loaded': false,
-    }
-
-    mockInvoke.mockImplementation((cmd: string, args: any) => {
+    mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'plugin_list_loaded') {
         return Promise.resolve([
           // 已激活且开了自启动 → 放行
-          makePluginInfo({ id: 'com.wasmnest.gate-on', name: 'Gate On', state: { state: 'activated' } }),
+          shell(
+            makePluginInfo({
+              id: 'com.wasmnest.gate-on',
+              name: 'Gate On',
+              state: { state: 'activated' },
+            }),
+            true,
+          ),
           // 已激活但未开自启动 → 跳过（即使运行时是 Activated）
-          makePluginInfo({ id: 'com.wasmnest.gate-off', name: 'Gate Off', state: { state: 'activated' } }),
+          shell(
+            makePluginInfo({
+              id: 'com.wasmnest.gate-off',
+              name: 'Gate Off',
+              state: { state: 'activated' },
+            }),
+            false,
+          ),
           // Loaded 且未开自启动 → 跳过（boot 不预载，等壳里点击）
-          makePluginInfo({ id: 'com.wasmnest.gate-off-loaded', name: 'Gate Off Loaded', state: { state: 'loaded' } }),
+          shell(
+            makePluginInfo({
+              id: 'com.wasmnest.gate-off-loaded',
+              name: 'Gate Off Loaded',
+              state: { state: 'loaded' },
+            }),
+            false,
+          ),
         ])
-      }
-      if (cmd === 'plugin_is_autostart') {
-        const pid = (args as { pluginId?: string })?.pluginId ?? ''
-        return Promise.resolve(autostartMap[pid] ?? false)
       }
       return Promise.resolve(undefined)
     })
@@ -216,11 +259,9 @@ describe('pluginLoader.loadAll 启动加载门禁', () => {
     expect(markErrorCount('com.wasmnest.gate-off')).toBe(0)
     expect(markErrorCount('com.wasmnest.gate-off-loaded')).toBe(0)
 
-    // plugin_is_autostart 按插件 id 查询（参数契约）
-    const autostartCalls = mockInvoke.mock.calls
-      .filter(([c]) => c === 'plugin_is_autostart')
-      .map(([, a]) => (a as { pluginId?: string })?.pluginId)
-    expect(autostartCalls).toContain('com.wasmnest.gate-off')
-    expect(autostartCalls).toContain('com.wasmnest.gate-off-loaded')
+    // F2 锁：清单已带偏好，单点偏好查询零调用（1+N 次串行 IPC 不再存在）
+    expect(
+      mockInvoke.mock.calls.filter(([c]) => c === 'plugin_is_autostart'),
+    ).toHaveLength(0)
   })
 })

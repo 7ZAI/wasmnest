@@ -217,12 +217,24 @@ function ratioFromPx(px: { x: number; y: number }): FloatingNavPosition {
   }
 }
 
-/** 实测尺寸并落到当前位置；尺寸没变时也不重复写（watch 只在比例 / 视口变化时触发） */
+/**
+ * 实测尺寸并落到当前位置
+ *
+ * 等值短路（F11）：resize 两路监听会重复回调，尺寸 / 落位不变时不写回，
+ * 免得每次回调都让 `barStyle` 重算、悬浮条重新渲染。
+ */
 function measure(): void {
   const el = barEl.value
   if (!el) return
-  size.value = { width: el.offsetWidth, height: el.offsetHeight }
-  if (!dragging.value) positionPx.value = pxFromRatio(floatingNavPos.value)
+  const width = el.offsetWidth
+  const height = el.offsetHeight
+  if (size.value.width !== width || size.value.height !== height) {
+    size.value = { width, height }
+  }
+  if (!dragging.value) {
+    const next = pxFromRatio(floatingNavPos.value)
+    if (positionPx.value.x !== next.x || positionPx.value.y !== next.y) positionPx.value = next
+  }
   ready.value = true
 }
 
@@ -456,16 +468,44 @@ function onKeydown(event: KeyboardEvent): void {
 
 // ==================== 生命周期 ====================
 
+/** resize 合帧句柄（窗口 + visualViewport 两路都挂，同一帧只量一次，F11） */
+let resizeRaf: number | null = null
+
 function onViewportResize(): void {
-  viewport.value = readViewport()
-  measure()
+  if (resizeRaf !== null) return
+  resizeRaf = requestAnimationFrame(() => {
+    resizeRaf = null
+    viewport.value = readViewport()
+    measure()
+  })
+}
+
+function cancelViewportResize(): void {
+  if (resizeRaf === null) return
+  cancelAnimationFrame(resizeRaf)
+  resizeRaf = null
+}
+
+/** 监听只在悬浮条启用时挂：隐藏期间窗口 resize 与它无关（F11） */
+function attachViewportListeners(): void {
+  window.addEventListener('resize', onViewportResize)
+  // 键盘弹出只改 visual viewport 的实现也要跟随（两路都监听，合帧去重）
+  window.visualViewport?.addEventListener?.('resize', onViewportResize)
+}
+
+function detachViewportListeners(): void {
+  window.removeEventListener('resize', onViewportResize)
+  window.visualViewport?.removeEventListener?.('resize', onViewportResize)
+  cancelViewportResize()
 }
 
 watch(enabled, async (on) => {
   if (!on) {
     ready.value = false
+    detachViewportListeners()
     return
   }
+  attachViewportListeners()
   // 关闭时根节点被 v-if 摘掉，重新开启要等 DOM 回来再量
   await nextTick()
   measure()
@@ -486,14 +526,11 @@ watch(bounds, () => {
 onMounted(() => {
   viewport.value = readViewport()
   measure()
-  window.addEventListener('resize', onViewportResize)
-  // 键盘弹出只改 visual viewport 的实现也要跟随（两路都监听，重复触发无代价）
-  window.visualViewport?.addEventListener?.('resize', onViewportResize)
+  if (enabled.value) attachViewportListeners()
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', onViewportResize)
-  window.visualViewport?.removeEventListener?.('resize', onViewportResize)
+  detachViewportListeners()
   resetDrag()
 })
 </script>

@@ -94,9 +94,34 @@ export function createPluginContext(
   info: PluginInfo,
   hooks: PluginContextHooks = {},
 ): PluginContext {
+  /**
+   * 本插件运行期创建的可回收资源（停用时由 loader 统一 dispose）
+   *
+   * 条目在 `dispose()` 时**自摘**：早先只 push 不删，按组件生命周期订阅 / 解绑的
+   * 常见写法会在数组里留下已 dispose 的包装闭包（间接钉住组件状态），长会话里只增
+   * 不减。保持数组形态（不改 Set）是为了不动 SDK 对外暴露的 `_disposables: Disposable[]`
+   * 形状——应用与 dev-shell 都按它编译；自摘才是本缺陷的判据。
+   */
   const disposables: Disposable[] = []
   const permissions = info.permissions
   let context: PluginContext | null = null
+
+  /**
+   * 登记资源并让 `dispose()` 自摘（幂等：重复 dispose 只影响底层资源，不再改数组）
+   *
+   * 返回包装句柄而不是原句柄：插件把返回值存起来手动 dispose 时，数组同步收缩。
+   */
+  function track(disposable: Disposable): Disposable {
+    const tracked: Disposable = {
+      dispose() {
+        const index = disposables.indexOf(tracked)
+        if (index >= 0) disposables.splice(index, 1)
+        disposable.dispose()
+      },
+    }
+    disposables.push(tracked)
+    return tracked
+  }
 
   /** 快速失败：检查权限 */
   function requirePermission(apiMethod: string): void {
@@ -125,8 +150,7 @@ export function createPluginContext(
       const disposable = {
         dispose() { commandHandlers.delete(id) },
       }
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     async execute(id: string, ...args: any[]): Promise<any> {
       const handler = commandHandlers.get(id)
@@ -171,8 +195,7 @@ export function createPluginContext(
     onStatusChange(handler: (event: any) => void): Disposable {
       requirePermission('session.onStatusChange')
       const disposable = pluginEvents.on(info.id, 'session:statusChange', handler)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
   }
 
@@ -213,24 +236,20 @@ export function createPluginContext(
         ...surface,
         component: wrapped,
       })
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     registerSlot(slot: ShellSlotContribution): Disposable {
       const disposable = getShellRegistry().registerSlot(info.id, slot)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     registerCapsuleItem(item: ShellCapsuleItem): Disposable {
       const disposable = getShellRegistry().registerCapsuleItem(info.id, item)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     registerRoute(route: PluginRouteDescriptor): Disposable {
       requirePermission('ui.registerRoute')
       const disposable = registerPluginRoute(info.id, route)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     openPage(routeId: string): void {
       requirePermission('ui.openPage')
@@ -244,8 +263,7 @@ export function createPluginContext(
       requirePermission('ui.onBackPressed')
       const unsubscribe = subscribeAppBackPressed(handler)
       const disposable = { dispose: unsubscribe }
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     showDialog(options: PluginDialogOptions): PluginDialogHandle {
       requirePermission('ui.showDialog')
@@ -276,8 +294,7 @@ export function createPluginContext(
   const events: EventAPI = {
     on(event: string, handler: (...args: any[]) => void): Disposable {
       const disposable = pluginEvents.on(info.id, event, handler)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     emit(event: string, ...args: any[]): void {
       pluginEvents.emit(event, ...args)
@@ -425,33 +442,27 @@ export function createPluginContext(
   const lifecycle: LifecycleAPI = {
     onAppStartup(handler: () => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:appStartup', handler)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     onAppShutdown(handler: () => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:appShutdown', handler)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     onAuthSuccess(handler: () => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:authSuccess', handler)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     onDisconnect(handler: (reason: string) => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:disconnect', (payload: any) => handler(payload.reason))
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     onSessionCreated(handler: (sessionId: string) => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:sessionCreated', (payload: any) => handler(payload.sessionId))
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     onSessionStopped(handler: (sessionId: string) => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:sessionStopped', (payload: any) => handler(payload.sessionId))
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
   }
 

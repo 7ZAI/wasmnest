@@ -95,6 +95,22 @@ fn dir_size(path: &std::path::Path) -> u64 {
     total
 }
 
+/// 返回给前端**宿主壳**的插件清单条目：清单字段平铺 + 偏好同位
+///
+/// 为什么单开一层而不给 [`MobilePluginInfo`] 加字段：同一结构体也被 `get_info` /
+/// 更新链路复用，那些调用点没有「本次装配的偏好」可填——加可选字段等于把
+/// 「这条清单到底查没查偏好」变成调用方可遗忘的约定。壳清单单独成型，
+/// `list_loaded`（含 `get_info` 等）形状与语义零变化。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileShellPluginInfo {
+    #[serde(flatten)]
+    pub plugin: MobilePluginInfo,
+    /// 启动时自动激活偏好（缺省按装配角色：L1/L2 开、L3 关；与
+    /// `PluginManager::is_autostart` 逐字一致）
+    pub autostart: bool,
+}
+
 /// 以 plugin.json 的 mtime 近似安装时间（unix 毫秒）
 fn manifest_installed_at(extension_path: &str) -> Option<i64> {
     let manifest = std::path::Path::new(extension_path).join("plugin.json");

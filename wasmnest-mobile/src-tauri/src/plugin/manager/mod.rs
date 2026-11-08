@@ -294,6 +294,25 @@ impl PluginManager {
         plugins.values().map(|p| MobilePluginInfo::from(p)).collect()
     }
 
+    /// 返回所有已加载插件信息 + 自启偏好同位（宿主壳 `plugin_list_loaded` 用）
+    ///
+    /// 为什么合并：插件前端预载对每个插件做一次 `plugin_is_autostart`，冷启动
+    /// 就多出 N 次串行 IPC（装载主链卡在首帧前）。偏好真源在 `PluginManager`，
+    /// 进程内合并即可，壳只付一次往返。
+    ///
+    /// 缺省取向复用 [`Self::is_autostart`]（L1/L2 缺省 true / L3 false），不另立判据。
+    pub async fn list_loaded_with_autostart(&self) -> Vec<MobileShellPluginInfo> {
+        // 先取完清单再逐条读偏好：`is_autostart` 内部会再取一次插件表读锁，
+        // 不能与 `list_loaded` 的读锁嵌套
+        let infos = self.list_loaded().await;
+        let mut out = Vec::with_capacity(infos.len());
+        for plugin in infos {
+            let autostart = self.is_autostart(&plugin.id).await;
+            out.push(MobileShellPluginInfo { plugin, autostart });
+        }
+        out
+    }
+
     /// 返回单个插件信息
     pub async fn get_info(&self, plugin_id: &str) -> Option<MobilePluginInfo> {
         let plugins = self.plugins.read().await;

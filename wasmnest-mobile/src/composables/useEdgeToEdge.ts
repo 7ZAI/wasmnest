@@ -12,6 +12,12 @@
  * - 在 composable 创建时立即启动异步初始化（不等 onMounted）
  * - 首次渲染时 safeArea 为全 0，由 isReady 控制内容显示时机
  * - Android WebView 不支持 CSS env(safe-area-inset-*)，完全依赖 JS 值
+ *
+ * 事件面只有一个（2026-11-08 性能审查 F3）：插件真源
+ * （`tauri-plugin-edge-to-edge@0.3.3` 的 `EdgeToEdgePlugin.kt`）在 insets / 键盘
+ * 变化时只 `window.dispatchEvent(new CustomEvent('safeAreaChanged', ...))`，
+ * **不 emit 任何 Tauri 事件**。此前这里还挂了一条 `listen('safeAreaChanged')`，
+ * 既永不触发、又在初始化链上多付一次串行往返——已删，只剩 DOM 监听。
  */
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { logger } from '@/utils/frontendLogger'
@@ -50,9 +56,6 @@ export function useEdgeToEdge() {
   })
 
   const isReady = ref(false)
-
-  // 清理函数列表
-  const cleanupFunctions: Array<() => void> = []
 
   /**
    * 处理安全区域变化事件
@@ -130,46 +133,6 @@ export function useEdgeToEdge() {
   }
 
   /**
-   * 使用 Tauri 事件系统监听安全区域变化
-   */
-  async function setupEventListener() {
-    try {
-      const { listen } = await import('@tauri-apps/api/event')
-      const unlisten = await listen<{
-        top: number
-        right: number
-        bottom: number
-        left: number
-        keyboardHeight: number
-        keyboardVisible: boolean
-      }>('safeAreaChanged', (event) => {
-        const { top, right, bottom, left, keyboardHeight, keyboardVisible } = event.payload
-
-        safeArea.value = {
-          top,
-          right,
-          bottom,
-          left,
-          statusBar: top,
-          navigationBar: bottom,
-        }
-
-        keyboardInfo.value = {
-          keyboardHeight,
-          isVisible: keyboardVisible,
-        }
-
-        logger.log('[EdgeToEdge] Safe area changed via Tauri event:', safeArea.value)
-      })
-
-      return unlisten
-    } catch (e) {
-      logger.warn('[EdgeToEdge] Failed to setup Tauri event listener:', e)
-      return null
-    }
-  }
-
-  /**
    * 核心初始化逻辑 — 立即执行，不依赖 onMounted
    *
    * 提前启动异步初始化，使 safeArea 值在首次渲染前就可能就绪
@@ -181,15 +144,9 @@ export function useEdgeToEdge() {
       return
     }
 
-    // 设置 Tauri 事件监听（推荐方式）
-    const unlisten = await setupEventListener()
-    if (unlisten) {
-      cleanupFunctions.push(unlisten)
-    }
-
-    // 初始获取安全区域
-    await getSafeAreaInsets()
-    await getKeyboardInfo()
+    // 两条初始查询并发发出：此前是「挂 Tauri 监听 → insets → 键盘」三次串行，
+    // 首帧要等满三轮往返才放开 ShellView 闸门
+    await Promise.all([getSafeAreaInsets(), getKeyboardInfo()])
 
     isReady.value = true
     logger.log('[EdgeToEdge] Initialized:', safeArea.value)
@@ -208,8 +165,6 @@ export function useEdgeToEdge() {
 
   onUnmounted(() => {
     window.removeEventListener('safeAreaChanged', handleSafeAreaChange as EventListener)
-    cleanupFunctions.forEach(fn => fn())
-    cleanupFunctions.length = 0
   })
 
   // 计算属性：是否有安全区域

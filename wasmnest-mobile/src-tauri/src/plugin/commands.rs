@@ -39,7 +39,7 @@
 //! 凭证由宿主层补）。两者都归宿主门。
 
 use crate::plugin::manager::PluginManager;
-use crate::plugin::types::MobilePluginInfo;
+use crate::plugin::types::{MobilePluginInfo, MobileShellPluginInfo};
 use crate::Result;
 use serde_json::Value;
 use std::sync::Arc;
@@ -160,11 +160,15 @@ async fn require_storage_access(
 
 // ==================== Plugin Lifecycle Commands ====================
 
-/// 获取所有已加载插件信息
+/// 获取所有已加载插件信息（含自启偏好同位）
+///
+/// 返回值 = 清单 + `autostart`：宿主壳的插件预载与清单页都不必再逐应用查
+/// `plugin_is_autostart`（1+N 次串行 IPC）。偏好缺失时不丢字段——`is_autostart`
+/// 已带角色缺省（L1/L2 true / L3 false），由后端权威给出。
 #[tauri::command]
-pub async fn plugin_list_loaded(app_handle: tauri::AppHandle) -> Result<Vec<MobilePluginInfo>> {
+pub async fn plugin_list_loaded(app_handle: tauri::AppHandle) -> Result<Vec<MobileShellPluginInfo>> {
     let manager = app_handle.state::<Arc<PluginManager>>();
-    Ok(manager.list_loaded().await)
+    Ok(manager.list_loaded_with_autostart().await)
 }
 
 /// 获取单个插件信息

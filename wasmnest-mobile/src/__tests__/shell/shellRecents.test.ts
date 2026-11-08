@@ -451,8 +451,11 @@ describe('C-S6 上滑关闭手势', () => {
     await grid.trigger('pointermove', { clientX: 104, clientY: 160 })
     await wrapper.vm.$nextTick()
 
-    // 拖拽中卡片跟随位移（反馈是手势可发现性的前提，不能「松手才知道生效」）
-    expect(activeCard(wrapper).attributes('style')).toContain('-40px')
+    // 拖拽中卡片跟随位移（反馈是手势可发现性的前提，不能「松手才知道生效」）。
+    // 位移经 CSS 变量直写被拖节点（F6：不重建 vnode，只改 style）
+    const dragged = activeCard(wrapper)
+    expect(dragged.classes(), '只有被拖的卡带 is-dragging').toContain('is-dragging')
+    expect(dragged.attributes('style')).toContain('--drag-y: -40px')
     expect(mockStop).not.toHaveBeenCalled()
   })
 
@@ -798,8 +801,11 @@ describe('C-S8 卡片布局（与桌面同形）', () => {
     await grid.trigger('pointermove', { clientX: 175, clientY: 300 })
     await grid.trigger('pointermove', { clientX: 150, clientY: 300 })
 
-    // 横向手势是「切当前卡」：网格整体轻微跟手（-50 × 0.14 = -7px），抬手吸附
-    expect(wrapper.find('.shell-recents-grid-inner').attributes('style')).toContain('-7px')
+    // 横向手势是「切当前卡」：网格整体轻微跟手（-50 × 0.14 = -7px），抬手吸附。
+    // 合帧位移走网格上的 CSS 变量（F6），不再写 .shell-recents-grid-inner 的 inline style
+    expect(wrapper.find('.shell-recents-grid').attributes('style')).toContain(
+      '--grid-nudge: -7px',
+    )
   })
 
   it('should_keepCurrentCardMarked_when_cardsRendered', () => {
@@ -1035,7 +1041,7 @@ describe('C-S25 卡片视觉口径（2026-11-06 用户反馈）', () => {
       'utf8',
     )
     expect(src, '等比缩放必须取 Math.min（contain，整页可见）').toContain(
-      'Math.min(boxWidth / size.width, boxHeight / size.height)',
+      'Math.min(box.width / size.width, box.height / size.height)',
     )
   })
 })

@@ -8,8 +8,21 @@ import { invoke } from '@tauri-apps/api/core'
 import type { PluginInfo } from './types'
 import { ensureHostCredential, invalidateChannelToken } from './credentials'
 
-/** 获取所有已加载插件信息 */
-export async function pluginListLoaded(): Promise<PluginInfo[]> {
+/**
+ * 宿主壳清单条目：插件字段平铺 + 自启偏好同位
+ *
+ * 后端返回 `MobileShellPluginInfo`（清单 ⊔ `autostart`）：偏好由宿主进程内合并，
+ * 壳与插件预载不必再逐应用发 `plugin_is_autostart`。字段必存在（不用可选 + 前端
+ * 自定缺省：缺省归后端按装配角色，L1/L2 服务缺省 true，前端猜 false 会把服务
+ * 型应用的预载静默漏掉）。
+ */
+export interface PluginShellInfo extends PluginInfo {
+  /** 启动时自动激活偏好（缺省按装配角色：L1/L2 开、L3 关） */
+  autostart: boolean
+}
+
+/** 获取所有已加载插件信息（含自启偏好同位） */
+export async function pluginListLoaded(): Promise<PluginShellInfo[]> {
   return await invoke('plugin_list_loaded')
 }
 

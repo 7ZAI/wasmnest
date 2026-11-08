@@ -16,6 +16,9 @@
  * - `attachPreview` / `detachPreview`：多任务卡（2026-10-30）把同一容器搬进卡片
  *   缩略区，按最近一次实测的整幅尺寸等比缩放（布局不重排、滚动 / 输入原样），
  *   卡片**不是**可交互前台（前台信号推 false）；卡片卸载回后台。
+ *   **搬入两趟制**（2026-11-08 F5）：同一 tick 内所有卡的搬入请求先进队列，
+ *   微任务里一次读完所有尺寸（容器整幅 + 卡片盒子）再统一写 DOM——逐卡
+ *   「搬入整棵子树 → 读盒子」会让每张卡都强制同步布局一次（N 张卡 N 次全文档重排）。
  * - `dispose`：唯一会 `app.unmount()` 的路径；**先摘记账**再 unmount 再移除
  *   容器——unmount 期间的并发 attach 拿到 false，不会复用半销毁实例；幂等；
  *   能处理「创建在途」：在途 ensure 完成后发现记账已不在，不得重新登记，
@@ -153,6 +156,12 @@ const PREVIEW_STYLE_PROPS = [
   'transform',
 ] as const
 
+/** 卡片盒子尺寸（只读一次；读后立即写会触发强制同步布局，两趟制把它提到写之前） */
+interface BoxSize {
+  width: number
+  height: number
+}
+
 /** 在文档里时实测整幅尺寸（脱离文档的节点量不到布局，保留旧值） */
 function measureInDocument(record: MutableSurfaceAppRecord): void {
   if (!record.container.isConnected) return
@@ -175,20 +184,23 @@ function measureInDocument(record: MutableSurfaceAppRecord): void {
  *
  * 卡片里内容要铺满、不裁切：宁可上下（或左右）留边，也不切掉应用的任何一页内容。
  */
-function fitPreviewStyle(record: MutableSurfaceAppRecord, boxEl: HTMLElement): void {
+function fitPreviewStyle(record: MutableSurfaceAppRecord, box: BoxSize): void {
   const size = record.size
   if (!size) return
-  const boxWidth = boxEl.clientWidth
-  const boxHeight = boxEl.clientHeight
-  if (!(boxWidth > 0) || !(boxHeight > 0)) return
-  const scale = Math.min(boxWidth / size.width, boxHeight / size.height)
-  const x = (boxWidth - size.width * scale) / 2
-  const y = (boxHeight - size.height * scale) / 2
+  if (!(box.width > 0) || !(box.height > 0)) return
+  const scale = Math.min(box.width / size.width, box.height / size.height)
+  const x = (box.width - size.width * scale) / 2
+  const y = (box.height - size.height * scale) / 2
   record.container.style.transform = `translate(${x}px, ${y}px) scale(${scale})`
 }
 
+/** 读卡片盒子尺寸（**纯读**：调用方必须把所有读集中到写之前） */
+function measureBox(boxEl: HTMLElement): BoxSize {
+  return { width: boxEl.clientWidth, height: boxEl.clientHeight }
+}
+
 /** 进入预览态：固定整幅尺寸 + 内联缩放 + inert（卡片里的实例不可交互 / 不可聚焦） */
-function applyPreviewStyle(record: MutableSurfaceAppRecord, boxEl: HTMLElement): void {
+function applyPreviewStyle(record: MutableSurfaceAppRecord, box: BoxSize): void {
   const el = record.container
   el.style.position = 'absolute'
   el.style.left = '0'
@@ -199,7 +211,7 @@ function applyPreviewStyle(record: MutableSurfaceAppRecord, boxEl: HTMLElement):
     el.style.transformOrigin = '0 0'
   }
   el.inert = true
-  fitPreviewStyle(record, boxEl)
+  fitPreviewStyle(record, box)
 }
 
 /** 离开预览态：清掉预览内联样式，让 `.surface-instance-host` 的 100% 尺寸规则重新生效 */
@@ -221,6 +233,68 @@ export function createSurfaceAppRegistry(options: {
 
   const records = new Map<string, MutableSurfaceAppRecord>()
   const inflight = new Map<string, InflightCreate>()
+
+  /**
+   * 待搬入多任务卡的请求（同一 tick 合批；微任务里两趟制落 DOM）
+   *
+   * 为什么不在 `attachPreview` 里直接搬：Vue 在同一 flush 里逐个 mount 卡片，
+   * 每张卡「append 整棵应用子树（可达千级节点）→ 读盒子尺寸」都会强制一次全文档
+   * 同步布局；N 张卡就是 N 次。合批后读阶段（容器整幅 + 所有盒子）全部发生在
+   * 写阶段之前，一次布局即可收口。
+   */
+  interface PendingPreviewAttach {
+    appId: string
+    record: MutableSurfaceAppRecord
+    boxEl: HTMLElement
+    cancelled: boolean
+  }
+  let pendingPreviewAttaches: PendingPreviewAttach[] = []
+  let previewFlushQueued = false
+
+  /** 取消该应用在队列里的搬入（dispose / 回插槽 / 摘下卡片）：队列里不留死条目 */
+  function cancelPendingPreview(appId: string): void {
+    for (const pending of pendingPreviewAttaches) {
+      if (pending.appId === appId) pending.cancelled = true
+    }
+  }
+
+  function flushPreviewAttaches(): void {
+    previewFlushQueued = false
+    const batch = pendingPreviewAttaches
+    pendingPreviewAttaches = []
+    if (batch.length === 0) return
+
+    // ① 读阶段：容器整幅尺寸（在文档里才量得到）+ 卡片盒子尺寸
+    const measured = batch
+      .filter((pending) => !pending.cancelled && records.get(pending.appId) === pending.record)
+      .map((pending) => {
+        measureInDocument(pending.record)
+        return { ...pending, box: measureBox(pending.boxEl) }
+      })
+
+    // ② 写阶段：搬入 + 内联尺寸/缩放（不再回读盒子）
+    for (const { record, boxEl, box, appId } of measured) {
+      if (record.location === 'preview') continue
+      boxEl.appendChild(record.container)
+      record.location = 'preview'
+      applyPreviewStyle(record, box)
+      // 卡片是后台展示，不是可交互前台：前台信号推 false（应用可暂停轮询 / 动画）
+      record.active.value = false
+      logger.info(makeEvent(appId, 'attach', { detail: '多任务卡片预览（非前台）' }))
+    }
+  }
+
+  function queuePreviewAttach(record: MutableSurfaceAppRecord, boxEl: HTMLElement): void {
+    pendingPreviewAttaches.push({
+      appId: record.appId,
+      record,
+      boxEl,
+      cancelled: false,
+    })
+    if (previewFlushQueued) return
+    previewFlushQueued = true
+    queueMicrotask(flushPreviewAttaches)
+  }
 
   /** 组装日志事件（instanceCount 字段只在组装点取值，保证口径单一） */
   function makeEvent(
@@ -392,6 +466,7 @@ export function createSurfaceAppRegistry(options: {
     attach(appId, outlet) {
       const record = records.get(appId)
       if (!record) return false
+      cancelPendingPreview(appId)
       if (record.location === 'preview') clearPreviewStyle(record.container)
       if (record.container.parentElement !== outlet) outlet.appendChild(record.container)
       record.location = 'outlet'
@@ -405,14 +480,12 @@ export function createSurfaceAppRegistry(options: {
     attachPreview(appId, boxEl) {
       const record = records.get(appId)
       if (!record) return false
-      // 前台实例还在插槽里：先量整幅，再改写容器尺寸（否则量到的是卡片盒子）
-      measureInDocument(record)
-      boxEl.appendChild(record.container)
-      record.location = 'preview'
-      applyPreviewStyle(record, boxEl)
-      // 卡片是后台展示，不是可交互前台：前台信号推 false（应用可暂停轮询 / 动画）
-      record.active.value = false
-      logger.info(makeEvent(appId, 'attach', { detail: '多任务卡片预览（非前台）' }))
+      if (record.location === 'preview') {
+        // 已在卡片里（live 抖动的重复调用）：直接按当前盒子重排，不进队列
+        applyPreviewStyle(record, measureBox(boxEl))
+        return true
+      }
+      queuePreviewAttach(record, boxEl)
       return true
     },
 
@@ -421,13 +494,19 @@ export function createSurfaceAppRegistry(options: {
       if (!record || record.location !== 'preview') return false
       const boxEl = record.container.parentElement
       if (!boxEl) return false
-      fitPreviewStyle(record, boxEl)
+      // ResizeObserver 回调在布局之后投递：这里的读不会触发强制同步布局
+      fitPreviewStyle(record, measureBox(boxEl))
       return true
     },
 
     detachPreview(appId) {
       const record = records.get(appId)
-      if (!record || record.location !== 'preview') return false
+      if (!record) return false
+      cancelPendingPreview(appId)
+      if (record.location !== 'preview') {
+        // 搬入还在队列里（同一 tick 内先挂后摘）：队列已取消，等价于「已离开卡片」
+        return pendingPreviewAttaches.some((p) => p.appId === appId && p.cancelled)
+      }
       clearPreviewStyle(record.container)
       record.container.remove()
       record.location = 'detached'
@@ -438,6 +517,7 @@ export function createSurfaceAppRegistry(options: {
     detach(appId) {
       const record = records.get(appId)
       if (!record) return false
+      cancelPendingPreview(appId)
       if (record.location === 'preview') clearPreviewStyle(record.container)
       measureInDocument(record)
       record.container.remove() // 脱文档但整棵子树保留（不销毁、不 unmount）
@@ -448,6 +528,7 @@ export function createSurfaceAppRegistry(options: {
     },
 
     async dispose(appId) {
+      cancelPendingPreview(appId)
       const record = records.get(appId)
       if (record) {
         await destroyRecord(record)

@@ -822,12 +822,21 @@
   box-shadow: 0 14px 36px color-mix(in srgb, var(--mobile-text-primary) 16%, transparent);
 }
 /* 拖拽期间关掉过渡与入场动画并开启 will-change：抬手后交回 CSS 过渡，
-   否则手指与卡片之间会慢半拍，入场动画也会盖掉跟手位移。 */
+   否则手指与卡片之间会慢半拍，入场动画也会盖掉跟手位移。
+   位移经 CSS 变量由 pointermove 直写（rAF 合帧，F6）——逐帧移动不重建 vnode。 */
 .shell-recents-grid--dragging .shell-recents-grid-inner,
 .shell-recents-grid--dragging .shell-recents-card {
   animation: none;
   transition: none;
   will-change: transform;
+}
+.shell-recents-grid--dragging .shell-recents-grid-inner {
+  transform: translate3d(var(--grid-nudge, 0px), 0, 0);
+}
+/* 上滑关闭跟手：只有被拖的那张卡带 is-dragging（class 一次手势变一次） */
+.shell-recents-card.is-dragging {
+  transform: translate3d(0, var(--drag-y, 0px), 0);
+  opacity: var(--drag-opacity, 1);
 }
 
 /* 信息条：图标打头 + 名称（异常态才追加状态行）。右侧 44px 留给关闭键，

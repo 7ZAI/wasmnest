@@ -84,13 +84,19 @@ function stubHistoryBack(back: string | null): void {
   })
 }
 
-function mountNav() {
+/** 等一帧 rAF（resize 合帧，F11：两路监听同帧只量一次） */
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()))
+}
+
+async function mountNav() {
   const wrapper = mount(ShellFloatingNav, { attachTo: document.body })
   const el = wrapper.find('[data-testid="shell-floating-nav"]').element as HTMLElement
   // 实测尺寸在挂载后补：先给实例装尺寸，再触发一次 resize 让组件重新量
   Object.defineProperty(el, 'offsetWidth', { configurable: true, value: NAV_SIZE.width })
   Object.defineProperty(el, 'offsetHeight', { configurable: true, value: NAV_SIZE.height })
   window.dispatchEvent(new Event('resize'))
+  await nextFrame()
   return { wrapper, el }
 }
 
@@ -134,8 +140,8 @@ describe('C-F1 开关与渲染', () => {
     wrapper.unmount()
   })
 
-  it('should_renderWithAccessibleNames_when_enabled', () => {
-    const { wrapper } = mountNav()
+  it('should_renderWithAccessibleNames_when_enabled', async () => {
+    const { wrapper } = await mountNav()
 
     const bar = wrapper.find('[data-testid="shell-floating-nav"]')
     expect(bar.attributes('role'), '拖动面是语义分组').toBe('group')
@@ -151,7 +157,7 @@ describe('C-F1 开关与渲染', () => {
 describe('C-F2..C-F4 导航动作', () => {
   it('should_useSharedBackAction_when_backTappedInsideShell', async () => {
     hasBackTarget.value = true
-    const { wrapper } = mountNav()
+    const { wrapper } = await mountNav()
     const back = wrapper.find('button[aria-label="shell.floatingNav.back"]')
 
     expect(back.attributes('disabled'), '壳内有可退项时可点').toBeUndefined()
@@ -164,9 +170,9 @@ describe('C-F2..C-F4 导航动作', () => {
     wrapper.unmount()
   })
 
-  it('should_disableBack_when_shellHasNothingToGoBackTo', () => {
+  it('should_disableBack_when_shellHasNothingToGoBackTo', async () => {
     // 主屏且无覆盖层 = 没有可退的东西：保留占位（胶囊宽度不跳）但置灰
-    const { wrapper } = mountNav()
+    const { wrapper } = await mountNav()
 
     expect(
       wrapper.find('button[aria-label="shell.floatingNav.back"]').attributes('disabled'),
@@ -177,7 +183,7 @@ describe('C-F2..C-F4 导航动作', () => {
   it('should_goBackInHistory_when_backTappedOnLegacyRoute', async () => {
     route.name = 'mobile-settings-about'
     stubHistoryBack('/mobile/shell')
-    const { wrapper } = mountNav()
+    const { wrapper } = await mountNav()
 
     await wrapper.find('button[aria-label="shell.floatingNav.back"]').trigger('click')
     await flushPromises()
@@ -193,7 +199,7 @@ describe('C-F2..C-F4 导航动作', () => {
     // 直接深链进旧二级页：没有可回退的整页历史（交给共用实现 replace 回壳入口）
     route.name = 'mobile-settings-appearance'
     stubHistoryBack(null)
-    const { wrapper } = mountNav()
+    const { wrapper } = await mountNav()
 
     await wrapper.find('button[aria-label="shell.floatingNav.back"]').trigger('click')
     await flushPromises()
@@ -206,7 +212,7 @@ describe('C-F2..C-F4 导航动作', () => {
 
   it('should_goHomeAndEnterShell_when_homeTappedFromLegacyRoute', async () => {
     route.name = 'mobile-settings-about'
-    const { wrapper } = mountNav()
+    const { wrapper } = await mountNav()
 
     await wrapper.find('button[aria-label="shell.floatingNav.home"]').trigger('click')
     await flushPromises()
@@ -218,7 +224,7 @@ describe('C-F2..C-F4 导航动作', () => {
 
   it('should_openSwitcherAndEnterShell_when_recentsTappedFromLegacyRoute', async () => {
     route.name = 'mobile-settings-appearance'
-    const { wrapper } = mountNav()
+    const { wrapper } = await mountNav()
 
     await wrapper.find('button[aria-label="shell.floatingNav.recents"]').trigger('click')
     await flushPromises()
@@ -229,7 +235,7 @@ describe('C-F2..C-F4 导航动作', () => {
   })
 
   it('should_notPushAgain_when_alreadyOnShellRoute', async () => {
-    const { wrapper } = mountNav()
+    const { wrapper } = await mountNav()
 
     await wrapper.find('button[aria-label="shell.floatingNav.home"]').trigger('click')
     await flushPromises()
@@ -242,7 +248,7 @@ describe('C-F2..C-F4 导航动作', () => {
 
 describe('C-F5..C-F6 拖动', () => {
   it('should_persistNormalizedPosition_when_dragged', async () => {
-    const { wrapper, el } = mountNav()
+    const { wrapper, el } = await mountNav()
     const bar = wrapper.find('[data-testid="shell-floating-nav"]')
     const { minX, maxX, minY, maxY } = bounds()
     // 初始比例 (0.5, 1)：像素位置在底部居中
@@ -287,7 +293,7 @@ describe('C-F5..C-F6 拖动', () => {
   })
 
   it('should_swallowClickAfterDrag_when_dragStartedOnButton', async () => {
-    const { wrapper } = mountNav()
+    const { wrapper } = await mountNav()
     const bar = wrapper.find('[data-testid="shell-floating-nav"]')
     const home = wrapper.find('button[aria-label="shell.floatingNav.home"]')
 
@@ -324,7 +330,7 @@ describe('C-F5..C-F6 拖动', () => {
   })
 
   it('should_keepClickWorking_when_movementWithinThreshold', async () => {
-    const { wrapper } = mountNav()
+    const { wrapper } = await mountNav()
     const bar = wrapper.find('[data-testid="shell-floating-nav"]')
     const home = wrapper.find('button[aria-label="shell.floatingNav.home"]')
 
@@ -373,7 +379,7 @@ describe('C-F8 文案双语在场', () => {
 
 describe('C-F7 键盘替代路径', () => {
   it('should_moveAndPersist_when_arrowKeyPressed', async () => {
-    const { wrapper } = mountNav()
+    const { wrapper } = await mountNav()
     const bar = wrapper.find('[data-testid="shell-floating-nav"]')
     const { minX, maxX } = bounds()
     const startX = minX + 0.5 * (maxX - minX)

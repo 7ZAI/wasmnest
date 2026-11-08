@@ -73,13 +73,15 @@
         @pointerup="onPointerUp"
         @pointercancel="resetDrag"
       >
-        <div class="shell-recents-grid-inner" :style="gridStyle()">
+        <!-- 拖拽位移写 CSS 变量（pointermove 直写被拖节点 / 网格，F6）：
+             只有 class 的开关走响应式，逐帧移动不再重建整片卡片 vnode -->
+        <div class="shell-recents-grid-inner">
           <article
             v-for="(card, index) in cards"
             :key="card.app.id"
             class="shell-recents-card"
-            :class="{ active: index === activeIndex }"
-            :style="cardStyle(index)"
+            :class="{ active: index === activeIndex, 'is-dragging': card.app.id === dragTargetId }"
+            :style="{ '--i': index }"
             :data-app-id="card.app.id"
             role="listitem"
           >
@@ -89,8 +91,8 @@
               <ShellAppIcon :app="card.app" :size="28" />
               <span class="flex-1 min-w-0">
                 <span class="shell-recents-name">{{ card.app.name }}</span>
-                <span v-if="stateText(card)" class="shell-recents-status" :class="stateClass(card)">
-                  {{ stateText(card) }}
+                <span v-if="card.statusText" class="shell-recents-status" :class="card.statusClass">
+                  {{ card.statusText }}
                 </span>
               </span>
             </div>
@@ -227,6 +229,15 @@ const { open } = useShellOpen()
 interface RecentCard {
   app: ShellApp
   running: boolean
+  /**
+   * 状态行（运行中为空串：不重复播报默认事实）
+   *
+   * 随 `cards` 一次算好而不是在模板里调函数：原先 v-if 与插值各调一次 `stateText`，
+   * 拖动每帧重建 N 张卡时就是 N×2 次 i18n 查表（F6）。
+   */
+  statusText: string
+  /** 状态行语义色（异常态才偏离次级文字色） */
+  statusClass: string
 }
 
 /** 最近使用排序：recentIds 有记录的按记录顺序，其余运行中应用按名称兜底 */
@@ -252,10 +263,13 @@ const cards = computed<RecentCard[]>(() => {
       (app): app is ShellApp =>
         app !== undefined && !runningIds.has(app.id) && !isServiceKind(app.kind),
     )
-  return [
-    ...running.map((app) => ({ app, running: true })),
-    ...dormant.map((app) => ({ app, running: false })),
-  ]
+  const toCard = (app: ShellApp, running: boolean): RecentCard => ({
+    app,
+    running,
+    statusText: running ? '' : statusTextOf(app),
+    statusClass: statusClassOf(app),
+  })
+  return [...running.map((app) => toCard(app, true)), ...dormant.map((app) => toCard(app, false))]
 })
 
 // ==================== 前层选择 ====================
@@ -287,9 +301,9 @@ function step(delta: number): void {
 
 // ==================== 卡片内容 ====================
 
-/** 状态行：运行中不重复播报默认事实，只给未运行 / 待审批 / 停用 / 失败 */
-function stateText(card: RecentCard): string {
-  switch (card.app.state) {
+/** 状态行：运行中不重复播报默认事实，只给待审批 / 停用 / 失败 / 未运行 */
+function statusTextOf(app: ShellApp): string {
+  switch (app.state) {
     case 'running':
       return ''
     case 'approval':
@@ -304,9 +318,9 @@ function stateText(card: RecentCard): string {
 }
 
 /** 状态行的语义色：异常态才偏离次级文字色（颜色之外另有文字，非纯色传达） */
-function stateClass(card: RecentCard): string {
-  if (card.app.state === 'approval') return 'is-warn'
-  if (card.app.state === 'error') return 'is-danger'
+function statusClassOf(app: ShellApp): string {
+  if (app.state === 'approval') return 'is-warn'
+  if (app.state === 'error') return 'is-danger'
   return ''
 }
 
@@ -366,6 +380,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onViewportResize)
   resizeObserver?.disconnect()
   resizeObserver = null
+  clearDragPaint()
 })
 
 watch(cards, async () => {
@@ -373,37 +388,52 @@ watch(cards, async () => {
   syncScrollable()
 })
 
-/** 网格整体位移：只在横向拖动时轻微跟手，抬手后吸附回原位 */
-function gridStyle(): Record<string, string> {
-  if (dragAxis.value !== 'x') return {}
-  const raw = Math.max(
-    -GRID_NUDGE_LIMIT,
-    Math.min(GRID_NUDGE_LIMIT, dragDx.value * GRID_NUDGE_RATIO),
-  )
-  // 取整到 0.1px：避免浮点误差写出一长串小数（CSS 里也没有亚像素收益）
-  const nudge = Math.round(raw * 10) / 10
-  return { transform: `translate3d(${nudge}px, 0, 0)` }
+/**
+ * 拖拽位移直写 DOM——**不碰响应式状态**
+ *
+ * 此前 `dragDx` / `dragDy` 是 ref，pointermove 每次写都会重建整片卡片 vnode
+ * （N 张卡 + N×2 次状态文案 + aria-label 的 t() 查表），而实际只有一张卡在动
+ * （F6）。现在位移经 CSS 变量只改被拖节点 / 网格的 style，响应式只在手势开始
+ * （锁轴）与结束（复位）各变一次；样式写入由浏览器按帧合并，无需自己再排队。
+ */
+function paintDrag(): void {
+  if (dragAxis.value === 'x') {
+    const raw = Math.max(
+      -GRID_NUDGE_LIMIT,
+      Math.min(GRID_NUDGE_LIMIT, dragDx * GRID_NUDGE_RATIO),
+    )
+    // 取整到 0.1px：避免浮点误差写出一长串小数（CSS 里也没有亚像素收益）
+    gridEl.value?.style.setProperty('--grid-nudge', `${Math.round(raw * 10) / 10}px`)
+    return
+  }
+  if (dragAxis.value === 'y' && dragTargetEl) {
+    dragTargetEl.style.setProperty('--drag-y', `${dragDy}px`)
+    dragTargetEl.style.setProperty('--drag-opacity', String(Math.max(0.4, 1 + dragDy / 360)))
+  }
 }
 
-/** 卡片自身样式：上滑关闭时跟手位移 + 淡出；其余卡片保持原位 */
-function cardStyle(index: number): Record<string, string> {
-  const style: Record<string, string> = { '--i': String(index) }
-  const dragging = dragAxis.value === 'y' && cards.value[index]?.app.id === dragTargetId
-  if (!dragging) return style
-  style.opacity = String(Math.max(0.4, 1 + dragDy.value / 360))
-  style.transform = `translate3d(0, ${dragDy.value}px, 0)`
-  return style
+/** 清掉拖拽内联变量（抬手 / 取消 / 卸载）：交回 CSS 过渡与默认态 */
+function clearDragPaint(): void {
+  gridEl.value?.style.removeProperty('--grid-nudge')
+  if (dragTargetEl) {
+    dragTargetEl.style.removeProperty('--drag-y')
+    dragTargetEl.style.removeProperty('--drag-opacity')
+    dragTargetEl = null
+  }
 }
 
 // ==================== 手势（横向切卡 / 纵向上滑关闭） ====================
 
 const dragAxis = ref<'x' | 'y' | null>(null)
-const dragDx = ref(0)
-const dragDy = ref(0)
+/** 手势位移（普通变量：逐帧写 ref 会重建整片卡片 vnode，见 paintDrag） */
+let dragDx = 0
+let dragDy = 0
 /** 本次手势是否已越过阈值（越过则抬手后的 click 不再触发卡片动作） */
 let dragMoved = false
-/** 本次手势作用的卡片（纵向关闭按手指下那张卡判定） */
-let dragTargetId: string | null = null
+/** 本次手势作用的卡片 id（ref：卡片 class 的 is-dragging 只用它，一次手势变一次） */
+const dragTargetId = ref<string | null>(null)
+/** 同一张卡的元素句柄（起手时缓存一次；pointermove 里不再查 DOM） */
+let dragTargetEl: HTMLElement | null = null
 /** 手势起点 */
 let dragOrigin: { x: number; y: number } | null = null
 /** 起手时网格是否可纵向滚动（可滚动则纵向手势让给原生滚动） */
@@ -463,13 +493,20 @@ function onPointerDown(event: PointerEvent): void {
     (event.target as HTMLElement | null)?.closest('[data-app-id]')?.getAttribute('data-app-id') ??
     cards.value[activeIndex.value]?.app.id
   if (!hitId || !cards.value.some((c) => c.app.id === hitId)) return
-  dragTargetId = hitId
+  dragTargetId.value = hitId
+  // 元素句柄缓存在起手时：卡片间空档起手按 hitId 回查，pointermove 不再查 DOM
+  dragTargetEl =
+    (event.target as HTMLElement | null)?.closest('[data-app-id]') ??
+    Array.from(el?.querySelectorAll<HTMLElement>('[data-app-id]') ?? []).find(
+      (node) => node.dataset.appId === hitId,
+    ) ??
+    null
   dragOrigin = { x: event.clientX, y: event.clientY }
   lastPointerId = event.pointerId
   dragMoved = false
   dragAxis.value = null
-  dragDx.value = 0
-  dragDy.value = 0
+  dragDx = 0
+  dragDy = 0
 }
 
 function onPointerMove(event: PointerEvent): void {
@@ -491,18 +528,19 @@ function onPointerMove(event: PointerEvent): void {
     capturePointer()
   }
   if (dragAxis.value === 'x') {
-    dragDx.value = dx
+    dragDx = dx
   } else {
     // 只允许上滑（offset ≤ 0）：下滑是「取消」，不应该把卡片往下推
-    dragDy.value = Math.min(0, dy)
+    dragDy = Math.min(0, dy)
   }
+  paintDrag()
 }
 
 function onPointerUp(event: PointerEvent): void {
   const origin = dragOrigin
-  const target = dragTargetId
+  const target = dragTargetId.value
   const axis = dragAxis.value
-  const dx = dragDx.value
+  const dx = dragDx
   resetDrag()
   if (!origin || !target) return
   if (axis === 'x') {
@@ -518,12 +556,13 @@ function onPointerUp(event: PointerEvent): void {
 
 function resetDrag(): void {
   releasePointer()
+  clearDragPaint()
   dragOrigin = null
-  dragTargetId = null
+  dragTargetId.value = null
   scrollAtStart = false
   dragAxis.value = null
-  dragDx.value = 0
-  dragDy.value = 0
+  dragDx = 0
+  dragDy = 0
 }
 
 /**

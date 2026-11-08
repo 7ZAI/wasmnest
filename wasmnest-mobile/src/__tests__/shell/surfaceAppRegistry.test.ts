@@ -588,6 +588,11 @@ describe('多任务卡预览态：真实实例搬运（2026-10-30）', () => {
     }
   }
 
+  /** 等合批微任务落完（attachPreview 在同 tick 排队，微任务里两趟制搬入） */
+  function flushPreviewBatch(): Promise<void> {
+    return Promise.resolve()
+  }
+
   /** 已 attach 过的实例：整幅 400×800（运行屏典型竖屏） */
   async function attachedRecord(): Promise<SurfaceAppRecord> {
     const probe = makeSurfaceProbe('A')
@@ -608,6 +613,7 @@ describe('多任务卡预览态：真实实例搬运（2026-10-30）', () => {
     const { box } = makeBox(214, 237)
 
     expect(registry.attachPreview(APP_A, box)).toBe(true)
+    await flushPreviewBatch()
 
     expect(record.container.parentElement, '必须是同一个容器节点（实例状态原样）').toBe(box)
     expect(record.location).toBe('preview')
@@ -620,10 +626,69 @@ describe('多任务卡预览态：真实实例搬运（2026-10-30）', () => {
     expect(record.container.inert, '卡片里的实例不可交互 / 不可聚焦').toBe(true)
   })
 
+  it('同一 tick 多张卡：先读完所有盒子尺寸再统一搬入（两趟制，F5）', async () => {
+    const ids = [APP_A, 'app.preview-b', 'app.preview-c']
+    const records = []
+    for (const [index, id] of ids.entries()) {
+      const probe = makeSurfaceProbe(String.fromCharCode(65 + index))
+      const record = await registry.ensure(id, makeInput(probe.component, `ctx-${id}`))
+      fakeSize(record.container, 400, 800)
+      registry.attach(id, makeOutlet(`run-outlet-${index}`))
+      records.push(record)
+    }
+
+    // 盒子：记录「读尺寸时已经发生了几次 appendChild」——两趟制下必须全是 0
+    let appends = 0
+    const readsAtAppendCount: number[] = []
+    const boxes = [214, 300, 180].map((width) => {
+      const box = document.createElement('div')
+      document.body.appendChild(box)
+      Object.defineProperty(box, 'clientWidth', {
+        configurable: true,
+        get: () => {
+          readsAtAppendCount.push(appends)
+          return width
+        },
+      })
+      Object.defineProperty(box, 'clientHeight', {
+        configurable: true,
+        get: () => {
+          readsAtAppendCount.push(appends)
+          return 237
+        },
+      })
+      const append = box.appendChild.bind(box)
+      box.appendChild = (<T extends Node>(node: T): T => {
+        appends += 1
+        return append(node) as T
+      }) as typeof box.appendChild
+      return box
+    })
+
+    // 同一 tick 连续挂三张卡：请求只入队，不立刻改 DOM
+    for (const [index, id] of ids.entries()) {
+      expect(registry.attachPreview(id, boxes[index])).toBe(true)
+      expect(records[index].container.parentElement?.className).toBe(`run-outlet-${index}`)
+    }
+
+    await flushPreviewBatch()
+
+    // 写阶段：三张卡各搬一次；读阶段：六次尺寸读取全部发生在第一次写之前
+    expect(appends).toBe(3)
+    expect(readsAtAppendCount).toHaveLength(6)
+    expect(readsAtAppendCount.every((seen) => seen === 0)).toBe(true)
+    for (const [index, record] of records.entries()) {
+      expect(record.container.parentElement).toBe(boxes[index])
+      expect(record.container.style.width).toBe('400px')
+      expect(record.container.style.transform).toMatch(/scale\(/)
+    }
+  })
+
   it('卡片尺寸变化：fitPreview 重算缩放并居中留边', async () => {
     const record = await attachedRecord()
     const { box, resize } = makeBox(214, 237)
     registry.attachPreview(APP_A, box)
+    await flushPreviewBatch()
 
     resize(200, 200)
     expect(registry.fitPreview(APP_A)).toBe(true)
@@ -636,6 +701,7 @@ describe('多任务卡预览态：真实实例搬运（2026-10-30）', () => {
     const record = await attachedRecord()
     const { box } = makeBox(214, 237)
     registry.attachPreview(APP_A, box)
+    await flushPreviewBatch()
 
     expect(registry.detachPreview(APP_A)).toBe(true)
 
@@ -651,6 +717,7 @@ describe('多任务卡预览态：真实实例搬运（2026-10-30）', () => {
     const record = await attachedRecord()
     const { box } = makeBox(214, 237)
     registry.attachPreview(APP_A, box)
+    await flushPreviewBatch()
     const outlet = makeOutlet('next-run-outlet')
 
     expect(registry.attach(APP_A, outlet)).toBe(true)
@@ -679,6 +746,7 @@ describe('多任务卡预览态：真实实例搬运（2026-10-30）', () => {
     const record = await attachedRecord()
     const { box } = makeBox(214, 237)
     registry.attachPreview(APP_A, box)
+    await flushPreviewBatch()
 
     await expect(registry.dispose(APP_A)).resolves.toBe(true)
 
