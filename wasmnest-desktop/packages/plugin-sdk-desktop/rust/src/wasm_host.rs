@@ -1028,7 +1028,9 @@ impl HostTunnel for WasmHost {
     ) -> Result<serde_json::Value, HostError> {
         let addrs_json = serde_json::to_string(addrs)
             .map_err(|e| host_err("tunnel_connect", format!("addrs 序列化失败：{e}")))?;
-        let raw = host_tunnel::connect(node_id, port, kind, &addrs_json, pairing_ticket)
+        // WIT `option<string>` 的生成参数是 `Option<&str>`：trait 收 `Option<String>`
+        // 是为了让插件侧能直接持有票据（不引发生命周期绑定），转借在绑定层做
+        let raw = host_tunnel::connect(node_id, port, kind, &addrs_json, pairing_ticket.as_deref())
             .map_err(|e| host_err("tunnel_connect", e))?;
         parse_json("tunnel_connect", raw)
     }
