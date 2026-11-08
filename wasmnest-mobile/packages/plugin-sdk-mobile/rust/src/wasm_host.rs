@@ -391,6 +391,11 @@ impl HostPeer for WasmHost {
         host_peer::dial_peer(&endpoint_json).map_err(|e| host_err("peer_dial", e))
     }
 
+    fn peer_dial_addrs(&self, endpoint: &serde_json::Value) -> Result<String, HostError> {
+        let endpoint_json = to_json_string("peer_dial_addrs", endpoint)?;
+        host_peer::dial_peer_addrs(&endpoint_json).map_err(|e| host_err("peer_dial_addrs", e))
+    }
+
     fn peer_close(&self, handle: &str) -> Result<bool, HostError> {
         host_peer::close(handle).map_err(|e| host_err("peer_close", e))
     }

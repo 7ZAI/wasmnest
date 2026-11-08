@@ -29,6 +29,10 @@ pub trait HostPeer {
     /// 按 endpoint 拨号（endpoint = `{ nodeId, addr, port }`），成功返回 session
     /// 句柄；denied/unreachable 报错
     fn peer_dial(&self, endpoint: &serde_json::Value) -> Result<String, HostError>;
+    /// 多地址拨号（T11 方案 B）：endpoint = `{ nodeId, addrs: [multiaddr...] }`。
+    /// addrs 顺序 = 调用方拨号策略顺序（先 LAN，明确不在内网才 relay）；成功后
+    /// 句柄记忆全部候选地址，数据面断线重拨按同一顺序复用（不查发现缓存）
+    fn peer_dial_addrs(&self, endpoint: &serde_json::Value) -> Result<String, HostError>;
     /// 统一资源关闭：session 句柄 = 断开；传输句柄 = 取消。返回是否命中
     fn peer_close(&self, handle: &str) -> Result<bool, HostError>;
     /// 首次连接确认应答（返回是否命中了待确认项）

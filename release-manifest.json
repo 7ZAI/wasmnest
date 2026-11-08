@@ -12,7 +12,7 @@
   "contract": {
     "package": "wasmnest:plugin",
     "version": "0.1.0",
-    "witSha256": "a0b7f220251e6a2213299fa51e0bfb860f4b1a9690b1744e6bb9248779ae95bb",
+    "witSha256": "fda834231a33f6b22f8826305d8022e48bde90c48685d2a1700a842b529599ff",
     "packages": {
       "wasmnest:plugin": "0.1.0",
       "wasmnest:pty": "0.0.1",
