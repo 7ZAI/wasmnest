@@ -117,7 +117,7 @@ android_logger = "0.14"
 # 平台缝；host-peer 的 WIT 绑定层在 `common-host` feature，双端宿主同开）——
 # 宿主零 peer 适配代码：只注入 `PeerPorts`（`plugin/peer_ports.rs`），
 # `Host` impl / 能力模块自报 / 句柄属主仲裁全在 lib
-wasmnest-server-peer-net = { path = "../../../wasmnest-lib/wasmnest-server-peer-net", features = ["common-host"] }
+wasmnest-server-peer-net = { path = "../../../wasmnest-lib/wasmnest-server-peer-net", features = ["common-host", "relay"] }
 # 端口 trait 词汇（BusPort / EventSink / PathsPort / SystemInfoPort / MdnsPort）
 # ——能力域端口面与宿主适配层共用同一套 trait，不新造第二套
 wasmnest-server-base = { path = "../../../wasmnest-lib/wasmnest-server-base" }
