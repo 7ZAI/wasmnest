@@ -214,6 +214,18 @@ describe('连接流：useMobileConnection × useHttpApi × terminalBuffer store'
     expect(invokeCalls('ws_connect')).toHaveLength(0)
   })
 
+  it('配对模式：跳过 HTTP 探测，仍写目标 + ws_connect（隧道票据不被提前消费）', async () => {
+    installInvokeMock()
+
+    await conn.connect(DEVICE, { pairingOnly: true })
+    await flushAsync()
+
+    expect(invokeCalls('http_request')).toHaveLength(0)
+    expect(invokeCalls('ws_connect')).toHaveLength(1)
+    expect(conn.currentDevice.value).toMatchObject({ address: DEVICE.address, port: DEVICE.port })
+    expect(conn.connectionError.value).toBeNull()
+  })
+
   it('连接超时：12 秒未收到 ws_connected → timeoutToast + 状态 error', async () => {
     vi.useFakeTimers()
 

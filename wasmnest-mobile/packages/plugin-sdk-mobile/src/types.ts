@@ -270,6 +270,18 @@ export interface MobileDeviceTarget {
   name?: string
 }
 
+/**
+ * `connectDevice` 行为选项。
+ *
+ * `pairingOnly`：只把目标写入连接引擎 / 设好 HTTP base（供后续 `/api/auth/*`
+ * 配对请求使用），**不**先探测 `/api/health`。首次经隧道配对时探测会消费掉
+ * 一次性配对票据（隧道准入先放行再判 403），随后真正的认证请求反而无票可用；
+ * 因此配对流程必须用本模式，认证成功后再走普通 `connectDevice`。
+ */
+export interface MobileConnectOptions {
+  pairingOnly?: boolean
+}
+
 /** 连接历史条目（宿主连接域引擎事实） */
 export interface MobileConnectionHistoryItem {
   address: string
@@ -392,8 +404,11 @@ export interface MobileHostApi {
   currentDevice: import('vue').Ref<MobileDeviceTarget | null>
   /** 连接历史（此前尝试连接过的桌面端端点；宿主连接域引擎事实） */
   connectionHistory: import('vue').Ref<MobileConnectionHistoryItem[]>
-  /** 建立到目标桌面的连接（HTTP base url 探测 + WS 事件通道建链；宿主引擎动作） */
-  connectDevice(device: MobileDeviceTarget): Promise<void>
+  /** 建立到目标桌面的连接（HTTP base url 探测 + WS 事件通道建链；宿主引擎动作）
+   *
+   * `pairingOnly=true`：仅设置目标（不探测），供首次配对/扫码先走 `/api/auth/*`；
+   * 认证成功后再调用默认模式建立事件通道。 */
+  connectDevice(device: MobileDeviceTarget, options?: MobileConnectOptions): Promise<void>
   /** 取消进行中的连接 */
   cancelConnection(): Promise<void>
   /** 用宿主持有的凭据静默换新 JWT（返回用户免配对；凭据零过境，插件拿不到 token）
