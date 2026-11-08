@@ -57,8 +57,8 @@ async fn bundled_id(manager: &PluginLifecycleManager, suffix: &str) -> String {
 /// 平台侧这里只钉组合根里的调用顺序。
 #[test]
 fn boot_clears_activation_snapshot_before_creating_host() {
-    // 65964b9 起 boot 编排自 lib.rs 抽到 bootstrap/mod.rs：组合根顺序在那里钉
-    let boot_rs = include_str!("../src/bootstrap/mod.rs");
+    // 65964b9 起 boot 编排自 lib.rs 抽到 bootstrap/run.rs：组合根顺序在那里钉
+    let boot_rs = include_str!("../src/bootstrap/run.rs");
     let clear = boot_rs
         .find("clear_persisted_activation_snapshot(&plugin_storage)")
         .expect("boot 必须在 PluginHost::new 前调用 clear_persisted_activation_snapshot");

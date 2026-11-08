@@ -151,12 +151,12 @@ mod tests {
     ///
     /// 门是 `#[cfg(debug_assertions)]` 的**声明处与注册处**两行；本测试
     /// 从源码文本上钉死它们——模块声明在 lib.rs、`generate_handler!` 注册项在
-    /// bootstrap/mod.rs（2026-10-25 启动装配拆分随迁），两处都必须带 cfg 门。
+    /// bootstrap/run.rs（2026-10-25 启动装配拆分随迁），两处都必须带 cfg 门。
     /// 删掉任一门即红。
     #[test]
     fn bench_channel_surface_stays_debug_only() {
         let lib = std::fs::read_to_string("src/lib.rs").expect("read src/lib.rs");
-        let handler = std::fs::read_to_string("src/bootstrap/mod.rs").expect("read src/bootstrap/mod.rs");
+        let handler = std::fs::read_to_string("src/bootstrap/run.rs").expect("read src/bootstrap/run.rs");
 
         // 门在**属性行**上（`#[cfg(debug_assertions)]` 是 `mod` 的上一行），
         // 故每个待查项都要连同前一行一起看——只看命中行会把“门在前一行”误判为无门
@@ -186,7 +186,7 @@ mod tests {
             "bench_channel_stream_text",
             "bench_channel_stream_raw",
         ] {
-            let (hit, prev) = with_prev(&handler_lines, "src/bootstrap/mod.rs", cmd);
+            let (hit, prev) = with_prev(&handler_lines, "src/bootstrap/run.rs", cmd);
             assert!(
                 hit.contains("cfg(debug_assertions)") || prev.contains("cfg(debug_assertions)"),
                 "{cmd} 的注册必须紧邻 #[cfg(debug_assertions)] 门：{prev} / {hit}"

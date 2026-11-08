@@ -4,6 +4,7 @@
 
 // 应用启动装配（run / run_with / 日志接线 / 托盘 / 右键菜单抑制）——私有项单测
 // 随迁 bootstrap/（context_menu_test / run_with_test），crate 内私有项测试口径不变。
+// 模块入口 `bootstrap.rs` 只做声明 / 再导出，实现在 `bootstrap/` 各子模块。
 mod bootstrap;
 pub mod commands;
 // 第一方免弹窗归属清单（产品数据真源，票 08/P0-2；判定逻辑在 wasm-core）

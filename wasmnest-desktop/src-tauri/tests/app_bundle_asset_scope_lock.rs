@@ -14,7 +14,7 @@
 //! 而 `WASMNEST_PLUGINS_DIR` 允许把插件目录指到**任意**路径（应用仓
 //! `apps/<slug>/desktop/.dev-host/plugins` 就是这种），落在静态作用域之外 → 403。
 //!
-//! 修法在启动装配（`lib.rs`）：按解析出的 `plugins_dir` 动态放行。本锁钉住这件事
+//! 修法在启动装配（`bootstrap/run.rs`）：按解析出的 `plugins_dir` 动态放行。本锁钉住这件事
 //! 没被静默改回——改错了不编译失败、测试不红，只在运行期悄悄 403。
 
 use std::path::{Path, PathBuf};
@@ -29,14 +29,14 @@ fn read_file(rel: &str) -> String {
 
 #[test]
 fn resolved_plugins_dir_is_allowed_in_asset_protocol_scope() {
-    let lib = read_file("src/bootstrap/mod.rs");
+    let lib = read_file("src/bootstrap/run.rs");
 
     let resolved_at = lib
         .find("let plugins_dir")
-        .unwrap_or_else(|| panic!("bootstrap/mod.rs 必须解析出 plugins_dir（应用整包根目录）"));
+        .unwrap_or_else(|| panic!("bootstrap/run.rs 必须解析出 plugins_dir（应用整包根目录）"));
     let scope_at = lib.find("asset_protocol_scope()").unwrap_or_else(|| {
         panic!(
-            "bootstrap/mod.rs 启动装配必须按解析出的 plugins_dir 动态放行 asset protocol 作用域：\n\
+            "bootstrap/run.rs 启动装配必须按解析出的 plugins_dir 动态放行 asset protocol 作用域：\n\
              静态作用域（tauri.conf.json 的 $RESOURCE/$APPCONFIG/$APPDATA）覆盖不到\n\
              WASMNEST_PLUGINS_DIR 指向的任意目录 → asset 协议 403 → 挂载包动态 import\n\
              失败（「应用界面加载失败，可重试」）+ 应用图标回退成壳内通用 glyph。\n\
@@ -66,6 +66,6 @@ fn assets_command_doc_does_not_claim_static_scope_guarantees_serving() {
     assert!(
         !claims_static_guarantee,
         "plugin/assets.rs 的模块注释不得再声称落点由 tauri.conf.json 的静态作用域保证——\n\
-         WASMNEST_PLUGINS_DIR 形态不在静态作用域内（放行在 lib.rs 启动装配里动态做）"
+         WASMNEST_PLUGINS_DIR 形态不在静态作用域内（放行在 bootstrap/run.rs 启动装配里动态做）"
     );
 }

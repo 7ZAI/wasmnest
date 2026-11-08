@@ -309,7 +309,7 @@ fn network_capable_plugin_crates_are_not_depended_on() {
 /// 只补不撤 = 红线没关上。这条锁把两者绑在一起。
 #[test]
 fn revoked_capabilities_have_host_command_replacements() {
-    let lib_rs = fs::read_to_string(desktop_root().join("src/bootstrap/mod.rs")).expect("读 src/bootstrap/mod.rs");
+    let lib_rs = fs::read_to_string(desktop_root().join("src/bootstrap/run.rs")).expect("读 src/bootstrap/run.rs");
 
     for command in ["commands::open_external_url", "commands::install_update"] {
         assert!(

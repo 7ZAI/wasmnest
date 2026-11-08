@@ -141,7 +141,7 @@ fn plugin_gated_commands_authorize_before_side_effects() {
     // 旧实现在 wasm-core（跨 crate），桌面经 glob 再导出且直接注册；现在注册的
     // 是 `src/plugin/lifecycle.rs` 的身份门版本。这条锁防「注册路径改回去 / 本地
     // 定义被删」后命令面静默落回无门版本。
-    let bootstrap = read_source("src/bootstrap/mod.rs");
+    let bootstrap = read_source("src/bootstrap/run.rs");
     assert!(
         bootstrap.contains("plugin::lifecycle::plugin_mark_error"),
         "bootstrap 未注册 identity-gated 的 plugin_mark_error（注册路径改回去了？）"

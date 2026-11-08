@@ -1,180 +1,30 @@
-//! 应用启动装配：日志接线、Tauri builder、托盘、插件目录注入
+//! 应用启动主流程：Tauri builder / setup 装配 / invoke handler / RunEvent 循环
 //!
-//! 原 lib.rs「Application Setup」整段；`run` / `run_with` 经 lib.rs 再导出，
-//! `wasmnest_desktop_lib::run{,_with}` 外部路径不变。
-
-mod context_menu;
-
-#[cfg(all(test, target_os = "linux"))]
-mod context_menu_test;
-
-// `run_with` 的插件目录注入单测（私有 fn 只能留 crate 内；不启动 Tauri）
-#[cfg(test)]
-mod run_with_test;
+//! 从模块入口拆出的 Application Setup 整段（模块入口只放声明与再导出）；
+//! `run` / `run_with` 经 `bootstrap.rs` → lib.rs 再导出，外部路径
+//! `wasmnest_desktop_lib::run{,_with}` 不变。日志接线 / 托盘 / 前端通道会话钩子
+//! 分住同目录的 logging / tray / frontend_channel。
 
 #[cfg(debug_assertions)]
 use crate::bench_channel;
-use crate::wasm_core;
-use crate::Result;
-use crate::{commands, plugin, plugin_updates, server, system};
-// 原生右键菜单抑制是 **Linux 专用**（Windows WebView2 / macOS WKWebView 由前端
-// capture 阶段 preventDefault 覆盖）：这三个项在 context_menu.rs 里都带
-// `#[cfg(target_os = "linux")]`，装配侧的注册与窗口销毁钩子也在同一 cfg 里。
-// 少了这一行 cfg，非 Linux 目标会 E0432 unresolved import（首次三平台发布实测）。
-#[cfg(target_os = "linux")]
-use context_menu::{context_menu_ledger, forget_context_menu_label, native_context_menu_guard};
-
-// ==================== Application Setup ====================
-
 use crate::db::Database;
+use crate::wasm_core;
+use crate::{commands, plugin, plugin_updates, server, system};
 use std::sync::Arc;
 use tauri::Manager;
 
-/// 删除当天已存在的日志文件（仅 dev 构建调用）
-///
-/// dev 启动频次高，按天追加会让同一天的日志混入多次启动的片段，难以定位；
-/// 因此 dev 启动时替换当天日志（删旧建新）。release 保持按天追加轮转。
-/// 必须在 RollingFileAppender 构建前调用，确保 appender 首次写入创建全新文件。
-/// dev 启动同时重置 `bootstrap.log`（bootstrap 通道先于本函数就绪；重置消息本身
-/// 经 bootstrap 落盘即重建该文件，见 system::logging::bootstrap_log）。
-#[cfg(debug_assertions)]
-fn reset_today_logs(log_dir: &std::path::Path) {
-    // bootstrap.log（固定文件名，bootstrap 通道产物、无轮转）：dev 重启替换，
-    // 避免多次启动的启动早期片段混叠；消息经 bootstrap 通道写入即重建文件
-    let bootstrap_path = log_dir.join("bootstrap.log");
-    if bootstrap_path.exists() {
-        match std::fs::remove_file(&bootstrap_path) {
-            Ok(()) => system::logging::bootstrap_log(
-                tracing::Level::INFO,
-                format!("[logging] dev reset: replaced {}", bootstrap_path.display()),
-            ),
-            Err(e) => system::logging::bootstrap_log(
-                tracing::Level::ERROR,
-                format!(
-                    "[logging] dev reset: failed to replace {}: {e}",
-                    bootstrap_path.display()
-                ),
-            ),
-        }
-    }
-    // tracing_appender 的 rolling 文件名日期用 UTC（与本地日期可能错位一天）
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    // 日志重置列表：runtime / error / frontend（前端 console 单独文件，见 init_logging）
-    for prefix in ["runtime", "error", "frontend"] {
-        let path = log_dir.join(format!("{prefix}.{today}.log"));
-        if path.exists() {
-            match std::fs::remove_file(&path) {
-                Ok(()) => system::logging::bootstrap_log(
-                    tracing::Level::INFO,
-                    format!("[logging] dev reset: replaced today's log {}", path.display()),
-                ),
-                Err(e) => system::logging::bootstrap_log(
-                    tracing::Level::ERROR,
-                    format!("[logging] dev reset: failed to replace {}: {e}", path.display()),
-                ),
-            }
-        }
-    }
-}
-
-/// 初始化日志系统
-///
-/// 接受 LogConfig 参数，所有日志行为均可通过配置文件控制
-fn init_logging(app_handle: &tauri::AppHandle, log_config: &system::config::LogConfig) -> Result<()> {
-    let log_dir = app_handle.path().app_log_dir().expect("Failed to get log directory");
-
-    // bootstrap 通道幂等兜底：setup 早期已初始化（config 复制/加载沿用），此处仅防漏
-    system::logging::bootstrap_init(&log_dir)?;
-    std::fs::create_dir_all(&log_dir)?;
-
-    // dev 构建替换当天日志（release 保持追加轮转）
-    #[cfg(debug_assertions)]
-    reset_today_logs(&log_dir);
-
-    // 构建日志订阅器：文件层非阻塞写盘 + 控制台层。
-    // 过滤语义与旧实现一致（error 固定 ERROR、runtime 按级别、frontend 仅 dev），
-    // 全部收敛于 system::logging::build_logging，便于独立单测（见该模块测试）
-    let (setup, subscriber) = system::logging::build_logging(&log_dir, log_config, cfg!(debug_assertions))?;
-    install_subscriber(subscriber);
-
-    // 保存句柄到进程级全局：worker guard 存活到进程退出（drop 时 flush 剩余日志）；
-    // 级别热调（file_level_reload）与容量裁剪/丢弃告警（writers）由后续模块从此读取
-    system::logging::store_setup(setup);
-
-    // 启动后台日志维护任务：容量裁剪（超限删最旧，当前在写文件除外）+ 非阻塞队列丢弃告警（03）
-    system::logging::spawn_log_maintenance(
-        system::logging::global_setup().expect("logging setup stored before maintenance"),
-        log_config.capacity_bytes,
-    );
-
-    tracing::info!("Logging initialized. Log directory: {:?}", log_dir);
-    tracing::info!(
-        "Log config: file_level={}, rotation={}, max_files={}, console_in_release={}",
-        log_config.file_level,
-        log_config.rotation,
-        log_config.max_files,
-        log_config.console_in_release,
-    );
-    tracing::info!("WasmNest Desktop v{} starting...", env!("CARGO_PKG_VERSION"));
-
-    Ok(())
-}
-
-/// 安装 tracing 全局订阅器（容忍 log→tracing 桥已被抢占）
-///
-/// debug 构建下 tauri-plugin-wdio 的 `.setup()` 会先 `log::set_boxed_logger`
-/// 抢占 log 全局 logger（其 setup 早于应用 setup 执行），使 `try_init()` 在
-/// `LogTracer::init()` 阶段返回 `SetLoggerError` 并 panic。拆成两步：桥安装
-/// 失败仅忽略（log 记录由 wdio 自带 logger 承接），tracing 全局默认仍须设置
-/// （与 `try_init` 第二步 `set_global_default` 等价）。
-fn install_subscriber<S>(subscriber: S)
-where
-    S: tracing::Subscriber + Send + Sync + 'static,
-{
-    let _ = tracing_log::LogTracer::init();
-    tracing::subscriber::set_global_default(subscriber).expect("Failed to set tracing subscriber");
-}
+use super::frontend_channel::frontend_channel_session_hook;
+use super::logging::init_logging;
+use super::tray::setup_tray;
+// 原生右键菜单抑制是 **Linux 专用**（Windows WebView2 / macOS WKWebView 由前端
+// capture 阶段 preventDefault 覆盖）：这三个项在 context_menu.rs 里都带
+// #[cfg(target_os = "linux")]，装配侧的注册与窗口销毁钩子也在同一 cfg 里。
+// 少了这一行 cfg，非 Linux 目标会 E0432 unresolved import（首次三平台发布实测）。
+#[cfg(target_os = "linux")]
+use super::context_menu::{context_menu_ledger, forget_context_menu_label, native_context_menu_guard};
 
 /// 应用启动时间，用于计算启动耗时
 pub struct AppStartTime(pub(crate) std::time::Instant);
-
-/// 前端插件通道会话的生命周期钩子（审计票 06）
-///
-/// 页面加载重置**该 webview** 的 loader 会话密钥与全部插件令牌：宿主前端 bootstrap 会在导入
-/// 任何插件模块之前重新取得密钥，而插件代码只在模块被导入后才开始运行——「首个调用者生效」
-/// 因此恒由宿主前端赢得；dev 下页面刷新也能重新取得（否则刷新后插件前端全部拿不到凭证）。
-///
-/// **按 webview 分区**（2026-09-26）：本钩子对每个 webview（主窗口 / 终端窗口 / 未来任何
-/// 独立窗口）都触发，凭证表按 label 分域——否则终端窗口加载会回收主窗口凭证，使主窗口插件面
-/// 命令全数被拒（`缺少有效通道凭证`）。详见 `security::frontend_channel` 模块注释。
-fn frontend_channel_session_hook() -> tauri::plugin::TauriPlugin<tauri::Wry> {
-    tauri::plugin::Builder::<tauri::Wry>::new("wasmnest-frontend-channel")
-        .on_page_load(|webview, payload| {
-            // 只认 Started：本钩子对每次页面加载触发两次（Started / Finished），Finished
-            // 时本页 JS 已运行——此刻重置会把 bootstrap 刚签发、已进前端模块缓存的密钥
-            // 作废（移动端 bootstrap 在页面加载期间签发，2026-10-25 即因此全量拒启）。
-            // 桌面当前 activate 懒取凭证不受影响，同守卫保证双端语义一致：新页开始 =
-            // 旧域作废，且只发生一次。
-            if !matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
-                return;
-            }
-            let Some(plugin_host) = webview
-                .app_handle()
-                .try_state::<std::sync::Arc<crate::wasm_core::manager::host::PluginHost>>()
-            else {
-                // 页面加载早于 setup 装配 PluginHost（不应发生）：留痕不 panic
-                tracing::warn!("[PluginChannel] page load before PluginHost managed, session not reset");
-                return;
-            };
-            tracing::debug!(
-                webview = %webview.label(),
-                url = %payload.url(),
-                "[PluginChannel] 页面加载，重置该窗口的前端通道会话"
-            );
-            plugin_host.reset_frontend_loader_session(webview.label(), "page-load");
-        })
-        .build()
-}
 
 /// 宿主读取插件目录的环境变量名（启动流程的唯一读取点，`run_with` 也写它）
 pub(crate) const PLUGINS_DIR_ENV: &str = "WASMNEST_PLUGINS_DIR";
@@ -983,66 +833,4 @@ pub fn run() {
         }
         _ => {}
     });
-}
-/// Setup system tray
-fn setup_tray(app: &tauri::AppHandle) -> Result<()> {
-    use tauri::{
-        menu::{Menu, MenuItem},
-        tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    };
-
-    let show_item = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
-    let hide_item = MenuItem::with_id(app, "hide", "隐藏窗口", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-
-    let menu = Menu::with_items(app, &[&show_item, &hide_item, &quit_item])?;
-
-    let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
-        .menu(&menu)
-        .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "show" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-            "hide" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.hide();
-                }
-            }
-            "quit" => {
-                // 尝试关闭主窗口（触发 CloseRequested → 生命周期钩子 → 确认弹窗）
-                // 如果窗口已隐藏，先显示再关闭
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                    let _ = window.close();
-                } else {
-                    // 无窗口时直接退出
-                    app.exit(0);
-                }
-            }
-            _ => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-        })
-        .build(app)?;
-
-    tracing::info!("System tray initialized");
-    Ok(())
 }

@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs'
  */
 
 const USE_APP_MOUNT = 'src/shell/mount/useAppMount.ts'
-const BOOTSTRAP_RS = 'src-tauri/src/bootstrap/mod.rs'
+const BOOTSTRAP_RS = 'src-tauri/src/bootstrap/run.rs'
 const ASSETS_RS = 'src-tauri/src/plugin/assets.rs'
 
 describe('应用挂载包路径单一来源锁', () => {

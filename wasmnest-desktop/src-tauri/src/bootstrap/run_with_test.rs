@@ -11,7 +11,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::{apply_plugins_dir_env, PLUGINS_DIR_ENV};
+    use crate::bootstrap::run::{apply_plugins_dir_env, PLUGINS_DIR_ENV};
     use std::ffi::OsString;
     use std::path::PathBuf;
     use std::sync::Mutex;
