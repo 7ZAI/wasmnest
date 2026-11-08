@@ -191,7 +191,7 @@ wasmnest-server-http = { version = "0.0.1", git = "https://github.com/7ZAI/wasmn
 # server-lib-split 票 05：WebSocket 传输面（conn/channel/registry/endpoint/routes/manager）
 wasmnest-server-websocket = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["common-host"] }
 # server-lib-split 票 06：对等网络引擎域（节点身份/节点与发现守护生命周期/host-peer 引擎转发）
-wasmnest-server-peer-net = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["common-host"] }
+wasmnest-server-peer-net = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["common-host", "relay"] }
 inventory = "0.3"
 
 # Power management (prevent system sleep)

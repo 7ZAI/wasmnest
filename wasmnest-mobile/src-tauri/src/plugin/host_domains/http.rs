@@ -185,6 +185,17 @@ fn mobile_http_envelope(plugin_id: &str, url: &str) -> Option<Arc<dyn OutboundEn
     }))
 }
 
+/// 对端显式拒绝的稳定码（`X-WasmNest-Crypto-Error`，内网穿透 T07）
+///
+/// 只认共享 crate 登记的两个码（`encryption-unsupported` / `encryption-required`）；
+/// 头里是别的值时返回 `None`——不把对端自报的任意字符串当本地错误分类。
+fn crypto_refusal_code(headers: &[(String, String)]) -> Option<&'static str> {
+    headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(wasmnest_link_crypto::ERROR_HEADER))
+        .and_then(|(_, value)| wasmnest_link_crypto::parse_code(value))
+}
+
 /// 单次请求的信封状态（请求/响应双向密钥 + 路径绑定 AAD）
 struct MobileHttpEnvelope {
     path: String,
@@ -218,6 +229,18 @@ impl OutboundEnvelope for MobileHttpEnvelope {
     }
 
     fn open_response(&self, headers: &[(String, String)], body: Vec<u8>) -> Result<Vec<u8>, String> {
+        // 对端显式拒绝（带稳定码）：这是「有名字的拒绝」，不是「安静地回明文」的
+        // 降级——把码原样交给应用（应用按码分别给「升级对端」与「检查链路身份 /
+        // 重新配对」两条出路），不吞成笼统的 LINK_ENCRYPTION_DOWNGRADE。
+        if let Some(code) = crypto_refusal_code(headers) {
+            tracing::error!(
+                path = %self.path,
+                code,
+                detail = %String::from_utf8_lossy(&body),
+                "link crypto: request refused by peer"
+            );
+            return Err(code.to_string());
+        }
         let negotiated = headers.iter().any(|(name, value)| {
             name.eq_ignore_ascii_case(wasmnest_link_crypto::NEGOTIATION_HEADER)
                 && value.trim() == format!("v{}", wasmnest_link_crypto::PROTOCOL_VERSION)
@@ -412,6 +435,51 @@ mod tests {
         assert_eq!(err, "LINK_ENCRYPTION_DOWNGRADE");
 
         // 复位全局态，避免污染其他用例
+        crate::state::set_link_crypto_context(crate::state::LinkCryptoContext::default());
+    }
+
+    /// 对端显式拒绝（带稳定码，内网穿透 T07）：非 strict 也不得被「明文续跑」
+    /// 分支吞掉——这是有名字的拒绝，没有载荷可交付，应用要按码给出路
+    #[test]
+    fn envelope_surfaces_peer_crypto_refusal_code() {
+        let _guard = CRYPTO_CTX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let envelope = envelope_fixture();
+        crate::state::set_link_crypto_context(crate::state::LinkCryptoContext {
+            enabled: true,
+            // 刻意取非 strict：拒绝码不是「可容忍的降级」
+            strict_mode: false,
+            encrypt_http: true,
+            kd_public_b64: None,
+        });
+
+        for code in [
+            wasmnest_link_crypto::CODE_ENCRYPTION_UNSUPPORTED,
+            wasmnest_link_crypto::CODE_ENCRYPTION_REQUIRED,
+        ] {
+            // 头名大小写不敏感（对端可能经 reqwest / actix 归一成不同拼写）
+            let headers = vec![(
+                wasmnest_link_crypto::ERROR_HEADER.to_ascii_lowercase(),
+                code.to_string(),
+            )];
+            let error = match envelope.open_response(&headers, br#"{"code":1003}"#.to_vec()) {
+                Ok(body) => panic!("显式拒绝不得当明文交付: {:?}", String::from_utf8_lossy(&body)),
+                Err(error) => error,
+            };
+            assert_eq!(error, code, "码必须原样交给应用（应用按码给不同出路）");
+        }
+
+        // 头里不是登记码 → 不采信，退回既有明文续跑口径
+        let headers = vec![(
+            wasmnest_link_crypto::ERROR_HEADER.to_string(),
+            "some-other-reason".to_string(),
+        )];
+        assert_eq!(
+            envelope
+                .open_response(&headers, b"plain".to_vec())
+                .expect("plain downgrade"),
+            b"plain"
+        );
+
         crate::state::set_link_crypto_context(crate::state::LinkCryptoContext::default());
     }
 

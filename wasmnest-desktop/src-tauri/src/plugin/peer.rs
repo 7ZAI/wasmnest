@@ -1,6 +1,6 @@
 //! host-peer 宿主侧适配器（能力域端口 `PeerPorts` 的宿主实现 + 装配自报）
 //!
-//! 域机制（19 条 `host-peer` 原语 + 引擎收发/远端/传输三面）在
+//! 域机制（20 条 `host-peer` 原语 + 引擎收发/远端/传输三面）在
 //! `wasmnest-server-peer-net`；本文件是**宿主侧的另一半**——wasm-core 纯净性收口票 02
 //! 批次 03 整文件迁自 `wasmnest-wasm-core/src/host_api/peer.rs`（内核自此不点名本域、
 //! 端口装配只有本文件一条来源）。

@@ -37,6 +37,8 @@ pub mod pty;
 pub mod storage;
 pub mod task;
 pub mod timer;
+/// 内网穿透通道（`host-tunnel`，T06）
+pub mod tunnel;
 pub mod ws;
 
 pub use app::HostApp;
@@ -63,6 +65,7 @@ pub use pty::{pty_event_topic, HostPty, PtyRingFetch, PtySpawnConfig, PTY_EXIT, 
 pub use storage::HostStorage;
 pub use task::{HostTask, TaskPlan, TaskProgress, TaskUnit};
 pub use timer::HostTimer;
+pub use tunnel::{HostTunnel, TunnelConfig, TunnelExposeConfig};
 pub use ws::{ws_event_topic, HostWebsocket, WS_CLIENT_CONNECT, WS_CLIENT_DISCONNECT, WS_CLOSE, WS_ERROR, WS_OPEN};
 
 /// 宿主调用错误
@@ -186,6 +189,7 @@ pub trait HostApi:
     + HostApp
     + HostWebsocket
     + HostMetrics
+    + HostTunnel
 {
 }
 
@@ -208,5 +212,6 @@ impl<T> HostApi for T where
         + HostApp
         + HostWebsocket
         + HostMetrics
+        + HostTunnel
 {
 }

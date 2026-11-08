@@ -42,6 +42,8 @@ pub mod registry;
 pub mod saf_io;
 pub mod saf_path;
 pub mod terminal_stream;
+/// 内网穿透（`host-tunnel`，T06）：端口 adapter + 开机装配
+pub mod tunnel_ports;
 pub mod types;
 // 应用版本更新链路（GitHub Release 检查 / 校验下载；应用管理页与 SDK 默认实现共用）
 pub mod updates;

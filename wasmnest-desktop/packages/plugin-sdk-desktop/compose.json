@@ -80,6 +80,10 @@
     "timer": {
       "file": "wasmnest-desktop/packages/plugin-sdk-desktop/rust/wit-src/cap-timer.wit",
       "package": "wasmnest:timer"
+    },
+    "tunnel": {
+      "file": "../wasmnest-lib/wasmnest-server-peer-net/wit/tunnel.wit",
+      "package": "wasmnest:tunnel"
     }
   },
   "worlds": ["plugin", "plugin-binary", "plugin-ws", "plugin-task", "plugin-auth-policy", "plugin-system", "desktop-compat"],

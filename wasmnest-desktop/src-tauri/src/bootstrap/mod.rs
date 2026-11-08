@@ -570,6 +570,27 @@ pub fn run() {
             )
             .expect("register net.peer-node service (duplicate key = assembly bug)");
 
+            // 内网穿透 T06：隧道管理器（单一引用计数）+ `net.tunnel` 服务租约。
+            // 管理器必须在 `PluginHost::new` 之前装好：WIT 绑定层在插件激活期就会
+            // 取端口与管理器，取不到是 fail-visible 错误（不静默 lan-only）。
+            let tunnel_manager = std::sync::Arc::new(
+                wasmnest_server_peer_net::tunnel::TunnelManager::new(
+                    std::sync::Arc::new(wasmnest_server_peer_net::tunnel::PeerCtxEngine::new(
+                        crate::server::peer_net_cmds::peer_ctx(&app_handle),
+                    )),
+                    std::sync::Arc::new(crate::plugin::tunnel::DesktopPeerFaceStarter::new(
+                        wasmnest_server_base::config::NetworkConfig::default(),
+                        crate::server::composition::transport_faces(),
+                    )),
+                    wasmnest_server_peer_net::DEFAULT_PEER_PORT,
+                    wasmnest_server_peer_net::tunnel::DEFAULT_RELAY_CONTROL_PORT,
+                )
+                .expect("assemble tunnel manager (management ports must be real)"),
+            );
+            crate::plugin::tunnel::install_manager(std::sync::Arc::clone(&tunnel_manager));
+            wasmnest_server_peer_net::tunnel::TunnelService::register(&service_registry, tunnel_manager)
+                .expect("register net.tunnel service (duplicate key = assembly bug)");
+
             // 用户插件目录（app_data_dir/plugins）：zip 安装的插件所在地（可卸载），
             // 与只读的内置目录（resource_dir/resources/plugins/desktop）分离
             let user_plugins_dir = app_handle

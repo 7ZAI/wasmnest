@@ -206,6 +206,25 @@ pub fn run() {
             )
             .expect("register net.peer-node service (duplicate key = assembly bug)");
 
+            // 内网穿透 T06：移动端是拨号方（connect/close），不提供对等 HTTP/WS
+            // 面；expose / issue-pairing-ticket 由 Ports 显性 `tunnel-unavailable`。
+            let tunnel_service_registry = plugin_manager.service_registry();
+            let tunnel_manager = Arc::new(
+                wasmnest_server_peer_net::tunnel::TunnelManager::new(
+                    Arc::new(wasmnest_server_peer_net::tunnel::PeerCtxEngine::new(
+                        crate::peer::net::peer_ctx(&app_handle),
+                    )),
+                    Arc::new(crate::plugin::tunnel_ports::MobilePeerFaceStarter),
+                    wasmnest_server_peer_net::DEFAULT_PEER_PORT,
+                    wasmnest_server_peer_net::tunnel::DEFAULT_RELAY_CONTROL_PORT,
+                )
+                .expect("assemble tunnel manager (management ports must be real)"),
+            );
+            crate::plugin::tunnel_ports::install_manager(Arc::clone(&tunnel_manager));
+            wasmnest_server_peer_net::tunnel::TunnelService::register(&tunnel_service_registry, tunnel_manager)
+                .expect("register net.tunnel service (duplicate key = assembly bug)");
+            crate::plugin::tunnel_ports::install(Some(Arc::new(app_handle.clone())), tunnel_service_registry);
+
             // 异步：解压内置插件 → 初始化 WASM 运行时 → 扫描加载 → 自动激活
             // 使用 tauri::async_runtime::spawn 而非 tokio::spawn，
             // 因为 setup 闭包不在 Tokio 运行时上下文中执行，tokio::spawn 会 panic

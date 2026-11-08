@@ -44,6 +44,10 @@
     "auth-client": {
       "file": "wasmnest-mobile/packages/plugin-sdk-mobile/rust/wit-src/cap-auth-client.wit",
       "package": "wasmnest:auth-client"
+    },
+    "tunnel": {
+      "file": "../wasmnest-lib/wasmnest-server-peer-net/wit/tunnel.wit",
+      "package": "wasmnest:tunnel"
     }
   },
   "worlds": ["plugin", "plugin-binary"],
