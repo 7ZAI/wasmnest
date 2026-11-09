@@ -9,7 +9,8 @@
     "test:run": "node --test \"scripts/*.test.mjs\"",
     "check:wit": "node scripts/compose-wit.mjs --all --check",
     "check:manifest": "node scripts/check-release-manifest.mjs",
-    "check:links": "node scripts/check-markdown-links.mjs"
+    "check:links": "node scripts/check-markdown-links.mjs",
+    "target:worktrees": "node scripts/worktree-shared-target.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

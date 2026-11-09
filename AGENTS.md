@@ -25,7 +25,7 @@
 - **项目阶段（研发起步期）**：无真实用户、无对外 ABI 兼容义务——破坏性变更可直接进行，但跨仓契约按 tag 钉住（docs/contracts.md §1），退役面必须 **fail-visible**（点名缺失 + 给出路），禁止静默降级成「查不到就返回空」。
 ### 0.1 Agent 工作流（vibe coding 简则）
 
-1. **开工自检**：`git status` 认领改动来源；读相关模块头注释与 `docs/codemap.md` §6 任务路由表的「必读」；确认要改的是哪一端（桌面 / 移动 / SDK / 工具）。
+1. **开工自检**：`git status` 认领改动来源；读相关模块头注释与 `docs/codemap.md` §6 任务路由表的「必读」；确认要改的是哪一端（桌面 / 移动 / SDK / 工具）。**若在 git worktree 里开工，先跑 `pnpm run target:worktrees`**（target 共享桶硬规范，见 `docs/public/git.md` §8）——否则该 worktree 会自己长出一整套 8~24G 的 target。
 2. **边界判定**：动宿主侧前先过 §2 三问（能离宿主实现吗 → 携带产品语义吗 → 才放宿主）；改跨仓面（WIT / 清单 / 应用注册表）先读 docs/contracts.md / docs/boundaries.md。判不准就停下问用户。
 3. **小步实现**：最小 diff 完成一个可验证单元；不并行夹带无关改动；生成物不手改（docs/contracts.md §6）。
 4. **针对性验证**：按 docs/testing.md §3 跑改动类型对应的最小测试集；改锁 / 改注册表 / 改 WIT 时必须跑对应锁。
@@ -88,6 +88,7 @@
 | 前端测试 | 端目录 `pnpm run test:run`（桌面含 SDK 契约测试） |
 | Rust 全量测试 | `cd src-tauri && cargo test`（部分用例需先构建随包插件产物） |
 | 单应用调试 | 桌面 `pnpm run plugins:dev -- --plugin <id>`（详见 commands.md §5.2） |
+| worktree 共用 target 桶 | 根 `pnpm run target:worktrees`（把 `.worktrees/**` 的 target 软链到 `<container>/target-shared`；构建中的 worktree 自动跳过，详见 `docs/target-governance.md` §1.1） |
 
 ## 4. docs 体系（本文档的拆分文档，硬约束同级）
 

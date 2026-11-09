@@ -2,6 +2,7 @@
 
 > **本文件是 `AGENTS.md` 的拆分文档（构建资源与 target 治理）**：讲**手工精确清理**——磁盘吃紧时人 / Agent 按步照做的流程。
 > **自动治理**（宿主 `src-tauri/target` 15GB 阈值脚本、共享目录只报告）仍归 `docs/commands.md` §6 与 `wasmnest-desktop/scripts/check-target-size.js`；两边冲突时以脚本 + 本文实测为准，并回来修文档。
+> **worktree 共用桶**（`.worktrees/**` 的 target 经软链落到 `<container>/target-shared/**`）由 `scripts/worktree-shared-target.mjs`（`pnpm run target:worktrees`）维护，见 §1.1。
 > 命令与门禁全景见 `docs/commands.md`；磁盘相关的「改了没生效」排查见 `docs/codemap.md` §6。
 
 ## 0. 三条底层事实（先读，避免把磁盘问题当性能问题）
@@ -27,6 +28,30 @@
 | `<libRoot>/<crate>/target`（**无** `.cargo/config.toml` 的 crate：`link-crypto` / `wasmnest-contract` / `wasmnest-cli-engine` / `wasmnest-clipboard-engine` / `wasmnest-notify-engine` / `wasmnest-host-api-core` / `wasmnest-headless-host-probe` / `wasmnest-ws-client-engine`） | 各 crate 自己的 cargo 调用（无重定向） | ✅ 三级都可 | 独立桶，每个 crate 单独清；目前只有 `wasmnest-clipboard-engine/target` 有产物（7 MB 级） |
 | `<libRoot>/wasmnest-wasm-core/target` | 迁移前 per-crate 残留 | ✅ 可删（legacy） | 该 crate 已用 `.cargo/config.toml` 指向 `../target/host-kits`，这仍是旧落点（删除前 `grep target-dir wasmnest-wasm-core/.cargo/config.toml` 确认） |
 | `wasmnest-desktop` / `wasmnest-mobile` 的 `packages/<crate>/target`、`<appsRoot>/apps/<slug>/<end>/rust/target` | 历史错位残留 | ✅ 可删（legacy） | `pnpm run target:size`（在端目录跑）的 `[遗留]` 行即此类；标 `遗留·在用` 的一律不动 |
+| `<container>/target-shared/<repo>/…`（容器根，**仓外**） | `scripts/worktree-shared-target.mjs` 建的软链目标：`.worktrees/**` 里的 target 全部指到这里 | ✅ 可删（删空桶内容即可，链接照旧） | 2026-11-08 引入，见 §1.1；宿主的 15GB 阈值脚本**不覆盖**这里，需手工按 §3 清 |
+
+### 1.1 worktree 共用桶（软链机制，2026-11-08）
+
+**为什么**：四仓 `.cargo/config.toml` 的相对 `target-dir`（`target/wasm-apps`、`../target/server-libs`）由 cargo 按 **config 所在目录**解析，worktree 里 config 随代码走 ⇒ 每棵 worktree 各长一整套 target（桌面 8~12G / 移动 8~9G / lib 9~24G）。一天内三棵 worktree 并行就能吃掉 190G+。
+
+**为什么不用 cargo 自带开关**（2026-11-08 实测）：
+
+- `target-dir` 的相对路径跨不出 checkout（主树 depth 0、worktree depth ≥ 2，深度不同，没有统一相对值）；
+- `[env] CARGO_TARGET_DIR` **不影响** cargo 自己的 target 解析（实测产物仍落 `<crate>/target`）；改写各轮 `[env]` 无效。
+
+**做法**：`node scripts/worktree-shared-target.mjs`（`pnpm run target:worktrees`，在平台仓根跑）——对每个**已登记且非主树**的 worktree，把 cargo 会写的那批路径建成软链：
+
+- `<wt>/target` → `<container>/target-shared/<repo>/target`（`target/server-libs`、`target/host-kits`、`target/wasm-apps` 等子桶自动穿过链接）
+- `<wt>/<crate>/target`（无 `target-dir` 配置的 crate，含两端宿主 `src-tauri`）→ `…/<repo>/<crate>/target`
+
+主树布局零改动、CI 零影响（脚本只在仓外落 `target-shared/`，软链在各 worktree 里、被 `**/target/` 忽略）。
+
+**纪律**：
+
+- **幂等、可随时重跑**：**正在构建的 worktree 自动整体跳过**（按 `/proc/<pid>/cwd` 判定）——不要在活构建里换链接，会直接打断对方（2026-11-08 两次实测事故）。
+- 新建 worktree 后跑一次；`--dry-run` 先看、`--migrate` 把既有实体 target 并入共享桶、`--force` 替换指错地方的链接。
+- **清理**：删 `<container>/target-shared` 下的内容；删 worktree 里的 `target` 只删掉软链，不省空间。
+- **并发放开逃生阀**：同 repo 多棵 worktree 共用一个桶时，同时构建会互相等 cargo 的 target 锁；确需并行让该会话自带桶：`CARGO_TARGET_DIR=/tmp/wt-<name> …`（env 压过一切 config / 软链），用完自行清理。
 
 发现新落点先查这三处再动手：`find <repo> -maxdepth 4 -name target`、该 crate 的 `.cargo/config.toml` 的 `[build] target-dir`、以及 `scripts/check-target-size.js` 的 `sharedTargetDirs` / `rootTargetDirs` 名单（改名单要同步注释）。
 > 能力仓另有一条规则：**没有 `.cargo/config.toml` 的 crate 就写自己的 `<crate>/target`**（当前 8 个），所以「lib 只有两个桶」是错的——`ls -d <libRoot>/*/target` 核实再判断。
@@ -140,7 +165,7 @@ find wasmnest/wasmnest-desktop/src-tauri/target wasmnest/wasmnest-mobile/src-tau
 
 ## 5. 标准流程（照抄即可）
 
-1. §2 前置检查（构建进程为空 + 记基线）。
+1. §2 前置检查（构建进程为空 + 记基线）。用了 §1.1 软链后，worktree 的 target 实为链接：`du` 不跟随（报 4K），真实占用量以 `<container>/target-shared` 为准。
 2. 决定做到哪一级：**只要空间 → Tier 1 + Tier 3**（零风险；2026-11-04 实测这两级拿回 33.8 GiB / 85.5 GiB，剩余大头是三方依赖 rlib 与 `build/`，属刻意保留）；**宿主源码大改过或要做干净基线 → 再加 Tier 2**（记得 E2E 前重建 bin）。
 3. 逐级执行（§3.1 → §3.3），每级后 `du -sb` 记录实际回收量。
 4. 完成验证（§6）。

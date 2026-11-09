@@ -46,3 +46,20 @@
 2. **平台仓**（更新 `release-manifest.json` 的跨仓 tag / SDK 生成物）；
 3. **应用仓**（按当前 SDK 重建产物）；
 每一仓各自可回退；平台仓的 `release-manifest.json` 跨仓 tag 变更必须与能力仓 / 应用仓的实际 tag 同步（细则见平台仓 `docs/git.md`）。
+
+## 8. worktree 与 target 共享桶（新建 worktree 后必做）
+
+四仓的 `.cargo/config.toml` 用相对 `target-dir`（`target/wasm-apps`、`../target/server-libs`），cargo 按 **config 所在目录**解析，worktree 里 config 随代码走 ⇒ **每棵 worktree 各长一整套 target**（桌面 8~12G / 移动 8~9G / 能力仓 9~24G）。2026-11-08 一天内清了三轮共 ~190G，全是这个原因。
+
+因此**新建（或重新启用）worktree 后必须做第一步，再开始构建**：
+
+```bash
+cd <容器根>/wasmnest && pnpm run target:worktrees     # = node scripts/worktree-shared-target.mjs
+```
+
+- 脚本把该 worktree 里 cargo 会写的路径（`<wt>/target`、`<wt>/<crate>/target`、`<wt>/<host>/src-tauri/target`）软链到 `<容器根>/target-shared/<repo>/…`；仓内相对 `target-dir` 穿链落进共享桶，主树与 CI 零改动。
+- **幂等、可随时重跑**：正在构建的 worktree 按 `/proc/<pid>/cwd` 自动整体跳过——**绝不在活构建里换链接**（会直接打断对方）。
+- 已有实体 target 目录时用 `pnpm run target:worktrees --migrate` 并入共享桶；先看用 `--dry-run`。
+- **清理**：删 `<容器根>/target-shared` 下的内容；删 worktree 里的 `target` 只删掉软链、不省空间。
+- 需要并行构建（同 repo 多棵 worktree 共用一把 cargo target 锁）时，给该会话自带桶：`CARGO_TARGET_DIR=/tmp/wt-<name> …`（env 压过一切 config / 软链），用完自行清理。
+- 机制与落点全景：平台仓 `docs/target-governance.md` §1.1。
