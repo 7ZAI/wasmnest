@@ -15,7 +15,7 @@
         </button>
       </div>
 
-      <!-- 快捷开关（深色主题 / 动画 / 防休眠；三项占单列整行）。
+      <!-- 快捷开关（深色主题 / 动画 / 防休眠 / 悬浮导航；2×2 网格，无奇数项）。
            2026-10-19 自通知中心拆分：通知面板只保留通知内容，这里单独成面。
            链路加密不在此面：它属 bedcode 的业务设置（应用设置页承载），宿主快捷
            面只留壳自身的通用开关。 -->
@@ -57,6 +57,23 @@
               }}</span>
             </span>
           </button>
+          <!-- 悬浮导航（2026-11-07 用户要求从系统设置「导航」卡上提到快捷面）：
+               写的是壳偏好 floatingNav（useShellSettings），与 SysSettingsView 那处
+               开关同一真源；打开即由 ShellHost 的 ShellFloatingNav 落地渲染。 -->
+          <button
+            class="tile"
+            :class="{ on: floatingNav }"
+            :aria-pressed="floatingNav"
+            @click="toggleFloatingNav"
+          >
+            <ShellIcon name="recents" :size="15" />
+            <span class="tt">
+              <b>{{ t('shell.quickSettings.tileNav') }}</b>
+              <span>{{
+                floatingNav ? t('shell.quickSettings.on') : t('shell.quickSettings.off')
+              }}</span>
+            </span>
+          </button>
         </div>
       </div>
     </div>
@@ -67,8 +84,9 @@
 /**
  * ShellQuickSettings — 快捷设置面板（工具栏锚定下拉；2026-10-19 与通知中心拆分）
  *
- * 快捷开关：深色主题 / 动画 / 防止休眠——即改即存（settings store 整表回传，
- * useTheme 即时应用）。链路加密不在此面（bedcode 业务设置，应用设置页承载）。
+ * 快捷开关：深色主题 / 动画 / 防止休眠 / 悬浮导航——即改即存（前两项走 settings
+ * store 整表回传，防休眠走 network 分组，悬浮导航走壳偏好 floatingNav 的 deep
+ * watch 写穿；useTheme 即时应用）。链路加密不在此面（bedcode 业务设置，应用设置页承载）。
  * 原本混在通知中心顶部，拆成独立浏览面，由工具栏独立图标（sliders）开合，
  * 与通知 / 多任务互斥（互斥收口在 useShellState）。
  */
@@ -77,11 +95,13 @@ import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { useTheme } from '@/composables/useTheme'
 import { useShellState } from '../composables/useShellState'
+import { useShellSettings } from '../composables/useShellSettings'
 import ShellIcon from './ShellIcon.vue'
 
 const { t } = useI18n()
 const state = useShellState()
 const settingsStore = useSettingsStore()
+const { prefs } = useShellSettings()
 const { isSystemDark } = useTheme()
 
 const open = computed(() => state.quickSettingsOpen.value)
@@ -95,6 +115,7 @@ const isDark = computed(() =>
 )
 const animationsEnabled = computed(() => settingsStore.settings.ui.animations_enabled !== false)
 const preventSleep = computed(() => settingsStore.settings.network.prevent_sleep ?? false)
+const floatingNav = computed(() => prefs.value.floatingNav === true)
 
 function toggleTheme() {
   settingsStore.settings.ui.theme = isDark.value ? 'light' : 'dark'
@@ -107,6 +128,10 @@ function toggleAnimations() {
 function togglePreventSleep() {
   settingsStore.settings.network.prevent_sleep = !preventSleep.value
   void settingsStore.saveSettings({ network: settingsStore.settings.network })
+}
+function toggleFloatingNav() {
+  // 壳偏好：deep watch 已在 useShellSettings 内写穿 localStorage，这里只改值
+  prefs.value.floatingNav = !floatingNav.value
 }
 
 function close() {
@@ -153,7 +178,7 @@ function close() {
   grid-template-columns: 1fr 1fr;
   gap: 7px;
 }
-/* 奇数项时最后一块占整行（当前 3 项：主题 / 动画 / 防休眠） */
+/* 奇数项时最后一块占整行（当前 4 项：主题 / 动画 / 防休眠 / 悬浮导航，正好 2×2） */
 .tiles > :last-child:nth-child(odd) {
   grid-column: span 2;
 }

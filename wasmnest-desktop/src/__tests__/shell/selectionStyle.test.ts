@@ -93,7 +93,9 @@ describe('其余选择：固定黑底 + 固定白字，不用勾章', () => {
     expect(src).toMatch(
       /\.tile\.on svg,\s*\.tile\.on \.tt b,\s*\.tile\.on \.tt span\s*\{[^}]*var\(--selection-solid-ink\)/,
     )
-    expect(src.match(/:aria-pressed=/g)?.length ?? 0).toBe(3)
+    // 4 项（主题 / 动画 / 防休眠 / 悬浮导航）每块都要向读屏宣布按下态
+    expect(src.match(/:aria-pressed=/g)?.length ?? 0).toBe(4)
+    expect(src, '悬浮导航磁贴读壳偏好 floatingNav').toContain('prefs.value.floatingNav')
   })
 
   it('快捷磁贴深色档：不用边框，信息蓝淡染底 + 蓝图标表达「开」（2026-10-26 用户裁决）', () => {

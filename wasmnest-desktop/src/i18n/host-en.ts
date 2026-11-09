@@ -120,6 +120,7 @@ export default {
       tileAnim: 'Animations',
       tileCrypto: 'Link crypto',
       tileSleep: 'Prevent sleep',
+      tileNav: 'Floating nav',
     },
     notif: {
       title: 'Notification Center',

@@ -115,6 +115,7 @@ export default {
       tileAnim: '动画',
       tileCrypto: '链路加密',
       tileSleep: '防止休眠',
+      tileNav: '悬浮导航',
     },
     notif: {
       title: '通知中心',
