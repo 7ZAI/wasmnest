@@ -15,6 +15,7 @@
     "dist",
     "src",
     "bin",
+    "go",
     "tools",
     "template",
     "README.md",
