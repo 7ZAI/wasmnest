@@ -42,6 +42,10 @@
 
 **底线而非上限**：这些准则是沟通下限，不是压缩上限——涉及准确性、安全、契约、跨仓同步、必要深度时，不得以「简洁」为由省略；与本文档其他硬约束冲突时，以对应硬约束为准。
 
+### 0.3 Rust 编写与审核（强制 skill）
+
+> **规则**：任何 Rust 代码的**编写与审核**（crate / 模块 / 命令面 / `Cargo.toml` / 测试 / rustdoc / unsafe），动手前与完成审核时**必须**显式加载并遵循 `/skill:rust-best-practices`（skill 落点 `~/.agents/skills/rust-best-practices/SKILL.md`）；未加载即开始写或评审 = 流程违规，视为未完成交付 / 无效评审。该 skill 是通用惯用法与 API 设计判据层（占 §0 裁决第 5 档「通用工程经验」），与本仓硬约束（`docs/backend.md` / `docs/security.md` / 契约与锁）冲突时**以本仓为准**；其自带的自检命令（fmt / clippy）不替代 `docs/testing.md` §3 的测试与锁门禁。
+
 ## 1. 仓速览（完整代码导航 → `docs/codemap.md`）
 
 平台仓 = 双端宿主 + 端内 SDK + 根工具；Rust **无根 workspace**。能力仓 `../wasmnest-lib` 是全部内部依赖 crate 的真源，平台经 Cargo path（`../../../wasmnest-lib/<crate>`）直接消费，版本由 `release-manifest.json` 的 `repos.lib.tag` 钉住；平台仓不复制、不镜像能力仓源码。应用源码住应用仓、产物落本仓 `resources/plugins/**`（不入库）。**双端一句话**：桌面 = 同窗口全屏挂载独立构建的应用包（机制 B）；移动 = 宿主壳运行面（`registerSurface` 等运行时注册），每个运行面由宿主建成**独立 Vue 应用**（`surfaceAppRegistry` 容器注册表承载，2026-10-24），共享模块外置宿主全局与桌面不同。
@@ -96,7 +100,7 @@
 | `docs/contracts.md` | 契约：release-manifest 判据 / WIT 真源链与 bump 政策 / WIT-ABI 变更 7 步流程 / 权限声明 / plugin.json / SDK / 生成物清单 |
 | `docs/frontend.md` | 前端规范：零资源访问三层封锁 / 挂载包与运行面形态 / 移动壳优先 / **UI 设计强制前置技能（`ui-ux-pro-max` + `design-taste-frontend`）** / 注释命名 i18n |
 | `docs/brand.md` | 对外品牌文案真源：主标（中/英）/ 副标句 / 技术意象句 / 备选池 / 使用规则 / 落地位置与现状（视觉 token 另见两端 `src` 下的 CSS 变量） |
-| `docs/backend.md` | Rust 规范：命名 / AppError / Command 纪律 / 调试面门控 / 注释命名（后端面） |
+| `docs/backend.md` | Rust 规范：命名 / AppError / Command 纪律 / 调试面门控 / 注释命名（后端面）；写 / 审 Rust 前另须加载 `/skill:rust-best-practices`（§0.3） |
 | `docs/security.md` | 安全与日志红线：密钥禁令 / fail-closed / 加密引擎中性原语 / tracing 分级 / 结构化字段 |
 | `docs/testing.md` | 单元测试形态 / 测试工具链 / 完成定义与验证清单（迁移期口径 2026-10-18）/ 锁纪律（Seam 3） |
 | `docs/git.md` | 提交规范 / 能力仓 sibling 钉版纪律 / 三仓提交顺序与 tag 规则 / 文件回滚规范 |
