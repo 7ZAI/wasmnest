@@ -61,6 +61,11 @@ const PLUGINS = {
     group: 'servers',
     slug: 'auth-center',
   },
+  // 服务型 wasm（L2 内部业务）：网络配置中心（T18，跨应用共享 relay 配置与 WAN 注册表）。
+  'com.wasmnest.net-config': {
+    group: 'servers',
+    slug: 'net-config',
+  },
   'com.wasmnest.lanbitou': {
     group: 'apps',
     slug: 'lanbitou',

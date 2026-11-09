@@ -12,7 +12,7 @@
  * 任一子进程退出（Ctrl+C / 宿主崩溃）时统一回收全部。
  *
  * 用法：
- *   node scripts/dev-run.js              # 默认：六个插件（4 apps + 2 servers）watch + tauri dev
+ *   node scripts/dev-run.js              # 默认：七个插件（4 apps + 3 servers）watch + tauri dev
  *   node scripts/dev-run.js --host-cmd "<命令>"   # 覆盖宿主命令（按空格拆分）
  *   node scripts/dev-run.js --no-watch   # 不起插件前端 watch（默认开启，行为不变）
  *

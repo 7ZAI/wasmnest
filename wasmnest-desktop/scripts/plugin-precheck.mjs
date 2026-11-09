@@ -104,6 +104,15 @@ export const PLUGIN_WATCH_CMDS = [
     wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_auth_center.wasm',
   },
   {
+    // Network Config（服务型 wasm，L2，T18）：工程住应用仓 `servers/` 分组。
+    // 配置中心是其它业务启动期就要读的服务，保持与其他应用同一条 watch 闭环。
+    group: 'servers',
+    slug: 'net-config',
+    id: 'com.wasmnest.net-config',
+    args: ['scripts/build.js', '--watch'],
+    wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_net_config.wasm',
+  },
+  {
     // Lanbitou（Markdown 记事本）：业务应用，工程住应用仓 `apps/lanbitou`。
     // 数据根在 `$HOME/.wasmnest/lanbitou`（host-fs），前端与 Rust 都轻。
     slug: 'lanbitou',

@@ -123,8 +123,9 @@ export interface ShellAppEntry {
 /**
  * 宿主挂载运行面路由表（桌面 UI 宿主修正 2026-10-17）：应用前端由壳经挂载槽承载
  * 其独立构建的前端整包（机制 B，非贡献面）。每个有前端界面的挂载包都在此登记
- * （现状 5 个：bedcode / ai-chatbox / file-transfer / monitor /
- * auth-center；agent-hub 已并入 bedcode 的 Agent 管理域）；`auth-center` 住应用仓 `servers/` 分组（服务型 wasm）；
+ * （现状 6 个：bedcode / ai-chatbox / file-transfer / monitor /
+ * auth-center / net-config；agent-hub 已并入 bedcode 的 Agent 管理域）；`auth-center` 与
+ * `net-config` 住应用仓 `servers/` 分组（服务型 wasm）；
  * 无前端界面的应用无挂载路由。registerSurface 契约为多应用扩展预留（防回接锁保持）。
  *
  * 插件 id 家族随 ADR 0056 全改 `com.wasmnest`（bedcode 应用豁免仅显示名 / rust
@@ -137,6 +138,8 @@ export const FILE_TRANSFER_PLUGIN_ID = 'com.wasmnest.file-transfer'
 export const MONITOR_PLUGIN_ID = 'com.wasmnest.monitor'
 /** 认证中心（服务型 wasm：L1 基础服务 / L2 内部业务，随宿主分发；应用仓 `servers/auth-center`） */
 export const AUTH_CENTER_PLUGIN_ID = 'com.wasmnest.auth-center'
+/** 网络配置中心（服务型 wasm：L2 内部业务；应用仓 `servers/net-config`，T18） */
+export const NET_CONFIG_PLUGIN_ID = 'com.wasmnest.net-config'
 /** 烂笔头（Markdown 记事本；应用仓 `apps/lanbitou`） */
 export const LANBITOU_PLUGIN_ID = 'com.wasmnest.lanbitou'
 
@@ -158,6 +161,7 @@ export const SURFACE_ROUTES: Readonly<Record<string, string>> = {
   [FILE_TRANSFER_PLUGIN_ID]: '/transfer',
   [MONITOR_PLUGIN_ID]: '/monitor',
   [AUTH_CENTER_PLUGIN_ID]: '/auth',
+  [NET_CONFIG_PLUGIN_ID]: '/network',
   [LANBITOU_PLUGIN_ID]: '/notes',
 }
 
@@ -179,6 +183,7 @@ const APP_ROUTE_PREFIXES: Readonly<Record<string, string[]>> = {
   [FILE_TRANSFER_PLUGIN_ID]: ['/transfer'],
   [MONITOR_PLUGIN_ID]: ['/monitor'],
   [AUTH_CENTER_PLUGIN_ID]: ['/auth'],
+  [NET_CONFIG_PLUGIN_ID]: ['/network'],
   [LANBITOU_PLUGIN_ID]: ['/notes'],
 }
 

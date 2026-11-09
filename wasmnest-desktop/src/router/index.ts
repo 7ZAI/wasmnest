@@ -19,6 +19,7 @@
  * - com.wasmnest.file-transfer：/transfer
  * - com.wasmnest.monitor：/monitor
  * - com.wasmnest.auth-center：/auth（服务型 wasm，应用仓 servers/auth-center）
+ * - com.wasmnest.net-config：/network（服务型 wasm，应用仓 servers/net-config；T18）
  * - com.wasmnest.lanbitou：/notes（应用仓 apps/lanbitou）
  */
 import { createRouter, createWebHistory } from 'vue-router'
@@ -30,6 +31,7 @@ import {
   FILE_TRANSFER_PLUGIN_ID,
   MONITOR_PLUGIN_ID,
   AUTH_CENTER_PLUGIN_ID,
+  NET_CONFIG_PLUGIN_ID,
   LANBITOU_PLUGIN_ID,
 } from '@/shell/composables/useShellApps'
 
@@ -161,6 +163,13 @@ const router = createRouter({
       name: 'app-auth-center',
       component: AppMountSlot,
       props: { appId: AUTH_CENTER_PLUGIN_ID, route: '/auth' },
+    },
+    {
+      // 网络配置中心（服务型 wasm，应用仓 `servers/net-config`）：T18 跨应用共享网络配置
+      path: '/network',
+      name: 'app-net-config',
+      component: AppMountSlot,
+      props: { appId: NET_CONFIG_PLUGIN_ID, route: '/network' },
     },
     {
       // 烂笔头（Markdown 记事本，应用仓 `apps/lanbitou`）：单面应用

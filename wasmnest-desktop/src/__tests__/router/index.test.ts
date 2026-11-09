@@ -66,6 +66,7 @@ describe('Router Configuration（静态表）', () => {
       expect(routeByName('app-file-transfer').path).toBe('/transfer')
       expect(routeByName('app-monitor').path).toBe('/monitor')
       expect(routeByName('app-auth-center').path).toBe('/auth')
+      expect(routeByName('app-net-config').path).toBe('/network')
       // 全部指向 AppMountSlot（机制 B 挂载槽）
       for (const name of [
         'pairing',
@@ -79,6 +80,7 @@ describe('Router Configuration（静态表）', () => {
         'app-file-transfer',
         'app-monitor',
         'app-auth-center',
+        'app-net-config',
       ]) {
         const comp = routeByName(name).components?.default
         expect(comp?.__name ?? comp?.name, `路由 ${name} 必须挂载 AppMountSlot`).toMatch(

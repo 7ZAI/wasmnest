@@ -126,6 +126,17 @@
           "sha256": "c77433ebac246319609f4f1cdfd46c28b06f605c6c03754bebd3fd2d53c92e9b"
         }
       }
+    },
+    "com.wasmnest.net-config": {
+      "path": "servers/net-config",
+      "version": "0.0.1",
+      "ends": {
+        "desktop": {
+          "artifact": "wasmnest_plugin_net_config.wasm",
+          "package": "net-config-desktop-v0.0.1.zip",
+          "sha256": "d6443d0c73c87b2af67cf690bc7c458151cc3326f6436ea7879a14a1aa951892"
+        }
+      }
     }
   }
 }
