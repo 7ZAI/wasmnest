@@ -29,8 +29,11 @@ use std::time::{Duration, Instant};
 /// 副本可随时从 SAF 重新生成，无需更长保留）
 const RELAY_CACHE_TTL: Duration = Duration::from_secs(3600);
 
-/// 中转复制完成轮询间隔（Kotlin 复制在后台线程执行，轮询取其终态）
+/// 中转复制轮询间隔（Kotlin 复制在后台线程执行，轮询取其终态）
 const COPY_POLL_INTERVAL: Duration = Duration::from_millis(200);
+
+/// 单次中转复制的总超时（Kotlin/provider 不回调时不得永久挂起）
+const RELAY_COPY_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// 中转副本共享状态（进程内；服务重启时由 sweep_relay_dir 重置）
 struct RelayState {
@@ -261,8 +264,19 @@ pub async fn ensure_relay_copy(saf: &dyn SafIo, relay_dir: &Path, uri: &str) -> 
         .read_to_cache(uri, &part_name)
         .map_err(|e| crate::AppError::Plugin(format!("ensure_relay_copy: read_to_cache({}) failed: {}", uri, e)))?;
 
-    // 轮询复制终态（顺序流不可续，等待完成；取消/失败即整体失败）
+    // 轮询复制终态（顺序流不可续，等待完成；取消/失败即整体失败）。
+    // Kotlin 侧卡住或 provider 不回调时必须有截止时间：先 cancel 再报错，
+    // 否则 async 任务与调用方永久挂起。
+    let deadline = tokio::time::Instant::now() + RELAY_COPY_TIMEOUT;
     loop {
+        if tokio::time::Instant::now() >= deadline {
+            let _ = saf.cancel_copy(&handle.copy_id);
+            return Err(crate::AppError::Plugin(format!(
+                "ensure_relay_copy: relay copy timed out after {}s ({})",
+                RELAY_COPY_TIMEOUT.as_secs(),
+                uri
+            )));
+        }
         let status = saf.copy_status(&handle.copy_id).map_err(|e| {
             crate::AppError::Plugin(format!(
                 "ensure_relay_copy: copy_status({}) failed: {}",

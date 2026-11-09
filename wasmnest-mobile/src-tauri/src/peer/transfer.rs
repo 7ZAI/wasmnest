@@ -34,11 +34,21 @@ pub(crate) async fn peer_pick_files(app_handle: AppHandle) -> crate::Result<Vec<
 }
 
 async fn relay_copy_upload_source(app: &AppHandle, uri: &str, dest_name: &str) -> crate::Result<String> {
+    const RELAY_COPY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(600);
+    const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(200);
     let saf = app.state::<crate::plugin::saf_io::SafIoState>();
     let handle = saf
         .read_to_cache(uri, dest_name)
         .map_err(|e| crate::AppError::Plugin(format!("upload relay copy start failed: {e}")))?;
+    let deadline = tokio::time::Instant::now() + RELAY_COPY_TIMEOUT;
     loop {
+        if tokio::time::Instant::now() >= deadline {
+            let _ = saf.cancel_copy(&handle.copy_id);
+            return Err(crate::AppError::Plugin(format!(
+                "upload relay copy timed out after {}s: {uri}",
+                RELAY_COPY_TIMEOUT.as_secs()
+            )));
+        }
         let status = saf
             .copy_status(&handle.copy_id)
             .map_err(|e| crate::AppError::Plugin(format!("upload relay copy poll failed: {e}")))?;
@@ -51,7 +61,7 @@ async fn relay_copy_upload_source(app: &AppHandle, uri: &str, dest_name: &str) -
             }
             break;
         }
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        tokio::time::sleep(POLL_INTERVAL).await;
     }
     Ok(handle.dest_path)
 }

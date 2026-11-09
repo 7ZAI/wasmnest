@@ -305,9 +305,13 @@ impl PluginManager {
             )
         };
         if !was_active {
-            // 未在运行（Loaded / Deactivated / Error）：无 guest 需要清理，直接收权——
-            // Error 态可能是「激活成功后前端 mark_error」残留，授权不能留在下一轮激活
+            // 未在运行（Loaded / Deactivated / Error）：无 guest 需要清理，但仍须做
+            // 本次运行留下的宿主侧回收——Error 可能是「激活成功后前端 mark_error」
+            // 残留，消息总线订阅与派生进程仍在：只撤权限会让停用后的插件继续收到
+            // 总线消息（`dispatch_to_wasm` 不检查状态）。清理口径与下方运行态分支一致。
+            self.message_bus.remove_all_subscriptions(plugin_id).await;
             if let Some(ctx) = self.wasm_host_ctx.get() {
+                ctx.process_registry().kill_all_for(plugin_id).await;
                 ctx.revoke_permissions(plugin_id);
             }
             return Ok(());
@@ -330,10 +334,24 @@ impl PluginManager {
             }
         }
 
-        // 3. 清理消息总线订阅（async 上下文直接 await，禁止 block_on）
+        // 3. 回收插件派生的宿主进程（`process_run` 的独立进程组）：停用是唯一
+        // 销毁点，guest 自己来不及/无法 `process_kill` 时由宿主兜底；否则进程会
+        // 继续运行到 timeout（默认 600s），卸载后仍在写 output_path。
+        if let Some(ctx) = self.wasm_host_ctx.get() {
+            let killed = ctx.process_registry().kill_all_for(plugin_id).await;
+            if killed > 0 {
+                tracing::warn!(
+                    plugin_id = %plugin_id,
+                    killed,
+                    "plugin deactivated with running processes; process groups killed"
+                );
+            }
+        }
+
+        // 4. 清理消息总线订阅（async 上下文直接 await，禁止 block_on）
         self.message_bus.remove_all_subscriptions(plugin_id).await;
 
-        // 4. 权限随停用撤销（桌面 `PluginHost::deactivate_plugin` 的 `revoke_all` 同款）：
+        // 5. 权限随停用撤销（桌面 `PluginHost::deactivate_plugin` 的 `revoke_all` 同款）：
         // 真源是内核 PermissionManager，未撤销的授权会活到下一轮激活。放在 guest
         // deactivate **之后**——清理期 guest 仍要调宿主原语（mdns 停浏览 / peer 断开 /
         // 总线退订），先收权会把插件自己的清理动作拒掉；且在 plugins 锁之前取权限

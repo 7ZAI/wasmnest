@@ -23,8 +23,20 @@ use crate::connection::WsClientEvent;
 use crate::router::MobileEvent;
 use crate::system::error_boundary::spawn_with_error_boundary;
 
-/// 监督任务单例守卫（复制 event.rs OUTPUT_FORWARDING_STARTED 模式：重复启动幂等）
+/// 监督任务单例标志（重复启动幂等）
 static EVENT_WS_SUPERVISOR_STARTED: AtomicBool = AtomicBool::new(false);
+
+/// 监督任务退出（正常返回 / panic 被错误边界捕获）时复位单例标志
+///
+/// 否则任务死亡后标志永为 true，之后无法重启自愈（`spawn_with_error_boundary`
+/// 会吞掉 panic，外部看不到任务已死）。
+struct SupervisorFlagGuard;
+
+impl Drop for SupervisorFlagGuard {
+    fn drop(&mut self) {
+        EVENT_WS_SUPERVISOR_STARTED.store(false, Ordering::SeqCst);
+    }
+}
 
 /// 启动常驻事件 WS 监督任务（单例，仅首次调用生效）
 ///
@@ -37,6 +49,7 @@ pub fn start_event_ws_supervisor(app_handle: Option<AppHandle>) {
     }
     let manager = crate::state::get_connection_manager();
     spawn_with_error_boundary("event_ws_supervisor", async move {
+        let _guard = SupervisorFlagGuard;
         run_supervisor(manager, app_handle, None).await;
     });
 }

@@ -332,8 +332,18 @@ impl Default for ReconnectManager {
 
 fn rand_simple() -> f64 {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos();
-    (nanos as f64) / (u32::MAX as f64)
+    // 亚秒纳秒 ∈ [0, 1e9)，分母必须是同一量级（u32::MAX ≈ 4.29e9 会把抖动
+    // 压到 0–2.3%，多设备仍近乎同步重试）。时钟早于 epoch 不 panic（NRD/错乱时钟）。
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    jitter_ratio(nanos)
+}
+
+/// 纳秒 → [0, 1) 抖动比例（分母单点，防再次写成 u32::MAX）
+fn jitter_ratio(nanos: u32) -> f64 {
+    f64::from(nanos) / 1_000_000_000.0
 }
 
 // ==================== 单元测试 ====================
@@ -528,6 +538,16 @@ mod tests {
             assert!(delay >= base, "延迟不应小于基础值: {:?}", delay);
             assert!(delay <= upper, "延迟不应超过 +10%: {:?}", delay);
         }
+    }
+
+    #[tokio::test]
+    async fn test_jitter_ratio_covers_full_range() {
+        // 分母回归：旧实现把 [0, 1e9) 的纳秒除以 u32::MAX（≈4.29e9），抖动只剩
+        // 0–2.3%。直接锁比例函数的满量程，不依赖采样时机（连续采样的纳秒跨度
+        // 只有几十毫秒，按采样值断言会假红）。
+        assert!(jitter_ratio(999_999_999) > 0.99);
+        assert!((jitter_ratio(50_000_000) - 0.05).abs() < f64::EPSILON);
+        assert_eq!(jitter_ratio(0), 0.0);
     }
 
     #[tokio::test]
