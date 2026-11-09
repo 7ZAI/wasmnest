@@ -15,6 +15,10 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }))
 
+vi.mock('@/plugin/credentials', () => ({
+  ensureHostCredential: vi.fn(async () => 'test-host-credential'),
+}))
+
 import { useSettingsStore } from '@/stores/settings'
 
 /** 构造一个完整的 ui 节（saveSettings 浅合并按节整体替换，调用方需传完整节） */
@@ -90,6 +94,7 @@ describe('settings store', () => {
         session: expect.objectContaining({ default_command: 'claude' }),
         ui: expect.objectContaining({ theme: 'dark', terminal_font_size: 14 }),
       }),
+      credential: 'test-host-credential',
     })
     expect(store.settings.ui.theme).toBe('dark')
     expect(store.settings.ui.terminal_font_size).toBe(14)
@@ -101,6 +106,7 @@ describe('settings store', () => {
     expect(store.settings.network).toEqual({ port: 9123 })
     expect(invokeMock).toHaveBeenCalledWith('save_app_settings', {
       settings: expect.objectContaining({ network: { port: 9123 } }),
+      credential: 'test-host-credential',
     })
   })
 

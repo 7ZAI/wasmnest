@@ -25,9 +25,19 @@ pub async fn get_app_settings(app_handle: tauri::AppHandle) -> crate::Result<cra
 /// 保存应用设置
 #[tauri::command]
 pub async fn save_app_settings(
+    webview: tauri::Webview,
     app_handle: tauri::AppHandle,
     settings: crate::system::config::AppConfig,
+    credential: String,
 ) -> crate::Result<()> {
+    let channel = crate::commands::host_gate::channel_registry(&app_handle)?;
+    crate::commands::host_gate::require_host_surface(
+        &channel,
+        webview.label(),
+        "save_app_settings",
+        &credential,
+        "command 'save_app_settings' must be requested by the host frontend",
+    )?;
     let config_path = app_handle
         .path()
         .app_data_dir()

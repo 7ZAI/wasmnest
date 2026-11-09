@@ -2,8 +2,9 @@
 //!
 //! 与 `mobile_plugin_command_identity_lock.rs` 同一判据、不同面：
 //! - 那边锁 `plugin/commands.rs`（插件面命令，身份 = 插件通道令牌 / 宿主凭证）；
-//! - 这边锁 `commands/{auth,connection,egress,http_proxy}.rs`——**宿主机密面**：
-//!   认证凭据、全局 JWT、连接目标、链路加密开关、egress 决策、HTTP 出站。
+//! - 这边锁 `commands/{auth,connection,egress,http_proxy}.rs` + `system/commands.rs`
+//!   ——**宿主机密面**：认证凭据、全局 JWT、连接目标、链路加密开关、egress 决策、
+//!   HTTP 出站、全局应用设置写入口。
 //!
 //! 为什么必须锁：移动运行面与宿主壳同 webview（ADR 0058 F2），任何随包 / 用户安装
 //! 应用的前端都能裸 invoke 这些命令。这些命令一旦「漏接门」，缺失是**静默**的
@@ -23,15 +24,16 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 /// 待扫的命令面文件（相对 `src-tauri`）
-const COMMAND_FILES: [&str; 4] = [
+const COMMAND_FILES: [&str; 5] = [
     "src/commands/auth.rs",
     "src/commands/connection.rs",
     "src/commands/egress.rs",
     "src/commands/http_proxy.rs",
+    "src/system/commands.rs",
 ];
 
 /// 必须带 `credential` 且先过门禁的命令（宿主机密面全量）
-const CREDENTIAL_GATED: [&str; 16] = [
+const CREDENTIAL_GATED: [&str; 17] = [
     // auth.rs：JWT / 设备凭据 / 生物密钥（#42）
     "ws_authenticate",
     "ws_get_auth_credentials",
@@ -51,13 +53,22 @@ const CREDENTIAL_GATED: [&str; 16] = [
     // egress.rs：目标声明与授权回执（#42）
     "egress_declare_desktop_target",
     "egress_consent_resolve",
+    // system/commands.rs：整份 AppConfig 写入口（应用前端同 webview 可裸 invoke）
+    "save_app_settings",
 ];
 
 /// HTTP 出站面：身份分流（宿主 vs 应用），门禁是 `resolve_caller(` 而不是宿主门
 const CALLER_RESOLVED: [&str; 2] = ["http_request", "http_cancel"];
 
 /// 无身份参数的合法命令：只读查询（不改变状态、不触达他人数据）
-const READ_ONLY: [&str; 3] = ["ws_get_status", "ws_is_connected", "get_ws_url"];
+const READ_ONLY: [&str; 5] = [
+    "ws_get_status",
+    "ws_is_connected",
+    "get_ws_url",
+    // system/commands.rs：只读配置 / 无身份语义探活
+    "get_app_settings",
+    "ping",
+];
 
 /// 任一门禁调用名（出现即视为「已接门」）
 const GATES: [&str; 5] = [
@@ -153,8 +164,7 @@ fn collect_all() -> Vec<CommandShape> {
     let mut all = Vec::new();
     for rel in COMMAND_FILES {
         let path = src_root().join(rel);
-        let src = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("读取 {rel} 失败（扫描面失效）：{e}"));
+        let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 {rel} 失败（扫描面失效）：{e}"));
         let parsed = parse_commands(&src);
         assert!(
             !parsed.is_empty(),
@@ -183,10 +193,7 @@ fn host_secret_commands_carry_credential_and_gate_before_side_effects() {
         let body = code_only(&command.body);
         let gate_at = GATES.iter().filter_map(|gate| body.find(gate)).min();
         let Some(gate_at) = gate_at else {
-            violations.push(format!(
-                "`{expected}`：命令体未出现门禁调用（{}）",
-                GATES.join(" / ")
-            ));
+            violations.push(format!("`{expected}`：命令体未出现门禁调用（{}）", GATES.join(" / ")));
             continue;
         };
         if let Some((effect_at, effect)) = SIDE_EFFECTS
@@ -202,7 +209,11 @@ fn host_secret_commands_carry_credential_and_gate_before_side_effects() {
         }
     }
 
-    assert!(violations.is_empty(), "宿主机密命令面身份回归：\n{}", violations.join("\n"));
+    assert!(
+        violations.is_empty(),
+        "宿主机密命令面身份回归：\n{}",
+        violations.join("\n")
+    );
 }
 
 #[test]
@@ -237,7 +248,11 @@ fn http_surface_resolves_caller_identity() {
         }
     }
 
-    assert!(violations.is_empty(), "HTTP 面身份分流回归：\n{}", violations.join("\n"));
+    assert!(
+        violations.is_empty(),
+        "HTTP 面身份分流回归：\n{}",
+        violations.join("\n")
+    );
 }
 
 #[test]

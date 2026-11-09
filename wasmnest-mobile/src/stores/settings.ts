@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { logger } from '@/utils/frontendLogger'
 import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { ensureHostCredential } from '@/plugin/credentials'
 
 export interface Settings {
   network: {
@@ -80,7 +81,10 @@ export const useSettingsStore = defineStore('settings', () => {
   async function saveSettings(newSettings: Partial<Settings>) {
     try {
       const merged = { ...settings.value, ...newSettings }
-      await invoke('save_app_settings', { settings: merged })
+      await invoke('save_app_settings', {
+        settings: merged,
+        credential: await ensureHostCredential(),
+      })
       settings.value = merged
     } catch (e) {
       logger.error('[Settings] Failed to save settings:', e)
