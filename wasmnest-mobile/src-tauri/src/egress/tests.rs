@@ -21,12 +21,25 @@ fn parse_url_lite_basic() {
     assert_eq!(u.port, Some(4455));
     assert_eq!(u.path, "/api/health");
 
+    // IPv6：带/不带端口（reqwest 解析出的 host 不含方括号）
+    let u = parse_url_lite("http://[::1]/x").unwrap();
+    assert_eq!(u.host, "::1");
+    assert_eq!(u.port, None);
+    assert!(is_loopback_host(&u.host));
+    let u = parse_url_lite("http://[::1]:8080/x").unwrap();
+    assert_eq!(u.host, "::1");
+    assert_eq!(u.port, Some(8080));
+
     // 无 path → 默认 "/"
     let u = parse_url_lite("https://example.com").unwrap();
     assert_eq!(u.path, "/");
     // 非法 → None
     assert!(parse_url_lite("not-a-url").is_none());
     assert!(parse_url_lite("").is_none());
+    // 非数字端口 / userinfo 一律拒绝（后者是策略与 reqwest 解析分叉的入口）
+    assert!(parse_url_lite("http://example.com:abc/x").is_none());
+    assert!(parse_url_lite("http://user:pass@example.com/x").is_none());
+    assert!(parse_url_lite("http://127.0.0.1:80@evil.com/x").is_none());
 }
 
 #[test]
@@ -181,21 +194,42 @@ fn plugin_declarations_registered_and_removed() {
         ],
     );
     assert!(matches!(
-        p.decide("https://api.openai.com/v1/chat/completions", "plugin:ai-chatbox"),
+        p.decide(
+            "https://api.openai.com/v1/chat/completions",
+            "plugin:com.wasmnest.ai-chatbox"
+        ),
         EgressDecision::Allow(GrantSource::L2Plugin)
     ));
     assert!(matches!(
-        p.decide("https://api.deepseek.com/chat/completions", "plugin:ai-chatbox"),
+        p.decide(
+            "https://api.deepseek.com/chat/completions",
+            "plugin:com.wasmnest.ai-chatbox"
+        ),
         EgressDecision::Allow(GrantSource::L2Plugin)
     ));
     // 未声明的其它域名 → NeedConsent
     assert!(matches!(
-        p.decide("https://custom.example.com/v1", "plugin:ai-chatbox"),
+        p.decide("https://custom.example.com/v1", "plugin:com.wasmnest.ai-chatbox"),
+        EgressDecision::NeedConsent(_)
+    ));
+    // 声明只属于注册它的插件：另一个插件 / 宿主来源命中同一 URL 不得放行
+    assert!(matches!(
+        p.decide(
+            "https://api.openai.com/v1/chat/completions",
+            "plugin:com.wasmnest.bedcode"
+        ),
+        EgressDecision::NeedConsent(_)
+    ));
+    assert!(matches!(
+        p.decide("https://api.openai.com/v1/chat/completions", "host"),
         EgressDecision::NeedConsent(_)
     ));
     p.unregister_plugin_urls("com.wasmnest.ai-chatbox");
     assert!(matches!(
-        p.decide("https://api.openai.com/v1/chat/completions", "plugin:ai-chatbox"),
+        p.decide(
+            "https://api.openai.com/v1/chat/completions",
+            "plugin:com.wasmnest.ai-chatbox"
+        ),
         EgressDecision::NeedConsent(_)
     ));
 }

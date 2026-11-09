@@ -625,8 +625,12 @@ impl EgressPolicy {
             "path": request.path,
             "source": request.source,
         });
-        app.emit("egress_consent_request", payload)
-            .map_err(|e| AppError::Egress(format!("egress consent emit failed: {e}")))?;
+        if let Err(e) = app.emit("egress_consent_request", payload) {
+            // 事件没发出去 = 前端永远不会回执：必须立刻摘掉本次 oneshot，
+            // 否则 pending_consents 随每次重试累积（长生命周期 map 泄漏）。
+            self.pending_consents.lock().await.remove(&request.id);
+            return Err(AppError::Egress(format!("egress consent emit failed: {e}")));
+        }
         tracing::info!(
             request_id = %request.id,
             host = %request.host,
@@ -726,14 +730,17 @@ impl EgressPolicy {
             return EgressDecision::Allow(GrantSource::L2Builtin);
         }
 
-        // 第 2 步：L2 插件 preauthUrls 声明
-        let plugin_hit = self
-            .plugin_patterns
-            .read()
-            .unwrap()
-            .values()
-            .flatten()
-            .any(|p| p.matches(&parsed));
+        // 第 2 步：L2 插件 preauthUrls 声明（**只认调用方自己的声明**）
+        //
+        // 声明是插件对自己的授权，不是全局白名单：任意插件 A 声明某域名后，
+        // 插件 B / 宿主来源同域名请求都命中 L2 就等于让 A 替 B 放行，最小权限
+        // 与「授权主体绑定」双失效。宿主来源（host / useUpdateChecker 等）没有
+        // 插件 id，不享受任何插件声明。
+        let plugin_hit = source
+            .strip_prefix("plugin:")
+            .and_then(|id| self.plugin_patterns.read().unwrap().get(id).cloned())
+            .map(|patterns| patterns.iter().any(|p| p.matches(&parsed)))
+            .unwrap_or(false);
         if plugin_hit {
             return EgressDecision::Allow(GrantSource::L2Plugin);
         }

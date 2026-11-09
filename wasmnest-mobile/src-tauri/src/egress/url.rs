@@ -14,33 +14,30 @@ pub struct LiteUrl {
 
 /// 轻量 URL 解析：`scheme://host[:port]/path...`。host 归一化小写；
 /// 无法解析返回 None（判定方按拒绝处理，fail-closed）。
+///
+/// **必须与 reqwest 使用同一份解析结果**（CWE-20 / CWE-918）：安全判定看的是
+/// 这里解析出的 host/port，实际请求由 reqwest 发出——两套手写解析对 userinfo
+/// （`http://127.0.0.1:80@evil.com`）与 IPv6 authority 的分叉会让策略检查 A、
+/// 请求发给 B。故直接复用 `reqwest::Url`（reqwest 内部同一 crate/同一版本），
+/// 并显式拒绝 userinfo：宿主的任何合法调用面都不需要它。
 pub fn parse_url_lite(url: &str) -> Option<LiteUrl> {
-    let scheme_end = url.find("://")?;
-    let scheme = url[..scheme_end].to_lowercase();
-    let rest = &url[scheme_end + 3..];
-    let (authority, path) = match rest.find('/') {
-        Some(i) => (&rest[..i], &rest[i..]),
-        None => (rest, "/"),
-    };
-    // authority 可能含 query（无 path 时）——取到 ? 为止
-    let authority = authority.split('?').next().unwrap_or(authority);
-    let (host, port) = match authority.rsplit_once(':') {
-        Some((h, p)) => (h.to_lowercase(), p.parse::<u16>().ok()),
-        None => (authority.to_lowercase(), None),
-    };
-    if host.is_empty() {
+    let parsed = reqwest::Url::parse(url).ok()?;
+    // userinfo 会让 reqwest 的 host 与策略解析分叉，且宿主无此需求 → fail-closed
+    if !parsed.username().is_empty() || parsed.password().is_some() {
         return None;
     }
-    // path 剥 query
-    let path = match path.split('?').next() {
-        Some(p) if !p.is_empty() => p,
-        _ => "/",
-    };
     Some(LiteUrl {
-        scheme,
-        host,
-        port,
-        path: path.to_string(),
+        scheme: parsed.scheme().to_ascii_lowercase(),
+        // `Url::host_str` 对 IPv6 带方括号（`[::1]`）：去掉后再与 IP 解析 / L1 目标
+        // 集合同口径（`is_loopback_host` / `is_private_ip` 都按裸地址判断）。
+        host: parsed
+            .host_str()?
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .to_ascii_lowercase(),
+        // 默认端口（http:80 / https:443）返回 None，与既有「未显式声明即任意」语义一致
+        port: parsed.port(),
+        path: parsed.path().to_string(),
     })
 }
 
@@ -98,7 +95,11 @@ impl UrlPattern {
         };
         let (wildcard_subdomain, host) = match host_part.strip_prefix("*.") {
             Some(h) => (true, h.to_lowercase()),
-            None => (false, host_part.to_lowercase()),
+            // IPv6 声明同样去掉方括号，与 `LiteUrl.host` 同口径
+            None => (
+                false,
+                host_part.trim_start_matches('[').trim_end_matches(']').to_lowercase(),
+            ),
         };
         if host.is_empty() {
             return None;
