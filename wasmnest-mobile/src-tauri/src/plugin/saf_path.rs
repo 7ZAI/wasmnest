@@ -23,7 +23,9 @@ pub fn resolve_saf_path(authority: &str, document_id: &str, primary_dir: &str) -
         // 外部存储：primary: 为主存储，其余卷号为可移动存储（SD 卡挂载于 /storage/<卷号>）
         "com.android.externalstorage.documents" => {
             let (volume, rest) = document_id.split_once(':')?;
-            if volume.is_empty() {
+            // volume 直接拼进 `/storage/{volume}`：必须是单一卷号，不能含路径分隔符
+            // 或 `..`（`documentId="../../data:x"` 会得到 `/storage/../../data/x`）
+            if volume.is_empty() || volume.contains('/') || volume.contains('\\') || volume == "." || volume == ".." {
                 return None;
             }
             let base = if volume == "primary" {
@@ -48,12 +50,29 @@ pub fn resolve_saf_path(authority: &str, document_id: &str, primary_dir: &str) -
             })
         }
         // 下载 provider：raw: 前缀直接携带真实路径
-        "com.android.providers.downloads.documents" => document_id
-            .strip_prefix("raw:")
-            .filter(|p| !p.is_empty())
-            .map(|p| p.to_string()),
+        "com.android.providers.downloads.documents" => {
+            let raw = document_id.strip_prefix("raw:").filter(|p| !p.is_empty())?;
+            // raw 同样是不可信输入：必须是绝对路径、无 `..` 段，且位于主存储或
+            // /storage 之下（带分隔符比较，避免 `/storage/emulated/0evil` 误命中）
+            if !raw.starts_with('/')
+                || raw.split('/').any(|seg| seg == "..")
+                || !(is_within(raw, primary_dir) || is_within(raw, "/storage"))
+            {
+                return None;
+            }
+            Some(raw.to_string())
+        }
         _ => None,
     }
+}
+
+/// `path` 是否等于 `root` 或位于其下（带分隔符比较，不靠裸 `starts_with`）
+fn is_within(path: &str, root: &str) -> bool {
+    let root = root.trim_end_matches('/');
+    if root.is_empty() {
+        return false;
+    }
+    path == root || path.strip_prefix(root).is_some_and(|rest| rest.starts_with('/'))
 }
 
 #[cfg(test)]
@@ -178,6 +197,51 @@ mod tests {
             resolve_saf_path("com.android.externalstorage.documents", "", PRIMARY_DIR),
             None
         );
+    }
+
+    /// 卷号注入：含路径分隔符 / `..` 的 volume 一律拒绝
+    #[test]
+    fn volume_injection_rejected() {
+        for document_id in ["../../data:x", "../x", "a/b:x", "a\\b:x", ".:x", "..:x"] {
+            assert_eq!(
+                resolve_saf_path("com.android.externalstorage.documents", document_id, PRIMARY_DIR),
+                None,
+                "{document_id} 必须被拒绝"
+            );
+        }
+    }
+
+    /// raw: 路径约束：绝对 + 主存储或 /storage 下 + 无 `..`
+    #[test]
+    fn downloads_raw_path_constrained() {
+        for raw in [
+            "relative/path",
+            "/data/data/com.wasmnest/files/x",
+            "/storage/emulated/0/../../data/x",
+        ] {
+            assert_eq!(
+                resolve_saf_path(
+                    "com.android.providers.downloads.documents",
+                    &format!("raw:{raw}"),
+                    PRIMARY_DIR,
+                ),
+                None,
+                "{raw} 必须被拒绝"
+            );
+        }
+        assert_eq!(
+            resolve_saf_path(
+                "com.android.providers.downloads.documents",
+                "raw:/storage/ABCD-1234/Download/a.mp4",
+                PRIMARY_DIR,
+            ),
+            Some("/storage/ABCD-1234/Download/a.mp4".to_string())
+        );
+        // 分隔符边界：`/storage/emulated/0evil` 不在 primary_dir 之下（但仍在
+        // `/storage` 之下，故 raw 路径整体仍合法）——单独锁比较函数本身
+        assert!(!is_within("/storage/emulated/0evil/x", PRIMARY_DIR));
+        assert!(is_within("/storage/emulated/0/x", PRIMARY_DIR));
+        assert!(is_within(PRIMARY_DIR, PRIMARY_DIR));
     }
 
     /// 路径逃逸防御：.. 段被拒绝

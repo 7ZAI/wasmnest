@@ -200,6 +200,17 @@ impl PluginLoader {
                     // 报错信息明确——旧 ABI 产物残留在切换期即暴露）
                     if manifest.plugin_type.has_backend() && !manifest.rust_library.is_empty() {
                         let wasm_file = path.join(format!("{}{}", manifest.rust_library, WASM_FILE_EXT));
+                        if wasm_file.exists() && !wasm_file_inside_plugin_dir(&path, &wasm_file) {
+                            // 双保险（第一道 = manifest 校验）：符号链接可把目录内路径
+                            // 指到目录外，canonicalize 后必须仍在插件目录下。
+                            tracing::error!(
+                                "[PluginLoader] Rejecting plugin {:?}: wasm file escapes plugin dir: {:?}",
+                                plugin_id,
+                                wasm_file
+                            );
+                            seen_ids.remove(&plugin_id);
+                            continue;
+                        }
                         if wasm_file.exists() {
                             match wasm_runtime.compile_component_from_file(&wasm_file) {
                                 Ok(component) => {
@@ -335,9 +346,29 @@ impl PluginLoader {
                 "backend/full plugin.json missing rustLibrary field".to_string(),
             ));
         }
+        // rustLibrary 是拼插件目录内 wasm 路径的唯一输入：拒绝路径成分
+        // （绝对路径 / `..` 会让加载落到审批哈希覆盖不到的目录外）
+        if !manifest.rust_library.is_empty() {
+            wasmnest_wasm_core::manager::validation::validate_rust_library_name(&manifest.rust_library)?;
+        }
 
         Ok(manifest)
     }
+}
+
+/// 最终 wasm 路径 canonicalize 后是否仍在插件目录内（防符号链接逃逸）
+///
+/// manifest 校验已拒绝路径分隔符 / `..`；本检查是装载期双保险：插件目录里的
+/// 符号链接仍可把 `{rustLibrary}.wasm` 指到目录外。canonicalize 失败（路径
+/// 不存在 / 环）按不安全处理。
+fn wasm_file_inside_plugin_dir(plugin_dir: &Path, wasm_file: &Path) -> bool {
+    let Ok(root) = plugin_dir.canonicalize() else {
+        return false;
+    };
+    let Ok(file) = wasm_file.canonicalize() else {
+        return false;
+    };
+    file.starts_with(&root)
 }
 
 /// 递归复制目录（dev 插件复制用）

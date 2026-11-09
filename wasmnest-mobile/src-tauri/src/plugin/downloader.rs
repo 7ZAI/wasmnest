@@ -238,6 +238,11 @@ impl PluginDownloader {
         if manifest.version.is_empty() {
             return Err(crate::AppError::Plugin("plugin.json missing version field".to_string()));
         }
+        // rustLibrary 是拼 wasm 路径的唯一输入：拒绝路径成分（目录外 wasm 不在
+        // 审批哈希的钉扎范围内）
+        if !manifest.rust_library.is_empty() {
+            wasmnest_wasm_core::manager::validation::validate_rust_library_name(&manifest.rust_library)?;
+        }
         // 平台适配门禁（platform 必填）：移动端只放行 mobile / both——桌面专属
         // 分发包被安装到本端即显性拒绝（与目录扫描 loader.rs::load_manifest 同判据）
         if !manifest.platform.supports(crate::plugin::types::PluginPlatform::Mobile) {
@@ -257,29 +262,38 @@ impl PluginDownloader {
         }
         tokio::fs::create_dir_all(&temp_dir).await?;
 
-        for i in 0..archive.len() {
-            let mut entry = archive
-                .by_index(i)
-                .map_err(|e| crate::AppError::Plugin(format!("Failed to read plugin package entry: {}", e)))?;
-            let name = entry.name().to_string();
-            if entry.is_dir() {
-                continue;
+        // 解压是同步阻塞 I/O：搬进 spawn_blocking，不能占住 Tokio worker
+        // （大包会让同一运行时的连接/事件任务一起变慢）。
+        let extract_dir = temp_dir.clone();
+        tokio::task::spawn_blocking(move || -> crate::Result<()> {
+            for i in 0..archive.len() {
+                let mut entry = archive
+                    .by_index(i)
+                    .map_err(|e| crate::AppError::Plugin(format!("Failed to read plugin package entry: {}", e)))?;
+                let name = entry.name().to_string();
+                if entry.is_dir() {
+                    continue;
+                }
+                if !Self::is_safe_zip_name(&name) {
+                    return Err(crate::AppError::Plugin(format!(
+                        "Plugin package contains unsafe path: {}",
+                        name
+                    )));
+                }
+                let dest = extract_dir.join(&name);
+                if let Some(parent) = dest.parent() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| crate::AppError::Plugin(format!("Failed to create '{}': {}", name, e)))?;
+                }
+                let mut out = std::fs::File::create(&dest)
+                    .map_err(|e| crate::AppError::Plugin(format!("Failed to create '{}': {}", name, e)))?;
+                std::io::copy(&mut entry, &mut out)
+                    .map_err(|e| crate::AppError::Plugin(format!("Failed to extract '{}': {}", name, e)))?;
             }
-            if !Self::is_safe_zip_name(&name) {
-                return Err(crate::AppError::Plugin(format!(
-                    "Plugin package contains unsafe path: {}",
-                    name
-                )));
-            }
-            let dest = temp_dir.join(&name);
-            if let Some(parent) = dest.parent() {
-                tokio::fs::create_dir_all(parent).await?;
-            }
-            let mut out = std::fs::File::create(&dest)
-                .map_err(|e| crate::AppError::Plugin(format!("Failed to create '{}': {}", name, e)))?;
-            std::io::copy(&mut entry, &mut out)
-                .map_err(|e| crate::AppError::Plugin(format!("Failed to extract '{}': {}", name, e)))?;
-        }
+            Ok(())
+        })
+        .await
+        .map_err(|e| crate::AppError::Plugin(format!("Plugin extract task failed: {}", e)))??;
 
         // 4. wasm_hash 校验（manifest 声明时）
         if !manifest.rust_library.is_empty() && !manifest.wasm_hash.is_empty() {

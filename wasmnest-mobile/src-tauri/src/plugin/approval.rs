@@ -148,9 +148,14 @@ impl PluginApprovalStore {
 /// 覆盖目录下全部文件（含 plugin.json / wasm 产物），
 /// 任一文件被替换都会导致哈希变化。
 pub fn compute_dir_hash(dir: &Path) -> crate::Result<String> {
-    let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+    use std::io::Read;
 
-    fn collect(dir: &Path, base: &Path, files: &mut Vec<(String, Vec<u8>)>) -> crate::Result<()> {
+    // 只收集相对路径，内容逐文件流式喂 hasher（大插件 / 符号链接指向大文件
+    // 不再把整个目录读进内存）。哈希序列与原实现逐字节一致：
+    // rel bytes + 0 + content + 0，按相对路径排序。
+    let mut files: Vec<String> = Vec::new();
+
+    fn collect(dir: &Path, base: &Path, files: &mut Vec<String>) -> crate::Result<()> {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
@@ -159,12 +164,19 @@ pub fn compute_dir_hash(dir: &Path) -> crate::Result<String> {
                 .map_err(|e| AppError::Plugin(format!("Hash path strip failed: {}", e)))?
                 .to_string_lossy()
                 .to_string();
-            if path.is_dir() {
+            let file_type = entry.file_type()?;
+            // 符号链接：审批哈希只应钝化目录内真实内容；跟随链接会让哈希依赖
+            // 目录外文件（且可指向任意大文件）。拒绝且显性报错，不静默跳过。
+            if file_type.is_symlink() {
+                return Err(AppError::Plugin(format!(
+                    "refusing to hash symlink in plugin dir: {}",
+                    rel
+                )));
+            }
+            if file_type.is_dir() {
                 collect(&path, base, files)?;
-            } else if path.is_file() {
-                let content = std::fs::read(&path)
-                    .map_err(|e| AppError::Plugin(format!("Failed to read '{}' for hashing: {}", rel, e)))?;
-                files.push((rel, content));
+            } else if file_type.is_file() {
+                files.push(rel);
             }
         }
         Ok(())
@@ -172,13 +184,25 @@ pub fn compute_dir_hash(dir: &Path) -> crate::Result<String> {
     collect(dir, dir, &mut files)?;
 
     // 相对路径排序，保证遍历顺序稳定（文件系统枚举顺序不保证）
-    files.sort_by(|a, b| a.0.cmp(&b.0));
+    files.sort();
 
     let mut hasher = Sha256::new();
-    for (rel, content) in &files {
+    let mut buf = [0u8; 64 * 1024];
+    for rel in &files {
         hasher.update(rel.as_bytes());
         hasher.update([0u8]);
-        hasher.update(content);
+        let file = std::fs::File::open(dir.join(rel))
+            .map_err(|e| AppError::Plugin(format!("Failed to open '{}' for hashing: {}", rel, e)))?;
+        let mut reader = std::io::BufReader::new(file);
+        loop {
+            let n = reader
+                .read(&mut buf)
+                .map_err(|e| AppError::Plugin(format!("Failed to read '{}' for hashing: {}", rel, e)))?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+        }
         hasher.update([0u8]);
     }
     Ok(format!("{:x}", hasher.finalize()))
@@ -300,6 +324,17 @@ mod tests {
         std::fs::write(dir.join("extra.bin"), "x").unwrap();
         let h4 = compute_dir_hash(&dir).unwrap();
         assert_ne!(h3, h4, "新增文件后哈希必须变化");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_compute_dir_hash_rejects_symlink() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path().join("p");
+        write_plugin_dir(&dir, &[("plugin.json", "{}")]);
+        std::os::unix::fs::symlink("/etc/hostname", dir.join("leak")).unwrap();
+        let err = compute_dir_hash(&dir).expect_err("符号链接必须拒绝");
+        assert!(err.to_string().contains("symlink"), "错误必须点明 symlink，got: {err}");
     }
 
     #[test]
