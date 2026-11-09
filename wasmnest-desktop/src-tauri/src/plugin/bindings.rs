@@ -124,10 +124,7 @@ mod tests {
                 .as_str()
                 .unwrap_or_else(|| panic!("caps.{key}.package 缺失"));
             let line = slice_package_line(&root.join(rel));
-            let full = line
-                .trim_start_matches("package ")
-                .trim_end_matches(';')
-                .to_string();
+            let full = line.trim_start_matches("package ").trim_end_matches(';').to_string();
             let name = full.rsplit_once('@').map(|(n, _)| n).unwrap_or(&full);
             assert_eq!(
                 name, declared,
@@ -161,9 +158,26 @@ mod tests {
         assert_eq!(
             keys,
             vec![
-                "api-call", "app", "auth-center", "clipboard", "connection-registry", "crypto",
-                "fs-desktop", "http", "http-endpoint", "mdns", "notify", "peer", "platform-desktop",
-                "process", "pty", "task", "timer", "tunnel", "ws", "ws-server",
+                "api-call",
+                "app",
+                "auth-center",
+                "clipboard",
+                "connection-registry",
+                "crypto",
+                "fs-desktop",
+                "http",
+                "http-endpoint",
+                "mdns",
+                "notify",
+                "peer",
+                "platform-desktop",
+                "process",
+                "pty",
+                "task",
+                "timer",
+                "tunnel",
+                "ws",
+                "ws-server",
             ],
             "caps 键漂移：能力域八片（pty/mdns/peer/http/ws/notify/clipboard/tunnel）+ 端扩展十二片 \
              （http-endpoint/ws-server/api-call/app/auth-center/connection-registry/crypto/ \
@@ -173,10 +187,7 @@ mod tests {
             let rel = spec["file"]
                 .as_str()
                 .unwrap_or_else(|| panic!("caps.{key} 必须是 {{ file, package }}（compose v2 schema）"));
-            assert!(
-                root.join(rel).exists(),
-                "caps.{key} 的 file 真源缺失: {rel}"
-            );
+            assert!(root.join(rel).exists(), "caps.{key} 的 file 真源缺失: {rel}");
             let declared = spec["package"].as_str().expect("caps.*.package 是字符串");
             assert!(
                 !declared.contains('@'),
@@ -184,7 +195,10 @@ mod tests {
             );
         }
 
-        for rel in [m["core"].as_str().expect("core 为路径"), m["face"].as_str().expect("face 为路径")] {
+        for rel in [
+            m["core"].as_str().expect("core 为路径"),
+            m["face"].as_str().expect("face 为路径"),
+        ] {
             let line = slice_package_line(&root.join(rel));
             let (pkg_name, pkg_version) = package_source();
             assert_eq!(

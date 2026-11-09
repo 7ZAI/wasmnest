@@ -78,7 +78,10 @@ const WASM_EQUIVALENT_PERMISSION_DECISIONS: &[(&str, &str)] = &[
         "os:allow-platform",
         "keep：平台判定唯一入口（`usePlatform`，双端同形）。只暴露平台名，不含主机名 / locale。",
     ),
-    ("os:allow-arch", "keep：`PlatformInfo.arch`（宿主壳展示与终端初始尺寸）。"),
+    (
+        "os:allow-arch",
+        "keep：`PlatformInfo.arch`（宿主壳展示与终端初始尺寸）。",
+    ),
     ("os:allow-version", "keep：`PlatformInfo.osVersion`（关于页）。"),
     ("os:allow-os-type", "keep：`PlatformInfo.osType`（关于页）。"),
     (
@@ -433,10 +436,7 @@ fn csp_to_text(value: &serde_json::Value, end: &str, field: &str) -> String {
         return s.to_string();
     }
     if let Some(map) = value.as_object() {
-        assert!(
-            !map.is_empty(),
-            "{end} 的 {field} 是空对象——等于没写策略，锁会空转通过"
-        );
+        assert!(!map.is_empty(), "{end} 的 {field} 是空对象——等于没写策略，锁会空转通过");
         return map
             .iter()
             .map(|(directive, val)| {

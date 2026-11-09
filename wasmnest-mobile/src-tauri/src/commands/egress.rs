@@ -34,7 +34,12 @@ pub fn egress_declare_desktop_target(
     port: u16,
     credential: String,
 ) -> Result<()> {
-    require_egress_host(&app_handle, webview.label(), "egress_declare_desktop_target", &credential)?;
+    require_egress_host(
+        &app_handle,
+        webview.label(),
+        "egress_declare_desktop_target",
+        &credential,
+    )?;
     crate::egress::policy().add_desktop_target(&address, port);
     Ok(())
 }

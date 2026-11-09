@@ -85,10 +85,7 @@ pub const MODULE_NAME: &str = "mobile-host-core";
 ///
 /// host-peer / host-mdns 由能力 lib 的 `common-host` 绑定层自报，**不在此列**
 /// （fallback 跳过是整模块粒度：这里若仍声明同名接口，http / websocket 会被一起跳过）
-pub const MODULE_INTERFACES: &[&str] = &[
-    "wasmnest:http@0.0.1/host-http",
-    "wasmnest:ws@0.0.1/host-websocket",
-];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:http@0.0.1/host-http", "wasmnest:ws@0.0.1/host-websocket"];
 
 /// 本模块读写的权限位（各域权限门的并集；装载期一致性核对用）
 pub const MODULE_PERMISSIONS: &[&str] = &["network:http", "ws:client"];

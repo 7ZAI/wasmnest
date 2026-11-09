@@ -78,11 +78,7 @@ async fn list_loaded_projects_real_bundled_apps() {
     let ids: Vec<&str> = infos.iter().map(|i| i.id.as_str()).collect();
 
     // 随包四应用在册（真实产物目录扫描；缺一个 = 构建/装配断链）
-    for suffix in [
-        TERMINAL_SESSION_ID_SUFFIX,
-        "ai-chatbox",
-        "file-transfer",
-    ] {
+    for suffix in [TERMINAL_SESSION_ID_SUFFIX, "ai-chatbox", "file-transfer"] {
         assert!(
             ids.iter().any(|id| id.ends_with(suffix)),
             "随包应用 {suffix} 不在清单: {ids:?}"

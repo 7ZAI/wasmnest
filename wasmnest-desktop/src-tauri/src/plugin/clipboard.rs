@@ -49,10 +49,7 @@ impl HostModule for ClipboardModule {
         DESC
     }
 
-    fn register(
-        &self,
-        linker: &mut wasmtime::component::Linker<WasmPluginState>,
-    ) -> wasmtime::Result<()> {
+    fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
         wasmnest::clipboard::host_clipboard::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
@@ -202,8 +199,7 @@ mod tests {
 
         ctx.permission()
             .grant_permissions(plugin, &[PERMISSION_CLIPBOARD_READ.to_string()]);
-        require_clipboard_read(ctx.as_ref(), plugin)
-            .expect("授予 clipboard:read 后必须放行");
+        require_clipboard_read(ctx.as_ref(), plugin).expect("授予 clipboard:read 后必须放行");
 
         // 授权不跨插件串号
         assert!(require_clipboard_read(ctx.as_ref(), "com.wasmnest.other").is_err());
@@ -220,8 +216,7 @@ mod tests {
 
         ctx.permission()
             .grant_permissions(plugin, &[PERMISSION_CLIPBOARD_WRITE.to_string()]);
-        require_clipboard_write(ctx.as_ref(), plugin)
-            .expect("授予 clipboard:write 后必须放行");
+        require_clipboard_write(ctx.as_ref(), plugin).expect("授予 clipboard:write 后必须放行");
 
         // 读权限不放行写（分域授权）
         ctx.permission()

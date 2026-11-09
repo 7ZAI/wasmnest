@@ -5,8 +5,8 @@
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
-use crate::connection::event_ws;
 use crate::commands::host_gate::{channel_registry, require_host_surface};
+use crate::connection::event_ws;
 use crate::router::event;
 use crate::state::{clear_global_token, get_auth_manager, get_connection_manager, get_global_token, set_global_token};
 use crate::Result;
@@ -84,11 +84,7 @@ pub async fn ws_connect(
 ///
 /// 宿主面门（安全审查 #42）同 `ws_connect`。
 #[tauri::command]
-pub async fn ws_disconnect(
-    app_handle: AppHandle,
-    webview: tauri::Webview,
-    credential: String,
-) -> Result<()> {
+pub async fn ws_disconnect(app_handle: AppHandle, webview: tauri::Webview, credential: String) -> Result<()> {
     require_host_connection_surface(&app_handle, webview.label(), "ws_disconnect", &credential)?;
     tracing::info!("WebSocket disconnecting");
 
@@ -179,11 +175,7 @@ pub async fn ws_reconnect(
 /// 宿主面门（安全审查 #42）：JWT 等价已配对身份，应用前端不得触达——
 /// 应用需要的受保护请求走宿主 HTTP 代理（`http_request`）。
 #[tauri::command]
-pub async fn get_ws_token(
-    app_handle: AppHandle,
-    webview: tauri::Webview,
-    credential: String,
-) -> Result<String> {
+pub async fn get_ws_token(app_handle: AppHandle, webview: tauri::Webview, credential: String) -> Result<String> {
     require_host_token_surface(&app_handle, webview.label(), "get_ws_token", &credential)?;
     Ok(get_global_token())
 }
@@ -213,12 +205,7 @@ pub async fn get_ws_url() -> Result<String> {
 /// 宿主面门（安全审查 #42）：改写 token = 把宿主连接到攻击者指定的凭据（中间人面），
 /// 只允许宿主壳调用。
 #[tauri::command]
-pub fn ws_set_token(
-    app_handle: AppHandle,
-    webview: tauri::Webview,
-    token: String,
-    credential: String,
-) -> Result<()> {
+pub fn ws_set_token(app_handle: AppHandle, webview: tauri::Webview, token: String, credential: String) -> Result<()> {
     require_host_token_surface(&app_handle, webview.label(), "ws_set_token", &credential)?;
     set_global_token(&token);
     Ok(())
@@ -259,11 +246,7 @@ pub fn set_link_crypto_context(
 ///
 /// 宿主面门（安全审查 #42）同 `get_ws_token`。
 #[tauri::command]
-pub fn ws_get_token(
-    app_handle: AppHandle,
-    webview: tauri::Webview,
-    credential: String,
-) -> Result<String> {
+pub fn ws_get_token(app_handle: AppHandle, webview: tauri::Webview, credential: String) -> Result<String> {
     require_host_token_surface(&app_handle, webview.label(), "ws_get_token", &credential)?;
     Ok(get_global_token())
 }
@@ -275,11 +258,7 @@ pub fn ws_get_token(
 ///
 /// 宿主面门（安全审查 #42）：清 token = 断开会话身份，不得由应用前端触发。
 #[tauri::command]
-pub fn ws_clear_token(
-    app_handle: AppHandle,
-    webview: tauri::Webview,
-    credential: String,
-) -> Result<()> {
+pub fn ws_clear_token(app_handle: AppHandle, webview: tauri::Webview, credential: String) -> Result<()> {
     require_host_token_surface(&app_handle, webview.label(), "ws_clear_token", &credential)?;
     clear_global_token();
     Ok(())

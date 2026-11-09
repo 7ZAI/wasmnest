@@ -54,7 +54,10 @@ impl HostModule for ConnectionModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::connection_registry::host_connection_registry::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::connection_registry::host_connection_registry::add_to_linker::<WasmPluginState, HasSelf>(
+            linker,
+            |s| s,
+        )
     }
 }
 

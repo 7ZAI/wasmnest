@@ -243,8 +243,10 @@ fn source_and_generated_packages_match_declarations() {
         );
 
         // 能力域/端扩展包：清单声明名 == 源文件包名；生成物 = 源文件逐字拷贝
-        let mut expected_files: BTreeSet<String> =
-            ["core.wit", "plugin-face.wit", "wasmnest.wit"].iter().map(|s| s.to_string()).collect();
+        let mut expected_files: BTreeSet<String> = ["core.wit", "plugin-face.wit", "wasmnest.wit"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         for (key, spec) in m["caps"].as_object().expect("caps 是对象") {
             let src_rel = spec["file"]
                 .as_str()

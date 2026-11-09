@@ -90,13 +90,7 @@ const CORE_IMPORTS: &[&str] = &[
     "host-worker",
 ];
 /// export 白名单（`events-binary` / `events-worker` 是可选导出，定义在文件内但不在 `world core`）
-const CORE_EXPORTS: &[&str] = &[
-    "command",
-    "lifecycle",
-    "manifest",
-    "events-binary",
-    "events-worker",
-];
+const CORE_EXPORTS: &[&str] = &["command", "lifecycle", "manifest", "events-binary", "events-worker"];
 
 #[test]
 fn core_wit_stays_mechanism_only() {
@@ -143,7 +137,10 @@ const DOMAIN_CONTRACT_HOUSES: &[(&str, &str)] = &[
     ("http", "../wasmnest-lib/wasmnest-server-http/wit/http.wit"),
     ("ws", "../wasmnest-lib/wasmnest-ws-client-engine/wit/ws.wit"),
     ("notify", "../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit"),
-    ("clipboard", "../wasmnest-lib/wasmnest-clipboard-engine/wit/clipboard.wit"),
+    (
+        "clipboard",
+        "../wasmnest-lib/wasmnest-clipboard-engine/wit/clipboard.wit",
+    ),
 ];
 
 /// 桌面端扩展（声明与实现都在端宿主）→ 端 wit-src
