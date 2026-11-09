@@ -3,35 +3,32 @@
        策略属于应用（2026-11-04 裁决）：每个应用在自己的设置页决定 off / preferred /
        required，覆盖该应用全部 HTTP / WS 端点。宿主不设整机下限、没有开关，只执行
        应用的决定并在这里展示当前执行事实。 -->
-  <section>
-    <h3 class="wb-section-title">{{ t('settings.linkCrypto.title') }}</h3>
-    <div class="shell-panel divide-y divide-[var(--border)]">
-      <p
-        v-if="capable && !wsSession"
-        data-testid="link-crypto-ws-gap"
-        class="px-5 py-3 text-xs leading-relaxed text-[var(--text-tertiary)]"
-      >
-        {{ t('settings.linkCrypto.wsNotEncrypted') }}
-      </p>
+  <ShellCard :title="t('settings.linkCrypto.title')" icon="lock" data-testid="settings-link-crypto">
+    <p
+      v-if="capable && !wsSession"
+      data-testid="link-crypto-ws-gap"
+      class="text-xs leading-relaxed text-[var(--text-tertiary)]"
+    >
+      {{ t('settings.linkCrypto.wsNotEncrypted') }}
+    </p>
 
-      <!-- 本机指纹：供双端人工核对（移动端 pin 展示比对） -->
-      <div class="px-5 py-3.5 flex items-center justify-between gap-4">
-        <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
-          t('settings.linkCrypto.fingerprint')
-        }}</span>
-        <span
-          data-testid="link-crypto-fingerprint"
-          class="wb-mono text-[calc(12px*var(--ui-scale))] text-[var(--text-secondary)] flex-shrink-0 truncate"
-        >
-          {{ fingerprint ?? '—' }}
-        </span>
+    <!-- 本机指纹：供双端人工核对（移动端 pin 展示比对） -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.linkCrypto.fingerprint') }}</b>
       </div>
+      <span
+        data-testid="link-crypto-fingerprint"
+        class="wb-mono text-[calc(12px*var(--ui-scale))] text-[var(--text-secondary)] flex-shrink-0 truncate"
+      >
+        {{ fingerprint ?? '—' }}
+      </span>
+    </div>
 
-      <!-- 应用策略（只读审计）：明文暴露面必须可见，但不提供任何写入口 -->
-      <div class="px-5 py-3.5">
-        <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
-          t('settings.linkCrypto.apps')
-        }}</span>
+    <!-- 应用策略（只读审计）：明文暴露面必须可见，但不提供任何写入口 -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.linkCrypto.apps') }}</b>
 
         <p
           v-if="loadError"
@@ -84,7 +81,7 @@
         </ul>
       </div>
     </div>
-  </section>
+  </ShellCard>
 </template>
 
 <script setup lang="ts">
@@ -105,6 +102,7 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@/utils/invoke'
 import { logger } from '@/utils/frontendLogger'
+import ShellCard from '../components/ShellCard.vue'
 
 /** 与能力仓 `link_crypto::EncryptionPolicy` 的 wire 字面量一致（小写） */
 type EncryptionPolicy = 'off' | 'preferred' | 'required'

@@ -7,18 +7,22 @@ import { readFileSync } from 'node:fs'
  * 事故背景：设置页四个功能分组（系统 / 日志 / 复位 / 关于）用裸 Tailwind
  * `bg-[var(--bg-card)] border rounded-[10px]` 自建卡面，控件也自己画（方角开关、
  * 土制分段控件、legacy `.wb-btn-*`）。主题的结构规则只认壳共享类（`.shell-card` /
- * `.shell-panel` / `.shell-sw` / `.shell-seg` / `.shell-btn`），所以切到玻璃主题时
+ * `.shell-sw` / `.shell-seg` / `.shell-btn`），所以切到玻璃主题时
  * **同一页一半是玻璃材质、一半是实心平面**——用户反馈的「关于等选项没适配玻璃主题」。
  *
- * 这条锁把口径固定下来：设置页的分组卡面与控件只许用壳共享类，不许再自建一份。
+ * 2026-11-09 用户裁决（卡头统一）：设置页分组卡一律走 `ShellCard`（图标 + 标题在卡内），
+ * 不再用「卡外平铺标题（`.wb-section-title`）+ `.shell-panel`」这套与入口卡并存的第二种头型。
  * 授权 / 弹窗等决策面**不在**本锁范围（它们按跨主题不变量必须保持实心，见
  * themePresetCoverage.test.ts 的决策面断言）。
  */
 
 const SETTINGS_FILES = [
   'src/shell/sys/SysSettingsView.vue',
+  'src/shell/sys/SysAppearanceView.vue',
   'src/shell/settings/SettingsSystemSection.vue',
+  'src/shell/settings/SettingsLinkCryptoSection.vue',
   'src/shell/settings/SettingsLoggingSection.vue',
+  'src/shell/settings/SettingsThemeSection.vue',
   'src/shell/settings/SettingsResetSection.vue',
   'src/shell/settings/SettingsAboutSection.vue',
 ]
@@ -33,17 +37,16 @@ const code = (file: string): string =>
     .replace(/^\s*\/\/.*$/gm, '')
 
 describe('设置页表面 / 控件语言', () => {
-  it('分组卡面走壳共享 .shell-panel（不是裸 bg-[var(--bg-card)] 自建卡面）', () => {
-    // 关于 / 复位用 .shell-panel + 内边距；系统 / 日志用 .shell-panel + divide-y 行分隔
-    for (const file of [
-      'src/shell/settings/SettingsSystemSection.vue',
-      'src/shell/settings/SettingsLoggingSection.vue',
-      'src/shell/settings/SettingsResetSection.vue',
-      'src/shell/settings/SettingsAboutSection.vue',
-    ]) {
-      expect(read(file), `${file} 的分组卡面没挂 .shell-panel`).toContain('shell-panel')
-    }
+  it('分组卡面走壳共享 ShellCard：图标 + 标题都在卡内（不是卡外平铺标题）', () => {
     for (const file of SETTINGS_FILES) {
+      const src = read(file)
+      expect(src, `${file} 的分组卡面没走 ShellCard`).toContain('<ShellCard')
+      // 头型只有一种：标题（+ 图标）在卡内，不许回到卡外 `.wb-section-title` 平铺标题
+      expect(code(file), `${file} 的标题又平铺到卡外（.wb-section-title）`).not.toContain(
+        'wb-section-title',
+      )
+      // 图标是卡头的一部分，不是可选装饰
+      expect(src, `${file} 的 ShellCard 缺图标`).toMatch(/<ShellCard[\s\S]{0,240}?icon="/)
       expect(code(file), `${file} 又在自建卡面（bg-[var(--bg-card)]）`).not.toContain(
         'bg-[var(--bg-card)]',
       )

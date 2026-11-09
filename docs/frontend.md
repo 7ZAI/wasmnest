@@ -102,4 +102,5 @@
   - **应用配色仍归应用**：主题只承诺宿主域，应用根容器自己声明的 token 优先；`data-palette` 归应用，宿主任何路径都不写（`themePresetBeforeMount.test.ts` 反面锁）。
 - **跨主题不变量：决策面永远实心**（ADR 0059）：授权列表 / 授权弹窗 / 确认弹窗 / 壳弹窗层在任何主题下不得使用半透明表面或 `backdrop-filter`；`--bg-card` 不得被主题改成半透明。内容面与浮层由主题决定是否玻璃化。锁在 `themePresetCoverage.test.ts`（双端各一）+ `surfaceLadder.test.ts`。
 - **设置页顺序是产品裁决**：界面 → 背景 → 主题 → 系统 → 日志 → 授权入口 → 恢复初始设置 → **关于（固定最后）**；`settingsOrderLock.test.ts` 钉住，插入新分组时不得把关于挤回中间。
+- **设置页卡头只有一种头型（2026-11-09 用户裁决）**：每个设置分组 = `ShellCard`（`icon` + 标题在卡内）+ `.row-sw` 行；禁止「标题平铺在卡外（`.wb-section-title`）+ `.shell-panel`」这套第二种头型。锁在 `settingsSurfaces.test.ts`（图标 + 卡内标题 + 无卡外标题）。
 - **术语**：`ui.theme` = 深色模式（文案称「明暗模式」）；`data-theme` = 主题。见根 `GLOSSARY.md`，不要混用。

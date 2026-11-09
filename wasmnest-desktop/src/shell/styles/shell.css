@@ -251,11 +251,11 @@
     box-shadow: none;
   }
 
-  /* ==================== 分组卡面（系统页设置分组） ====================
+  /* ==================== 分组卡面（无卡头的裸面板） ====================
      与 `.shell-card` 同一档「内容面」，差别只在标题：`.shell-card` 的标题在卡内
-     （ShellCard 组件），`.shell-panel` 的标题由分组平铺在卡外（`.wb-section-title`）。
-     之前这四处分组用裸 Tailwind `bg-[var(--bg-card)] border rounded-[10px]`，玻璃主题的
-     结构规则只认 `.shell-card`，于是设置页一半卡片是玻璃、一半是实心平面。
+     （ShellCard 组件）；`.shell-panel` 没有卡头，供不需要分组标题的整块面板用。
+     设置页分组 2026-11-09 起统一走 ShellCard（图标 + 卡内标题），不再用「卡外
+     平铺标题 + `.shell-panel`」这套写法——同一页两种头型是用户点名的不一致。
      `overflow: hidden` 让 `divide-y` 行分隔线跟随圆角裁切（10px 硬编码圆角正是裁不齐
      的根源之一，圆角统一走 `--radius-card`）。 */
   .shell-panel {

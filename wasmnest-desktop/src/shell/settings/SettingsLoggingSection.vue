@@ -1,90 +1,82 @@
 <template>
   <!-- ==================== LOGGING（仅 dev 构建显示；正式版隐藏，后端功能保留） ==================== -->
-  <section v-if="isDev">
-    <h3 class="wb-section-title">{{ t('settings.log.title') }}</h3>
-    <div class="shell-panel divide-y divide-[var(--border)]">
-      <!-- 日志级别：分段控件（壳共享 .shell-seg），点击即时热调（不重启） -->
-      <div class="px-5 py-3.5 flex items-center justify-between gap-4">
-        <div>
-          <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
-            t('settings.log.level')
-          }}</span>
-        </div>
-        <ShellSeg
-          class="flex-shrink-0"
-          :options="logLevelOptions"
-          :model-value="logFileLevel"
-          @update:model-value="onLogLevelClick"
-        />
+  <ShellCard
+    v-if="isDev"
+    :title="t('settings.log.title')"
+    icon="file"
+    data-testid="settings-logging"
+  >
+    <!-- 日志级别：分段控件（壳共享 .shell-seg），点击即时热调（不重启） -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.log.level') }}</b>
       </div>
+      <ShellSeg
+        class="flex-shrink-0"
+        :options="logLevelOptions"
+        :model-value="logFileLevel"
+        @update:model-value="onLogLevelClick"
+      />
+    </div>
 
-      <!-- 日志格式：text/json（壳共享 .shell-seg），保存后重启生效 -->
-      <div class="px-5 py-3.5 flex items-center justify-between gap-4">
-        <div>
-          <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
-            t('settings.log.format')
-          }}</span>
-        </div>
-        <ShellSeg
-          class="flex-shrink-0"
-          :options="logFormatOptions"
-          :model-value="logFormat"
-          @update:model-value="logFormat = $event"
-        />
+    <!-- 日志格式：text/json（壳共享 .shell-seg），保存后重启生效 -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.log.format') }}</b>
       </div>
+      <ShellSeg
+        class="flex-shrink-0"
+        :options="logFormatOptions"
+        :model-value="logFormat"
+        @update:model-value="logFormat = $event"
+      />
+    </div>
 
-      <!-- 保留文件数：按天轮转保留数量，保存后重启生效 -->
-      <div class="px-5 py-3.5 flex items-center justify-between gap-4">
-        <div>
-          <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
-            t('settings.log.maxFiles')
-          }}</span>
-        </div>
-        <input
-          class="shell-input wb-mono w-28 text-right"
-          type="text"
-          inputmode="numeric"
-          :value="logMaxFiles"
-          :aria-label="t('settings.log.maxFiles')"
-          @input="logMaxFiles = onIntInput($event, 1, logMaxFiles)"
-        />
+    <!-- 保留文件数：按天轮转保留数量，保存后重启生效 -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.log.maxFiles') }}</b>
       </div>
+      <input
+        class="shell-input wb-mono w-28 text-right"
+        type="text"
+        inputmode="numeric"
+        :value="logMaxFiles"
+        :aria-label="t('settings.log.maxFiles')"
+        @input="logMaxFiles = onIntInput($event, 1, logMaxFiles)"
+      />
+    </div>
 
-      <!-- 容量上限（MB）：保存后重启生效 -->
-      <div class="px-5 py-3.5 flex items-center justify-between gap-4">
-        <div>
-          <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
-            t('settings.log.capacityMb')
-          }}</span>
-        </div>
-        <input
-          class="shell-input wb-mono w-28 text-right"
-          type="text"
-          inputmode="numeric"
-          :value="logCapacityMb"
-          :aria-label="t('settings.log.capacityMb')"
-          @input="logCapacityMb = onIntInput($event, 1, logCapacityMb)"
-        />
+    <!-- 容量上限（MB）：保存后重启生效 -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.log.capacityMb') }}</b>
       </div>
+      <input
+        class="shell-input wb-mono w-28 text-right"
+        type="text"
+        inputmode="numeric"
+        :value="logCapacityMb"
+        :aria-label="t('settings.log.capacityMb')"
+        @input="logCapacityMb = onIntInput($event, 1, logCapacityMb)"
+      />
+    </div>
 
-      <!-- 打开日志目录 + 保存配置 -->
-      <div class="px-5 py-3.5 flex items-center justify-between gap-4">
-        <div>
-          <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
-            t('settings.log.persist')
-          }}</span>
-        </div>
-        <div class="flex items-center gap-2 flex-shrink-0">
-          <button class="shell-btn ghost" @click="onOpenLogDir">
-            {{ t('settings.log.openDir') }}
-          </button>
-          <button class="shell-btn" :disabled="logSaving" @click="onSaveLogConfig">
-            {{ t('settings.log.save') }}
-          </button>
-        </div>
+    <!-- 打开日志目录 + 保存配置 -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.log.persist') }}</b>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button class="shell-btn ghost" @click="onOpenLogDir">
+          {{ t('settings.log.openDir') }}
+        </button>
+        <button class="shell-btn" :disabled="logSaving" @click="onSaveLogConfig">
+          {{ t('settings.log.save') }}
+        </button>
       </div>
     </div>
-  </section>
+  </ShellCard>
 </template>
 
 <script setup lang="ts">
@@ -99,6 +91,7 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from '@/composables/useToast'
 import { useLogSettings } from '@/shell/settings/useLogSettings'
 import ShellSeg from '@/shell/components/ShellSeg.vue'
+import ShellCard from '@/shell/components/ShellCard.vue'
 import { logger } from '@/utils/frontendLogger'
 import { invoke } from '@/utils/invoke'
 import i18n from '@/i18n'
