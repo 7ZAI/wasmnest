@@ -45,6 +45,7 @@ import { getPluginRegistry } from '@/plugin/registry'
 import { getShellRegistry } from '@/shell/registry'
 import type { PluginInfo, PluginState } from '@/plugin/types'
 import { createPluginAppSource, PLUGIN_APP_SOURCE_ID, toShellApp } from '@/shell/adapters/pluginAppSource'
+import { logger } from '@/utils/frontendLogger'
 
 /** 最小插件信息 */
 function info(state: PluginState, patch: Partial<PluginInfo> = {}): PluginInfo {
@@ -156,6 +157,32 @@ describe('运行面解析（票 2026-10-10 C1：只认 registerSurface）', () =
     shellRegistry.upsertApps(PLUGIN_APP_SOURCE_ID, [toShellApp(info({ state: 'activated' }))])
 
     expect(createPluginAppSource().resolveSurface?.('com.test.app')).toBeUndefined()
+  })
+})
+
+describe('运行面解析的告警口径', () => {
+  it('should_notWarn_when_appNotRunningHasNoSurface', () => {
+    // 非运行态没有运行面是正常事实（随激活注册、随停用回收）。对账会拿清单里的
+    // 应用逐条查询，若一律 warn，停用后台应用就会刷黄警（2026-11-09 真机日志）。
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    shellRegistry.upsertApps(PLUGIN_APP_SOURCE_ID, [toShellApp(info({ state: 'deactivated' }))])
+
+    expect(createPluginAppSource().resolveSurface?.('com.test.app')).toBeUndefined()
+    expect(warn).not.toHaveBeenCalled()
+
+    warn.mockRestore()
+  })
+
+  it('should_warn_when_runningAppHasNoSurface', () => {
+    // 运行中却拿不到运行面是真缺口：保留 fail-visible 告警，点名应用
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    shellRegistry.upsertApps(PLUGIN_APP_SOURCE_ID, [toShellApp(info({ state: 'activated' }))])
+
+    expect(createPluginAppSource().resolveSurface?.('com.test.app')).toBeUndefined()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.[0])).toContain('com.test.app')
+
+    warn.mockRestore()
   })
 })
 

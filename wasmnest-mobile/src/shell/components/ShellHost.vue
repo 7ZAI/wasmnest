@@ -111,11 +111,18 @@ const surfaceRegistry = getSurfaceAppRegistry()
  * 对账触发面：应用清单 / 运行态 / 打开记录变化，或运行面注册变化
  * （resolveSurface 的响应式依赖——注册、晚到、身份替换都会推动重算）。
  * reconcileSurfaceApps 幂等（ensure 对同组件身份直接返回既有实例），重复触发无代价。
+ *
+ * 运行面探针只取「运行中 ∩ 打开过」——这正好是对账的 desired 集合。
+ * 其余应用（未启动 / 已停用）解析出来也不会建实例，反而让数据源对它们逐条
+ * 走 resolveSurface：运行面随激活注册、停用即回收，查询必然落空并刷出
+ * 「no surface registered」警告（2026-11-09 真机停用 monitor / file-transfer 时实测）。
  */
 watch(
   () => [
     apps.value.map((a) => `${a.id}:${a.state}:${opened.value.has(a.id) ? 1 : 0}`).join('|'),
-    apps.value.map((a) => resolveSurface(a.id)),
+    apps.value
+      .filter((a) => a.state === 'running' && opened.value.has(a.id))
+      .map((a) => resolveSurface(a.id)),
   ],
   () => void reconcileSurfaceApps({ apps: apps.value, opened: opened.value, resolveSurface }),
   { immediate: true },

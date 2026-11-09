@@ -228,14 +228,20 @@ export function createPluginAppSource(): ShellAppSource {
       // 运行面已由 context.ui.registerSurface 写进 ShellRegistry（含 PluginViewHost
       // 包装），壳的 useShellApps.resolveSurface 会先读那份。此处是插件数据源的兜底：
       // 仅当应用确实注册过 surface 才补解析，否则交回空态由运行屏显式提示。
-      const surface = getShellRegistry().getApp(appId)?.contributions.surface
-      if (!surface) {
+      const app = getShellRegistry().getApp(appId)
+      const surface = app?.contributions.surface
+      if (surface) return surface.component
+
+      // 只有「运行中却拿不到运行面」才是真缺口（fail-visible）。
+      // 非运行态（未启动 / 已停用 / 待审批 / 出错）没有 surface 是正常事实：
+      // 运行面随激活注册、随停用回收，而对账与运行屏会拿清单里的应用逐条查询本方法——
+      // 一律 warn 会在每次停用后台应用时刷一行黄警（2026-11-09 真机日志）。
+      if (app?.state === 'running') {
         logger.warn(
           `[ShellAdapter] app has no surface registered: appId=${appId}（退役扩展点不再回退，运行屏显示空态）`,
         )
-        return undefined
       }
-      return surface.component
+      return undefined
     },
   }
 }
