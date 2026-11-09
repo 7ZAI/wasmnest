@@ -60,11 +60,22 @@ pub(crate) fn should_skip_recovery(visible: bool, minimized: bool) -> bool {
 pub fn spawn_wake_monitor(app: tauri::AppHandle) {
     #[cfg(target_os = "windows")]
     {
-        std::thread::Builder::new()
+        // 后台监视器失败不应拖垮整个应用（线程名冲突 / 资源耗尽）：
+        // 降级为告警，唤醒自愈能力缺失但宿主继续运行。
+        match std::thread::Builder::new()
             .name("power-wake-monitor".to_string())
-            .spawn(move || unsafe { imp::run_message_loop(app) })
-            .expect("failed to spawn power wake monitor thread");
-        tracing::info!("[power_wake] wake monitor started");
+            .spawn(move || {
+                // SAFETY: 消息循环必须在独立线程运行：它在当前线程阻塞到进程退出，
+                // 且独占该线程的消息队列；`app` 的所有权随闭包移入，生命周期覆盖
+                // 整个循环。
+                unsafe { imp::run_message_loop(app) }
+            }) {
+            Ok(_) => tracing::info!("[power_wake] wake monitor started"),
+            Err(e) => tracing::warn!(
+                error = %e,
+                "[power_wake] failed to spawn wake monitor thread; resume recovery disabled"
+            ),
+        }
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -180,6 +191,12 @@ mod imp {
     ///
     /// WM_POWERBROADCAST 广播给所有顶层窗口，因此创建隐藏的顶层窗口即可收到
     /// 系统休眠/唤醒事件，无需任何可见 UI（不设置 WS_VISIBLE）。
+    ///
+    /// # Safety
+    ///
+    /// 必须在**独立线程**调用：函数阻塞在该线程的消息循环直到进程退出，且消息
+    /// 队列是线程绑定的。`app` 由调用方按值传入，生命周期覆盖整个循环。
+    /// 不得在 Tauri 主线程 / async worker 上调用。
     pub(crate) unsafe fn run_message_loop(app: tauri::AppHandle) {
         let hinstance = GetModuleHandleW(ptr::null());
         let class = WNDCLASSW {

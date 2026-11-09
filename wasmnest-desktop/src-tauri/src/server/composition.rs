@@ -97,7 +97,10 @@ pub async fn init_link_crypto_at_startup(app_handle: &tauri::AppHandle) {
 
     let dir = app_handle.path().app_data_dir();
     let db = app_handle.state::<Arc<std::sync::Mutex<Database>>>();
-    let guard = db.lock().expect("main db lock poisoned");
+    let guard = db.lock().unwrap_or_else(|e| {
+        tracing::error!("main db lock poisoned; recovering inner guard for link crypto init");
+        e.into_inner()
+    });
 
     match dir {
         Ok(dir) => wasmnest_server_core::link_crypto::init_at_startup(&dir, guard.conn()),

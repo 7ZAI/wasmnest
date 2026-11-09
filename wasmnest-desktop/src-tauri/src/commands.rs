@@ -910,10 +910,19 @@ pub async fn set_app_link_crypto_policy(
     let previous = link_crypto::app_policy(&plugin_id);
     link_crypto::set_app_policy(&plugin_id, policy).map_err(crate::AppError::InvalidInput)?;
     let snapshot = link_crypto::app_policy_snapshot();
-    let persisted = {
-        let guard = db.lock().expect("main db lock poisoned");
+    // SQLite 同步写入不能跑在 Tokio worker 上（大策略表会拖慢同一运行时的
+    // 连接/事件任务）；clone Arc 进 spawn_blocking，锁中毒不 panic（与内核
+    // ProcessRegistry 同口径）。
+    let db = db.inner().clone();
+    let persisted = tokio::task::spawn_blocking(move || {
+        let guard = db.lock().unwrap_or_else(|e| {
+            tracing::error!("main db lock poisoned; recovering inner guard for link crypto persist");
+            e.into_inner()
+        });
         link_crypto::persist_app_policies_to_db(guard.conn(), &snapshot)
-    };
+    })
+    .await
+    .map_err(|e| crate::AppError::Internal(format!("link crypto persist task failed: {e}")))?;
     if let Err(e) = persisted {
         // 落库失败 → 回滚运行态（界面不能显示「已生效」而重启后又变回去）
         let _ = link_crypto::set_app_policy(&plugin_id, previous);

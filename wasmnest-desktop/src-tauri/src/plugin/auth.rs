@@ -48,6 +48,18 @@ use wasmnest_wasm_core::runtime_util::block_on_async;
 
 use crate::plugin::bindings::wasmnest;
 
+/// 取插件主库锁：中毒时恢复内层 guard 而不是 panic
+///
+/// 一次 DB 操作 panic 不应把后续所有认证命令放大成永久 panic（rusqlite 的
+/// `Transaction` 在 drop 时回滚，`into_inner` 通常安全）。保留 error 日志让
+/// 中毒可见，与内核 `ProcessRegistry` 同口径。
+fn lock_plugin_db(db: &std::sync::Mutex<crate::db::Database>) -> std::sync::MutexGuard<'_, crate::db::Database> {
+    db.lock().unwrap_or_else(|e| {
+        tracing::error!("plugin secrets db lock poisoned; recovering inner guard");
+        e.into_inner()
+    })
+}
+
 // 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报）。路径 B 域
 // 的自报静态住在本 crate（宿主 lib 即最终二进制）⇒ 无需强制引用行。
 wasmnest_host_kit::expect_host_module!(MODULE_NAME);
@@ -210,7 +222,7 @@ pub(crate) fn auth_secret_get(
     let pid = plugin_id.to_string();
     let k = key.to_string();
     let value: Option<String> = block_on_async(async move {
-        let db = db.lock().expect("plugin secrets db lock poisoned");
+        let db = lock_plugin_db(&db);
         db.conn()
             .query_row(
                 "SELECT value FROM plugin_secrets WHERE plugin_id = ?1 AND key = ?2",
@@ -253,7 +265,7 @@ pub(crate) fn auth_secret_set(
     let v = value.to_string();
     let now = Utc::now().to_rfc3339();
     block_on_async(async move {
-        let db = db.lock().expect("plugin secrets db lock poisoned");
+        let db = lock_plugin_db(&db);
         db.conn()
             .execute(
                 "INSERT INTO plugin_secrets (plugin_id, key, value, updated_at) \
@@ -288,7 +300,7 @@ pub(crate) fn auth_secret_delete(
     let pid = plugin_id.to_string();
     let k = key.to_string();
     block_on_async(async move {
-        let db = db.lock().expect("plugin secrets db lock poisoned");
+        let db = lock_plugin_db(&db);
         db.conn()
             .execute(
                 "DELETE FROM plugin_secrets WHERE plugin_id = ?1 AND key = ?2",
@@ -317,7 +329,7 @@ pub(crate) fn auth_secret_keys(
     let db = db.database().clone();
     let pid = plugin_id.to_string();
     block_on_async(async move {
-        let db = db.lock().expect("plugin secrets db lock poisoned");
+        let db = lock_plugin_db(&db);
         let mut stmt = db
             .conn()
             .prepare("SELECT key FROM plugin_secrets WHERE plugin_id = ?1 ORDER BY key")
@@ -366,7 +378,7 @@ pub(crate) fn auth_setting_set(
     let k = key.to_string();
     let v = value.to_string();
     block_on_async(async move {
-        let db = db.lock().expect("plugin secrets db lock poisoned");
+        let db = lock_plugin_db(&db);
         db.set_setting(&k, &v).map_err(|e| format!("database error: {}", e))
     })?;
     tracing::info!(
