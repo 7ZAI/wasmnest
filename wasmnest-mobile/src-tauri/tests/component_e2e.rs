@@ -269,7 +269,7 @@ fn test_component_fuel_trap() {
 /// 持续报 `cannot enter component instance`，唯一恢复途径是整体重载
 /// （宿主 trap 自动重载机制的立论依据）。与桌面
 /// `engine_e2e::test_component_trap_poisons_store_and_reinstantiate_recovers`
-/// 同口径，覆盖移动同步形态；用 `set_fuel(1)` 制造瞬时耗尽，不烧满 64G 预算。
+/// 同口径，覆盖移动同步形态；用 `set_fuel(1)` 制造瞬时耗尽，不烧满 32G 预算。
 #[test]
 fn test_component_fuel_trap_poisons_store_and_reinstantiate_recovers() {
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -349,7 +349,8 @@ fn test_component_limiter_rejects_over_limit_memory() {
 
         // 单元层：阈值语义（硬顶内放行、超 1 字节拒绝）——资源上限由 host-kit
         // state 的 ResourceLimiter 实现承载（统一 state，票 04）。阈值从统一
-        // 默认配置读取，不写死数字：硬顶调整（2026-10-22 256MB → 128MB）时
+        // 默认配置读取，不写死数字：硬顶调整（2026-10-22 256MB → 128MB，
+        // 2026-11-07 进一步 128MB → 64MB）时
         // 本用例仍锁「边界 = 配置值」语义
         let max_memory = wasmnest_wasm_core::config::StoreLimits::default().max_memory_bytes;
         let mut state = wasmnest_wasm_core::test_support::build_component_state(TEST_PLUGIN_ID, &[]);
