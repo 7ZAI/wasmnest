@@ -21,6 +21,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use base64::Engine as _;
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::Manager;
@@ -40,6 +41,13 @@ pub(crate) const AUTH_PATH_PREFIX: &str = "/api/auth/";
 
 /// 桌面端 HTTP 为局域网明文（单端口自定义），https 外网不得借 kind=desktop 逃逸
 const DESKTOP_REQUIRED_SCHEME: &str = "http";
+
+/// 响应体上限（流式累计；恶意/异常服务端返回数 GB 不得打爆宿主内存）
+const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
+
+/// `request_id` 上限：空串 / 超长 / 重复会让取消路由失准（重复会覆盖前一个
+/// oneshot，前一个请求被当成“已取消”）
+const MAX_REQUEST_ID_LEN: usize = 128;
 
 /// 请求头黑名单：浏览器禁止前端设置的 forbidden headers（对齐 Web fetch 语义，
 /// §5.5 结论 2.3）——大小写不敏感
@@ -207,18 +215,15 @@ pub async fn http_request(
     credential: String,
 ) -> Result<HttpProxyResponse> {
     let channel = crate::commands::host_gate::channel_registry(&app)?;
-    let caller = crate::commands::host_gate::resolve_caller(
-        &channel,
-        webview.label(),
-        "http_request",
-        &credential,
-    )?;
+    let caller = crate::commands::host_gate::resolve_caller(&channel, webview.label(), "http_request", &credential)?;
 
     // 应用发起：先过 `network:http` 权限位（该位在 wasm 侧只门控 guest host fn，
     // 前端面此前无任何仲裁 ⇒ 声明与审批形同虚设）
     if let crate::commands::host_gate::CallerIdentity::Plugin(ref plugin_id) = caller {
         let manager = app.state::<std::sync::Arc<crate::plugin::manager::PluginManager>>();
-        if !manager.has_permission(plugin_id, wasmnest_wasm_core::permission::PERMISSION_NETWORK_HTTP).await
+        if !manager
+            .has_permission(plugin_id, wasmnest_wasm_core::permission::PERMISSION_NETWORK_HTTP)
+            .await
         {
             tracing::warn!(
                 plugin_id = %plugin_id,
@@ -246,6 +251,11 @@ pub async fn execute_proxy(
     use tauri::Emitter;
 
     let request_id = request.request_id.clone();
+    if request_id.is_empty() || request_id.len() > MAX_REQUEST_ID_LEN {
+        return Err(AppError::Egress(format!(
+            "invalid request_id: must be 1..={MAX_REQUEST_ID_LEN} bytes"
+        )));
+    }
     let timeout = Duration::from_millis(request.timeout_ms.unwrap_or(DEFAULT_TIMEOUT.as_millis() as u64));
     let kind = request.kind.as_deref().unwrap_or("external");
     // 记账与分档主体：宿主 `host`，应用 `plugin:{id}`（与 wasm 侧 agent 口径一致）
@@ -412,7 +422,16 @@ pub async fn execute_proxy(
         .map_err(|e| AppError::Egress(format!("build request failed: {e}")))?;
 
     let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
-    pending_requests().lock().await.insert(request_id.clone(), cancel_tx);
+    {
+        // 检查与插入同一把锁：并发同名请求不得互相覆盖取消通道
+        let mut pending = pending_requests().lock().await;
+        if pending.contains_key(&request_id) {
+            return Err(AppError::Egress(format!(
+                "REQUEST_ID_IN_USE: request_id '{request_id}' is already in flight"
+            )));
+        }
+        pending.insert(request_id.clone(), cancel_tx);
+    }
 
     let fut = client().execute(req);
     tokio::pin!(fut);
@@ -449,10 +468,28 @@ pub async fn execute_proxy(
         .map(|v| v == "v1")
         .unwrap_or(false);
 
-    let raw_body = response
-        .bytes()
-        .await
-        .map_err(|e| AppError::Egress(format!("read response body failed: {e}")))?;
+    let raw_body = {
+        if let Some(len) = response.content_length() {
+            if len > MAX_RESPONSE_BYTES as u64 {
+                return Err(AppError::Egress(format!(
+                    "response body exceeds {MAX_RESPONSE_BYTES} bytes (content-length={len})"
+                )));
+            }
+        }
+        // 流式累计并封顶：`bytes()` 会把整个响应读进内存
+        let mut body = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| AppError::Egress(format!("read response body failed: {e}")))?;
+            if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
+                return Err(AppError::Egress(format!(
+                    "response body exceeds {MAX_RESPONSE_BYTES} bytes"
+                )));
+            }
+            body.extend_from_slice(&chunk);
+        }
+        body
+    };
 
     let body_text = if encryption_active {
         match request_keys {

@@ -142,31 +142,43 @@ fn mobile_http_envelope(plugin_id: &str, url: &str) -> Option<Arc<dyn OutboundEn
     // 按**该应用**在对端的策略裁决（健康探测缓存的 `linkCryptoPolicies`）：
     // off / 未登记 / 未知 = 明文；只有 preferred / required 才加信封。这样
     // 「bedcode 加密、file-transfer 明文」的 per-app 语义在客户端侧也成立。
-    if !matches!(
-        crate::state::link_crypto_app_policy(&parsed.host, port, plugin_id).as_deref(),
-        Some("preferred") | Some("required")
-    ) {
+    let policy = crate::state::link_crypto_app_policy(&parsed.host, port, plugin_id);
+    if !matches!(policy.as_deref(), Some("preferred") | Some("required")) {
         return None;
     }
+    // `required` 下任何「做不出信封」的原因都必须是显性失败，不能返回 None
+    // 让调用方按明文发出（与 WS 路径的 pin 损坏 → 握手失败同口径）。
+    let required = policy.as_deref() == Some("required");
+    let fail = |reason: &str| -> Option<Arc<dyn OutboundEnvelope>> {
+        if required {
+            tracing::error!(%reason, path = %parsed.path, "http link crypto: required but envelope unavailable");
+            Some(Arc::new(FailingEnvelope(format!(
+                "link encryption required but {reason}"
+            ))))
+        } else {
+            tracing::warn!(%reason, path = %parsed.path, "http link crypto: preferred downgraded to plaintext");
+            None
+        }
+    };
     let ctx = crate::state::get_link_crypto_context();
     if !ctx.enabled || !ctx.encrypt_http {
-        return None;
+        return fail("local link encryption is disabled");
     }
     let Some(kd_raw) = ctx.kd_public_b64.as_deref() else {
         // 未配对（无信任锚）= 无法信封；与 HTTP 宿主路径同口径
-        return None;
+        return fail("no pinned peer key (not paired)");
     };
     let kd_public = match wasmnest_link_crypto::b64_decode(kd_raw) {
         Ok(raw) => match raw.try_into() {
             Ok(key) => key,
             Err(_) => {
                 tracing::error!("http link crypto: pinned key has invalid length (expect 32 bytes)");
-                return None;
+                return fail("pinned key has invalid length (expect 32 bytes)");
             }
         },
         Err(error) => {
             tracing::error!(%error, "http link crypto: pinned key is not valid base64");
-            return None;
+            return fail("pinned key is not valid base64");
         }
     };
     let (ephemeral_private, ephemeral_public) = wasmnest_link_crypto::generate_ephemeral();
@@ -174,7 +186,7 @@ fn mobile_http_envelope(plugin_id: &str, url: &str) -> Option<Arc<dyn OutboundEn
         Ok(keys) => keys,
         Err(error) => {
             tracing::error!(%error, "http link crypto: key derivation failed");
-            return None;
+            return fail("key derivation failed");
         }
     };
     Some(Arc::new(MobileHttpEnvelope {
@@ -183,6 +195,28 @@ fn mobile_http_envelope(plugin_id: &str, url: &str) -> Option<Arc<dyn OutboundEn
         request_key: keys.request,
         response_key: keys.response,
     }))
+}
+
+/// 必失败信封：`required` 策略下「做不出真信封」时的替代物
+///
+/// `HttpPorts::outbound_envelope` 的返回类型是 `Option`（`None` = 明文），能力域
+/// 无法区分「按策略不加密」与「本应加密但失败」。把后者包成这个信封，让
+/// `seal_request` 在能力域的请求执行路径上显性报错，而不是静默发明文。
+/// 长期方向：能力域端口改为 `Result<Option<_>, String>`（跨仓 lib 改动）。
+struct FailingEnvelope(String);
+
+impl OutboundEnvelope for FailingEnvelope {
+    fn seal_request(
+        &self,
+        _headers: &mut Vec<(String, String)>,
+        _body: Option<Vec<u8>>,
+    ) -> Result<Option<Vec<u8>>, String> {
+        Err(self.0.clone())
+    }
+
+    fn open_response(&self, _headers: &[(String, String)], _body: Vec<u8>) -> Result<Vec<u8>, String> {
+        Err(self.0.clone())
+    }
 }
 
 /// 对端显式拒绝的稳定码（`X-WasmNest-Crypto-Error`，内网穿透 T07）
