@@ -267,7 +267,6 @@ export default {
       nav: {
         title: '导航',
         label: '悬浮导航',
-        hint: '返回、回主屏与切换应用的常驻胶囊，可拖动',
       },
       ui: {
         title: '界面',
@@ -503,17 +502,12 @@ export default {
     // 链路加密（2026-11-04 用户裁决）：策略属于应用，宿主只执行与只读审计。
     linkCrypto: {
       title: '链路加密',
-      appOwnedHint:
-        '链路加密策略由各应用在自己的设置页决定（每个应用一个策略，覆盖其全部 HTTP / WS 端点）；宿主只执行并展示，不提供整机开关或下限。',
       wsNotEncrypted:
         '当前宿主版本不支持 WS 端点的帧级链路加密；应用策略只对 HTTP 生效，WS 流量仍为明文。更新宿主后 WS 帧才会加密。',
       fingerprint: '本机指纹',
-      fingerprintDesc: '本机身份密钥指纹（SHA-256 前 16 位），请与移动端展示值人工比对',
       apps: '应用策略（只读）',
       appsEmpty: '当前没有注册中的插件端点（应用未运行或未暴露端点）。',
       endpointCount: '{count} 个端点',
-      defaultHint:
-        '未设置策略的应用不要求加密（默认明文）；已配对客户端开启链路加密时 HTTP 仍会加密。',
       policyRequired: '强制加密',
       policyPreferred: '尽量加密',
       policyOff: '不要求',

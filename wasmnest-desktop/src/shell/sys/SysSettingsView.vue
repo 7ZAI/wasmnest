@@ -50,7 +50,6 @@
         <span class="track"></span><span class="knob"></span>
       </label>
     </div>
-    <span class="hint">{{ t('shell.settings.nav.hint') }}</span>
   </ShellCard>
 
   <!-- ==================== 系统 / 日志（复用既有设置分组组件，零重写） ====================
@@ -91,6 +90,7 @@
  * 本页顶部留「外观」入口卡（与授权入口同构：desc + 打开按钮，openSys 子路由段），
  * 之后是功能分组——系统 / 日志 / 授权入口 / 复位 / 关于（关于固定最后）。
  * 授权管理入口互切到「权限与授权」系统页卡（spec-c §3 同构卡片）。
+ * 行控件行样式在 shell.css（`.row-sw`，与外观 / 快捷键二级页共用）。
  */
 import { useI18n } from 'vue-i18n'
 import SettingsSystemSection from '@/shell/settings/SettingsSystemSection.vue'
@@ -107,13 +107,3 @@ const { t } = useI18n()
 const state = useShellState()
 const { prefs } = useShellSettings()
 </script>
-
-<style scoped>
-/* 行控件行样式已上提 shell.css（.row-sw，2026-10-28 达 3+ 组件门槛：
-   SysSettingsView / SysAppearanceView / SysShortcutsView 三处消费） */
-.hint {
-  display: block;
-  font-size: calc(11px * var(--ui-scale));
-  color: var(--text-tertiary);
-}
-</style>

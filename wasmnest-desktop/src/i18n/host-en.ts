@@ -276,7 +276,6 @@ export default {
       nav: {
         title: 'Navigation',
         label: 'Floating navigation',
-        hint: 'A persistent capsule for Back, Home and app switcher, draggable',
       },
       ui: {
         title: 'Appearance',
@@ -532,18 +531,12 @@ export default {
     // only enforces and audits it read-only.
     linkCrypto: {
       title: 'Link Encryption',
-      appOwnedHint:
-        'Each app decides its link encryption policy in its own settings (one policy per app, covering all of its HTTP / WS endpoints). The host only enforces and displays it; there is no host-wide switch or floor.',
       wsNotEncrypted:
         'This host does not support frame-level link encryption for WS endpoints (older build); app policy applies to HTTP only, and WS traffic stays plaintext. Update the host to encrypt WS frames.',
       fingerprint: 'Local Fingerprint',
-      fingerprintDesc:
-        'Local identity key fingerprint (first 16 hex of SHA-256); compare manually with the mobile end',
       apps: 'App policies (read-only)',
       appsEmpty: 'No plugin endpoints are currently registered (apps are stopped or expose none).',
       endpointCount: '{count} endpoints',
-      defaultHint:
-        'Apps without a policy do not require encryption (plaintext by default); a paired client that enables link encryption can still encrypt their HTTP.',
       policyRequired: 'Require encrypted',
       policyPreferred: 'Prefer encrypted',
       policyOff: 'Not required',

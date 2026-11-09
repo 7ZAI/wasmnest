@@ -68,14 +68,14 @@ beforeEach(() => {
 })
 
 describe('SettingsLinkCryptoSection — 只读审计', () => {
-  it('展示归属说明、本机指纹与应用策略（required / off + 端点计数）', async () => {
+  it('展示本机指纹与应用策略（required / off + 端点计数），不附说明文字', async () => {
     installMock()
     const wrapper = mountSection()
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="link-crypto-app-owned-hint"]').text()).toBe(
-      t('appOwnedHint'),
-    )
+    // 设置项只留标签与值：归属 / 默认值等说明文字已删（用户 2026-11-09 裁决）
+    expect(wrapper.find('[data-testid="link-crypto-app-owned-hint"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="link-crypto-default-hint"]').exists()).toBe(false)
     // 新宿主支持 WS 帧级加密：不得再显示「WS 仍明文」缺口横幅
     expect(wrapper.find('[data-testid="link-crypto-ws-gap"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="link-crypto-fingerprint"]').text()).toBe('abcd1234abcd1234')
@@ -87,7 +87,6 @@ describe('SettingsLinkCryptoSection — 只读审计', () => {
     expect(rows[0].text()).toContain(t('policyRequired'))
     expect(rows[1].text()).toContain('com.wasmnest.file-transfer')
     expect(rows[1].text()).toContain(t('policyOff'))
-    expect(wrapper.find('[data-testid="link-crypto-default-hint"]').text()).toBe(t('defaultHint'))
   })
 
   it('旧宿主 wsSession=false：如实提示 WS 仍明文（不把明文说成已加密）', async () => {
@@ -119,7 +118,6 @@ describe('SettingsLinkCryptoSection — 只读审计', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="link-crypto-empty"]').text()).toBe(t('appsEmpty'))
-    expect(wrapper.find('[data-testid="link-crypto-default-hint"]').exists()).toBe(false)
   })
 
   it('旧宿主缺能力字段：显性提示能力缺失，不渲染假策略', async () => {

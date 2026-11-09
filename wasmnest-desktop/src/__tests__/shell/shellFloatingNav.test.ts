@@ -353,7 +353,7 @@ describe('C-F10 文案双语在场', () => {
         )
         expect(String(shellTree.floatingNav[key]).length).toBeGreaterThan(0)
       }
-      for (const key of ['title', 'label', 'hint']) {
+      for (const key of ['title', 'label']) {
         expect(
           typeof shellTree.settings?.nav?.[key],
           `${locale} 缺 shell.settings.nav.${key}`,

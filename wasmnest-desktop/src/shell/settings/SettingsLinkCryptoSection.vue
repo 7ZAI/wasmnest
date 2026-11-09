@@ -6,13 +6,6 @@
   <section>
     <h3 class="wb-section-title">{{ t('settings.linkCrypto.title') }}</h3>
     <div class="shell-panel divide-y divide-[var(--border)]">
-      <!-- 归属说明：唯一写入口在应用设置页，宿主设置页没有写控件 -->
-      <p
-        data-testid="link-crypto-app-owned-hint"
-        class="px-5 py-3 text-xs leading-relaxed text-[var(--text-tertiary)]"
-      >
-        {{ t('settings.linkCrypto.appOwnedHint') }}
-      </p>
       <p
         v-if="capable && !wsSession"
         data-testid="link-crypto-ws-gap"
@@ -23,14 +16,9 @@
 
       <!-- 本机指纹：供双端人工核对（移动端 pin 展示比对） -->
       <div class="px-5 py-3.5 flex items-center justify-between gap-4">
-        <div class="min-w-0">
-          <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
-            t('settings.linkCrypto.fingerprint')
-          }}</span>
-          <p class="text-xs text-[var(--text-tertiary)] mt-0.5">
-            {{ t('settings.linkCrypto.fingerprintDesc') }}
-          </p>
-        </div>
+        <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
+          t('settings.linkCrypto.fingerprint')
+        }}</span>
         <span
           data-testid="link-crypto-fingerprint"
           class="wb-mono text-[calc(12px*var(--ui-scale))] text-[var(--text-secondary)] flex-shrink-0 truncate"
@@ -94,15 +82,6 @@
             </span>
           </li>
         </ul>
-
-        <!-- 未设置策略 = 明文（应用显式开启才会加密），不是「跟随某个宿主下限」 -->
-        <p
-          v-if="capable && records.length"
-          data-testid="link-crypto-default-hint"
-          class="text-xs text-[var(--text-tertiary)] mt-2"
-        >
-          {{ t('settings.linkCrypto.defaultHint') }}
-        </p>
       </div>
     </div>
   </section>
