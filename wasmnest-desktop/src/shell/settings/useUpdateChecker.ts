@@ -22,6 +22,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { relaunch } from '@tauri-apps/plugin-process'
 import i18n from '@/i18n'
+import { ensureHostCredential } from '@/utils/appCommands'
 import { logger } from '@/utils/frontendLogger'
 
 /** 更新状态 */
@@ -110,7 +111,9 @@ async function downloadAndInstall(onProgress?: (downloaded: number, total: numbe
     })
 
     // false = 当前无可用更新：**不是失败**，保持既有状态直接返回
-    const started = await invoke<boolean>('install_update')
+    const started = await invoke<boolean>('install_update', {
+      credential: await ensureHostCredential(),
+    })
     if (!started) {
       status.value = 'available'
       return

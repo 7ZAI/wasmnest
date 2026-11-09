@@ -38,6 +38,9 @@ vi.mock('@tauri-apps/api/window', () => ({
 vi.mock('@/utils/frontendLogger', () => ({
   logger: { warn: vi.fn(), error: vi.fn() },
 }))
+vi.mock('@/utils/appCommands', () => ({
+  ensureHostCredential: vi.fn(async () => 'test-host-credential'),
+}))
 
 vi.mock('@/shell/composables/useShellState', () => ({
   useShellState: () => ({
@@ -113,7 +116,9 @@ describe('退出确认弹窗', () => {
     await confirm!.trigger('click')
     await flushPromises()
 
-    expect(mocks.invoke).toHaveBeenCalledWith('confirm_window_close')
+    expect(mocks.invoke).toHaveBeenCalledWith('confirm_window_close', {
+      credential: 'test-host-credential',
+    })
     // 命令只启动有界优雅关闭；确认面保持可见并进入 quitting 态
     expect(mocks.dialog.value).toBe('exit')
     expect(wrapper.find('[data-testid="exit-quitting"]').exists()).toBe(true)

@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 ///
 /// 副作用特征串用于断言「门禁先于副作用」——只看有没有 `credential` 参数，挡不住
 /// 「先把事做了再验身份」这种顺序错误。
-const HOST_GATED: [(&str, &str, &str); 5] = [
+const HOST_GATED: [(&str, &str, &str); 9] = [
     // #48：界面租约——释放他人租约 = 掐断对端传输
     ("plugin_surface_open", "src/commands.rs", "acquire_for_surface"),
     ("plugin_surface_close", "src/commands.rs", "release_for_surface"),
@@ -40,6 +40,12 @@ const HOST_GATED: [(&str, &str, &str); 5] = [
     ),
     // #45：整份 AppConfig 写入口（含 network / ui / terminal / log）
     ("save_app_settings", "src/commands.rs", "settings.save"),
+    // 宿主 UI 职权：退出 / 更新安装 / 日志级别与容量（应用前端可裸 invoke 时
+    // 任意应用能退宿主、触发安装、写盘 DoS）
+    ("confirm_window_close", "src/commands.rs", "begin_graceful_shutdown"),
+    ("install_update", "src/commands.rs", "updater()"),
+    ("save_log_settings", "src/commands.rs", "config.save"),
+    ("set_log_level", "src/commands.rs", "file_level_reload"),
 ];
 
 /// 插件自报面：必须带通道令牌，且「只能标自己」（#48）

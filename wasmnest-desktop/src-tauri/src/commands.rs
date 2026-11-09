@@ -107,7 +107,19 @@ pub async fn save_app_settings(
 /// 只替换现有配置的 log 段并持久化（避免前端整表保存时丢 log 字段）；
 /// 除 file_level 热调外的项（format/rotation/max_files/capacity_bytes）重启后生效。
 #[tauri::command]
-pub async fn save_log_settings(app_handle: tauri::AppHandle, log: crate::system::config::LogConfig) -> Result<()> {
+pub async fn save_log_settings(
+    webview: tauri::Webview,
+    app_handle: tauri::AppHandle,
+    log: crate::system::config::LogConfig,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "save_log_settings",
+    )?;
     let config_path = app_handle
         .path()
         .app_data_dir()
@@ -125,7 +137,18 @@ pub async fn save_log_settings(app_handle: tauri::AppHandle, log: crate::system:
 ///
 /// 仅允许标准五级之一；非法值返回配置错误。
 #[tauri::command]
-pub fn set_log_level(level: String) -> Result<()> {
+pub fn set_log_level(
+    webview: tauri::Webview,
+    level: String,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "set_log_level",
+    )?;
     match level.as_str() {
         "trace" | "debug" | "info" | "warn" | "error" => {}
         other => {
@@ -437,7 +460,18 @@ pub fn get_app_version() -> String {
 ///
 /// 保留主窗口：前端退出确认面会展示「正在优雅关闭」进度，直到窗口随进程退出。
 #[tauri::command]
-pub fn confirm_window_close(app_handle: tauri::AppHandle) -> Result<()> {
+pub fn confirm_window_close(
+    webview: tauri::Webview,
+    app_handle: tauri::AppHandle,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "confirm_window_close",
+    )?;
     tracing::info!("User confirmed exit; starting graceful shutdown");
     crate::system::shutdown::begin_graceful_shutdown(
         &app_handle,
@@ -552,7 +586,18 @@ pub async fn check_for_update(app_handle: tauri::AppHandle) -> Result<UpdateChec
 ///
 /// 事件载荷：`{"downloaded": u64, "content_length": u64, "finished": bool}`
 #[tauri::command]
-pub async fn install_update(app_handle: tauri::AppHandle) -> Result<bool> {
+pub async fn install_update(
+    webview: tauri::Webview,
+    app_handle: tauri::AppHandle,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<bool> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "install_update",
+    )?;
     let updater = app_handle
         .updater()
         .map_err(|e| crate::AppError::Internal(format!("install_update: updater unavailable: {e}")))?;

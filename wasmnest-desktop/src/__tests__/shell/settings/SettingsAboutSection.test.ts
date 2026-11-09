@@ -63,6 +63,7 @@ beforeEach(() => {
     return handler(args)
   })
   invokeHandlers.set('get_app_version', async () => '0.0.1')
+  invokeHandlers.set('plugin_frontend_loader_session', async () => 'test-host-credential')
   setActivePinia(createPinia())
   // 模块级单例跨用例共享：复位状态与上一轮版本号
   const { status, availableVersion, downloadProgress } = useUpdateChecker()
@@ -138,7 +139,9 @@ describe('设置页「关于」— 检查更新', () => {
     await w.find('[data-testid="settings-install-update"]').trigger('click')
     await flushAsync()
 
-    expect(mockInvoke).toHaveBeenCalledWith('install_update')
+    expect(mockInvoke).toHaveBeenCalledWith('install_update', {
+      credential: 'test-host-credential',
+    })
   })
 
   it('已是最新 → 弹 info toast，检查按钮保留可重试', async () => {

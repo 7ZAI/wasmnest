@@ -227,6 +227,7 @@ import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { ensureHostCredential } from '@/utils/appCommands'
 import { logger } from '@/utils/frontendLogger'
 import { isHighRisk } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
@@ -345,8 +346,9 @@ async function confirmExit() {
   setQuitting(true)
   try {
     // 会话守卫会拦截普通 window.close()；用户已确认，先走宿主优雅关闭
-    // （hooks 有总预算，超过后由宿主 watchdog 强制退出）。
-    await invoke('confirm_window_close')
+    // （hooks 有总预算，超过后由宿主 watchdog 强制退出）。宿主面命令必须带
+    // 宿主凭证——应用前端同 webview 可裸 invoke，无凭证就等于任意应用可退宿主。
+    await invoke('confirm_window_close', { credential: await ensureHostCredential() })
   } catch (e) {
     // 命令失败必须显性：恢复确认面供重试，详情进日志。
     setQuitting(false)

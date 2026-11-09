@@ -41,6 +41,10 @@ vi.mock('@/i18n', async () => {
   return actual
 })
 
+vi.mock('@/utils/appCommands', () => ({
+  ensureHostCredential: vi.fn(async () => 'test-host-credential'),
+}))
+
 import { useUpdateChecker } from '@/shell/settings/useUpdateChecker'
 
 /** 手动广播一条下载进度事件（模拟 Rust 侧 `app://update-progress`） */
@@ -157,7 +161,9 @@ describe('downloadAndInstall', () => {
 
     await downloadAndInstall()
 
-    expect(mockInvoke).toHaveBeenCalledWith('install_update')
+    expect(mockInvoke).toHaveBeenCalledWith('install_update', {
+      credential: 'test-host-credential',
+    })
     expect(mockRelaunch).toHaveBeenCalled()
     expect(status.value).toBe('installing')
     expect(errorSpy).not.toHaveBeenCalled()
