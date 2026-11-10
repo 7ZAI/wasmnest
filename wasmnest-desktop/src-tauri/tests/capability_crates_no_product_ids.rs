@@ -99,6 +99,10 @@ const SCANNED_CRATES: &[&str] = &[
     // 无头宿主探针（能力域脱绑长期门禁：`cargo tree` 零 wasmtime / wit-bindgen /
     // inventory / host-kit / plugin-api）——纯门禁 crate，零产品语义；同上补登记。
     "wasmnest-headless-host-probe",
+    // 内网穿透中继守护进程（T13）：独立 Linux 二进制 + Docker 交付，零内部 crate
+    // 依赖（形态锁在 crate 内 `src/boundary_lock.rs`）。它跑在公网 VPS 上代替宿主
+    // 转发密文，**不得**知道任何产品身份——入扫描面正是这条边的判据。
+    "wasmnest-relay",
 ];
 
 /// 已知的、暂未纳入扫描的 `wasmnest-*` crate（各有明确在办票据）
