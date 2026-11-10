@@ -1044,6 +1044,18 @@ impl HostTunnel for WasmHost {
             .map_err(|e| host_err("tunnel_issue_pairing_ticket", e))
     }
 
+    fn tunnel_probe_relay(
+        &self,
+        addrs: &[String],
+        timeout_ms: u32,
+    ) -> Result<serde_json::Value, HostError> {
+        let addrs_json = serde_json::to_string(addrs)
+            .map_err(|e| host_err("tunnel_probe_relay", format!("addrs 序列化失败：{e}")))?;
+        let raw = host_tunnel::probe_relay(&addrs_json, timeout_ms)
+            .map_err(|e| host_err("tunnel_probe_relay", e))?;
+        parse_json("tunnel_probe_relay", raw)
+    }
+
     fn tunnel_status(&self) -> Result<serde_json::Value, HostError> {
         let raw = host_tunnel::status().map_err(|e| host_err("tunnel_status", e))?;
         parse_json("tunnel_status", raw)

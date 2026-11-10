@@ -167,7 +167,12 @@ pub const PERMISSION_TUNNEL_SERVE: &str = "tunnel:serve";
 /// 客户端只在本机 `127.0.0.1` 起临时端口（不变量 1），但会把远端端口映射成
 /// 本机可访问面，且拨号可消耗中继带宽；故与应用侧配对语义分开授权。
 pub const PERMISSION_TUNNEL_CONNECT: &str = "tunnel:connect";
-
+/// 内网穿透·只读探测（T19）：`host-tunnel` 的 probe-relay
+///
+/// **为什么不复用 `tunnel:connect`**：connect 能把任意远端端口映射到本机回环，
+/// 那是比「测一下通不通」大得多的权力；配置中心（`servers/net-config`）只为一
+/// 个诊断按钮，不应获得端口映射能力。本位不蕴含任何写面。
+pub const PERMISSION_TUNNEL_PROBE: &str = "tunnel:probe";
 
 /// 权限词汇反射表：`(常量标识符, 权限串)`
 ///
@@ -216,6 +221,7 @@ pub const PERMISSION_VOCABULARY: &[(&str, &str)] = &[
     (stringify!(PERMISSION_CLIPBOARD_WRITE), PERMISSION_CLIPBOARD_WRITE),
     (stringify!(PERMISSION_TUNNEL_SERVE), PERMISSION_TUNNEL_SERVE),
     (stringify!(PERMISSION_TUNNEL_CONNECT), PERMISSION_TUNNEL_CONNECT),
+    (stringify!(PERMISSION_TUNNEL_PROBE), PERMISSION_TUNNEL_PROBE),
 ];
 
 /// 合法权限集合 — 桌面端权限词汇的**唯一真源**（由 [`PERMISSION_VOCABULARY`] 派生）
@@ -366,6 +372,8 @@ pub static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
         &["tunnel.expose", "tunnel.unexpose", "tunnel.issuePairingTicket"],
     ),
     (PERMISSION_TUNNEL_CONNECT, &["tunnel.connect", "tunnel.close"]),
+    // T19：只读连通性探测（与 serve / connect 都不共享权力面）
+    (PERMISSION_TUNNEL_PROBE, &["tunnel.probeRelay"]),
     // 内嵌 worker 调度（WASM-only：宿主 `host-worker.submit/cancel`，无前端调用点）
     (PERMISSION_WORKER_RUN, &["worker.submit", "worker.cancel"]),
 ];

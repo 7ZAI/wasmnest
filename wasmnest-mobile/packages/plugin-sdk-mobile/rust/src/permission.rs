@@ -60,6 +60,11 @@ pub const PERMISSION_TUNNEL_SERVE: &str = "tunnel:serve";
 /// 客户端只在本机 `127.0.0.1` 起临时端口（不变量 1），但会把远端端口映射成
 /// 本机可访问面，且拨号可消耗中继带宽；故与应用侧配对语义分开授权。
 pub const PERMISSION_TUNNEL_CONNECT: &str = "tunnel:connect";
+/// 内网穿透·只读探测（T19）：`host-tunnel` 的 probe-relay
+///
+/// 移动端没有配置中心页面，本位为与 core 真源集合相等而登记；探测本身零持久
+/// 副作用（不建 reservation、不映射端口），只做可达性 + 身份 + RTT。
+pub const PERMISSION_TUNNEL_PROBE: &str = "tunnel:probe";
 
 /// 权限词汇全量表（pub：宿主机制层〔wasm-core-mobile 权限漂移锁〕与生成物
 /// 校验消费；新增权限必须在此登记，否则 grant 静默丢弃）
@@ -84,6 +89,7 @@ pub static VALID_PERMISSIONS: &[&str] = &[
     PERMISSION_METRICS_READ,
     PERMISSION_TUNNEL_SERVE,
     PERMISSION_TUNNEL_CONNECT,
+    PERMISSION_TUNNEL_PROBE,
 ];
 
 /// 已退役权限位（票 2026-10-10 批次 C2）：`ui:toolbox` / `ui:navtab` / `ui:input`
@@ -173,6 +179,7 @@ static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
         &["tunnel.expose", "tunnel.unexpose", "tunnel.issuePairingTicket"],
     ),
     (PERMISSION_TUNNEL_CONNECT, &["tunnel.connect", "tunnel.close"]),
+    (PERMISSION_TUNNEL_PROBE, &["tunnel.probeRelay"]),
 ];
 
 pub struct PermissionManager {

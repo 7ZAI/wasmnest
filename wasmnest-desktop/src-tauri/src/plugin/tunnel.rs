@@ -212,8 +212,8 @@ mod tests {
         );
         assert_eq!(
             wasmnest_server_peer_net::tunnel::plugin_binding::MODULE_PERMISSIONS,
-            &["tunnel:serve", "tunnel:connect"],
-            "权限位必须与 wasm-core 真源 / SDK 权限表逐字一致"
+            &["tunnel:serve", "tunnel:connect", "tunnel:probe"],
+            "权限位必须与 wasm-core 真源 / SDK 权限表逐字一致（T19 起三位）"
         );
     }
 

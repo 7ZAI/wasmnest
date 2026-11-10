@@ -52,6 +52,15 @@ pub trait HostTunnel {
     fn tunnel_close(&self, handle: &str) -> Result<bool, HostError>;
     /// 签发一次性配对票据（TTL ≤ 120s；明文不落日志）
     fn tunnel_issue_pairing_ticket(&self, port: u16, ttl_secs: u32) -> Result<String, HostError>;
+    /// 只读探测 relay 端点（T19）：一次 TCP + Noise + PeerId 校验 + ping
+    ///
+    /// 返回 `{ v, addr, peerId, peerIdSha256, handshakeMs, rttMs, checkedAt }`；
+    /// **无持久副作用**（不建 reservation、不登记规则、不写信任、不发事件）。
+    fn tunnel_probe_relay(
+        &self,
+        addrs: &[String],
+        timeout_ms: u32,
+    ) -> Result<serde_json::Value, HostError>;
     /// 只读状态投影（节点 / 对等面 / relay / 本应用计数）
     fn tunnel_status(&self) -> Result<serde_json::Value, HostError>;
 }

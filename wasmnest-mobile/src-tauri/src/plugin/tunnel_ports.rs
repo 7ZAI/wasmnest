@@ -141,7 +141,8 @@ mod tests {
         );
         assert_eq!(
             wasmnest_server_peer_net::tunnel::plugin_binding::MODULE_PERMISSIONS,
-            &["tunnel:serve", "tunnel:connect"]
+            &["tunnel:serve", "tunnel:connect", "tunnel:probe"],
+            "T19 起隧道域是三位：serve / connect / probe"
         );
         assert!(
             !crate::plugin::host_domains::MODULE_INTERFACES.contains(&"wasmnest:tunnel@0.0.1/host-tunnel"),
