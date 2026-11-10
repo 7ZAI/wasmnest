@@ -193,7 +193,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 改构建 / dev 脚本 | 对应脚本头注释（自解释）+ 根 `scripts/app-paths.mjs`；桌面还有 `src/__tests__/scripts/pluginWatchCopy.test.ts` 等脚本锁 |
 | 新增 / 改名 / 停用桌面应用 | 应用仓先按 `../wasmnest-apps/AGENTS.md` §5 清单走；本仓四处注册表 + 一处路由 + 两处锁必须同步：`scripts/plugin-build.js` `PLUGINS`、`scripts/plugin-dev.js` `PLUGINS`、`scripts/dev-run.js` `PLUGIN_WATCH_CMDS`、`src/shell/composables/useShellApps.ts` `SURFACE_ROUTES`（+ `src/router/index.ts` 路由条目）、`hostAppBoundaryLock.test.ts` 的 `APP_ENTRIES` + `release-manifest.json` |
 | 新增 / 停用移动应用 | 移动构建自动扫描 `apps/*/mobile`（无注册表）；只需同步 `release-manifest.json`；机制差异读 docs/architecture.md §4 |
-| 改跨端传输 / 认证 / 配对面 | docs/architecture.md §6（跨端协议）；改完去 `../wasmnest-test/cross-end-tests` 跑真实互连（零 mock） |
+| 改跨端传输 / 认证 / 配对面 | docs/architecture.md §6（跨端协议）；穿透链路（中继预留 / relay 地址 / WAN 放行）另读 docs/nat-traversal.md；改完去 `../wasmnest-test/cross-end-tests` 跑真实互连（零 mock），穿透改动另跑其成员 `relay-transport`（`cargo test -p relay-transport`） |
 | 改 Android 原生（Kotlin / manifest / gradle） | `wasmnest-mobile/src-tauri/gen/android/**`；改 Kotlin 必须 gradlew 验证；`tauri android init` 重建后手工恢复手写面 |
 | 清 target / 磁盘吃紧 | `docs/target-governance.md`（落点全景 + 三级阶梯 + 前置检查；清共享 target 前先查有无并行构建）；产物落点排查见本文末行 |
 | 排查「改了没生效」/ 产物路径 | 桌面 `scripts/{dev-run,plugin-build}.js` 与 `packages/plugin-sdk-desktop/bin/plugin-watch.js`、移动 `scripts/plugin-build.js`、根 `scripts/app-paths.mjs`；先确认产物是否真写进 `src-tauri/resources/plugins/<end>/<id>/`；再确认宿主扫描目录（桌面 dev 是 `target/debug/resources/…` 运行时副本——源目录删除不会自动同步，幽灵目录只在这里活着） |
@@ -291,6 +291,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | --- | --- |
 | 本仓命令全集（根 / 桌面 / 移动 / 应用 / target 治理 / husky） | `docs/commands.md` |
 | 架构硬约束（宿主薄壳六判据 / 桌面挂载形态 / 双端差异 / 权限闸门 / 数据库 / 跨端协议） | `docs/architecture.md` |
+| 内网穿透（中继原理 / 部署与防火墙 / 客户端配置真源 / 排障） | `docs/nat-traversal.md` |
 | 插件与 SDK 契约（plugin.json / 权限 / WIT 链 / 生成物 / 变更流程） | `docs/contracts.md` |
 | 前端规范（零资源访问三层封锁 / 挂载包形态 / 移动壳优先 / i18n） | `docs/frontend.md` |
 | 对外品牌文案（主标 / 副标句 / 技术意象句 / 备选池 / 落地位置） | `docs/brand.md` |

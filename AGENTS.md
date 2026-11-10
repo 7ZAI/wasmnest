@@ -107,6 +107,7 @@
 | `docs/git.md` | 提交规范 / 能力仓 sibling 钉版纪律 / 三仓提交顺序与 tag 规则 / 文件回滚规范 |
 | `docs/boundaries.md` | 依赖方向（禁止反向引用）/ 跨仓锁 / Agent 禁行清单 |
 | `docs/docker.md` | 本机 Docker 部署事实：版本与 API / data-root / docker 组 / 镜像源 / 清理 |
+| `docs/nat-traversal.md` | 内网穿透：Circuit Relay v2 原理（预留 / 中继拨号 / 两段 Noise）/ 客户端状态机与 `allowWan` 引用计数 / 中继部署（Compose·单命令·systemd·防火墙·容器指标语义·卷名坑）/ 配置真源 `network.relay` 与 `network.wanPolicy` / 导入载荷校验 / 排障表 / 已知缺口 |
 | `docs/public/` ★ | **四仓共享通用规范真源**（其他仓经 `../wasmnest/docs/public/` 引用）：`git.md`（git 提交）/ `commenting.md`（注释与命名）/ `testing.md`（测试与验证底线）/ `versioning.md`（版本号管理：只有发布时 bump，dev 不 bump）/ `issues.md`（GitHub Issues = 跨会话存续 backlog 真源）——通用部分单一真源，本仓 docs 不复制 |
 
 **文档字面 ≠ 事实**：任何文档（含 `docs/`）都只是导航与判据，改结构 / 文案前先 `ls` / `rg` 核对；引用旧仓（`../../BedCode/`）内容时注意它与三仓现状的差异，机制以新仓代码为准。
