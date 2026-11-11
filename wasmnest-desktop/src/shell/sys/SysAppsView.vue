@@ -31,11 +31,23 @@
         v-for="app in group.apps"
         :key="app.id"
         :title="app.name"
-        :icon="app.icon"
       >
+      <!-- 卡头图标 = 应用自带那张（manifest.icon 经 asset 协议），与主屏 / 多任务
+           图块同一组件：加载不出来时 ShellAppTile 自行回退壳内 glyph，管理页不会
+           出现「主屏是应用图标、这里却是通用图标」的两套观感。 -->
+      <template #icon>
+        <ShellAppTile
+          :icon="app.icon"
+          :plugin-id="app.pluginId"
+          :icon-file="app.iconFile"
+          :tone="app.tone"
+          :size="20"
+        />
+      </template>
       <div class="sub-line">
         <span class="shell-chip" :class="chipMeta(app.state).cls">{{ chipMeta(app.state).text }}</span>
-        <span class="sub-note mono">{{ app.pluginId }}</span>
+        <!-- 应用 id（`com.wasmnest.bedcode`）是装配标识，不是用户语汇：卡头已有名称、
+             下方已有来源与版本，原样展示只会增加噪声（2026-11-11 用户裁决） -->
         <span class="sub-note">{{ sourceText(app.source) }} · v{{ app.version }}</span>
         <span class="grow"></span>
         <!-- 启用 = 主屏入口可见性（缺省可见；关闭后主屏 / 搜索隐藏入口）；自启 = boot
@@ -195,6 +207,7 @@ import { useShellState } from '../composables/useShellState'
 import { isServiceKind, useShellApps, type ShellAppEntry } from '../composables/useShellApps'
 import { useAppUpdates, type AppUpdateState } from '../composables/useAppUpdates'
 import ShellIcon from '../components/ShellIcon.vue'
+import ShellAppTile from '../components/ShellAppTile.vue'
 import ShellCard from '../components/ShellCard.vue'
 
 const { t } = useI18n()
