@@ -83,8 +83,9 @@
         </ShellSection>
         <div ref="slotTrack" class="shell-slot-track shell-reveal" role="list" :style="{ animationDelay: '120ms' }">
           <div v-for="card in slotCards" :key="card.key" class="shell-slot-item" role="listitem">
-            <!-- 可访问名 = 隐藏动作前缀「打开 <应用>」+ 卡片内容：不覆盖应用自持的读数 -->
-            <button type="button" class="shell-slot-card" @click="open(card.app.id)">
+            <!-- 可访问名 = 隐藏动作前缀「打开 <应用>」+ 卡片内容：不覆盖应用自持的读数。
+                 点击除打开应用外，还把应用现算的入口意图投递给它（卡片可直达会话 / 页）。 -->
+            <button type="button" class="shell-slot-card" @click="openSlotCard(card)">
               <span class="sr-only">{{ t('shell.home.slotOpen', { name: card.app.name }) }}</span>
               <component :is="card.component" :app="card.app" />
             </button>
@@ -214,13 +215,15 @@
  */
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { ShellSurfaceIntent } from '@binblink/wasmnest-plugin-sdk-mobile'
+import { logger } from '@/utils/frontendLogger'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
 import { useShellNotifications } from '../../composables/useShellNotifications'
 import { useShellOpen } from '../../composables/useShellOpen'
 import { useShellOverlays } from '../../composables/useShellOverlays'
 import { useSlotCarousel } from '../../composables/useSlotCarousel'
-import { selectSlotCards } from '../../slotCards'
+import { selectSlotCards, type ShellSlotCard } from '../../slotCards'
 import { isServiceKind } from '../../utils'
 import ShellAppCell from '../ShellAppCell.vue'
 import ShellBrandTile from '../ShellBrandTile.vue'
@@ -243,6 +246,22 @@ const badgeCount = computed(
 
 /** 应用贡献的快捷卡片（注册顺序，超过展示上限的部分不渲染） */
 const slotCards = computed(() => selectSlotCards(apps.value))
+
+/**
+ * 点击快捷卡片：打开应用 + 投递应用现算的入口意图
+ *
+ * `onPress` 是应用自持逻辑（例如「最近一个活跃会话」），抛错不得阻断「打开应用」
+ * 这条主路径——意图算不出来就只打开应用（旧行为），并在宿主日志留痕。
+ */
+function openSlotCard(card: ShellSlotCard): void {
+  let intent: ShellSurfaceIntent | null | undefined
+  try {
+    intent = card.onPress?.()
+  } catch (e) {
+    logger.warn(`[shell] 快捷卡片入口意图计算失败 appId=${card.app.id}`, e)
+  }
+  void open(card.app.id, intent)
+}
 
 /** 轨道轮播：多张时自动播放，触摸 / 聚焦 / 切后台 / 减少动效时停走 */
 const slotTrack = ref<HTMLElement | null>(null)

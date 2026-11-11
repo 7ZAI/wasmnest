@@ -16,7 +16,7 @@
  */
 
 import type { Component } from 'vue'
-import type { PluginUpdateDecl } from '@binblink/wasmnest-plugin-sdk-mobile'
+import type { PluginUpdateDecl, ShellSurfaceIntent } from '@binblink/wasmnest-plugin-sdk-mobile'
 
 /** 可释放句柄：注册扩展点的返回值，dispose 即摘除该注册 */
 export interface Disposable {
@@ -63,6 +63,11 @@ export interface ShellSlotContribution {
   component: Component
   /** 排序权重，小者靠前；缺省 100 */
   order?: number
+  /**
+   * 点击卡片时应用要进入的内部位置（按点击时刻现算）。返回值由壳原样投递给
+   * 该应用运行面（`ui.onSurfaceIntent`），壳不解释内容；缺省 = 只打开应用。
+   */
+  onPress?: () => ShellSurfaceIntent | null | undefined
 }
 
 /** 应用的运行面（在壳内被打开时挂载） */

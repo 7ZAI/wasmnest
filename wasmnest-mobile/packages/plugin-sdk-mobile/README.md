@@ -106,7 +106,7 @@ export async function deactivate(): Promise<void> {
 |-----|------|----------|
 | `context.commands` | 注册 / 执行命令（`register` / `execute`）——含本应用的自持业务命令（如 `file-transfer.list-remote`） | 默认授予 |
 | `context.session` | 会话列表、单会话查询、状态变更订阅 | `session:read` / `session:write` |
-| `context.ui` | 宿主壳运行面 / 首页卡片 / 胶囊菜单 / 平台设置入口 / 动态路由（`registerSurface` / `registerSlot` / `registerCapsuleItem` / `registerSettingsEntry` / `registerRoute`）、跳转与返回（`openPage` / `goBack`）、系统返回键接管（`onBackPressed`）、全局弹窗（`showDialog`） | `ui:route` / `ui:back` / `ui:dialog` / `ui:settings` |
+| `context.ui` | 宿主壳运行面 / 首页卡片 / 胶囊菜单 / 平台设置入口 / 动态路由（`registerSurface` / `registerSlot` / `registerCapsuleItem` / `registerSettingsEntry` / `registerRoute`）、跳转与返回（`openPage` / `goBack`）、系统返回键接管（`onBackPressed`）、入口意图（`onSurfaceIntent`）、全局弹窗（`showDialog`） | `ui:route` / `ui:back` / `ui:dialog` / `ui:settings` |
 | `context.events` | 宿主事件订阅与发布（`on` / `emit`） | 默认授予 |
 | `context.storage` | 键值存储（`get` / `set` / `delete`） | `storage`（**移动端恒授予**，见下方说明） |
 | `context.lifecycle` | 应用生命周期钩子（`onAppStartup` / `onAppShutdown` / `onAuthSuccess` / `onDisconnect` / `onSessionCreated` / `onSessionStopped`） | 默认授予 |
@@ -359,6 +359,12 @@ import AppUpdateSection from '@binblink/wasmnest-plugin-sdk-mobile/ui/app-update
 activate 期用 `context.ui.registerSlot` 注册；宿主壳负责展示、自动轮播（最多 5 张）与
 点击打开本应用，应用不需要也不应该在卡片里处理导航。
 
+卡片可以**直达应用内某个位置**（如「活跃会话」卡点进最近一个会话）：`registerSlot`
+的可选 `onPress()` 在点击时刻现算一个入口意图（`{ key, payload }`，内容全归应用），
+宿主启动并打开应用后原样投递给运行面——运行面在 `onMounted` 里用
+`context.ui.onSurfaceIntent(handler)` 订阅即可。订阅前到达的意图由宿主排队补投，
+运行面晚于点击创建也不会丢；应用停用 / 卸载后队列清空。
+
 ```vue
 <script setup lang="ts">
 import QuickCard from '@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card'
@@ -378,10 +384,26 @@ defineProps<{ activeCount: number }>()
 ```
 
 ```ts
-context.ui.registerSlot({ id: 'sessions', component: SessionCard, order: 10 })
+context.ui.registerSlot({
+  id: 'sessions',
+  component: SessionCard,
+  order: 10,
+  // 点击直达应用内位置；省略 = 只打开应用（旧行为）
+  onPress: () => ({ key: 'open-session', payload: { sessionId: latestLiveSessionId() } }),
+})
 ```
 
-- 宿主把整张卡渲染成按钮（点击 = 启动并打开贡献方应用），卡片内不得再放按钮 / 链接；
+```ts
+// 运行面（应用根组件）：宿主投递入口意图
+const sub = context.ui.onSurfaceIntent((intent) => {
+  if (intent.key !== 'open-session') return
+  openSession((intent.payload as { sessionId: string }).sessionId)
+})
+// 卸载时 sub.dispose()
+```
+
+- 宿主把整张卡渲染成按钮（点击 = 启动并打开贡献方应用，再投递 `onPress()` 的返回值），
+  卡片内不得再放按钮 / 链接；
 - 宿主按注册顺序截断展示（当前 5 张），多张时自动轮播——触摸 / 键盘聚焦 / 切后台 /
   系统「减少动效」时停走，标题行提供暂停 / 播放控件；
 - `label` / `value` / `hint` / `tone` / `iconPath` 覆盖常见读数卡，复杂内容用默认插槽。

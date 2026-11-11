@@ -26,6 +26,7 @@ export type {
   PluginRouteDescriptor,
   ShellSurfaceContribution,
   ShellSlotContribution,
+  ShellSurfaceIntent,
   ShellCapsuleItem,
   PluginDialogAction,
   PluginDialogOptions,

@@ -132,8 +132,9 @@
         </ShellSection>
         <div ref="slotTrack" class="shell-slot-track shell-reveal" role="list" :style="{ animationDelay: '120ms' }">
           <div v-for="card in slotCards" :key="card.key" class="shell-slot-item" role="listitem">
-            <!-- 可访问名 = 隐藏动作前缀「打开 <应用>」+ 卡片内容：不覆盖应用自持的读数 -->
-            <button type="button" class="shell-slot-card" @click="open(card.app.id)">
+            <!-- 可访问名 = 隐藏动作前缀「打开 <应用>」+ 卡片内容：不覆盖应用自持的读数。
+                 点击除打开应用外，还把应用现算的入口意图投递给它（与宿主同构）。 -->
+            <button type="button" class="shell-slot-card" @click="openSlotCard(card)">
               <span class="sr-only">{{ t('shell.home.slotOpen', { name: card.app.name }) }}</span>
               <component :is="card.component" :app="card.app" />
             </button>
@@ -230,7 +231,9 @@ import { useShellOverlays } from '../../composables/useShellOverlays'
 import { useShellPreferences } from '../../composables/useShellPreferences'
 import { useShellRecent } from '../../composables/useShellRecent'
 import { useSlotCarousel } from '../../composables/useSlotCarousel'
-import { selectSlotCards } from '../../slotCards'
+import { selectSlotCards, type ShellSlotCard } from '../../slotCards'
+import { logger } from '../../logger'
+import type { ShellSurfaceIntent } from '../../../../src/types'
 // dev-shell 无 asset protocol：自定义壁纸图恒不可达（wallpaperImage 恒 null），该导入宿主独有
 import type { ShellApp } from '../../types'
 import ShellAppCell from '../ShellAppCell.vue'
@@ -290,6 +293,21 @@ const runningOrdered = computed<ShellApp[]>(() => {
 
 /** 应用贡献的快捷卡片（注册顺序，超过展示上限的部分不渲染；与宿主同构） */
 const slotCards = computed(() => selectSlotCards(apps.value))
+
+/**
+ * 点击快捷卡片：打开应用 + 投递应用现算的入口意图（与宿主同构）
+ *
+ * `onPress` 抛错不阻断「打开应用」主路径，只落一条壳日志。
+ */
+function openSlotCard(card: ShellSlotCard): void {
+  let intent: ShellSurfaceIntent | null | undefined
+  try {
+    intent = card.onPress?.()
+  } catch (e) {
+    logger.warn(`[shell] 快捷卡片入口意图计算失败 appId=${card.app.id}`, e)
+  }
+  void open(card.app.id, intent)
+}
 
 /** 轨道轮播（与宿主同构：自动播放 / 触摸停走 / 减少动效停走） */
 const slotTrack = ref<HTMLElement | null>(null)

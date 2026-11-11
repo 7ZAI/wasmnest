@@ -106,7 +106,7 @@ The `PluginContext` received by `activate(context)` is the **single channel** th
 |-----|-------------|---------------------|
 | `context.commands` | Register / execute commands (`register` / `execute`) — including the app's own business commands (e.g. `file-transfer.list-remote`) | granted by default |
 | `context.session` | Session list, single-session lookup, status change subscription | `session:read` / `session:write` |
-| `context.ui` | Host-shell surface / home quick cards / capsule menu / platform settings entries / dynamic routes (`registerSurface` / `registerSlot` / `registerCapsuleItem` / `registerSettingsEntry` / `registerRoute`), navigation (`openPage` / `goBack`), system back-key interception (`onBackPressed`), global dialogs (`showDialog`) | `ui:route` / `ui:back` / `ui:dialog` / `ui:settings` |
+| `context.ui` | Host-shell surface / home quick cards / capsule menu / platform settings entries / dynamic routes (`registerSurface` / `registerSlot` / `registerCapsuleItem` / `registerSettingsEntry` / `registerRoute`), navigation (`openPage` / `goBack`), system back-key interception (`onBackPressed`), surface entry intents (`onSurfaceIntent`), global dialogs (`showDialog`) | `ui:route` / `ui:back` / `ui:dialog` / `ui:settings` |
 | `context.events` | Host event subscription & publishing (`on` / `emit`) | granted by default |
 | `context.storage` | Key-value storage (`get` / `set` / `delete`) | `storage` (**always granted on mobile** — see note below) |
 | `context.lifecycle` | App lifecycle hooks (`onAppStartup` / `onAppShutdown` / `onAuthSuccess` / `onDisconnect` / `onSessionCreated` / `onSessionStopped`) | granted by default |
@@ -331,6 +331,14 @@ The app only implements the content and registers it with `context.ui.registerSl
 `activate`; the host shell renders it, auto-rotates the rail (up to 5 cards) and opens the
 owning app on tap. The app must not handle navigation inside the card.
 
+A card can **deep-link into a position inside the app** (e.g. an "active sessions" card that
+jumps into the most recent session): the optional `onPress()` on `registerSlot` computes an
+entry intent (`{ key, payload }`, entirely app-owned) at tap time. The host launches and
+opens the app, then delivers that intent verbatim to the surface — subscribe with
+`context.ui.onSurfaceIntent(handler)` in the surface's `onMounted`. Intents that arrive
+before subscription are queued and flushed on subscribe, so a surface created after the tap
+does not lose them; the queue is cleared when the app is stopped / uninstalled.
+
 ```vue
 <script setup lang="ts">
 import QuickCard from '@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card'
@@ -350,11 +358,26 @@ defineProps<{ activeCount: number }>()
 ```
 
 ```ts
-context.ui.registerSlot({ id: 'sessions', component: SessionCard, order: 10 })
+context.ui.registerSlot({
+  id: 'sessions',
+  component: SessionCard,
+  order: 10,
+  // Deep link target; omit to only open the app (previous behavior)
+  onPress: () => ({ key: 'open-session', payload: { sessionId: latestLiveSessionId() } }),
+})
 ```
 
-- The host wraps the whole card in a button (tap = launch and open the contributing app);
-  do not put buttons or links inside the card;
+```ts
+// App surface root: consume the host-delivered entry intent
+const sub = context.ui.onSurfaceIntent((intent) => {
+  if (intent.key !== 'open-session') return
+  openSession((intent.payload as { sessionId: string }).sessionId)
+})
+// sub.dispose() on unmount
+```
+
+- The host wraps the whole card in a button (tap = launch and open the contributing app,
+  then deliver the value returned by `onPress()`); do not put buttons or links inside the card;
 - The host truncates by registration order (currently 5 cards) and auto-rotates when there
   are several — paused on touch / keyboard focus / background / system reduced motion, with
   a pause/play control in the section header;

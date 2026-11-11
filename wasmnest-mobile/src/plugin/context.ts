@@ -26,6 +26,7 @@ import type {
   PluginDialogHandle,
   ShellSurfaceContribution,
   ShellSlotContribution,
+  ShellSurfaceIntent,
   ShellCapsuleItem,
   MonitorPanelHandle,
   AppUpdateAPI,
@@ -41,6 +42,7 @@ import PluginViewHost from './components/PluginViewHost.vue'
 import { registerPluginRoute, openPluginRoute } from './routes'
 import { getSharedModule } from './shared-runtime'
 import { getShellRegistry } from '@/shell/registry'
+import { subscribeSurfaceIntent } from '@/shell/surfaceIntent'
 import { invoke } from '@tauri-apps/api/core'
 // 全局弹窗控制器：必须经包说明符解析（与 App.vue 挂载的 PluginGlobalDialog.vue 同源）。
 // 移动端 file: 依赖是快照拷贝，若直连源码相对路径会与组件产生两个模块实例，
@@ -241,6 +243,11 @@ export function createPluginContext(
     registerSlot(slot: ShellSlotContribution): Disposable {
       const disposable = getShellRegistry().registerSlot(info.id, slot)
       return track(disposable)
+    },
+    onSurfaceIntent(handler: (intent: ShellSurfaceIntent) => void): Disposable {
+      // 宿主 → 本应用运行面的入口意图通道（快捷卡片点击等）。载荷由应用自持，
+      // 宿主只按 appId 排队 / 投递；订阅前到达的意图由通道补投（不丢）。
+      return track(subscribeSurfaceIntent(info.id, handler))
     },
     registerCapsuleItem(item: ShellCapsuleItem): Disposable {
       const disposable = getShellRegistry().registerCapsuleItem(info.id, item)

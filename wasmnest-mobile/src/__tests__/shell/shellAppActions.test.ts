@@ -20,6 +20,8 @@
  * | C-A12 | remove 摘运行屏 | 卸载成功且该应用运行屏在栈里 | 回落到该屏下面一屏 |
  * | C-O1 | openShellApp 分支 | 待审批应用 | 进详情页，不调 launch |
  * | C-O2 | openShellApp 正路 | 可启动应用 | launch + 进运行面 |
+| C-O3 | 入口意图投递 | 卡片带 onPress 返回的意图 | 启动成功后按 appId 入队，运行面订阅即收 |
+| C-O4 | 意图不入残留 | 启动失败 / 待审批 | 不入队（下一次打开不被旧意图劫持） |
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { defineComponent, h, onUnmounted, type Component } from 'vue'
@@ -29,6 +31,11 @@ import { useShellApps } from '@/shell/composables/useShellApps'
 import { openShellApp, resetShellNavigation, useShellNavigation } from '@/shell/index'
 import { getSurfaceAppRegistry, reconcileSurfaceApps } from '@/shell/surfaceRuntime'
 import { markSurfaceOpened, useAppSurfaces } from '@/shell/composables/useAppSurfaces'
+import {
+  pendingSurfaceIntentCount,
+  resetSurfaceIntents,
+  subscribeSurfaceIntent,
+} from '@/shell/surfaceIntent'
 import type { ShellApp, ShellAppSource } from '@/shell/types'
 
 const SOURCE_ID = 'app-actions-source'
@@ -337,6 +344,45 @@ describe('C-O1/C-O2 打开应用路由', () => {
 
     expect(ok).toBe(false)
     expect(nav.current.value.id, '启动失败不进运行面（错误留在列表上可见）').toBe('home')
+  })
+})
+
+describe('C-O3/C-O4 入口意图（快捷卡片直达应用内位置）', () => {
+  beforeEach(() => {
+    resetSurfaceIntents()
+  })
+
+  it('should_queueIntent_when_launchSucceeds', async () => {
+    shell.upsertApps(SOURCE_ID, [app('com.test.i', 'stopped', 'IntentApp')])
+    const intent = { key: 'open-session', payload: { sessionId: 's1' } }
+
+    const ok = await openShellApp('com.test.i', intent)
+
+    expect(ok).toBe(true)
+    const handler = vi.fn()
+    subscribeSurfaceIntent('com.test.i', handler)
+    expect(handler).toHaveBeenCalledWith(intent)
+    expect(pendingSurfaceIntentCount('com.test.i')).toBe(0)
+  })
+
+  it('should_notQueueIntent_when_launchFails', async () => {
+    shell.upsertApps(SOURCE_ID, [app('com.test.i2', 'stopped', 'IntentApp')])
+    source.launch.mockRejectedValueOnce(new Error('boom'))
+
+    const ok = await openShellApp('com.test.i2', { key: 'open-session' })
+
+    expect(ok).toBe(false)
+    expect(pendingSurfaceIntentCount('com.test.i2'), '失败不留残留意图').toBe(0)
+  })
+
+  it('should_notQueueIntent_when_appPendingApproval', async () => {
+    shell.upsertApps(SOURCE_ID, [app('com.test.i3', 'approval', 'PendingApp')])
+
+    const ok = await openShellApp('com.test.i3', { key: 'open-session' })
+
+    expect(ok).toBe(true)
+    // 待审批走详情页，应用没被打开；意图不得留在队列里等下一次打开
+    expect(pendingSurfaceIntentCount('com.test.i3')).toBe(0)
   })
 })
 

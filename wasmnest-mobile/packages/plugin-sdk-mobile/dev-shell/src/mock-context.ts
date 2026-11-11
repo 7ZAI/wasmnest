@@ -36,6 +36,7 @@ import {
 import { dialogService } from './mock/dialog-service'
 import PluginContextHost from './shell/components/PluginContextHost.vue'
 import { getShellRegistry } from './shell/registry'
+import { subscribeSurfaceIntent } from './shell/surfaceIntent'
 import { getSharedModule } from './shared-runtime'
 import {
   findRoute,
@@ -143,6 +144,10 @@ export function createMockContext(pluginId: string): PluginContext {
     },
     registerSlot(slot) {
       return track(shellRegistry.registerSlot(pluginId, slot))
+    },
+    onSurfaceIntent(handler) {
+      // 与宿主同构：入口意图按 appId 排队，订阅前到达的补投（见 shell/surfaceIntent.ts）
+      return track(subscribeSurfaceIntent(pluginId, handler))
     },
     registerCapsuleItem(item) {
       return track(shellRegistry.registerCapsuleItem(pluginId, item))

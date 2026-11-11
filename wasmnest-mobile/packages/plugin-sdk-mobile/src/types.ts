@@ -218,6 +218,20 @@ export interface ShellSurfaceContribution {
   accent?: string
 }
 
+/**
+ * 应用内入口意图（宿主 → 本应用运行面）
+ *
+ * 宿主**不解释** `key` / `payload`：只负责把应用给的意图原样投递给同一应用的
+ * 运行面（`context.ui.onSurfaceIntent`）。载荷留在同进程，不做序列化，可传任意
+ * 对象；形状与含义全归应用自持（宿主判据 B1–B6 均不命中）。
+ */
+export interface ShellSurfaceIntent {
+  /** 应用自定义入口键（如 'session' / 'settings'） */
+  key: string
+  /** 应用自定义载荷（宿主不读取、不复制） */
+  payload?: unknown
+}
+
 /** 宿主壳首页快捷卡片（应用自持内容，如「N 个活跃会话」） */
 export interface ShellSlotContribution {
   id: string
@@ -232,6 +246,14 @@ export interface ShellSlotContribution {
   component: any
   /** 排序权重，小者靠前；缺省 100 */
   order?: number
+  /**
+   * 点击卡片时应用要进入的内部位置（按**点击时刻**现算，可随数据变化）。
+   *
+   * 宿主照常「启动并打开本应用」，再把返回值经 `context.ui.onSurfaceIntent`
+   * 投递给运行面；返回 null / undefined = 只打开应用（旧行为）。卡片内仍不得
+   * 自带交互——本回调就是卡片点击的唯一出口，宿主按钮才是点击落点。
+   */
+  onPress?: () => ShellSurfaceIntent | null | undefined
 }
 
 /** 宿主壳胶囊菜单附加项（平台项 order：权限 10 / 停用 30，应用用中间值插入） */
@@ -636,6 +658,14 @@ export interface UIRegistry {
   registerSurface(surface: ShellSurfaceContribution): Disposable
   /** 宿主壳首页快捷卡片（应用自持内容；壳 Home 屏渲染，appId 由宿主代填） */
   registerSlot(slot: ShellSlotContribution): Disposable
+  /**
+   * 订阅宿主投递的应用内入口意图（快捷卡片点击等；载荷由应用自持）。
+   *
+   * 订阅**之前**到达的意图由宿主按 appId 排队，订阅时按序补投（运行面晚于
+   * 点击创建时不会丢）；应用停用 / 卸载 / 运行面销毁时队列清空，旧意图不会在
+   * 下一次打开时突然生效。Disposable.dispose = 取消订阅。
+   */
+  onSurfaceIntent(handler: (intent: ShellSurfaceIntent) => void): Disposable
   /** 宿主壳胶囊菜单附加项（appId 由宿主代填） */
   registerCapsuleItem(item: ShellCapsuleItem): Disposable
   /** 动态注册插件路由（宿主 addRoute 至 /mobile/plugins/{pluginId}/{id}；Disposable.dispose = removeRoute 撤销） */

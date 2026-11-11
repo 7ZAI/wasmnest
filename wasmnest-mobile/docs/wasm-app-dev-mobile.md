@@ -233,7 +233,28 @@ wasmnest-plugin create com.example.ui-only "UI Only" --ts-only
 3. 宿主壳按注册顺序最多展示 5 张，多张时自动轮播（触摸 / 键盘聚焦 / 切后台 /
    系统「减少动效」时停走，标题行有暂停 / 播放控件）；点击整张卡会启动并打开本应用。
 
-卡片内不要放按钮 / 链接：整张卡已经是宿主的按钮（嵌套交互会抢点击）；应用不处理导航。
+**直达应用内位置**：`registerSlot` 可带 `onPress()`，在**点击时刻**现算一个入口意图
+（`{ key, payload }`，key / payload 全归应用，宿主不解释），宿主启动并打开应用后把意图
+原样投递给运行面；运行面在 `onMounted` 里 `context.ui.onSurfaceIntent(handler)` 订阅。
+订阅前到达的意图由宿主排队补投（运行面晚于点击创建也不丢），应用停用 / 卸载时清空。
+bedcode 的「活跃会话」卡就是这样直达「最近活跃的存活会话」终端（key = `open-session`）。
+
+```ts
+// activate 期（卡片侧）
+context.ui.registerSlot({
+  id: 'host-sessions',
+  component: SlotCard,
+  onPress: () => ({ key: 'open-session', payload: { sessionId: latestId } }),
+})
+
+// 运行面（应用根组件）
+const sub = context.ui.onSurfaceIntent((intent) => {
+  if (intent.key === 'open-session') openSession(intent.payload)
+})
+```
+
+卡片内不要放按钮 / 链接：整张卡已经是宿主的按钮（嵌套交互会抢点击）；导航由
+`onPress()` + `onSurfaceIntent` 这条通道表达，卡片组件本身不做交互。
 
 ### 自渲染浮层（createApp 模式）
 

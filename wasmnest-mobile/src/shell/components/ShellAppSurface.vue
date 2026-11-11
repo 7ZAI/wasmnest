@@ -76,6 +76,7 @@ import { useI18n } from 'vue-i18n'
 import { logger } from '@/utils/frontendLogger'
 import { useShellApps } from '../composables/useShellApps'
 import { getSurfaceAppRegistry, makeSurfaceEnsureInput } from '../surfaceRuntime'
+import { clearSurfaceIntents } from '../surfaceIntent'
 import ShellPlaceholderSurface from './ShellPlaceholderSurface.vue'
 
 const props = defineProps<{ appId: string }>()
@@ -109,6 +110,8 @@ async function ensureAndAttach(): Promise<void> {
     // 注册表已清半挂载实例；失败事实仍需按 appId 落一条日志
     mountFailed.value = true
     logger.error(`[ShellAppSurface] 运行面创建失败 appId=${appId}`, e)
+    // 本次打开的入口意图不可能再被消费，清掉（重试成功后不会被旧意图突袭）
+    clearSurfaceIntents(appId)
     return
   }
   // 创建在途期间本屏可能已卸载或换了应用：此时 el 不再属于当前插槽。

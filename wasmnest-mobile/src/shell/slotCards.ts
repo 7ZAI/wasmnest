@@ -9,6 +9,7 @@
  * 不按最近使用重排：卡片是应用自持内容的读数，位置漂移会让用户每次都要重新找。
  */
 import type { Component } from 'vue'
+import type { ShellSurfaceIntent } from '@binblink/wasmnest-plugin-sdk-mobile'
 import type { ShellApp } from './types'
 
 /** 首页最多展示的快捷卡片数（一拍屏一张，5 张即一轮完整轮播） */
@@ -20,6 +21,8 @@ export interface ShellSlotCard {
   key: string
   component: Component
   app: ShellApp
+  /** 点击时要投递给应用的入口意图（按点击时刻现算；缺省 = 只打开应用） */
+  onPress?: () => ShellSurfaceIntent | null | undefined
 }
 
 /** 按注册顺序摊平并截断到展示上限 */
@@ -32,7 +35,12 @@ export function selectSlotCards(
   for (const app of apps) {
     for (const slot of app.contributions.slots ?? []) {
       if (cards.length >= max) return cards
-      cards.push({ key: `${app.id}:${slot.id}`, component: slot.component, app })
+      cards.push({
+        key: `${app.id}:${slot.id}`,
+        component: slot.component,
+        app,
+        onPress: slot.onPress,
+      })
     }
   }
   return cards

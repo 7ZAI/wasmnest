@@ -29,6 +29,7 @@ import {
   type SurfaceRegistryLogEvent,
 } from './surfaceAppRegistry'
 import { SURFACE_ACTIVE_KEY, dropSurface } from './composables/useAppSurfaces'
+import { clearSurfaceIntents } from './surfaceIntent'
 import { getHostSurfaceEnv } from './hostSurfaceEnv'
 import type { ShellApp } from './types'
 
@@ -93,6 +94,8 @@ export async function disposeSurfaceApp(appId: string): Promise<void> {
     logger.error(`[surfaceRuntime] 运行面销毁失败 appId=${appId}`, e)
   } finally {
     dropSurface(appId)
+    // 入口意图只属于「这一次打开」：实例销毁后旧意图不得在下一次打开时生效
+    clearSurfaceIntents(appId)
   }
 }
 
