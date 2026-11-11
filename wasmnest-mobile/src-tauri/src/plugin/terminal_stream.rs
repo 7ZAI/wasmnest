@@ -97,9 +97,22 @@ pub struct TerminalStreamStats {
     pub dropped_send_failed: u64,
 }
 
+/// 一条已登记的页面通道槽位：登记代际令牌 + 通道本体
+///
+/// 令牌为什么必须存在（#13 残余）：注销是异步 IPC，旧页面 `unsubscribe` 与新页面
+/// `subscribe` 的往返可交错——只按会话键注销，旧注销会把**新**页面通道摘掉，之后
+/// 重放与实时全部 `no page channel` 丢弃且不可自愈。带令牌后只有「当前代」能摘，
+/// 旧代注销是 no-op。
+struct PageChannel {
+    token: u64,
+    channel: Channel<InvokeResponseBody>,
+}
+
 /// 会话 → 页面通道的窄转发表（全局单例）
 pub struct TerminalStreamGateway {
-    channels: Mutex<HashMap<String, Channel<InvokeResponseBody>>>,
+    channels: Mutex<HashMap<String, PageChannel>>,
+    /// 页面登记代际令牌发号器（单调递增；跨会话共用，只用于同一会话的世代比较）
+    next_page_token: std::sync::atomic::AtomicU64,
     /// 成功转发的帧数 / 字节数
     forwarded_chunks: std::sync::atomic::AtomicU64,
     forwarded_bytes: std::sync::atomic::AtomicU64,
@@ -125,6 +138,7 @@ impl Default for TerminalStreamGateway {
     fn default() -> Self {
         Self {
             channels: Mutex::new(HashMap::new()),
+            next_page_token: std::sync::atomic::AtomicU64::new(0),
             forwarded_chunks: std::sync::atomic::AtomicU64::new(0),
             forwarded_bytes: std::sync::atomic::AtomicU64::new(0),
             dropped_no_channel: std::sync::atomic::AtomicU64::new(0),
@@ -135,12 +149,17 @@ impl Default for TerminalStreamGateway {
 }
 
 impl TerminalStreamGateway {
-    /// 登记页面通道（进入终端页）。幂等：重复订阅覆盖旧通道（旧通道随即
-    /// 失效——前端 markPageEntered 已先作废其 onmessage，在途帧不会写入
-    /// 已卸载的 xterm）
-    pub fn page_subscribe(&self, session_id: &str, channel: Channel<InvokeResponseBody>) {
+    /// 登记页面通道（进入终端页），返回本代令牌（注销时必须回传）。
+    ///
+    /// 重复订阅覆盖旧通道并**换发新令牌**（旧通道随即失效——前端 markPageEntered
+    /// 已先作废其 onmessage，在途帧不会写入已卸载的 xterm；旧代注销因令牌不匹配
+    /// 不会摘掉本代通道）。
+    ///
+    /// 返回 `None` = 拒绝登记（空 session id / 表满）：调用方必须显性失败，
+    /// 不能假装登记成功（否则页面静默收不到任何输出）。
+    pub fn page_subscribe(&self, session_id: &str, channel: Channel<InvokeResponseBody>) -> Option<u64> {
         if session_id.is_empty() {
-            return;
+            return None;
         }
         let mut channels = self.channels.lock().unwrap_or_else(|p| p.into_inner());
         if channels.len() >= MAX_CHANNELS && !channels.contains_key(session_id) {
@@ -148,30 +167,43 @@ impl TerminalStreamGateway {
                 count = channels.len(),
                 "terminal stream gateway: channel table full, refusing new registration"
             );
-            return;
+            return None;
         }
-        channels.insert(session_id.to_string(), channel);
+        let token = self.next_page_token.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        channels.insert(session_id.to_string(), PageChannel { token, channel });
         // 新页面已订阅：丢弃告警窗口复位（下一次丢弃重新留痕）
         self.warned_no_channel
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .remove(session_id);
-        tracing::debug!(session_id = %session_id, "terminal page subscribe (frontend consumer attached)");
+        tracing::debug!(session_id = %session_id, page_token = token, "terminal page subscribe (frontend consumer attached)");
+        Some(token)
     }
 
-    /// 注销页面通道（退出终端页）。输出在页面关闭期间不缓存（由重订阅回放补齐）
-    pub fn page_unsubscribe(&self, session_id: &str) {
+    /// 注销页面通道（退出终端页），只摘**本代**：令牌不匹配（旧代异步注销 / 已换代 /
+    /// 已被顶替）即 no-op，不碰新代通道。输出在页面关闭期间不缓存（由重订阅回放补齐）。
+    ///
+    /// 返回是否真的摘掉了通道（诊断用；`false` 不等于错误——注销本就幂等）。
+    pub fn page_unsubscribe(&self, session_id: &str, page_token: u64) -> bool {
         if session_id.is_empty() {
-            return;
+            return false;
         }
-        let removed = self
-            .channels
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .remove(session_id);
-        if removed.is_some() {
-            tracing::debug!(session_id = %session_id, "terminal page unsubscribe (frontend consumer detached)");
+        let mut channels = self.channels.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(current) = channels.get(session_id) else {
+            return false;
+        };
+        if current.token != page_token {
+            tracing::debug!(
+                session_id = %session_id,
+                stale_page_token = page_token,
+                current_page_token = current.token,
+                "terminal page unsubscribe ignored: stale generation (newer page channel kept)"
+            );
+            return false;
         }
+        channels.remove(session_id);
+        tracing::debug!(session_id = %session_id, page_token, "terminal page unsubscribe (frontend consumer detached)");
+        true
     }
 
     /// 会话删除：清通道（订阅/链路语义在插件侧，此处只管转发面）
@@ -211,7 +243,7 @@ impl TerminalStreamGateway {
     pub fn forward_output(&self, session_id: &str, data: &[u8]) -> Result<(), String> {
         use std::sync::atomic::Ordering;
         let mut channels = self.channels.lock().unwrap_or_else(|p| p.into_inner());
-        let Some(channel) = channels.get_mut(session_id) else {
+        let Some(entry) = channels.get_mut(session_id) else {
             let dropped = self.dropped_no_channel.fetch_add(1, Ordering::Relaxed) + 1;
             // 每段未订阅窗口只留痕一次（页面离开期间长会话会持续产出，逐帧打点即刷屏）
             let first_in_window = self
@@ -231,7 +263,7 @@ impl TerminalStreamGateway {
                 "terminal stream: no page channel for session {session_id} (page not subscribed)"
             ));
         };
-        if let Err(e) = channel.send(InvokeResponseBody::Raw(data.to_vec())) {
+        if let Err(e) = entry.channel.send(InvokeResponseBody::Raw(data.to_vec())) {
             channels.remove(session_id);
             self.dropped_send_failed.fetch_add(1, Ordering::Relaxed);
             return Err(format!(
@@ -299,21 +331,25 @@ mod tests {
         assert!(!gw.is_page_subscribed(""));
     }
 
+    /// 造一个把原始字节攒进共享缓冲的通道（同时返回接收端，便于断言送达）
+    fn collecting_channel() -> (Channel<InvokeResponseBody>, Arc<Mutex<Vec<u8>>>) {
+        let received: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = received.clone();
+        let channel = Channel::new(move |body| {
+            if let InvokeResponseBody::Raw(bytes) = body {
+                sink.lock().unwrap_or_else(|p| p.into_inner()).extend_from_slice(&bytes);
+            }
+            Ok(())
+        });
+        (channel, received)
+    }
+
     /// 已登记通道：字节原样送达（Raw）+ 转发计数递增；丢弃计数不动
     #[test]
     fn forward_with_channel_sends_raw_and_counts_forwarded() {
         let gw = TerminalStreamGateway::default();
-        let received: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
-        let sink = received.clone();
-        gw.page_subscribe(
-            "s-1",
-            Channel::new(move |body| {
-                if let InvokeResponseBody::Raw(bytes) = body {
-                    sink.lock().unwrap_or_else(|p| p.into_inner()).extend_from_slice(&bytes);
-                }
-                Ok(())
-            }),
-        );
+        let (channel, received) = collecting_channel();
+        gw.page_subscribe("s-1", channel).expect("subscribe ok");
         gw.forward_output("s-1", b"hello").expect("forward ok");
         gw.forward_output("s-1", b" world").expect("forward ok");
         assert_eq!(&received.lock().unwrap_or_else(|p| p.into_inner())[..], b"hello world");
@@ -322,5 +358,58 @@ mod tests {
         assert_eq!(stats.forwarded_bytes, 11);
         assert_eq!(stats.dropped_no_channel, 0);
         assert_eq!(stats.dropped_send_failed, 0);
+    }
+
+    /// 旧代注销不得摘掉新代通道（#13 残余：离开页面与重进页面的 IPC 往返可交错）
+    ///
+    /// 真实时序：A 代 dispose → 异步 `terminal_page_unsubscribe(A)`；B 代
+    /// `terminal_page_subscribe` 先落定 → A 的注销若只按会话键就会把 B 摘掉，
+    /// 之后重放/实时全部 `no page channel` 丢弃。
+    #[test]
+    fn stale_page_unsubscribe_keeps_newer_generation() {
+        let gw = TerminalStreamGateway::default();
+        let (channel_a, _a) = collecting_channel();
+        let (channel_b, received_b) = collecting_channel();
+        let token_a = gw.page_subscribe("s-1", channel_a).expect("subscribe a");
+        let token_b = gw.page_subscribe("s-1", channel_b).expect("subscribe b");
+        assert_ne!(token_a, token_b, "每次登记必须换发新令牌");
+
+        // A 代（旧）注销晚到：令牌不匹配 → no-op
+        assert!(!gw.page_unsubscribe("s-1", token_a), "旧代注销必须被拒绝");
+        assert!(gw.is_page_subscribed("s-1"), "新代通道必须仍在表里");
+        gw.forward_output("s-1", b"after-stale-unsubscribe")
+            .expect("新代通道必须仍能接收字节");
+        assert_eq!(
+            &received_b.lock().unwrap_or_else(|p| p.into_inner())[..],
+            b"after-stale-unsubscribe"
+        );
+
+        // 本代注销：真摘（幂等，第二次为 no-op）
+        assert!(gw.page_unsubscribe("s-1", token_b));
+        assert!(!gw.is_page_subscribed("s-1"));
+        assert!(!gw.page_unsubscribe("s-1", token_b));
+        assert!(gw.forward_output("s-1", b"x").is_err());
+    }
+
+    /// 登记拒绝必须显性（None）：空 session 与表满都不能假装成功
+    #[test]
+    fn page_subscribe_reports_refusal_instead_of_faking_success() {
+        let gw = TerminalStreamGateway::default();
+        let (channel, _) = collecting_channel();
+        assert!(gw.page_subscribe("", channel).is_none(), "空 session 必须拒绝登记");
+
+        for i in 0..MAX_CHANNELS {
+            let (channel, _) = collecting_channel();
+            gw.page_subscribe(&format!("s-{i}"), channel)
+                .unwrap_or_else(|| panic!("第 {i} 个会话应能登记"));
+        }
+        let (overflow, _) = collecting_channel();
+        assert!(
+            gw.page_subscribe("s-overflow", overflow).is_none(),
+            "表满时新会话必须拒绝登记（不得静默成功）"
+        );
+        // 已登记会话仍可换代（覆盖自己的槽位不受容量限制）
+        let (again, _) = collecting_channel();
+        assert!(gw.page_subscribe("s-0", again).is_some());
     }
 }

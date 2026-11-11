@@ -519,22 +519,24 @@ export function clearAuthCredentials() {
 const TERMINAL_PLUGIN_ID = 'com.wasmnest.bedcode'
 
 /**
- * 段2：登记页面级 Tauri Channel（输出帧唯一出口，裸字节推送）。
+ * 段2：登记页面级 Tauri Channel（输出帧唯一出口，裸字节推送），返回本代页面令牌。
  *
  * 幂等，且不依赖链路是否已建立（通道与订阅意愿先于链路记录，链路建立后即生效）。
+ * 返回值必须随注销回传：注销是异步 IPC，旧代注销可能晚于新代登记落定，宿主按令牌
+ * 只摘本代通道（旧注销不得摘新通道）。
  * 为什么用 Channel 而非全局事件：per-page 通道没有全局广播与事件名匹配开销，负载走
  * Raw 字节省掉 base64（-33% 体积）与 JSON 序列化/解析（与桌面端终端输出同路径）
  */
 export async function terminalPageSubscribe(
   sessionId: string,
   channel: Channel<ArrayBuffer>,
-): Promise<void> {
+): Promise<number> {
   const credential = await ensureHostCredential()
-  return invoke('terminal_page_subscribe', { sessionId, channel, credential })
+  return invoke<number>('terminal_page_subscribe', { sessionId, channel, credential })
 }
 
-/** 段2：取消登记（退出终端页）— 清空推送通道 */
-export async function terminalPageUnsubscribe(sessionId: string): Promise<void> {
+/** 段2：取消登记（退出终端页）— 只摘本代通道（令牌不匹配则宿主 no-op） */
+export async function terminalPageUnsubscribe(sessionId: string, pageToken: number): Promise<void> {
   const credential = await ensureHostCredential()
-  return invoke('terminal_page_unsubscribe', { sessionId, credential })
+  return invoke('terminal_page_unsubscribe', { sessionId, pageToken, credential })
 }

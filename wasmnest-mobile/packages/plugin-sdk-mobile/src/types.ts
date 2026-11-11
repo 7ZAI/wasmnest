@@ -331,7 +331,10 @@ export interface MobileHttpRequestOptions {
   headers?: Record<string, string>
 }
 
-/** 终端输出流句柄（openTerminalStream 返回；dispose = 注销页面通道） */
+/** 终端输出流句柄（openTerminalStream 返回；dispose = 注销本代页面通道）
+ *
+ * 注销携带登记时拿到的页面令牌：同一会话重复 open 时，旧句柄的 dispose 不会
+ * 摘掉新通道（宿主按令牌只摘当前代）。 */
 export interface TerminalStreamHandle {
   dispose(): void
 }

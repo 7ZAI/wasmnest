@@ -205,7 +205,9 @@ fn mobile_terminal_plugin_pipe_contracts() {
         };
 
         let sink = Arc::new(PageSink::default());
-        terminal_stream_gateway().page_subscribe(SESSION_ID, sink.channel());
+        let page_token = terminal_stream_gateway()
+            .page_subscribe(SESSION_ID, sink.channel())
+            .expect("页面通道登记失败：表满或空 session");
 
         // ==================== P-001 prewarm 只建连（不发 subscribe） ====================
         world
@@ -336,7 +338,7 @@ fn mobile_terminal_plugin_pipe_contracts() {
             "P-006 停止后到达的字节必须被丢弃（状态机漏关 = 终端冻结后仍看似有输出）"
         );
 
-        terminal_stream_gateway().page_unsubscribe(SESSION_ID);
+        terminal_stream_gateway().page_unsubscribe(SESSION_ID, page_token);
         mock.shutdown().await;
     });
 }

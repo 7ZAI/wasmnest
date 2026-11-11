@@ -878,7 +878,10 @@ pub async fn plugin_open_download_dir(plugin_id: String) -> Result<()> {
 // 任一应用前端能按 session_id 抢登记他人会话的输出通道（输出按会话键控，
 // 后登记覆盖前登记）——既窃听又静默顶掉正常页面。通道归属 = 宿主，故只认宿主门。
 
-/// 段2 订阅（进入终端页）：登记页面通道并开启输出推送。幂等
+/// 段2 订阅（进入终端页）：登记页面通道并开启输出推送。幂等，返回本代页面令牌
+///
+/// 令牌必须由调用方持有并在注销时回传：注销是异步 IPC，旧页面的注销可能晚于
+/// 新页面的登记落定；不带令牌则旧注销会摘掉新通道（#13 残余）。
 #[tauri::command]
 pub async fn terminal_page_subscribe(
     app_handle: tauri::AppHandle,
@@ -886,7 +889,7 @@ pub async fn terminal_page_subscribe(
     session_id: String,
     channel: tauri::ipc::Channel<tauri::ipc::InvokeResponseBody>,
     credential: String,
-) -> Result<()> {
+) -> Result<u64> {
     require_host_surface(
         &app_handle.state::<Arc<FrontendChannelRegistry>>(),
         webview.label(),
@@ -897,18 +900,25 @@ pub async fn terminal_page_subscribe(
     if session_id.is_empty() {
         return Err(crate::AppError::Plugin("session_id is empty".to_string()));
     }
-    crate::plugin::terminal_stream::terminal_stream_gateway().page_subscribe(&session_id, channel);
-    Ok(())
+    crate::plugin::terminal_stream::terminal_stream_gateway()
+        .page_subscribe(&session_id, channel)
+        .ok_or_else(|| {
+            crate::AppError::Plugin(format!(
+                "terminal page channel table full, refusing registration: session_id={session_id}"
+            ))
+        })
 }
 
-/// 段2 取消订阅（退出终端页）：清空页面通道并停止推送
+/// 段2 取消订阅（退出终端页）：只摘**本代**页面通道（令牌不匹配即 no-op）
 ///
 /// 同样只认宿主门：注销是「摘掉别人的通道」的破坏面，不能由任意前端触发。
+/// 幂等：页面通道已不在（已离开 / 已被新代顶替）也返回 Ok。
 #[tauri::command]
 pub async fn terminal_page_unsubscribe(
     app_handle: tauri::AppHandle,
     webview: tauri::Webview,
     session_id: String,
+    page_token: u64,
     credential: String,
 ) -> Result<()> {
     require_host_surface(
@@ -921,6 +931,12 @@ pub async fn terminal_page_unsubscribe(
     if session_id.is_empty() {
         return Err(crate::AppError::Plugin("session_id is empty".to_string()));
     }
-    crate::plugin::terminal_stream::terminal_stream_gateway().page_unsubscribe(&session_id);
+    if !crate::plugin::terminal_stream::terminal_stream_gateway().page_unsubscribe(&session_id, page_token) {
+        tracing::debug!(
+            session_id = %session_id,
+            page_token,
+            "terminal page unsubscribe: no matching generation (already detached or superseded)"
+        );
+    }
     Ok(())
 }
