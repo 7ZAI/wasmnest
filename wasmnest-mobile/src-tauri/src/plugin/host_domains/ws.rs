@@ -192,53 +192,72 @@ impl WsClientPorts for StateWsClientPorts {
 
     /// WS 帧级链路加密工厂（2026-11-04）
     ///
-    /// 裁决口径（与 HTTP 信封同源，除 `encryptHttp` 是 HTTP 子开关）：
-    /// - 主开关开（`enabled`）且持有配对 pin；
+    /// 裁决口径（与 HTTP 信封同源）：
+    /// - 持有配对 pin 就提案，**不看本端全局加密开关**（对端策略可能 `required`，
+    ///   开关关着不提案会让升级期直接 400；与事件 WS 同判据，见
+    ///   `connection/ws_connection.rs` 的 `WsCryptoOffer::from_context`）；
     /// - 目标 host:port 是已声明的桌面目标（`egress.is_desktop_target`）——对
     ///   第三方 WS 地址不提案，避免把宿主信任锚暴露给任意服务器；
     /// - `strict_mode` 只影响「服务端回绝提案时是否断开」，不改变提案条件。
-    ///
-    /// pin 存在但格式非法 → 仍注入工厂（`complete` 显性失败），不静默降级明文。
     fn frame_crypto(&self, _plugin_id: &str, url: &str) -> Option<Arc<dyn WsFrameCryptoFactory>> {
-        let parsed = crate::egress::parse_url_lite(url)?;
-        if parsed.scheme != "ws" {
+        if !should_offer_crypto(url) {
             return None;
         }
-        let port = parsed.port?;
-        // 环回目标是桌面端本地豁免面（WS 升级门禁不要求协商、过滤器也不介入）：
-        // 提案只会被回绝/造成密文直投，直接走明文
-        if crate::egress::is_loopback_host(&parsed.host) {
-            return None;
-        }
-        if !crate::egress::policy().is_desktop_target(&parsed.host, Some(port)) {
-            return None;
-        }
-        let ctx = crate::state::get_link_crypto_context();
-        if !ctx.enabled {
-            return None;
-        }
-        let Some(kd_raw) = ctx.kd_public_b64.as_deref() else {
-            // 未配对（无信任锚）= 无法提案；HTTP 同口径（is_http_encryption_active）
-            return None;
-        };
-        let kd_public = match b64_decode(kd_raw) {
-            Ok(raw) => raw.try_into().ok(),
-            Err(error) => {
-                tracing::error!(%error, "ws link crypto: pinned key is not valid base64");
-                None
-            }
-        };
-        if kd_public.is_none() {
-            tracing::error!("ws link crypto: pinned key has invalid length (expect 32 bytes)");
-        }
-        let (ephemeral_private, ephemeral_public) = generate_ephemeral();
-        Some(Arc::new(MobileWsCryptoFactory {
-            ephemeral_private,
-            ephemeral_public_b64: wasmnest_link_crypto::b64_encode(&ephemeral_public),
-            kd_public,
-            strict: ctx.strict_mode,
-        }))
+        ws_crypto_factory(&crate::state::get_link_crypto_context())
     }
+}
+
+/// 该 WS 目标是否应随升级请求提案链路加密
+///
+/// 判据 = **已声明的桌面目标**（`egress.is_desktop_target`），**不是**地址是否环回。
+///
+/// 为什么不能按环回跳过（不变量 15）：移动端没有本地桌面服务，隧道本地代理恰好绑
+/// `127.0.0.1`，但桌面接收端看到的是 **peer face**（面标记，不享受环回豁免）。
+/// bedcode 固定 `required`，代理流量不提案就会在 WS 升级期被 400
+/// （`plugin ws endpoint requires link encryption but the upgrade request carries
+/// no offer`）——真机回归：经 relay 连上后进入终端页，`bedcode.subscribe` 一直
+/// `terminal ws connect failed: HTTP error: 400 Bad Request`。
+///
+/// 未声明的环回地址（第三方本地 WS 服务）仍不提案：避免把宿主信任锚暴露给
+/// 任意服务器。
+fn should_offer_crypto(url: &str) -> bool {
+    let Some(parsed) = crate::egress::parse_url_lite(url) else {
+        return false;
+    };
+    if parsed.scheme != "ws" {
+        return false;
+    }
+    let Some(port) = parsed.port else {
+        return false;
+    };
+    crate::egress::policy().is_desktop_target(&parsed.host, Some(port))
+}
+
+/// 由运行期上下文构造 WS 提案（`None` = 未配对 / 无 pin）
+///
+/// **不看主开关**：对端应用策略可能是 `required`，本端开关关着就不提案会让升级期
+/// 被 400 拒；服务端策略 `off` 会回绝提案，非 strict 明文续跑，不构成降级。
+///
+/// pin 存在但格式非法 → 仍返回工厂（`complete` 显性失败），不静默降级明文。
+fn ws_crypto_factory(ctx: &crate::state::LinkCryptoContext) -> Option<Arc<dyn WsFrameCryptoFactory>> {
+    let kd_raw = ctx.kd_public_b64.as_deref()?;
+    let kd_public = match b64_decode(kd_raw) {
+        Ok(raw) => raw.try_into().ok(),
+        Err(error) => {
+            tracing::error!(%error, "ws link crypto: pinned key is not valid base64");
+            None
+        }
+    };
+    if kd_public.is_none() {
+        tracing::error!("ws link crypto: pinned key has invalid length (expect 32 bytes)");
+    }
+    let (ephemeral_private, ephemeral_public) = generate_ephemeral();
+    Some(Arc::new(MobileWsCryptoFactory {
+        ephemeral_private,
+        ephemeral_public_b64: wasmnest_link_crypto::b64_encode(&ephemeral_public),
+        kd_public,
+        strict: ctx.strict_mode,
+    }))
 }
 
 // ==================== WS 链路加密（移动端协议实现） ====================
@@ -541,6 +560,69 @@ mod tests {
             Some(factory.ephemeral_public_b64.as_str()),
             "提案值必须能被服务端 parse_negotiation 解析"
         );
+    }
+
+    /// 提案只看 pin，不看本端全局开关
+    ///
+    /// 真机回归：桌面 bedcode 固定 `required`，移动端主开关默认关时旧判据不提案，
+    /// 升级期被 400 拒。服务端策略 `off` 会回绝提案，非 strict 明文续跑。
+    #[test]
+    fn frame_crypto_proposal_ignores_local_master_switch() {
+        let pinned = wasmnest_link_crypto::b64_encode(&[9u8; X25519_KEY_LEN]);
+        let off = crate::state::LinkCryptoContext {
+            enabled: false,
+            strict_mode: false,
+            encrypt_http: true,
+            kd_public_b64: Some(pinned),
+        };
+        assert!(
+            ws_crypto_factory(&off).is_some(),
+            "已 pin 就必须提案（与本地主开关无关）"
+        );
+
+        let unpaired = crate::state::LinkCryptoContext {
+            kd_public_b64: None,
+            ..off.clone()
+        };
+        assert!(ws_crypto_factory(&unpaired).is_none(), "无 pin 无法提案");
+
+        let broken = crate::state::LinkCryptoContext {
+            kd_public_b64: Some("not-base64".to_string()),
+            ..off
+        };
+        assert!(
+            ws_crypto_factory(&broken).is_some(),
+            "损坏 pin 仍注入工厂（complete 显性失败，不静默明文）"
+        );
+    }
+
+    /// 不变量 15（T04/T09）：隧道本地代理是 `127.0.0.1`，但**不是**桌面端本地豁免面
+    ///
+    /// 真机回归：经 relay 连接后进入终端页，桌面 bedcode 固定 `required` 且接收端是
+    /// peer face；本端按「环回」跳过提案 → 升级期 400，`bedcode.subscribe` 永远失败。
+    /// 判据必须是「已声明的桌面目标」（`setApiBaseUrl` 在连接时声明），不是地址环回。
+    #[test]
+    fn should_offer_crypto_for_tunnel_loopback_target() {
+        let declared_port = 48631u16;
+        crate::egress::policy().add_desktop_target("127.0.0.1", declared_port);
+
+        let tunnel_url = format!("ws://127.0.0.1:{declared_port}/ws/plugin/com.wasmnest.bedcode/terminal");
+        assert!(
+            should_offer_crypto(&tunnel_url),
+            "隧道回环代理（已声明桌面目标）必须提案：对端按 peer 面不豁免，required 下不提案即 400"
+        );
+
+        // 未声明的环回端口 = 第三方本地 WS 服务，不提案（信任锚不外泄）
+        assert!(
+            !should_offer_crypto("ws://127.0.0.1:48632/ws"),
+            "未声明的环回目标不得提案"
+        );
+        // 非 ws / 无端口 / 未声明桌面目标：均不提案
+        assert!(!should_offer_crypto("http://127.0.0.1:48631/"));
+        assert!(!should_offer_crypto("ws://127.0.0.1/"));
+        assert!(!should_offer_crypto("ws://192.0.2.10:48631/ws"));
+
+        crate::egress::policy().clear_desktop_targets();
     }
 
     /// required + 无回执 = 协议违约 → 显性失败（不静默明文）
