@@ -98,6 +98,7 @@ impl MockDesktop {
                 .route("/api/auth/pairing", actix_web::web::post().to(mock_pairing))
                 .route("/echo", actix_web::web::post().to(mock_echo))
                 .route("/crypto", actix_web::web::post().to(mock_crypto))
+                .route("/reject-plaintext", actix_web::web::post().to(mock_reject_plaintext))
                 .route("/slow", actix_web::web::get().to(mock_slow))
         })
         .bind((bind_ip, 0))
@@ -248,6 +249,16 @@ async fn mock_crypto(
     let plain = decrypt_http_body(&keys.request, &body, &aad).expect("mock decrypt request");
     assert_eq!(plain, b"hello sealed", "请求信封解密应得原文");
     crypto_response("/crypto", &keys, "{\"code\":0,\"message\":\"decrypted ok\"}")
+}
+
+/// 模拟桌面端 `required` 端点对明文请求的拒绝（T07 稳定码 + 400 正文）
+async fn mock_reject_plaintext() -> actix_web::HttpResponse {
+    actix_web::HttpResponse::BadRequest()
+        .insert_header((
+            wasmnest_link_crypto::ERROR_HEADER,
+            wasmnest_link_crypto::CODE_ENCRYPTION_UNSUPPORTED,
+        ))
+        .json(json!({ "code": 1003, "message": "plaintext is not accepted" }))
 }
 
 async fn mock_slow() -> actix_web::HttpResponse {
@@ -499,6 +510,127 @@ async fn app_request_envelope_follows_per_app_policy() {
 
     wasmnest_mobile_lib::state::clear_link_crypto_servers();
     wasmnest_mobile_lib::state::set_link_crypto_context(wasmnest_mobile_lib::state::LinkCryptoContext::default());
+    reset_egress();
+}
+
+/// 真机回归：宿主桥（`useHttpApi.httpRequest` = Host 身份）代 bedcode 发请求，
+/// 本端「自愿加密」主开关默认关，但桌面端 bedcode 固定 `required` —— 服务端
+/// 安全下限不受本端开关降级，必须加封；无 pin 时显性失败，绝不退回明文。
+#[tokio::test]
+async fn host_bridge_required_ignores_local_switch() {
+    let _serial = SERIAL.lock().unwrap();
+    reset_egress();
+    let Some(bind_ip) = primary_non_loopback_ip() else {
+        eprintln!("skipping: no non-loopback interface available");
+        return;
+    };
+    let mock = MockDesktop::start_bound(&bind_ip.to_string()).await;
+    wait_mock_ready(mock.addr).await;
+    let host = mock.addr.ip().to_string();
+    let port = mock.addr.port();
+    wasmnest_mobile_lib::egress::policy().add_desktop_target(&host, port);
+
+    // 对端能力快照（连接流程 /api/health）：过滤器在链上 + bedcode 固定 required
+    wasmnest_mobile_lib::state::set_link_crypto_server(
+        &host,
+        port,
+        true,
+        [("com.wasmnest.bedcode".to_string(), "required".to_string())]
+            .into_iter()
+            .collect(),
+    );
+    // 本端：主开关 / HTTP 子开关全关，只有配对后落地的 pin
+    wasmnest_mobile_lib::state::set_link_crypto_context(wasmnest_mobile_lib::state::LinkCryptoContext {
+        enabled: false,
+        strict_mode: false,
+        encrypt_http: false,
+        kd_public_b64: Some(base64::engine::general_purpose::STANDARD.encode(kd_pub())),
+    });
+    assert!(
+        !wasmnest_mobile_lib::state::is_http_encryption_active(),
+        "本端自愿开关必须确实是关的"
+    );
+
+    let mut req = proxy_req("hb-1", "POST", &format!("{}/crypto", mock.base_url()), "desktop");
+    req.body = Some("hello sealed".to_string());
+    let resp = execute_proxy(req, None, &CallerIdentity::Host)
+        .await
+        .expect("required 对端即使本端开关全关也必须加封并解密响应");
+    assert_eq!(resp.status, 200);
+    assert!(
+        resp.body_text.contains("decrypted ok"),
+        "响应应被解密: {}",
+        resp.body_text
+    );
+    let cap = mock.capture("/crypto");
+    assert!(
+        cap.crypto_negotiation.as_deref().unwrap_or("").starts_with("v1 "),
+        "真机回归：明文请求必须改带协商头, got {:?}",
+        cap.crypto_negotiation
+    );
+
+    // required + 无 pin：本地显性失败，不发明文把 400 丢给应用猜
+    wasmnest_mobile_lib::state::set_link_crypto_context(wasmnest_mobile_lib::state::LinkCryptoContext {
+        enabled: false,
+        strict_mode: false,
+        encrypt_http: false,
+        kd_public_b64: None,
+    });
+    let mut no_pin = proxy_req("hb-2", "POST", &format!("{}/crypto", mock.base_url()), "desktop");
+    no_pin.body = Some("hello sealed".to_string());
+    let err = execute_proxy(no_pin, None, &CallerIdentity::Host)
+        .await
+        .expect_err("required 且无 pin 必须 fail-visible");
+    assert!(err.to_string().contains("LINK_ENCRYPTION_NO_PIN"), "got: {err}");
+
+    // 对端策略回到 off（过滤器仍在链上）：回到本端自愿语义，开关关 → 明文
+    wasmnest_mobile_lib::state::set_link_crypto_server(
+        &host,
+        port,
+        true,
+        [("com.wasmnest.bedcode".to_string(), "off".to_string())]
+            .into_iter()
+            .collect(),
+    );
+    let mut plain = proxy_req("hb-3", "POST", &format!("{}/echo", mock.base_url()), "desktop");
+    plain.body = Some("plain".to_string());
+    let resp = execute_proxy(plain, None, &CallerIdentity::Host)
+        .await
+        .expect("off 对端请求应放行");
+    assert_eq!(resp.status, 200);
+    assert!(
+        mock.capture("/echo").crypto_negotiation.is_none(),
+        "对端不要求加密时不得盲加信封（旧宿主会 400）"
+    );
+
+    wasmnest_mobile_lib::state::clear_link_crypto_servers();
+    reset_egress();
+}
+
+/// 明文路径收到对端稳定拒绝码也按码显性失败（不包装成普通 HTTP 400）
+///
+/// 覆盖健康探测缓存尚未建立、或对端策略刚升级到 required 的首批请求。
+#[tokio::test]
+async fn plaintext_request_surfaces_peer_refusal_code() {
+    let _serial = SERIAL.lock().unwrap();
+    reset_egress();
+    let mock = mock_once().await;
+    wasmnest_mobile_lib::egress::policy().add_desktop_target(&mock.addr.ip().to_string(), mock.addr.port());
+
+    let req = proxy_req(
+        "pr-1",
+        "POST",
+        &format!("{}/reject-plaintext", mock.base_url()),
+        "desktop",
+    );
+    let err = execute_proxy(req, None, &CallerIdentity::Host)
+        .await
+        .expect_err("对端显式拒绝必须按码失败");
+    assert!(
+        err.to_string()
+            .contains(wasmnest_link_crypto::CODE_ENCRYPTION_UNSUPPORTED),
+        "got: {err}"
+    );
     reset_egress();
 }
 

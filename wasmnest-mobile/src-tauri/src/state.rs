@@ -115,6 +115,10 @@ pub fn try_get_plugin_manager() -> Option<Arc<PluginManager>> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkCryptoContext {
     /// 主开关（对应移动端 trafficEncryption.enabled）
+    ///
+    /// 只约束**自愿加密**（对端策略 `preferred` / 宿主面请求）；对端应用策略
+    /// `required` 时不能降级：应用 HTTP 信封与 WS 提案都不看本开关（见
+    /// `plugin/host_domains/{http,ws}.rs`）。
     pub enabled: bool,
     /// 严格模式：加密被拒/失败时断连报错而非明文续跑
     pub strict_mode: bool,
@@ -164,6 +168,9 @@ pub fn update_link_crypto_pin(kd_public_b64: Option<String>) {
 
 /// HTTP 通道是否应加密（HTTP 代理收束后由 Rust 裁决）：主开关 ∧ HTTP 子开关
 /// ∧ 已持有 pin——对齐前端 `isChannelEncryptionActive('http')` 的判定。
+///
+/// 只覆盖**宿主身份**发起的请求（`http_proxy`）；应用经 host-http 发往
+/// `required` 对端的信封不受本判据约束（见 `plugin/host_domains/http.rs`）。
 pub fn is_http_encryption_active() -> bool {
     let ctx = get_link_crypto_context();
     ctx.enabled && ctx.encrypt_http && ctx.kd_public_b64.is_some()

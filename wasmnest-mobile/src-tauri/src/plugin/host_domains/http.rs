@@ -109,7 +109,9 @@ impl HttpPorts for StateHttpPorts {
     ///
     /// 与宿主 `http_proxy` 的 `host_request` 信封同协议；差别只在触发面：应用请求
     /// 没有“宿主内建”身份，但目标若是已声明桌面端，同一份宿主信任锚可以透明加封。
-    /// gating 口径：主开关 ∧ `encryptHttp` ∧ 已 pin ∧ 目标是已配对桌面 ∧ 非 auth 路径。
+    /// gating 口径：已 pin ∧ 目标是已配对桌面 ∧ 非 auth 路径；`preferred` 另要求
+    /// 本端开关（主开关 ∧ `encryptHttp`），`required` 不受本端开关约束——服务端
+    /// 的安全下限不能被本地「自愿加密」开关降级成提前失败。
     fn outbound_envelope(&self, plugin_id: &str, url: &str) -> Option<Arc<dyn OutboundEnvelope>> {
         mobile_http_envelope(plugin_id, url)
     }
@@ -118,7 +120,8 @@ impl HttpPorts for StateHttpPorts {
 // ==================== 出站链路信封（移动端协议实现） ====================
 
 /// 应用发起的 HTTP 是否走宿主信封；`None` = 明文
-/// （未启用 / 非桌面目标 / 环回 / auth·health 路径 / 该应用策略为 off 或未知）
+/// （非桌面目标 / 环回 / auth·health 路径 / 该应用策略为 off 或未知 /
+/// 策略 `preferred` 且本端关闭加密）
 fn mobile_http_envelope(plugin_id: &str, url: &str) -> Option<Arc<dyn OutboundEnvelope>> {
     let parsed = crate::egress::parse_url_lite(url)?;
     if parsed.scheme != "http" {
@@ -161,7 +164,10 @@ fn mobile_http_envelope(plugin_id: &str, url: &str) -> Option<Arc<dyn OutboundEn
         }
     };
     let ctx = crate::state::get_link_crypto_context();
-    if !ctx.enabled || !ctx.encrypt_http {
+    // `required` 不能被本端开关降级：关掉只会把请求提前拦在这里（服务端同样
+    // 拒绝明文），且与事件 WS 的提案判据矛盾（`connection/ws_connection.rs`：
+    // 只看 pin，不看全局开关）。`preferred` 仍保留本端「自愿加密」语义。
+    if !required && (!ctx.enabled || !ctx.encrypt_http) {
         return fail("local link encryption is disabled");
     }
     let Some(kd_raw) = ctx.kd_public_b64.as_deref() else {
@@ -575,6 +581,71 @@ mod tests {
         assert!(super::mobile_http_envelope(owner, "http://127.0.0.1:4555/api/sessions").is_none());
         assert!(super::mobile_http_envelope(owner, &format!("http://{host}:{port}/api/auth/pairing")).is_none());
         assert!(super::mobile_http_envelope(owner, &format!("http://{host}:{port}/api/health")).is_none());
+
+        crate::state::set_link_crypto_context(crate::state::LinkCryptoContext::default());
+    }
+
+    /// `required` 是服务端安全下限：本端全局开关关着也必须加封
+    ///
+    /// 真机回归：bedcode 桌面固定 `required`，移动端主开关默认关（设置页已退役），
+    /// 旧判据在这里返回「local link encryption is disabled」把 `bedcode.list-projects`
+    /// 直接拦死——服务端下限被本地开关降级成了提前失败。
+    #[test]
+    fn required_policy_overrides_local_switch() {
+        let _guard = CRYPTO_CTX_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let host = "203.0.113.78";
+        let port = 4556u16;
+        let owner = "com.example.required-local-off";
+        let url = format!("http://{host}:{port}/api/projects");
+        crate::egress::policy().add_desktop_target(host, port);
+
+        // required + 本端主开关/HTTP 子开关全关 + 已 pin → 仍必须加封
+        crate::state::set_link_crypto_context(crate::state::LinkCryptoContext {
+            enabled: false,
+            strict_mode: false,
+            encrypt_http: false,
+            kd_public_b64: Some(wasmnest_link_crypto::b64_encode(
+                &[7u8; wasmnest_link_crypto::X25519_KEY_LEN],
+            )),
+        });
+        crate::state::set_link_crypto_server(
+            host,
+            port,
+            true,
+            [(owner.to_string(), "required".to_string())].into_iter().collect(),
+        );
+        assert!(
+            super::mobile_http_envelope(owner, &url).is_some(),
+            "required 不得被本端开关降级"
+        );
+
+        // preferred + 本端关 → 仍按自愿语义走明文（行为不变）
+        crate::state::set_link_crypto_server(
+            host,
+            port,
+            true,
+            [(owner.to_string(), "preferred".to_string())].into_iter().collect(),
+        );
+        assert!(super::mobile_http_envelope(owner, &url).is_none());
+
+        // required + 无 pin → 必失败信封（不能被当明文发出）
+        crate::state::set_link_crypto_context(crate::state::LinkCryptoContext {
+            enabled: false,
+            strict_mode: false,
+            encrypt_http: false,
+            kd_public_b64: None,
+        });
+        crate::state::set_link_crypto_server(
+            host,
+            port,
+            true,
+            [(owner.to_string(), "required".to_string())].into_iter().collect(),
+        );
+        let envelope = super::mobile_http_envelope(owner, &url).expect("required 无 pin 必须显性失败");
+        let error = envelope
+            .seal_request(&mut Vec::new(), None)
+            .expect_err("必失败信封不得放行请求");
+        assert!(error.contains("no pinned peer key"), "{error}");
 
         crate::state::set_link_crypto_context(crate::state::LinkCryptoContext::default());
     }

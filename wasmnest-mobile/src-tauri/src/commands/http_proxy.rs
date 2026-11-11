@@ -174,12 +174,45 @@ pub fn should_inject_jwt(path: &str, token: &str, host_request: bool) -> bool {
     host_request && !path.starts_with(AUTH_PATH_PREFIX) && !token.is_empty()
 }
 
-/// 链路加密判定：主开关 ∧ HTTP 子开关 ∧ 已 pin（state.rs），且非明文白名单路径
+/// 明文白名单路径：auth（pin 刷新）/ health（桌面端过滤器豁免）
 ///
-/// auth 路径要明文响应（pin 刷新），health 路径在桌面端被过滤器豁免——两者加
-/// 信封只会得到「对端不参与」的 400 或明文降级警告。
+/// 这两类路径加信封只会得到「对端不参与」的 400 或明文降级警告；豁免面与
+/// `plugin/host_domains/http.rs` 的 guest 信封逐项一致。
+fn crypto_path_allowed(path: &str) -> bool {
+    !path.starts_with(AUTH_PATH_PREFIX) && path != "/api/health" && path != "/health"
+}
+
+/// 本端「自愿加密」判据：主开关 ∧ HTTP 子开关 ∧ 已 pin（state.rs）
+///
+/// 只约束**自愿**档（对端 `preferred` / 宿主面主动开加密）。对端应用策略
+/// `required` 是服务端安全下限，不受本开关约束（见 [`peer_requires_encryption`]
+/// 与 `plugin/host_domains/http.rs` 的同口径裁决）。
 pub fn should_encrypt(path: &str) -> bool {
-    is_http_encryption_active() && !path.starts_with(AUTH_PATH_PREFIX) && path != "/api/health" && path != "/health"
+    crypto_path_allowed(path) && is_http_encryption_active()
+}
+
+/// 对端是否强制要求加密（服务端安全下限，不受本端开关降级）
+///
+/// - `app_policy`：调用方应用在对端的策略（Plugin 身份按 `linkCryptoPolicies`
+///   精确取值；Host 身份拿不到端点属主，为 `None`）；
+/// - `server_active` / `any_required`：同一份 `/api/health` 能力快照的过滤器位
+///   与策略表；
+/// - 宿主桥（`useHttpApi.httpRequest` 代应用发请求）用宿主凭证，无法按应用精确
+///   裁决：只要对端链上有过滤器且任一应用登记了 `required`，就按 required 加封。
+///   加密对 `off` / `preferred` 端点无害（服务端照常解密并回密），漏加封则会被
+///   `encryption-unsupported` 400 拒（真机回归：bedcode 桌面固定 `required`）。
+fn peer_requires_encryption(
+    app_policy: Option<&str>,
+    server_active: bool,
+    any_required: bool,
+    host_request: bool,
+) -> bool {
+    match app_policy {
+        // 有精确策略就只认精确值（off 不因「别的应用 required」被误加封）
+        Some(policy) => policy == "required",
+        // 宿主桥拿不到端点属主：对端链上有过滤器且任一应用登记 required 时兜底
+        None => host_request && server_active && any_required,
+    }
 }
 
 /// 对端显式拒绝的稳定码（`X-WasmNest-Crypto-Error`，内网穿透 T07）
@@ -349,32 +382,58 @@ pub async fn execute_proxy(
         );
     }
 
-    // 链路加密信封（非 auth 且开关开且已 pin）
+    // 链路加密信封（非 auth/health，且对端要求或本端自愿）
     //
     // 触发面 = 宿主请求 ∪ 目标为已声明桌面端的应用请求：信封密钥是宿主与桌面端
-    // 协商的会话密钥，只有“对端就是那台桌面”时才成立（外部 URL 加信封只会让
-    // 对端解不开）。应用请求还要求健康探测已报告「对端链上有加密过滤器」——
-    // 对端全 off 时加信封只会被 fail-visible 400（`linkCryptoActive` 能力位）。
+    // 协商的会话密钥，只有「对端就是那台桌面」时才成立（外部 URL 加信封只会让
+    // 对端解不开）。
+    //
+    // 关键口径（与 `plugin/host_domains/http.rs` 的 guest 信封一致）：对端应用策略
+    // `required` 是服务端安全下限，**不受本端「自愿加密」主开关约束**。移动端主
+    // 开关默认关（设置页已退役），旧判据把宿主桥 `useHttpApi.httpRequest` 的请求
+    // 一律发明文，桌面端 bedcode（固定 required）随即 400 `encryption-unsupported`
+    // ——真机回归：/api/file-tree、/api/git/branches、/api/sessions/*/resize。
     let local_target = crate::egress::is_loopback_host(&parsed.host);
-    // 应用请求按**该应用**在对端的策略裁决（off / 未登记 = 明文）；策略来自健康
-    // 探测缓存。宿主请求保持既有行为（shell 只打 auth/health 等宿主面）。
-    let app_policy_encrypts = match (&caller, parsed.port) {
-        (crate::commands::host_gate::CallerIdentity::Plugin(plugin_id), Some(port)) => matches!(
-            crate::state::link_crypto_app_policy(&parsed.host, port, plugin_id).as_deref(),
-            Some("preferred") | Some("required")
-        ),
-        _ => false,
+    let desktop_kind = kind == "desktop";
+    // 对端能力快照来自连接流程的 `/api/health` 探测；未探测 / 旧宿主缺字段 =
+    // 无快照，此时不盲加信封（对端没有过滤器时会得到 fail-visible 400）。
+    let server_crypto = match parsed.port {
+        Some(port) if desktop_kind => crate::state::link_crypto_server(&parsed.host, port),
+        _ => None,
     };
-    let desktop_target_request = kind == "desktop" && !local_target && app_policy_encrypts;
+    let server_active = server_crypto.as_ref().is_some_and(|s| s.active);
+    let any_required = server_crypto
+        .as_ref()
+        .is_some_and(|s| s.policies.values().any(|p| p.as_str() == "required"));
+    // 应用请求按**该应用**在对端的策略精确裁决（off / 未登记 = 明文）。
+    let app_policy = match (&caller, parsed.port) {
+        (crate::commands::host_gate::CallerIdentity::Plugin(plugin_id), Some(port)) if desktop_kind => {
+            crate::state::link_crypto_app_policy(&parsed.host, port, plugin_id)
+        }
+        _ => None,
+    };
+    let peer_required = peer_requires_encryption(app_policy.as_deref(), server_active, any_required, host_request);
+    let app_policy_encrypts = matches!(app_policy.as_deref(), Some("preferred") | Some("required"));
+    let desktop_target_request = desktop_kind && !local_target && app_policy_encrypts;
     // 环回目标是桌面端本地豁免面（过滤器不介入）：加信封 = 把密文直投插件
-    let encryption_active = !local_target && (host_request || desktop_target_request) && should_encrypt(&path);
+    let path_allows_crypto = crypto_path_allowed(&path);
+    // 本端开关只管自愿档；required 无视它。required 且无 pin 时下面的
+    // `LINK_ENCRYPTION_NO_PIN` 显性失败，绝不退回明文。
+    let voluntary = should_encrypt(&path);
+    let encryption_active =
+        !local_target && path_allows_crypto && (host_request || desktop_target_request) && (voluntary || peer_required);
     let mut request_keys: Option<wasmnest_link_crypto::HttpTrafficKeys> = None;
     let mut body_bytes: Option<Vec<u8>> = request.body.clone().map(String::into_bytes);
 
     if encryption_active {
         let ctx = crate::state::get_link_crypto_context();
         let kd_raw = ctx.kd_public_b64.as_deref().ok_or_else(|| {
-            AppError::Egress("LINK_ENCRYPTION_NO_PIN: encryption active but no pinned key".to_string())
+            // required 对端下这也是有名字的失败：不是「查不到就发明文」，而是
+            // 点名缺信任锚并给出路（重新配对）。
+            AppError::Egress(
+                "LINK_ENCRYPTION_NO_PIN: link encryption required but no pinned peer key; pair the device first"
+                    .to_string(),
+            )
         })?;
         let kd_pub: [u8; 32] = base64::engine::general_purpose::STANDARD
             .decode(kd_raw)
@@ -491,6 +550,19 @@ pub async fn execute_proxy(
         body
     };
 
+    // 对端显式拒绝（带稳定码，内网穿透 T07）：无论本端是否判成加密，都按码
+    // 显性失败——明文路径打到 `required` 端点时，应用要的是「升级对端 / 重新
+    // 配对」这条出路，不是一坨 HTTP 400 正文。典型时机：健康探测缓存尚未建立。
+    // 码只认共享 crate 登记值，对端自报的任意串不得变成本地错误分类。
+    if let Some(code) = crypto_refusal_code(&resp_headers) {
+        tracing::error!(
+            request_id = %request_id,
+            code,
+            "http proxy: link crypto request refused by peer"
+        );
+        return Err(AppError::Egress(code.to_string()));
+    }
+
     let body_text = if encryption_active {
         match request_keys {
             Some(keys) if has_crypto_resp_header => {
@@ -503,18 +575,6 @@ pub async fn execute_proxy(
                 })
             }
             _ => {
-                // 对端显式拒绝（带稳定码，内网穿透 T07）：这是「有名字的拒绝」，
-                // 不是需要容忍的降级——没有载荷可交付，两种 strict 档资都报同一个码，
-                // 应用按码给「升级对端」或「检查链路身份 / 重新配对」的出路。
-                // 码只认共享 crate 登记值，对端自报的任意串不得变成本地错误分类。
-                if let Some(code) = crypto_refusal_code(&resp_headers) {
-                    tracing::error!(
-                        request_id = %request_id,
-                        code,
-                        "http proxy: link crypto request refused by peer"
-                    );
-                    return Err(AppError::Egress(code.to_string()));
-                }
                 // 预期加密而响应明文（downgrade）：strict 断连报错；非 strict 明文续跑
                 let strict = crate::state::get_link_crypto_context().strict_mode;
                 if strict {
@@ -707,5 +767,48 @@ mod tests {
         assert_eq!(crypto_refusal_code(&headers), None, "非登记码不得被采信");
 
         assert_eq!(crypto_refusal_code(&HashMap::new()), None, "无头 = 无码");
+    }
+
+    /// 明文白名单：auth（pin 刷新）/ health（过滤器豁免）永不加密
+    #[test]
+    fn crypto_path_exemptions() {
+        assert!(!crypto_path_allowed("/api/auth/pairing"));
+        assert!(!crypto_path_allowed("/api/auth/reauth"));
+        assert!(!crypto_path_allowed("/api/health"));
+        assert!(!crypto_path_allowed("/health"));
+        assert!(crypto_path_allowed("/api/file-tree"));
+        assert!(crypto_path_allowed("/api/sessions/id/resize"));
+    }
+
+    /// 对端 `required` 是服务端安全下限，与「本端自愿加密主开关」无关。
+    /// 真机回归：bedcode 桌面固定 required，移动端主开关默认关，宿主桥
+    /// `useHttpApi.httpRequest` 的请求此前一律明文 → 400 encryption-unsupported。
+    #[test]
+    fn peer_required_is_independent_of_local_switch() {
+        // Plugin 身份按该应用精确策略：required 必须加封，与过滤器位/全表无关
+        for host_request in [false, true] {
+            assert!(
+                peer_requires_encryption(Some("required"), false, false, host_request),
+                "精确 required 策略必须加封"
+            );
+        }
+        // 宿主桥（无端点属主）：对端链上有过滤器且任一应用登记 required → 兜底
+        assert!(peer_requires_encryption(None, true, true, true), "真机回归场景必须加封");
+        assert!(
+            !peer_requires_encryption(None, false, true, true),
+            "过滤器不在链上不得盲加封"
+        );
+        assert!(
+            !peer_requires_encryption(None, true, false, true),
+            "无 required 策略按明文"
+        );
+        assert!(
+            !peer_requires_encryption(None, true, true, false),
+            "应用身份不得靠全表猜测"
+        );
+        // preferred / off 不是下限，仍按本端自愿语义；off 不因别的应用 required 被误加封
+        assert!(!peer_requires_encryption(Some("preferred"), true, true, false));
+        assert!(!peer_requires_encryption(Some("off"), true, true, true));
+        assert!(!peer_requires_encryption(None, false, false, false), "未探测 = 明文");
     }
 }

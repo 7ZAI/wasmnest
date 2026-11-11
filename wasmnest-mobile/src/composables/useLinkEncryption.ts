@@ -2,7 +2,9 @@
  * 链路加密配置与 pin 状态（issue 05/06）
  *
  * 配置域镜像桌面端 trafficEncryption 的移动端 HTTP 子集（spec §6）：
- * - enabled：主开关（默认 false，opt-in；无 pin 时开启会被 UI 引导先配对）
+ * - enabled：本端「自愿加密」主开关（默认 false，opt-in）。对端应用策略
+ *   `required` 时由宿主侧强制加封，**不受本开关约束**（否则只是把服务端
+ *   安全下限降级成本地提前失败；见 `src-tauri/src/plugin/host_domains/http.rs`）
  * - strictMode：预期加密而遭降级时断连报错（默认 false → 明文续跑 + 提示）
  * - encryptHttp：HTTP REST 载荷加密（默认开）
  *
@@ -31,7 +33,7 @@ export interface LinkEncryptionSettings {
   encryptHttp: boolean
 }
 
-/** 默认值：功能整体关（opt-in），HTTP 载荷加密默认开——用户只需打开主开关即生效 */
+/** 默认值：自愿加密关（opt-in），HTTP 载荷加密默认开；required 对端由宿主强制 */
 const DEFAULTS: LinkEncryptionSettings = {
   enabled: false,
   strictMode: false,
