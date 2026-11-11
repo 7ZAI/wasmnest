@@ -1,20 +1,30 @@
 #!/usr/bin/env node
 /**
- * Dev Runner — 并行启动插件前端 watch 构建与宿主 dev 命令
+ * Dev Runner —— 先更新插件产物，再启动宿主 dev 命令
  * `pnpm run tauri:dev` 一条命令即完成：
- *   - 插件产物预检（`./plugin-precheck.js`，裸 `tauri dev` 经 beforeDevCommand 同样执行）：
- *     WASM 缺失/陈旧补建 + 前端挂载包陈旧预重建，一律 `--out` **直写宿主 resources**
- *     （不经 --out 只写应用仓 .build/plugins，resources 不更新 = 宿主加载旧产物）；
- *     产物 plugin.json 摘要基线对齐 + 退役目录清理，全幂等
- *   - 宿主 dev 进程（tauri dev）——先启动
- *   - 各插件前端 watch：改源码自动重建 + 复制产物（配合宿主 PluginDevWatcher 触发前端热重载）
- *     ——等宿主首次构建完成后启动，见下方「首次构建门控」
+ *   - **插件产物全量重建（默认，2026-11-11 起）**：`./plugin-precheck.mjs` 先删旧产物目录
+ *     （`src-tauri/resources/plugins/desktop/*` + `target/debug/resources/...` 运行时副本），
+ *     再跑 `plugin-build.js --all`（与 `plugins:build` 同一条链，`--out` 直写 resources），
+ *     最后做产物清单对齐 + 退役目录清理。裸 `tauri dev` 经 beforeDevCommand 跑同一份预检。
+ *   - 宿主 dev 进程（tauri dev）——预检完成后启动
+ *   - 插件前端 watch（热加载）**默认关闭**；`--watch` 才开启（改源码自动重建 + 复制产物，
+ *     配合宿主 PluginDevWatcher 触发前端热重载）——等宿主首次构建完成后启动，见下方
+ *     「首次构建门控」
  * 任一子进程退出（Ctrl+C / 宿主崩溃）时统一回收全部。
  *
  * 用法：
- *   node scripts/dev-run.js              # 默认：七个插件（4 apps + 3 servers）watch + tauri dev
+ *   node scripts/dev-run.js              # 默认：删旧产物 + 全量重建全部插件 → tauri dev（不起插件 watch）
+ *   node scripts/dev-run.js --watch      # 额外开启插件前端 watch（热重载，见下方“热加载开关”）
+ *   node scripts/dev-run.js --reuse      # 跳过全量重建，只按 mtime 补陈旧产物
  *   node scripts/dev-run.js --host-cmd "<命令>"   # 覆盖宿主命令（按空格拆分）
- *   node scripts/dev-run.js --no-watch   # 不起插件前端 watch（默认开启，行为不变）
+ *
+ * 热加载开关（2026-11-11 用户裁决）：**默认关闭**。过去默认起 4~5 条插件前端 watch，
+ * 改任何 app 源码都会重建并写入 `src-tauri/resources/plugins/desktop/`，而 `tauri dev`
+ * 的 file watch 覆盖整个 `src-tauri/`——于是每次重建都重启一次宿主、清掉当日日志，
+ * 且只重建前端、不重建 wasm，容易出现「新前端 + 旧 WASM」错配。现在默认改为
+ * **一次性全量重建**（`plugin-precheck --fresh`：先删旧产物目录，再跑
+ * `plugin-build.js --all`）——启动后产物不再变动，宿主不被打断；需要在会话内热改前端
+ * 的才显式加 `--watch`（`--no-watch` 仍被接受，等同默认）。
  *
  * 首次构建门控（2026-10-13 加固）：宿主先启动，插件前端 watch 等宿主输出出现 cargo
  * `Finished `dev` profile`（兜底 `Running `target/debug/...``）后再启动。原因：watch 首次
@@ -26,11 +36,8 @@
  * 不落 fingerprint，报错会反复出现、重跑才恢复）。`--host-cmd` 定制命令不保证有 cargo 输出、
  * 无法可靠判据，跳过门控（保持旧的立即启动）。
  *
- * `--no-watch` 的存在理由：插件 watch 会把 vite 产物复制进
- * `src-tauri/resources/plugins/desktop/<id>/`，而 `tauri dev` 的 file watch 覆盖整个
- * `src-tauri/`——于是**每次插件前端重建都会重启一次宿主 app 并清空当日日志**。
- * 需要在稳定 app 上连续观察的场景（票 01 桌面功能等价人工基线：十项清单要一口气走完）
- * 用这条把该重启源关掉；产物已由启动前的一次性预检保证不缺（ensurePluginWasm 仍跑）。
+ * `--reuse` 的存在理由：mtime 判据只需几百毫秒，而全量重建（7 个插件 × vite + 增量 cargo）
+ * 是分钟级——只改宿主壳、想快速起窗口时用它；产物仍由判据保证不缺失。
  */
 
 import { spawn, execFileSync } from 'node:child_process'
@@ -41,7 +48,7 @@ import { fileURLToPath } from 'node:url'
 import { appDir, hasAppDir } from '../../scripts/app-paths.mjs'
 // 插件产物预检（wasm/前端陈旧补建 + 清单基线 + 退役清理）抽为共享模块：
 // 裸 `tauri dev` 经 tauri.conf.json beforeDevCommand 同样执行（幂等，双路径相遇秒过）
-import { PLUGIN_WATCH_CMDS, runPluginPrecheck } from './plugin-precheck.mjs'
+import { PLUGIN_WATCH_CMDS, PRECHECK_DONE_ENV, runPluginPrecheck } from './plugin-precheck.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -175,14 +182,19 @@ function openDevLog() {
 
 const devLog = openDevLog()
 
-function start(cmd, args, cwd, onOutput) {
+function start(cmd, args, cwd, onOutput, env) {
   // POSIX：detached 让子进程自成进程组长（pgid = 自己的 pid），shutdown 时可用
   // 负 pgid 一次杀整棵子树（已实测：孙进程自动继承该 pgid，无需各自 detached）。
   // Windows 必须排除：detached 会传 CREATE_NEW_CONSOLE 弹出额外控制台窗口，
   // Windows 侧走下方 taskkill /T /F 分支
   //
   // stdio 用管道而非 inherit：既保持控制台输出（手动转发），又同时落盘排障日志
-  const child = spawn(cmd, args, { cwd, stdio: ['inherit', 'pipe', 'pipe'], detached: !IS_WIN })
+  const child = spawn(cmd, args, {
+    cwd,
+    stdio: ['inherit', 'pipe', 'pipe'],
+    detached: !IS_WIN,
+    env: env ? { ...process.env, ...env } : process.env,
+  })
   for (const [stream, target] of [
     [child.stdout, process.stdout],
     [child.stderr, process.stderr],
@@ -310,17 +322,23 @@ const hostOverride = hostIdx !== -1 && process.argv[hostIdx + 1] ? process.argv[
 const [hostBin, ...hostArgs] = hostOverride ? hostOverride.split(' ') : DEFAULT_HOST_CMD[1]
 const hostCmd = hostOverride ? [hostBin, hostArgs] : DEFAULT_HOST_CMD
 
-// 插件前端 watch 开关（默认开启 = 原行为）；见文件头 `--no-watch` 那段的理由
-const noWatch = process.argv.includes('--no-watch')
+// 插件前端 watch 开关（默认关闭 = 不热加载；见文件头「热加载开关」）
+const watchPlugins = process.argv.includes('--watch')
+const noWatch = !watchPlugins
+// 全量重建开关（默认开启 = 每次启动删旧产物重建；--reuse 退回 mtime 补齐）
+const reusePlugins = process.argv.includes('--reuse')
+const freshPlugins = !reusePlugins
 
 // 0. 宿主 devUrl 端口预检（被残留 vite 占用时提前报错，避免“执行不动”假象）
 //    + HMR 端口预检（仅 TAURI_DEV_HOST 局域网模式，防“页面正常但热更失效”隐蔽坑）
 await precheckDevPort()
 await precheckHmrPort()
 
-// 1. 插件产物预检（WASM 补建 → 前端预重建 → 清单基线 → 退役清理，幂等）：
-//    与裸 `tauri dev`（beforeDevCommand）共用 plugin-precheck.mjs，双路径相遇时第二遍秒过
-runPluginPrecheck()
+// 1. 插件产物更新（默认 fresh：删旧产物目录 → plugin-build --all 全量重建；
+//    --reuse 时只按 mtime 补陈旧产物）：
+//    与裸 `tauri dev`（beforeDevCommand）共用 plugin-precheck.mjs；本进程做过的重建
+//    经 PRECHECK_DONE_ENV 告知宿主子进程，beforeDevCommand 不再重复全量构建。
+runPluginPrecheck({ fresh: freshPlugins })
 
 /**
  * 启动全部插件前端 watch。
@@ -351,15 +369,17 @@ function startPluginWatches() {
   }
 }
 
-// 2. 宿主 dev 进程（先启动；默认路径下由它的首次构建完成信号触发插件 watch）
-//    --no-watch：不起 watch，无需门控；--host-cmd：定制命令无 cargo 标记，跳过门控
+// 2. 宿主 dev 进程（先启动；--watch 时由它的首次构建完成信号触发插件 watch）
+//    --host-cmd：定制命令无 cargo 标记，跳过门控
+//    PRECHECK_DONE_ENV：告诉 beforeDevCommand 里的 plugin-precheck 本次已重建过
 const watchGate = (noWatch || hostOverride)
   ? null
   : createHostBuildGate(() => {
       console.log('[dev-run] 宿主首次构建完成，启动插件前端 watch')
       startPluginWatches()
     })
-const host = start(hostCmd[0], hostCmd[1], ROOT, watchGate?.onOutput)
+const hostEnv = { [PRECHECK_DONE_ENV]: '1' }
+const host = start(hostCmd[0], hostCmd[1], ROOT, watchGate?.onOutput, hostEnv)
 host.on('exit', (code) => {
   if (!shuttingDown) {
     console.log(`[dev-run] 宿主 dev 退出（code=${code}），回收插件 watch`)
@@ -367,10 +387,10 @@ host.on('exit', (code) => {
   }
 })
 
-// 3. 插件前端 watch
+// 3. 插件前端 watch（默认关闭；--watch 显式开启）
 if (noWatch) {
-  console.warn('[dev-run] 插件前端 watch 已关闭（--no-watch）：resources 产物不会随插件源码改动刷新。')
-  console.warn('[dev-run]   改了插件前端要自己重建：cd <应用仓>/apps/<slug>/desktop && node scripts/build.js')
+  console.log('[dev-run] 插件前端热加载（watch）已关闭（默认）：产物已在本轮启动前全量重建。')
+  console.log('[dev-run]   改 app 源码后重启 dev 即生效；需要会话内热重载加 --watch（且 --reuse 可跳过重建）。')
 } else if (hostOverride) {
   console.warn('[dev-run] --host-cmd 定制宿主：跳过首次构建门控，插件前端 watch 立即启动')
   startPluginWatches()

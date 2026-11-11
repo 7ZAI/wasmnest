@@ -73,14 +73,18 @@ function pruneGradleIntermediates(mobileRoot, active) {
  * 删除 Android 生成资源中源目录已不存在的插件目录
  *
  * @param {string} mobileRoot wasmnest-mobile 目录绝对路径
+ * @param {{active?: Set<string>}} [options] active 显式指定保留名单（默认取源目录现有子目录）；
+ *        传空集 = 把生成资源里的插件目录全部删掉（fresh 全量重建前的清场）
  * @returns {string[]} 被删除的插件目录名
  */
-export function pruneStaleAndroidPluginAssets(mobileRoot) {
+export function pruneStaleAndroidPluginAssets(mobileRoot, { active: activeOverride } = {}) {
   const sourceDir = join(mobileRoot, 'src-tauri/resources/plugins/mobile')
   const assetDir = join(mobileRoot, 'src-tauri/gen/android/app/src/main/assets/resources/plugins/mobile')
-  if (!existsSync(sourceDir) || !existsSync(assetDir)) return []
+  const active = activeOverride ?? new Set(pluginDirNames(sourceDir))
+  if (!existsSync(assetDir)) return []
+  // 源目录缺失且调用方没给名单：无据可依，不动（Android 工程尚未 init / 插件尚未构建）
+  if (!activeOverride && !existsSync(sourceDir)) return []
 
-  const active = new Set(pluginDirNames(sourceDir))
   const removed = new Set()
 
   for (const name of pluginDirNames(assetDir)) {

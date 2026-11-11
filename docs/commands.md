@@ -38,8 +38,8 @@
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm install` | 本端依赖（独立 workspace，`packages/*`） |
-| `pnpm run tauri:dev` | 宿主 dev（`scripts/dev-run.js`：端口预检 → 插件产物预检 → tauri dev → 前端 watch；**bedcode 前端不参与 watch**，改了它单独重建 §5.2）。宿主启动的 file watch 覆盖整个 `src-tauri/`——**别在宿主冷构建期间手工往 `src-tauri/` 拷产物**，会触发重启风暴（机制见 `scripts/dev-run.js` 头注释） |
-| 裸 `tauri dev` | 等价地保证插件产物最新：`tauri.conf.json` 的 `beforeDevCommand` 串入 `node scripts/plugin-precheck.mjs`（与 dev-run 共用同一预检模块，幂等），宿主 cargo build 前完成 6 个插件（4 apps + 2 servers）的 wasm / 前端陈旧补建与直写 resources；**但不带前端 watch**——改插件前端请用 `tauri:dev` 或手动 §5.2 |
+| `pnpm run tauri:dev` | 宿主 dev（`scripts/dev-run.js`）：端口预检 → **删旧产物 + 全量重建全部插件**（`plugin-precheck --fresh` → `plugins:build` 同一条链，2026-11-11 起为默认）→ `tauri dev`。**插件前端 watch（热加载）默认关闭**——产物启动后不再变动，宿主不被打断；需要会话内热改前端加 `--watch`，只想快速起窗口加 `--reuse`（退回 mtime 陈旧补齐）。宿主启动的 file watch 覆盖整个 `src-tauri/`——**别在宿主冷构建期间手工往 `src-tauri/` 拷产物**，会触发重启风暴（机制见 `scripts/dev-run.js` 头注释） |
+| 裸 `tauri dev` | 等价地保证插件产物最新：`tauri.conf.json` 的 `beforeDevCommand` 串入 `node scripts/plugin-precheck.mjs`（与 dev-run 共用同一预检模块），**默认也是删旧产物 + 全量重建**（dev-run 路径下该预检经 env 得知已重建，只做陈旧补齐，不重复构建）；`node scripts/plugin-precheck.mjs --reuse` 可退回陈旧补齐 |
 | `pnpm run tauri:build` | 生产构建（`scripts/tauri-build.js` 解析 updater 签名；无密钥时自动关闭更新包产物；成功后把安装包重命名为 `<name>-<version>-release-<arch>[-setup].exe/.deb` —— **本地与 CI 同名**，命名规则在脚本头注释固定） |
 | `pnpm run host:pack` | 产出「可直接运行的宿主产物**目录**」（`scripts/package-host.mjs`；产物契约 = 应用仓 `.scratch/2026-10-21-host-runtime-distribution/CONTRACT.md` §1）。默认写 `dist-host/host-desktop/`（**不在 `dist/` 下**，避免被 `vite build` 清空）；`host-version.json` 的版本事实来自 `release-manifest.json` 的 `hostRuntime`。**不再产出 tar.gz / sha256**（2026-10-28 裁决：平台仓不发布任何压缩包，分发走安装包）。`--skip-build` 复用 `src-tauri/target/debug/<bin>` 重铺产物；`--out` 覆盖落点；`--via-cargo` 绕开 tauri CLI 版本一致性检查。应用侧以 env `WASMNEST_PLUGINS_DIR` 指定 plugins 目录 |
 | `pnpm run plugins:build` | 全量应用构建（`scripts/plugin-build.js --all`，注册表 = 5 个应用名单单一真源，见 §5.1） |
@@ -98,7 +98,8 @@ crates.io 精确版本；同场开发由平台仓根 `.cargo/config.toml` 的
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm install` | 本端依赖（独立工程 workspace） |
-| `pnpm run tauri:android:dev` | Android dev（`scripts/dev-run.js`：adb 定位 / 插件 watch → tauri android dev；**插件改动进应用后需手动重新激活生效**） |
+| `pnpm run tauri:android:dev` | Android dev（`scripts/dev-run.js`）：adb 定位 / **删旧产物 + 全量重建移动插件**（`plugin-build --fresh`，默认）→ `tauri android dev`；**插件前端 watch（热加载）默认关闭**，需要会话内热重建加 `--watch`，跳过重建加 `--reuse`。**插件改动进应用后需手动重新激活生效** |
+| 裸 `tauri dev` / `tauri android dev` | `beforeDevCommand` 串入 `node scripts/plugin-precheck.mjs`：默认删旧产物 + 全量重建移动插件（dev-run 路径下经 env 跳过重复构建）；`WASMNEST_PLUGIN_PRECHECK_REUSE=1` 可跳过 |
 | `pnpm run tauri:android:build` | Android 构建（`--target aarch64`；另有 `:build:emulator`（x86_64 debug）/ `:build:fast` / `:build:all`） |
 | `pnpm run plugins:build` | 扫描 `../wasmnest-apps/apps/*/mobile` 全量构建（无宿主侧注册表） |
 | `pnpm run test:run` | vitest（宿主 `src/__tests__`；不含 SDK） |
@@ -174,7 +175,7 @@ crates.io 精确版本；同场开发由平台仓根 `.cargo/config.toml` 的
 | `pnpm run plugins:build:frontend` / `plugins:build:rust` | 桌面便捷转发（ai-chatbox 单 app，走 `app-script.mjs`） |
 | `node ../scripts/app-script.mjs <slug> <desktop\|mobile> <script>` | 转发应用仓单 app 脚本（见 §5.3） |
 
-**bedcode 前端 dev 口径**：不参与 `tauri:dev` 的 watch（整包构建最重且每次写入都触发宿主重启）；改它的 UI 请单独重建：`pnpm run plugins:build` 或应用目录 `node scripts/build.js --frontend-only`。
+**bedcode 前端 dev 口径**：默认 `tauri:dev` 不做会话内热加载（全量重建一次后产物固定，含 bedcode）；需要会话内热改前端时加 `--watch`，但 bedcode 仍不在 watch 名单里（整包构建最重且每次写入都触发宿主重启）——改它的 UI 请单独重建：`pnpm run plugins:build` 或应用目录 `node scripts/build.js --frontend-only`。
 
 ### 5.3 app-script 转发（`scripts/app-script.mjs`）
 
@@ -183,9 +184,9 @@ crates.io 精确版本；同场开发由平台仓根 `.cargo/config.toml` 的
 ### 5.4 产物落点与排查
 
 - 产物目录：`<end>/src-tauri/resources/plugins/<end>/<id>/`（`resources/plugins/**` **不入库**，只由构建 / watch 脚本写入，勿手工拷）。
-- **dev 产物保新闭环**（`scripts/plugin-precheck.mjs`，dev-run 与裸 `tauri dev` 的 beforeDevCommand 共用）：补建/重建一律 `--out` **直写 resources**——apps 仓 `build.js` 默认只写仓内 `.build/plugins`（G2 设计），不经 `--out` 时 resources 不更新（watch 只复制前端、不碰 wasm，宿主加载的仍是旧产物）。
-- 桌面 dev 运行时的资源副本在 `target/debug/resources/plugins/desktop/`——源目录删除后副本**不会**自动同步（幽灵目录只在那里活着）；排查「改了没生效」先查这条，再看 `scripts/{dev-run,plugin-build,plugin-precheck}.js`、`packages/plugin-sdk-desktop/bin/plugin-watch.js` 与根 `scripts/app-paths.mjs`。
-- 每次 `tauri:dev` 的插件前端改动闭环：改 app 源码 → vite rebuild → 复制进 resources → 宿主 `PluginDevWatcher` emit `plugin:dev-reload` → 前端 reloadPlugin 重载。
+- **dev 产物保新闭环（默认 fresh，2026-11-11）**：每次 dev 启动先删旧产物再全量重建——桌面 `scripts/plugin-precheck.mjs`（`cleanPluginArtifacts` → `plugin-build.js --all` → 陈旧补齐 → 退役清理）、移动 `scripts/plugin-precheck.mjs`（→ `plugin-build.js --fresh`）。重建一律 `--out` **直写 resources**：apps 仓 `build.js` 默认只写仓内 `.build/plugins`（G2 设计），不经 `--out` 时 resources 不更新。`--reuse` / env `WASMNEST_PLUGIN_PRECHECK_REUSE=1` 退回旧的 mtime 陈旧补齐（快，但要求产物本来就新）。
+- 桌面 dev 运行时的资源副本在 `target/debug/resources/plugins/desktop/`——源目录删除后副本**不会**自动同步（幽灵目录只在那里活着）；fresh 清场会连它一起删（`tauri dev` 启动时重新复制）。排查「改了没生效」先查这条，再看 `scripts/{dev-run,plugin-build,plugin-precheck}.js`、`packages/plugin-sdk-desktop/bin/plugin-watch.js` 与根 `scripts/app-paths.mjs`。
+- 会话内热加载（显式 `--watch`）闭环：改 app 源码 → vite rebuild → 复制进 resources → 宿主 `PluginDevWatcher` emit `plugin:dev-reload` → 前端 reloadPlugin 重载。默认关闭的理由见 `scripts/dev-run.js` 头注释「热加载开关」。
 
 ## 6. 构建资源与 target 治理
 

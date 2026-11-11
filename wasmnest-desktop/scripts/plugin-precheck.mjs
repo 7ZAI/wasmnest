@@ -2,15 +2,21 @@
 /**
  * 插件产物预检（wasmnest-app 与 servers 的最新构建保证）
  *
- * 单一入口保证「宿主起来前，6 个随包插件（4 个产品应用 + 2 个系统服务）的产物
+ * 单一入口保证「宿主起来前，全部随包插件（apps 产品应用 + servers 系统服务）的产物
  * 一定是最新代码构建的」——无论走哪条 dev 路径：
  *   - `pnpm run tauri:dev`（dev-run.js）：spawn 宿主前内联调用本模块；
  *   - 裸 `tauri dev`（`pnpm run tauri -- dev` / `cargo tauri dev`）：tauri.conf.json
  *     `beforeDevCommand` 串入本脚本，宿主 cargo build 前先跑。
- * 两次路径相遇时（dev-run.js 内联 + beforeDevCommand）幂等：第一遍补建完成、
- * 第二遍 mtime 判据全 OK 秒过。
  *
- * 预检四步（顺序与 dev-run.js 原内联实现一致）：
+ * **默认 fresh（2026-11-11 用户裁决）**：每次 dev 启动都「先删旧产物、再全量重建」
+ * （见 `runPluginPrecheck({ fresh })`），不依赖 mtime 增量判据——dev 期看到的永远是
+ * 当前 apps 源码构建出来的产物。`--reuse` / env `WASMNEST_PLUGIN_PRECHECK_REUSE=1`
+ * 退回旧的陈旧补齐路径（快）。
+ *
+ * 两条路径相遇时（dev-run.js 内联 + beforeDevCommand）不重复全量重建：dev-run 给宿主
+ * 子进程注入 `WASMNEST_PLUGIN_PRECHECK_DONE=1`，beforeDevCommand 内那只做陈旧补齐。
+ *
+ * fresh 之后仍是预检四步（顺序与 dev-run.js 原内联实现一致）：
  *   1. ensurePluginWasm    各插件 WASM 缺失 / Rust 源码（端 rust/ + 应用级 ../rust/
  *                          + SDK rust/）比产物新 → 补建（`--rust-only` 或全量）
  *   2. ensurePluginFrontends 前端挂载包缺失 / 源码比产物新 → 宿主启动前预重建
@@ -296,6 +302,67 @@ function defaultExit(code) {
   process.exit(code)
 }
 
+// ==================== fresh：删旧 → 全量重建 ====================
+
+/**
+ * 删除旧插件产物目录（fresh 第一步）。
+ *
+ * 删的是**产物根下所有插件子目录**（不只注册表内）：注册表外的幽灵目录同样属于
+ * 「旧产物」，反正紧接着只重建注册表内的，幽灵不会复活。两个根都清：
+ *   - 源资源目录 `src-tauri/resources/plugins/desktop`；
+ *   - tauri dev 运行时副本 `src-tauri/target/debug/resources/plugins/desktop`
+ *     （`tauri dev` 只做增量复制，源目录删掉后副本里的旧文件仍会活着）。
+ * 删不掉（宿主还在跑、文件被占用）就 fail-fast——带着旧产物继续构建等于自欺。
+ */
+export function cleanPluginArtifacts(deps = {}) {
+  const {
+    resourcesBase = RESOURCES_BASE,
+    runtimeResourcesBase = RUNTIME_RESOURCES_BASE,
+    removeDir = (target) => rmSync(target, { recursive: true, force: true }),
+    exit = defaultExit,
+  } = deps
+  for (const base of [resourcesBase, runtimeResourcesBase]) {
+    if (!existsSync(base)) continue
+    for (const entry of readdirSync(base, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+      const target = join(base, entry.name)
+      try {
+        removeDir(target)
+        console.log(`[plugin-precheck] 已删除旧插件产物：${target}`)
+      } catch (e) {
+        console.error(`[plugin-precheck] ✗ 旧插件产物删除失败：${target}（${e.message}）`)
+        console.error('[plugin-precheck]   通常是上次 dev 会话的宿主仍在运行，请先关闭它再重试')
+        exit(1)
+        return
+      }
+    }
+  }
+}
+
+/**
+ * 全量重建注册表内全部插件产物（fresh 第二步），走 `scripts/plugin-build.js --all`。
+ *
+ * 复用生产构建链而不是逐个调 `scripts/build.js`：plugin-build.js 是插件名单单一真源，
+ * 构建前做 plugin.json 自动填充 + 校验，构建后清理退役目录——fresh 的「构建新的」
+ * 与 `pnpm run plugins:build`（CI / release）走完全同一条链，不产生第二套口径。
+ * 失败 fail-fast：宿主起来只会报加载失败。
+ */
+export function rebuildAllPluginArtifacts(deps = {}) {
+  const {
+    plugins = PLUGIN_WATCH_CMDS,
+    desktopRoot = ROOT,
+    runBuild = defaultRunBuild,
+    exit = defaultExit,
+  } = deps
+  console.log(`[plugin-precheck] 全量重建 ${plugins.length} 个插件（删旧 → 构建新，走 plugins:build 同一条链）`)
+  const res = runBuild(['scripts/plugin-build.js', '--all'], desktopRoot)
+  if (res.status !== 0) {
+    console.error('[plugin-precheck] ✗ 插件全量重建失败。请手动执行后重试：')
+    console.error(`[plugin-precheck]   cd ${desktopRoot} && pnpm run plugins:build`)
+    exit(res.status ?? 1)
+  }
+}
+
 /**
  * 各插件 WASM 产物缺失或过期时串行补建一次。
  *
@@ -448,7 +515,11 @@ export function ensurePluginManifests(deps = {}) {
  * 临时目录上断言四步**顺序**与各自行为，见 pluginPrecheck.test.ts）。
  * 返回每个插件最终状态（供调试/日志）；预检失败（补建 exit≠0）直接 process.exit。
  */
-export function runPluginPrecheck(deps = {}) {
+export function runPluginPrecheck({ fresh = false, ...deps } = {}) {
+  if (fresh) {
+    cleanPluginArtifacts(deps)
+    rebuildAllPluginArtifacts(deps)
+  }
   ensurePluginWasm(deps)
   ensurePluginFrontends(deps)
   ensurePluginManifests(deps)
@@ -456,8 +527,29 @@ export function runPluginPrecheck(deps = {}) {
   return PLUGIN_WATCH_CMDS.map(({ group, slug, id }) => ({ group, slug, id }))
 }
 
-// 直接执行（tauri.conf.json beforeDevCommand：`node scripts/plugin-precheck.mjs`）
+// ==================== CLI 直执行（tauri.conf.json beforeDevCommand） ====================
+
+/** 跨进程「本次 dev 已做过 fresh 重建」标记（dev-run.js 写进宿主子进程 env） */
+export const PRECHECK_DONE_ENV = 'WASMNEST_PLUGIN_PRECHECK_DONE'
+/** 显式退回陈旧补齐（不做全量重建）的 env 开关 */
+export const PRECHECK_REUSE_ENV = 'WASMNEST_PLUGIN_PRECHECK_REUSE'
+
 if (process.argv[1] && resolve(process.argv[1]) === __filename) {
-  runPluginPrecheck()
-  console.log('[plugin-precheck] 插件产物预检完成（全部最新，无需补建）')
+  // 默认 fresh：每次 dev 启动都删旧产物 + 全量重建（2026-11-11 用户裁决）。
+  // 两种情况退回陈旧补齐：--reuse / PRECHECK_REUSE_ENV（快路径），
+  // 或 dev-run 已经重建过（PRECHECK_DONE_ENV，避免一次 tauri:dev 连做两遍全量构建）。
+  const reuse = process.argv.includes('--reuse') || process.env[PRECHECK_REUSE_ENV] === '1'
+  const done = process.env[PRECHECK_DONE_ENV] === '1'
+  const fresh = !reuse && !done
+  if (done) {
+    console.log('[plugin-precheck] dev-run 已完成插件全量重建，这里只做陈旧补齐')
+  } else if (reuse) {
+    console.log('[plugin-precheck] --reuse / WASMNEST_PLUGIN_PRECHECK_REUSE=1：跳过全量重建，只补陈旧产物')
+  }
+  runPluginPrecheck({ fresh })
+  console.log(
+    fresh
+      ? '[plugin-precheck] 插件产物已删旧重建（全部为当前源码构建产物）'
+      : '[plugin-precheck] 插件产物预检完成（陈旧补齐，未全量重建）',
+  )
 }

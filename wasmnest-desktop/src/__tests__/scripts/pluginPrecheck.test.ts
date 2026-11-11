@@ -14,11 +14,13 @@ import { join } from 'node:path'
 // 同一口径）；模块导入无副作用（CLI 直执行入口按 process.argv[1] 判定，测试里不触发）。
 // 四步与陈旧判定均为可注入依赖的导出：本文件注入记录器 / 临时目录，绝不触发真实构建。
 import {
+  cleanPluginArtifacts,
   ensurePluginFrontends,
   ensurePluginManifests,
   ensurePluginWasm,
   frontendStaleReason,
   pruneStalePluginDirs,
+  rebuildAllPluginArtifacts,
   runPluginPrecheck,
   wasmStaleReason,
 } from '../../../scripts/plugin-precheck.mjs'
@@ -435,6 +437,103 @@ describe('runPluginPrecheck：四步顺序（WASM 补建 → 前端预重建 →
 
     expect(events).toEqual(['wasm-build', 'frontend-build', 'manifest-sync'])
     expect(existsSync(ghostDir), '预检结束后幽灵目录必须被清理').toBe(false)
+    expect(exiter.codes).toEqual([])
+  })
+})
+
+describe('fresh 默认通道：删旧产物 → 全量重建（2026-11-11 用户裁决）', () => {
+  it('cleanPluginArtifacts：两个产物根下所有插件目录被删、非目录文件保留、根缺失静默跳过', () => {
+    for (const base of [resourcesBase, runtimeResourcesBase]) {
+      mkdirSync(join(base, 'com.example.demo'), { recursive: true })
+      writeFileSync(join(base, 'com.example.demo', 'index.js'), 'old')
+      mkdirSync(join(base, 'com.bedcode.legacy'), { recursive: true }) // 幽灵目录也要清
+      writeFileSync(join(base, '.gitkeep'), '')
+    }
+    cleanPluginArtifacts({ resourcesBase, runtimeResourcesBase })
+    for (const base of [resourcesBase, runtimeResourcesBase]) {
+      expect(existsSync(join(base, 'com.example.demo')), `${base} 旧产物未被删除`).toBe(false)
+      expect(existsSync(join(base, 'com.bedcode.legacy')), `${base} 幽灵旧产物未被删除`).toBe(false)
+      expect(existsSync(join(base, '.gitkeep')), `${base} 非插件文件被误删`).toBe(true)
+    }
+
+    rmSync(resourcesBase, { recursive: true, force: true })
+    rmSync(runtimeResourcesBase, { recursive: true, force: true })
+    expect(() => cleanPluginArtifacts({ resourcesBase, runtimeResourcesBase })).not.toThrow()
+  })
+
+  it('cleanPluginArtifacts：删不掉（宿主仍在跑）→ fail-fast，不带着旧产物继续', () => {
+    mkdirSync(join(resourcesBase, 'com.example.demo'), { recursive: true })
+    const exiter = recorderExit()
+    cleanPluginArtifacts({
+      resourcesBase,
+      runtimeResourcesBase,
+      removeDir: () => {
+        throw new Error('EBUSY: resource busy or locked')
+      },
+      exit: exiter.exit,
+    })
+    expect(exiter.codes).toEqual([1])
+  })
+
+  it('rebuildAllPluginArtifacts：走 plugin-build --all（与 plugins:build 同一条链），失败 fail-fast', () => {
+    const build = recorderBuild()
+    const exiter = recorderExit()
+    rebuildAllPluginArtifacts({
+      plugins: [pluginEntry()],
+      desktopRoot: dir,
+      runBuild: build.runBuild,
+      exit: exiter.exit,
+    })
+    expect(build.calls).toEqual([{ script: ['scripts/plugin-build.js', '--all'], cwd: dir }])
+    expect(exiter.codes).toEqual([])
+
+    const failing = recorderBuild(1)
+    const failingExit = recorderExit()
+    rebuildAllPluginArtifacts({
+      plugins: [pluginEntry()],
+      desktopRoot: dir,
+      runBuild: failing.runBuild,
+      exit: failingExit.exit,
+    })
+    expect(failingExit.codes).toEqual([1])
+  })
+
+  it('runPluginPrecheck({ fresh: true })：顺序 = 删旧 → 全量重建 → WASM → 前端 → 清单 → 退役清理', () => {
+    mkdirSync(join(resourcesBase, 'com.example.demo'), { recursive: true })
+    writeFileSync(join(resourcesBase, 'com.example.demo', 'index.js'), 'old')
+
+    const events: string[] = []
+    const exiter = recorderExit()
+    runPluginPrecheck({
+      fresh: true,
+      plugins: [pluginEntry()],
+      resourcesBase,
+      runtimeResourcesBase,
+      appDirOf: () => pluginRoot,
+      hasApp: () => true,
+      sdkRoot,
+      desktopRoot: dir,
+      runBuild: (script: string[]) => {
+        if (script.includes('--all')) {
+          events.push('rebuild-all')
+          // 全量重建在这时把产物铺回来了（旧 index.js 不复存在，新构建的写入）
+          mkdirSync(join(resourcesBase, 'com.example.demo'), { recursive: true })
+          return { status: 0 }
+        }
+        events.push(script.includes('--frontend-only') ? 'frontend-build' : 'wasm-build')
+        return { status: 0 }
+      },
+      sync: () => {
+        events.push('manifest-sync')
+        return { written: false, reason: 'up-to-date' as const }
+      },
+      exit: exiter.exit,
+    })
+
+    expect(events[0]).toBe('rebuild-all')
+    expect(events).toContain('wasm-build')
+    expect(events).toContain('frontend-build')
+    expect(events.indexOf('manifest-sync')).toBeGreaterThan(events.indexOf('rebuild-all'))
     expect(exiter.codes).toEqual([])
   })
 })
