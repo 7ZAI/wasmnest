@@ -83,9 +83,18 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
 
         var extracted = 0
         for (id in pluginIds) {
-            if (File(uninstalledDir, id).exists()) {
-                Log.i(TAG, "Skipping uninstalled bundled plugin: $id")
-                continue
+            // 已卸载标记只对 release 生效（用户卸载的应用不该随宿主更新自己回来）。
+            // debug（tauri:android:dev）以构建产物为准：assets 里有完整产物就解压并加载，
+            // 否则卸载过一次后无论怎么重建产物都看不到该应用（本地 dev 的死状态）。
+            val uninstalledMarker = File(uninstalledDir, id)
+            if (uninstalledMarker.exists()) {
+                if (!BuildConfig.DEBUG) {
+                    Log.i(TAG, "Skipping uninstalled bundled plugin: $id")
+                    continue
+                }
+                if (uninstalledMarker.delete()) {
+                    Log.i(TAG, "Ignored stale uninstall marker in debug build: $id")
+                }
             }
             val assetDir = "$pluginsRoot/$id"
             val destDir = File(pluginsBaseDir, id)
@@ -245,6 +254,7 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
         /**
          * 已卸载内置应用标记目录（与 Rust `PLUGIN_UNINSTALLED_DIR` 逐字一致）。
          * 目录下以插件 id 为名的空文件存在时，解压器跳过该 id，直到 zip 重装清除。
+         * 仅 release 生效：debug 以构建产物为准（见 extractAll 内注释）。
          */
         private const val UNINSTALLED_DIR = ".uninstalled"
 

@@ -64,11 +64,22 @@ impl PluginLoader {
             if id.starts_with('.') || !entry.path().is_dir() {
                 continue;
             }
-            // 用户卸载过的内置应用：由 Rust 写入覆盖标记，dev 重启不得重新复制
-            // （否则「卸载」在 dev 环境永远不生效）。
-            if plugins_data_dir.join(PLUGIN_UNINSTALLED_DIR).join(&id).exists() {
-                tracing::info!("[PluginLoader] Skipping uninstalled builtin plugin: {}", id);
-                continue;
+            // 已卸载标记只对 release 生效：debug（本函数仅在 debug 构建运行）以构建
+            // 产物为准——resources/plugins/mobile 里有完整产物就重新复制并加载，
+            // 否则卸载一次后 dev 重启永远看不到该应用。残留标记顺手清掉。
+            let uninstalled_marker = plugins_data_dir.join(PLUGIN_UNINSTALLED_DIR).join(&id);
+            if uninstalled_marker.exists() {
+                match fs::remove_file(&uninstalled_marker) {
+                    Ok(()) => tracing::info!(
+                        "[PluginLoader] Ignored stale uninstall marker in dev: {}",
+                        id
+                    ),
+                    Err(e) => tracing::warn!(
+                        "[PluginLoader] Failed to clear stale uninstall marker for {}: {}",
+                        id,
+                        e
+                    ),
+                }
             }
             let dest = plugins_data_dir.join(&id);
             let marker = dest.join(PLUGIN_SOURCE_MARKER);

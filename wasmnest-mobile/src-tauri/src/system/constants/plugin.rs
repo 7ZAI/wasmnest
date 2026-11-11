@@ -47,6 +47,8 @@ pub const PLUGIN_DATA_DIR: &str = "plugins";
 /// 只服务随包内置（APK assets）应用：删除插件目录后，下一次启动的 Kotlin
 /// `PluginAssetExtractor` / dev 复制会跳过该 id，除非用户用 zip 重装（重装命令
 /// 清标记）。与 Kotlin `PluginAssetExtractor.UNINSTALLED_DIR` 逐字一致。
+/// **仅 release 生效**：debug 构建（tauri dev / tauri android dev）以构建产物为准，
+/// 产物在就解压 / 复制并加载，残留标记同时清除——dev 里的卸载不持久。
 pub const PLUGIN_UNINSTALLED_DIR: &str = ".uninstalled";
 
 /// 远程下载临时目录
