@@ -7,13 +7,13 @@
 //! 启用 `wasm` feature 后，额外提供 `WasmPlugin` trait 和 `wasm_entry!` 宏，
 //! 用于编译为 WASM 模块的插件。
 
-pub mod form;
 pub mod args;
 pub mod command;
 pub mod constants;
 pub mod context;
 pub mod error;
 pub mod events;
+pub mod form;
 pub mod host;
 pub mod http_response;
 pub mod permission;
@@ -49,15 +49,15 @@ pub mod api_call;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 #[cfg(feature = "wasm")]
+pub mod wasm_auth_policy;
+#[cfg(feature = "wasm")]
 pub mod wasm_binary;
 #[cfg(feature = "wasm")]
 pub mod wasm_host;
 #[cfg(feature = "wasm")]
-pub mod wasm_ws;
-#[cfg(feature = "wasm")]
-pub mod wasm_auth_policy;
-#[cfg(feature = "wasm")]
 pub mod wasm_task;
+#[cfg(feature = "wasm")]
+pub mod wasm_ws;
 // 组件导出宏（wasm_entry! 内 export!）的绑定类型路径：generate! 的
 // default_bindings_module 指向 `$crate`，绑定模块树在 wasm.rs 下，
 // 此处 re-export 到 crate 根使 `$crate::wasmnest::plugin::<iface>::Guest` 可解析

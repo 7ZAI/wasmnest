@@ -137,6 +137,20 @@
           "sha256": "d6443d0c73c87b2af67cf690bc7c458151cc3326f6436ea7879a14a1aa951892"
         }
       }
+    },
+    "com.wasmnest.assistant": {
+      "path": "servers/assistant",
+      "version": "0.0.1",
+      "ends": {
+        "desktop": {
+          "artifact": "wasmnest_plugin_assistant.wasm",
+          "package": "assistant-desktop-v0.0.1.zip",
+          "sha256": "32ec07bec55c961b5e5e39f144f054cb02a1c4630afb5fd1fa10e2e8e9d86dbc"
+        },
+        "mobile": {
+          "artifact": "wasmnest_plugin_assistant.wasm"
+        }
+      }
     }
   }
 }

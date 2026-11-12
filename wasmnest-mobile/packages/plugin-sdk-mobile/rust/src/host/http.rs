@@ -11,5 +11,8 @@ use super::HostError;
 /// 返回完整响应 `{ status, body, headers }`。
 pub trait HostHttp {
     /// 发起 HTTP 请求
-    fn http_fetch(&self, request: &serde_json::Value) -> Result<Option<serde_json::Value>, HostError>;
+    fn http_fetch(
+        &self,
+        request: &serde_json::Value,
+    ) -> Result<Option<serde_json::Value>, HostError>;
 }

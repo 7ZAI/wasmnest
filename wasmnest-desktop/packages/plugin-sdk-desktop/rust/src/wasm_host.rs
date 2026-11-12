@@ -23,33 +23,32 @@ use crate::host::{
 };
 use crate::wasm::wasmnest::app::host_app;
 use crate::wasm::wasmnest::auth_center::host_auth_center;
-use crate::wasm::wasmnest::plugin::host_bus;
 use crate::wasm::wasmnest::clipboard::host_clipboard;
-use crate::wasm::wasmnest::plugin::host_config;
 use crate::wasm::wasmnest::connection_registry::host_connection_registry;
 use crate::wasm::wasmnest::crypto::host_crypto;
-use crate::wasm::wasmnest::plugin::host_events;
-use crate::wasm::wasmnest::plugin::host_fs;
 use crate::wasm::wasmnest::fs_desktop::host_fs_desktop;
 use crate::wasm::wasmnest::http::host_http;
 use crate::wasm::wasmnest::http_endpoint::host_http_endpoint;
-use crate::wasm::wasmnest::plugin::host_log;
-use crate::wasm::wasmnest::plugin::host_metrics;
 use crate::wasm::wasmnest::mdns::host_mdns;
 use crate::wasm::wasmnest::notify::host_notify;
 use crate::wasm::wasmnest::peer::host_peer;
-use crate::wasm::wasmnest::plugin::host_platform;
 use crate::wasm::wasmnest::platform_desktop::host_platform_desktop;
+use crate::wasm::wasmnest::plugin::host_bus;
+use crate::wasm::wasmnest::plugin::host_config;
+use crate::wasm::wasmnest::plugin::host_events;
+use crate::wasm::wasmnest::plugin::host_fs;
+use crate::wasm::wasmnest::plugin::host_log;
+use crate::wasm::wasmnest::plugin::host_metrics;
+use crate::wasm::wasmnest::plugin::host_platform;
 use crate::wasm::wasmnest::plugin::host_plugin_database;
+use crate::wasm::wasmnest::plugin::host_storage;
 use crate::wasm::wasmnest::process::host_process;
 use crate::wasm::wasmnest::pty::host_pty;
-use crate::wasm::wasmnest::plugin::host_storage;
 use crate::wasm::wasmnest::task::host_task;
 use crate::wasm::wasmnest::timer::host_timer;
 use crate::wasm::wasmnest::tunnel::host_tunnel;
 use crate::wasm::wasmnest::ws::host_websocket;
 use crate::wasm::wasmnest::ws_server::host_websocket_server;
-
 
 /// 宿主 API 绑定（WASM 插件侧）
 ///
@@ -143,11 +142,13 @@ impl HostAuth for WasmHost {
     // 不解释；auth-method-invoke 零解析窄转发（宿主只校验 method 在注册表内）。
 
     fn auth_center_register(&self, methods: Vec<String>) -> Result<String, HostError> {
-        host_auth_center::auth_center_register(&methods).map_err(|e| host_err("auth_center_register", e))
+        host_auth_center::auth_center_register(&methods)
+            .map_err(|e| host_err("auth_center_register", e))
     }
 
     fn auth_center_unregister(&self) -> Result<(), HostError> {
-        host_auth_center::auth_center_unregister().map_err(|e| host_err("auth_center_unregister", e))
+        host_auth_center::auth_center_unregister()
+            .map_err(|e| host_err("auth_center_unregister", e))
     }
 
     fn auth_methods_list(&self) -> Result<Vec<String>, HostError> {
@@ -155,7 +156,8 @@ impl HostAuth for WasmHost {
     }
 
     fn auth_method_invoke(&self, method: &str, params: &str) -> Result<String, HostError> {
-        host_auth_center::auth_method_invoke(method, params).map_err(|e| host_err("auth_method_invoke", e))
+        host_auth_center::auth_method_invoke(method, params)
+            .map_err(|e| host_err("auth_method_invoke", e))
     }
 }
 
@@ -252,8 +254,8 @@ impl HostConnection for WasmHost {
     /// 走 `host-connection`（票 04）：这份宿主 server 的连接事实
     /// 不随会话原语域退役；权限判据是 `connection:read`。
     fn connections_list(&self) -> Result<serde_json::Value, HostError> {
-        let raw =
-            host_connection_registry::connections_list().map_err(|e| host_err("connections_list", e))?;
+        let raw = host_connection_registry::connections_list()
+            .map_err(|e| host_err("connections_list", e))?;
         parse_json("connections_list", raw)
     }
 }

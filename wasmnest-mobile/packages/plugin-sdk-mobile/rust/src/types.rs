@@ -130,11 +130,15 @@ pub enum PluginState {
     Activating,
     Activated,
     /// activate 成功但 on_startup 失败：实例可用、启动初始化未完成
-    Degraded { error: String },
+    Degraded {
+        error: String,
+    },
     /// 插件请求的权限尚未获得用户批准（需在插件管理页人工审批后才能激活）
     NeedsApproval,
     Deactivated,
-    Error { error: String },
+    Error {
+        error: String,
+    },
 }
 
 impl Default for PluginState {
@@ -198,7 +202,11 @@ pub struct PluginManifest {
     pub plugin_type: PluginType,
     /// 装配角色（manifest `type`）：`basic-service` / `internal-business` /
     /// `business-app`（缺省）。宿主不再消费本镜像，但插件作者可在代码里声明。
-    #[serde(rename = "type", default, skip_serializing_if = "PluginKind::is_business_app")]
+    #[serde(
+        rename = "type",
+        default,
+        skip_serializing_if = "PluginKind::is_business_app"
+    )]
     pub kind: PluginKind,
     /// 对外可互调 api 清单（全限定名；与核心 manifest 同形）
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -288,6 +296,16 @@ pub struct PluginContributes {
     /// 自定义监控面板声明（monitor 统一壳消费）
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub monitor_panels: Vec<MonitorPanelContribution>,
+    /// 助手能力描述符（通用应用调用桥，票 01 / spec §4.2）：本应用声明「可被系统助手
+    /// 调用」的命令。宿主据此在 `AppControlAPI.list()` 暴露给持有 `apps:control` 的应用，
+    /// 并在 `invoke()` 做白名单校验。描述符不含任何 AI / 人格 / 会话 / 模型字段。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assistant_tools: Vec<AssistantToolDescriptor>,
+    /// 全局入口声明（`ui:globalEntry` 权限门控，票 01 / spec §4.3）：本应用在壳的
+    /// 全局入口区登记一个入口。入口只对「已安装、已启用、激活成功」的应用渲染；
+    /// 停用 / 卸载 / 未声明权限 / 用户关闭即消失。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub global_entries: Vec<GlobalEntryContribution>,
 }
 
 /// 自定义监控面板声明（只登记元数据；实现住提供方应用工程）
@@ -302,6 +320,60 @@ pub struct MonitorPanelContribution {
 }
 
 fn default_monitor_panel_order() -> i32 {
+    100
+}
+
+/// 助手能力风险等级（应用声明；助手策略只能升不能降，spec §5.6）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AssistantToolRisk {
+    Read,
+    Ui,
+    Write,
+    Danger,
+}
+
+/// 助手能力输出形状
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AssistantToolOutput {
+    Text,
+    Json,
+}
+
+/// 助手能力描述符（`contributes.assistantTools` 条目）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistantToolDescriptor {
+    /// 应用内唯一；建议 `<slug>.<verb>`
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    /// 目标应用自己的命令 id（必须存在于 contributes.commands）
+    pub command: String,
+    /// JSON Schema（object）
+    pub args_schema: serde_json::Value,
+    pub risk: AssistantToolRisk,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<AssistantToolOutput>,
+}
+
+/// 全局入口声明（`contributes.globalEntries` 条目）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalEntryContribution {
+    /// 入口声明 id（应用内唯一）
+    pub id: String,
+    pub title: String,
+    /// 图标文件名（可选；缺省由壳按应用图标色板生成）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// 排序权重（小者靠前；缺省 100）
+    #[serde(default = "default_global_entry_order")]
+    pub order: i32,
+}
+
+fn default_global_entry_order() -> i32 {
     100
 }
 

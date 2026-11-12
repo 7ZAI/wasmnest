@@ -27,6 +27,7 @@ import { ensureHostCredential, invalidateChannelToken } from '@/utils/appCommand
 import { HOST_INTERNAL_CODE, parseInvokeError, showUserError } from '@/utils/userError'
 import { toneOf, type AppTone } from './state'
 import type { AppDisplayState } from '../types'
+import type { GlobalEntryContribution } from '@binblink/wasmnest-plugin-sdk-desktop'
 
 /**
  * 宿主 `plugin_list_loaded` 返回的插件信息形状（与 wasm-core `HostPluginInfo`
@@ -118,6 +119,8 @@ export interface ShellAppEntry {
   autostart: boolean
   /** 宿主挂载运行面的落地路由（有前端界面的应用在 SURFACE_ROUTES 登记；无界面应用缺省 = 无挂载面） */
   route?: string
+  /** 全局入口声明（contributes.globalEntries；仅 ui:globalEntry 权限门控的应用渲染） */
+  globalEntries?: GlobalEntryContribution[]
 }
 
 /**
@@ -235,6 +238,17 @@ function shellIconForApp(pluginId: string): string {
   return SET[h % SET.length]
 }
 
+/** 解析 contributes.globalEntries（防御性：contributes 可能不是对象） */
+function parseGlobalEntries(contributes: unknown): GlobalEntryContribution[] {
+  if (!contributes || typeof contributes !== 'object') return []
+  const entries = (contributes as { globalEntries?: unknown }).globalEntries
+  if (!Array.isArray(entries)) return []
+  return entries.filter(
+    (e): e is GlobalEntryContribution =>
+      e !== null && typeof e === 'object' && typeof (e as GlobalEntryContribution).id === 'string',
+  )
+}
+
 /** 注册表投影：HostShellPluginInfo → ShellAppEntry（偏好随清单同位返回） */
 function toEntry(info: HostPluginInfo, enabled: boolean, autostart: boolean): ShellAppEntry {
   return {
@@ -257,6 +271,7 @@ function toEntry(info: HostPluginInfo, enabled: boolean, autostart: boolean): Sh
     enabled,
     autostart,
     route: routeOfApp(info.id),
+    globalEntries: parseGlobalEntries(info.contributes),
   }
 }
 

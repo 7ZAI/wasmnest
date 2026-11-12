@@ -33,7 +33,7 @@
  */
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { join } from '@tauri-apps/api/path'
-import type { AppUpdateCheckResult } from '@binblink/wasmnest-plugin-sdk-desktop'
+import type { AppUpdateCheckResult, AppControlAPI } from '@binblink/wasmnest-plugin-sdk-desktop'
 import { logger } from '@/utils/frontendLogger'
 import { ensureHostCredential } from '@/utils/appCommands'
 import { invoke } from '@/utils/invoke'
@@ -70,6 +70,14 @@ export interface AppMountEnv {
   }
   /** 插件面命令（plugin_invoke，本 app 通道令牌已绑定） */
   appInvoke: <T = unknown>(command: string, ...args: unknown[]) => Promise<T>
+  /**
+   * 通用应用调用桥（可选：仅 manifest 声明 `apps:control` 时注入，票 02 / spec §4.2）。
+   *
+   * **新增可选字段属兼容变更，不 bump MOUNT_CONTRACT**：旧宿主不注入 = 无此能力，
+   * 应用必须显性提示「未授权」并给出去哪里开启。宿主只做白名单与审计，不解释工具
+   * 结果、不持有 AI 状态（宿主薄壳红线 B1–B6）。
+   */
+  apps?: AppControlAPI
   /** 本 app 插件 KV 存储（plugin_storage_*，宿主面凭证已绑定） */
   appStorageGet: <T = unknown>(key: string) => Promise<T | undefined>
   appStorageSet: (key: string, value: unknown) => Promise<void>

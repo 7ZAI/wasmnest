@@ -246,7 +246,12 @@ pub trait HostPty {
     /// 轮询节奏由插件掌握（宿主不唤醒插件）：交互场景典型做法是「`pty_write` → 以
     /// 20~50ms 间隔续拉，直到 `next_offset` 不再前进」；输出风暴场景按 `truncated`
     /// 走 resync。单次返回字节数被宿主截断到上限，超出部分留待下次拉取。
-    fn pty_ring_fetch(&self, pty_id: &str, from_offset: u64, max_bytes: u32) -> Result<Option<PtyRingFetch>, HostError>;
+    fn pty_ring_fetch(
+        &self,
+        pty_id: &str,
+        from_offset: u64,
+        max_bytes: u32,
+    ) -> Result<Option<PtyRingFetch>, HostError>;
 
     /// 进程是否仍在运行（`pty:io`，丢失 [`PTY_EXIT`] 事件后的自愈快照）
     ///
@@ -266,7 +271,10 @@ mod tests {
         // 不存在「逐字节一致」漂移面（票 05）
         assert_eq!(pty_event_topic(PTY_EXIT, "com.x"), "com.x::pty:exit");
         // 属主隔离：不同插件的 topic 互不相等（他人订阅被宿主拒绝）
-        assert_ne!(pty_event_topic(PTY_EXIT, "a"), pty_event_topic(PTY_EXIT, "b"));
+        assert_ne!(
+            pty_event_topic(PTY_EXIT, "a"),
+            pty_event_topic(PTY_EXIT, "b")
+        );
     }
 
     #[test]
@@ -305,9 +313,13 @@ mod tests {
     fn spawn_config_json_serializes_declared_ring_capacity_in_camel_case() {
         // 票 05：环容量属插件声明面（宿主仲裁上限），键名必须 camelCase
         let parsed: serde_json::Value =
-            serde_json::from_str(&PtySpawnConfig::new("sh").ring_bytes(4096).to_json()).expect("valid json");
+            serde_json::from_str(&PtySpawnConfig::new("sh").ring_bytes(4096).to_json())
+                .expect("valid json");
         assert_eq!(parsed["ringBytes"], 4096);
-        assert!(parsed.get("ring_bytes").is_none(), "snake_case 键宿主读不到");
+        assert!(
+            parsed.get("ring_bytes").is_none(),
+            "snake_case 键宿主读不到"
+        );
         // 未声明时省略字段——交由宿主取默认容量，而不是传 0（0 会被宿主判错拒绝）
         let unset: serde_json::Value =
             serde_json::from_str(&PtySpawnConfig::new("sh").to_json()).expect("valid json");

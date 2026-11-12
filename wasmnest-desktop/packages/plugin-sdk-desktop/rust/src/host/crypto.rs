@@ -83,7 +83,9 @@ pub trait HostCrypto {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::permission::{PERMISSION_CRYPTO_AEAD, PERMISSION_CRYPTO_ASYM, PERMISSION_CRYPTO_KDF};
+    use crate::permission::{
+        PERMISSION_CRYPTO_AEAD, PERMISSION_CRYPTO_ASYM, PERMISSION_CRYPTO_KDF,
+    };
 
     /// 三域权限常量与词汇真源对齐（编译期形状确认；宿主锁做集合相等断言）
     #[test]

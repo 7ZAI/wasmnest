@@ -121,7 +121,11 @@ pub trait HostWebsocket {
     /// **事实**，不含 JWT/token/公钥/配对记录或会话派生字段（websocket 业务下沉
     /// 专项票 02，spec §3.1）。`auth: none` 连接 `authenticated=false` 且
     /// `authContext` 省略。客户端不在端点名下 → `Err`。
-    fn ws_connection_context(&self, endpoint_id: &str, client_id: &str) -> Result<String, HostError>;
+    fn ws_connection_context(
+        &self,
+        endpoint_id: &str,
+        client_id: &str,
+    ) -> Result<String, HostError>;
 }
 
 #[cfg(test)]

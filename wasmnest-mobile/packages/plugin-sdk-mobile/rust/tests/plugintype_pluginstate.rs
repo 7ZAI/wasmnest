@@ -6,9 +6,18 @@ use wasmnest_plugin_api_mobile::types::*;
 fn test_plugin_type_wire_lowercase() {
     // 线协议 lowercase（2026-10-26 形态三档重定义，wasmnest-apps#21）：宿主按
     // 字面量解析 plugin.json 的 pluginType 字段；词汇只表达形态，不表达语言
-    assert_eq!(serde_json::to_value(PluginType::Frontend).unwrap(), serde_json::json!("frontend"));
-    assert_eq!(serde_json::to_value(PluginType::Backend).unwrap(), serde_json::json!("backend"));
-    assert_eq!(serde_json::to_value(PluginType::Full).unwrap(), serde_json::json!("full"));
+    assert_eq!(
+        serde_json::to_value(PluginType::Frontend).unwrap(),
+        serde_json::json!("frontend")
+    );
+    assert_eq!(
+        serde_json::to_value(PluginType::Backend).unwrap(),
+        serde_json::json!("backend")
+    );
+    assert_eq!(
+        serde_json::to_value(PluginType::Full).unwrap(),
+        serde_json::json!("full")
+    );
     assert_eq!(
         serde_json::from_value::<PluginType>(serde_json::json!("full")).unwrap(),
         PluginType::Full
@@ -28,7 +37,10 @@ fn test_plugin_type_retired_values_rejected_with_migration_path() {
             .expect_err("retired value must be rejected");
         let msg = err.to_string();
         assert!(msg.contains(old), "须点名旧值 {old}: {msg}");
-        assert!(msg.contains(expect_path), "须给出新值出路 {expect_path}: {msg}");
+        assert!(
+            msg.contains(expect_path),
+            "须给出新值出路 {expect_path}: {msg}"
+        );
         assert!(msg.contains("已退役"), "须说明退役事实: {msg}");
     }
 }
@@ -52,11 +64,17 @@ fn test_plugin_state_camel_case_tag() {
         serde_json::json!({ "state": "activating" })
     );
     assert_eq!(
-        serde_json::to_value(PluginState::Degraded { error: "init fail".into() }).unwrap(),
+        serde_json::to_value(PluginState::Degraded {
+            error: "init fail".into()
+        })
+        .unwrap(),
         serde_json::json!({ "state": "degraded", "error": "init fail" })
     );
     assert_eq!(
-        serde_json::to_value(PluginState::Error { error: "boom".into() }).unwrap(),
+        serde_json::to_value(PluginState::Error {
+            error: "boom".into()
+        })
+        .unwrap(),
         serde_json::json!({ "state": "error", "error": "boom" })
     );
     let back: PluginState =

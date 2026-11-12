@@ -8,15 +8,39 @@ use std::sync::Arc;
 
 /// 插件存储 trait
 pub trait PluginStorageAccess: Send + Sync + 'static {
-    fn get(&self, plugin_id: &str, key: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Option<serde_json::Value>>> + Send>>;
-    fn set(&self, plugin_id: &str, key: &str, value: serde_json::Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
-    fn delete(&self, plugin_id: &str, key: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
+    fn get(
+        &self,
+        plugin_id: &str,
+        key: &str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<Option<serde_json::Value>>> + Send>,
+    >;
+    fn set(
+        &self,
+        plugin_id: &str,
+        key: &str,
+        value: serde_json::Value,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
+    fn delete(
+        &self,
+        plugin_id: &str,
+        key: &str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
 }
 
 /// 会话查询 trait
 pub trait SessionQuery: Send + Sync + 'static {
-    fn list_sessions(&self) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Vec<serde_json::Value>>> + Send>>;
-    fn get_session(&self, session_id: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Option<serde_json::Value>>> + Send>>;
+    fn list_sessions(
+        &self,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<Vec<serde_json::Value>>> + Send>,
+    >;
+    fn get_session(
+        &self,
+        session_id: &str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<Option<serde_json::Value>>> + Send>,
+    >;
 }
 
 /// 事件发射 trait
@@ -27,13 +51,21 @@ pub trait EventEmitter: Send + Sync + 'static {
 /// 文件系统访问 trait（由主应用实现，解耦对 FsAuthChecker 的直接依赖）
 pub trait FileAccess: Send + Sync + 'static {
     fn read_file(
-        &self, plugin_id: &str, path: &str,
+        &self,
+        plugin_id: &str,
+        path: &str,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Option<String>>> + Send>>;
     fn write_file(
-        &self, plugin_id: &str, path: &str, data: &str,
+        &self,
+        plugin_id: &str,
+        path: &str,
+        data: &str,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
     fn copy_file(
-        &self, plugin_id: &str, src: &str, dst: &str,
+        &self,
+        plugin_id: &str,
+        src: &str,
+        dst: &str,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
 }
 
@@ -41,10 +73,14 @@ pub trait FileAccess: Send + Sync + 'static {
 pub trait BusAccess: Send + Sync + 'static {
     fn publish(&self, plugin_id: &str, topic: &str, payload: serde_json::Value);
     fn subscribe(
-        &self, plugin_id: &str, topic: &str,
+        &self,
+        plugin_id: &str,
+        topic: &str,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
     fn unsubscribe(
-        &self, plugin_id: &str, topic: &str,
+        &self,
+        plugin_id: &str,
+        topic: &str,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
 }
 
@@ -71,27 +107,54 @@ impl RustPluginContext {
         file: Arc<dyn FileAccess>,
         bus: Arc<dyn BusAccess>,
     ) -> Self {
-        Self { plugin_id, storage, session_query, event_emitter, permission, granted_permissions, file, bus }
+        Self {
+            plugin_id,
+            storage,
+            session_query,
+            event_emitter,
+            permission,
+            granted_permissions,
+            file,
+            bus,
+        }
     }
 
-    pub fn plugin_id(&self) -> &str { &self.plugin_id }
-    pub fn granted_permissions(&self) -> &HashSet<String> { &self.granted_permissions }
-    pub fn has_permission(&self, permission: &str) -> bool { self.permission.check(&self.plugin_id, permission) }
+    pub fn plugin_id(&self) -> &str {
+        &self.plugin_id
+    }
+    pub fn granted_permissions(&self) -> &HashSet<String> {
+        &self.granted_permissions
+    }
+    pub fn has_permission(&self, permission: &str) -> bool {
+        self.permission.check(&self.plugin_id, permission)
+    }
 
-    pub async fn storage_get(&self, key: &str) -> anyhow::Result<Option<serde_json::Value>> { self.storage.get(&self.plugin_id, key).await }
-    pub async fn storage_set(&self, key: &str, value: serde_json::Value) -> anyhow::Result<()> { self.storage.set(&self.plugin_id, key, value).await }
-    pub async fn storage_delete(&self, key: &str) -> anyhow::Result<()> { self.storage.delete(&self.plugin_id, key).await }
+    pub async fn storage_get(&self, key: &str) -> anyhow::Result<Option<serde_json::Value>> {
+        self.storage.get(&self.plugin_id, key).await
+    }
+    pub async fn storage_set(&self, key: &str, value: serde_json::Value) -> anyhow::Result<()> {
+        self.storage.set(&self.plugin_id, key, value).await
+    }
+    pub async fn storage_delete(&self, key: &str) -> anyhow::Result<()> {
+        self.storage.delete(&self.plugin_id, key).await
+    }
 
     pub async fn list_sessions(&self) -> anyhow::Result<Vec<serde_json::Value>> {
-        if !self.has_permission("session:read") { anyhow::bail!("Plugin {} lacks session:read permission", self.plugin_id); }
+        if !self.has_permission("session:read") {
+            anyhow::bail!("Plugin {} lacks session:read permission", self.plugin_id);
+        }
         self.session_query.list_sessions().await
     }
     pub async fn get_session(&self, session_id: &str) -> anyhow::Result<Option<serde_json::Value>> {
-        if !self.has_permission("session:read") { anyhow::bail!("Plugin {} lacks session:read permission", self.plugin_id); }
+        if !self.has_permission("session:read") {
+            anyhow::bail!("Plugin {} lacks session:read permission", self.plugin_id);
+        }
         self.session_query.get_session(session_id).await
     }
 
-    pub fn emit_event(&self, event: &str, payload: serde_json::Value) { self.event_emitter.emit(event, payload); }
+    pub fn emit_event(&self, event: &str, payload: serde_json::Value) {
+        self.event_emitter.emit(event, payload);
+    }
 
     // ==================== File System API ====================
 
@@ -113,8 +176,13 @@ impl RustPluginContext {
 
     /// 复制文件，自动创建目标父目录（需 fs:read + fs:write 权限）
     pub async fn fs_copy(&self, src: &str, dst: &str) -> anyhow::Result<()> {
-        if !self.has_permission(crate::permission::PERMISSION_FS_READ) || !self.has_permission(crate::permission::PERMISSION_FS_WRITE) {
-            anyhow::bail!("Plugin {} lacks fs:read+fs:write permission for copy", self.plugin_id);
+        if !self.has_permission(crate::permission::PERMISSION_FS_READ)
+            || !self.has_permission(crate::permission::PERMISSION_FS_WRITE)
+        {
+            anyhow::bail!(
+                "Plugin {} lacks fs:read+fs:write permission for copy",
+                self.plugin_id
+            );
         }
         self.file.copy_file(&self.plugin_id, src, dst).await
     }
@@ -167,7 +235,10 @@ mod tests {
         let pm = Arc::new(PermissionManager::new());
         pm.grant_permissions(
             "test.plugin",
-            &permissions.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+            &permissions
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
         );
         let storage = Arc::new(MockStorage::default());
         let emitter = Arc::new(MockEventEmitter::default());
@@ -218,7 +289,10 @@ mod tests {
         // mock 返回 { "stored": key }，验证调用链上 plugin_id 与 key 均透传
         assert_eq!(value, Some(serde_json::json!({ "stored": "my_key" })));
         let calls = storage.calls.lock().unwrap().clone();
-        assert_eq!(calls, vec![("test.plugin".to_string(), "my_key".to_string())]);
+        assert_eq!(
+            calls,
+            vec![("test.plugin".to_string(), "my_key".to_string())]
+        );
     }
 
     #[test]
@@ -268,7 +342,10 @@ mod tests {
         let (ctx, _, emitter, _, _) = make_context(&[]);
         let payload = serde_json::json!({ "status": "done" });
         ctx.emit_event("plugin:event", payload.clone());
-        assert_eq!(emitter.emit_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            emitter.emit_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
         let emitted = emitter.emitted.lock().unwrap().clone();
         assert_eq!(emitted, vec![("plugin:event".to_string(), payload)]);
     }
@@ -289,7 +366,10 @@ mod tests {
         let content = block_on(ctx.fs_read("/data/x.txt")).unwrap();
         assert_eq!(content.as_deref(), Some("content-of-/data/x.txt"));
         let reads = file.reads.lock().unwrap().clone();
-        assert_eq!(reads, vec![("test.plugin".to_string(), "/data/x.txt".to_string())]);
+        assert_eq!(
+            reads,
+            vec![("test.plugin".to_string(), "/data/x.txt".to_string())]
+        );
     }
 
     #[test]
@@ -307,7 +387,11 @@ mod tests {
         let writes = file.writes.lock().unwrap().clone();
         assert_eq!(
             writes,
-            vec![("test.plugin".to_string(), "/data/y.txt".to_string(), "hi".to_string())]
+            vec![(
+                "test.plugin".to_string(),
+                "/data/y.txt".to_string(),
+                "hi".to_string()
+            )]
         );
     }
 
@@ -323,7 +407,11 @@ mod tests {
         let copies = file2.copies.lock().unwrap().clone();
         assert_eq!(
             copies,
-            vec![("test.plugin".to_string(), "/a".to_string(), "/b".to_string())]
+            vec![(
+                "test.plugin".to_string(),
+                "/a".to_string(),
+                "/b".to_string()
+            )]
         );
     }
 
@@ -346,7 +434,11 @@ mod tests {
         let published = bus.published.lock().unwrap().clone();
         assert_eq!(
             published,
-            vec![("test.plugin".to_string(), "task:changed".to_string(), payload)]
+            vec![(
+                "test.plugin".to_string(),
+                "task:changed".to_string(),
+                payload
+            )]
         );
     }
 

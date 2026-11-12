@@ -28,8 +28,16 @@ import {
 import type { PluginInfo } from '@/plugin/types'
 import type { ShellApp, ShellAppSource } from '@/shell/types'
 
-// 运行面经 PluginViewHost 包装（内部 useI18n）；本测试只验证包装行为本身，文案用替身
-vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+// 运行面经 PluginViewHost 包装（内部 useI18n）；本测试只验证包装行为本身，文案用替身。
+// 部分 mock：context.ts 经 useShellOpen → useShellApps → @/locales 拉到真实 createI18n，
+// 只替掉 useI18n，其余导出保持真实。
+vi.mock('vue-i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-i18n')>()
+  return {
+    ...actual,
+    useI18n: () => ({ t: (key: string) => key }),
+  }
+})
 
 const PLUGIN_ID = 'com.test.surface-bridge'
 const OTHER_APP_ID = 'com.test.other-app'

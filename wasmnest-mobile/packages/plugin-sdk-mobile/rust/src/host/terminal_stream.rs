@@ -16,7 +16,11 @@ pub trait HostTerminalStream {
     ///
     /// 通道未登记（页面未订阅 / 已卸载）→ `Err`：字节由调用方丢弃（页面
     /// 重进时经重订阅回放补齐），宿主不缓存、不补发。
-    fn terminal_stream_forward_output(&self, session_id: &str, data: &[u8]) -> Result<(), HostError>;
+    fn terminal_stream_forward_output(
+        &self,
+        session_id: &str,
+        data: &[u8],
+    ) -> Result<(), HostError>;
 }
 
 #[cfg(test)]

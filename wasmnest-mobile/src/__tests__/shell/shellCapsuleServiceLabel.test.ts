@@ -8,19 +8,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { Ref } from 'vue'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { ShellApp } from '@/shell/types'
 
 const mocks = vi.hoisted(() => ({
   capsuleAppId: null as unknown as Ref<string | null>,
   app: null as unknown as ShellApp | null,
+  apps: [] as ShellApp[],
   closeCapsule: vi.fn(),
   openDetail: vi.fn(),
   stop: vi.fn(async () => true),
+  launch: vi.fn(async () => true),
 }))
 
 vi.mock('@/shell/composables/useShellApps', () => ({
-  useShellApps: () => ({ getApp: () => mocks.app, stop: mocks.stop }),
+  useShellApps: () => ({
+    apps: computed(() => mocks.apps),
+    getApp: () => mocks.app,
+    stop: mocks.stop,
+    launch: mocks.launch,
+  }),
 }))
 
 vi.mock('@/shell/composables/useShellNavigation', () => ({

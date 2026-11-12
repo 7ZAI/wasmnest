@@ -44,6 +44,9 @@ mod tests {
     fn mdns_event_topic_uses_owner_namespace() {
         assert_eq!(mdns_event_topic(MDNS_FOUND, "com.x"), "com.x::mdns:found");
         assert_eq!(mdns_event_topic(MDNS_LOST, "com.x"), "com.x::mdns:lost");
-        assert_ne!(mdns_event_topic(MDNS_FOUND, "a"), mdns_event_topic(MDNS_FOUND, "b"));
+        assert_ne!(
+            mdns_event_topic(MDNS_FOUND, "a"),
+            mdns_event_topic(MDNS_FOUND, "b")
+        );
     }
 }

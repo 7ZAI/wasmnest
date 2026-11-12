@@ -48,8 +48,8 @@
 //!    另：单元结果超 `PLUGIN_TASK_UNIT_RESULT_MAX_BYTES`（1MB）会被截断成
 //!    **非完整 JSON**（`truncated` 标记），大文件须走无截断的串行 `fs.read` 全量重读。
 
-use serde::Serialize;
 use super::HostError;
+use serde::Serialize;
 
 /// 单元操作 kind 初始集（与宿主 `host_impl/task.rs` 白名单逐条对应，不得漂移）。
 /// 追加新 kind = 宿主既有 interface 函数级追加（批次内不 bump），SDK 侧同步新增
@@ -107,7 +107,11 @@ impl TaskUnit {
 
     /// `fs.write`：写文本文件（`fs:write` + fs_auth）
     pub fn fs_write(id: &str, path: &str, data: &str) -> Self {
-        Self::new(id, kinds::FS_WRITE, serde_json::json!({ "path": path, "data": data }))
+        Self::new(
+            id,
+            kinds::FS_WRITE,
+            serde_json::json!({ "path": path, "data": data }),
+        )
     }
 
     /// `process.run-sync`：同步执行进程并捕获输出（`process:run`）。
@@ -143,7 +147,10 @@ pub struct TaskProgress {
 
 impl Default for TaskProgress {
     fn default() -> Self {
-        Self { every_units: None, every_ms: None }
+        Self {
+            every_units: None,
+            every_ms: None,
+        }
     }
 }
 

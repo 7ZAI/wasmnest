@@ -106,6 +106,18 @@ export interface MobilePluginContributes {
   lifecycle?: LifecycleContribution
   /** 自定义监控面板声明（monitor 统一壳消费；实现住提供方应用工程） */
   monitorPanels?: MonitorPanelContribution[]
+  /**
+   * 助手能力描述符（通用应用调用桥，票 01 / spec §4.2）：本应用声明「可被系统助手
+   * 调用」的命令。宿主据此在 `AppControlAPI.list()` 暴露给持有 `apps:control` 的应用，
+   * 并在 `invoke()` 做白名单校验。描述符不含任何 AI / 人格 / 会话 / 模型字段。
+   */
+  assistantTools?: AssistantToolDescriptor[]
+  /**
+   * 全局入口声明（`ui:globalEntry` 权限门控，票 01 / spec §4.3）：本应用在壳的
+   * 全局入口区登记一个入口。入口只对「已安装、已启用、激活成功」的应用渲染；
+   * 停用 / 卸载 / 未声明权限 / 用户关闭即消失。
+   */
+  globalEntries?: GlobalEntryContribution[]
 }
 
 /** 自定义监控面板声明（只登记元数据） */
@@ -113,6 +125,70 @@ export interface MonitorPanelContribution {
   id: string
   title: string
   /** 排序权重（小者靠前；缺省 100） */
+  order?: number
+}
+
+/** 助手能力风险等级（应用声明；助手策略只能升不能降，spec §5.6） */
+export type AssistantToolRisk = 'read' | 'ui' | 'write' | 'danger'
+
+/** 助手能力输出形状 */
+export type AssistantToolOutput = 'text' | 'json'
+
+/**
+ * 助手能力描述符（`contributes.assistantTools` 条目）
+ *
+ * 纯通用「应用能力描述」：不含人格 / 会话 / 模型字段。`command` 必须是本应用
+ * `contributes.commands` 里已声明的命令 id（构建期校验）；`argsSchema` 为 JSON Schema
+ * （object），映射为 agent 工具的 parameters；`risk` 决定助手侧确认策略。
+ */
+export interface AssistantToolDescriptor {
+  /** 应用内唯一；建议 `<slug>.<verb>`，助手侧再按 appId 去重 */
+  id: string
+  title: string
+  description: string
+  /** 目标应用自己的命令 id（必须存在于 contributes.commands） */
+  command: string
+  /** JSON Schema（object）；映射为 agent 工具的 parameters */
+  argsSchema: Record<string, unknown>
+  risk: AssistantToolRisk
+  output?: AssistantToolOutput
+}
+
+/** 应用种类（与宿主 `isServiceKind` 口径一致） */
+export type AppKind = 'business-app' | 'internal-business' | 'basic-service'
+
+/** 应用描述符（`AppControlAPI.list()` 返回条目）；不含任何 AI / 会话 / 模型字段 */
+export interface AssistantAppDescriptor {
+  id: string
+  name: string
+  version: string
+  kind: AppKind
+  /** 运行态（如 'running' / 'stopped'；宿主按实际装载状态填充） */
+  state: string
+  tools: AssistantToolDescriptor[]
+}
+
+/**
+ * 通用应用调用桥（`apps:control` 权限门控）
+ *
+ * 只有 manifest `permissions` 含 `apps:control` 时宿主才注入本对象；否则字段缺省，
+ * 应用必须显性提示「未授权」。宿主做白名单与审计，不解释工具结果、不持有 AI 状态。
+ */
+export interface AppControlAPI {
+  /** 列已安装 / 已加载应用及其声明给助手的工具 */
+  list(): Promise<AssistantAppDescriptor[]>
+  /** 调目标应用已声明的命令；未运行 / 未声明 / 参数不合 schema 各自点名拒绝 */
+  invoke<T = unknown>(appId: string, command: string, args?: unknown): Promise<T>
+  /** 打开 / 切到目标应用（用户可见动作；目标未安装 / 已停用 fail-visible） */
+  open(appId: string): Promise<void>
+}
+
+/** 全局入口声明（`contributes.globalEntries` 条目） */
+export interface GlobalEntryContribution {
+  id: string
+  title: string
+  icon?: string
+  /** 排序权重（缺省 100；小者靠前） */
   order?: number
 }
 
@@ -805,6 +881,13 @@ export interface PluginContext {
   readonly status: StatusAPI
   /** 应用更新检查（宿主统一默认实现；可选——旧宿主 / dev-shell 可不提供） */
   readonly appUpdate?: AppUpdateAPI
+  /**
+   * 通用应用调用桥（可选：仅 manifest 声明 `apps:control` 时注入，票 03 / spec §4.2）。
+   *
+   * **新增可选字段属兼容变更**：旧宿主不注入 = 无此能力，应用必须显性提示「未授权」
+   * 并给出去哪里开启。宿主只做白名单与审计，不解释工具结果、不持有 AI 状态。
+   */
+  readonly apps?: AppControlAPI
   readonly _disposables: Disposable[]
 }
 

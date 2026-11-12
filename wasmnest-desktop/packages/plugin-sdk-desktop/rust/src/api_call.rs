@@ -104,9 +104,15 @@ pub fn build_request(method: &str, params: serde_json::Value) -> serde_json::Val
 }
 
 /// 构造 JSON-RPC 响应（result | error 二选一）
-pub fn rpc_reply(id: &str, result: std::result::Result<serde_json::Value, (i32, String)>) -> serde_json::Value {
+pub fn rpc_reply(
+    id: &str,
+    result: std::result::Result<serde_json::Value, (i32, String)>,
+) -> serde_json::Value {
     let mut m = serde_json::Map::new();
-    m.insert("jsonrpc".to_string(), serde_json::Value::String("2.0".to_string()));
+    m.insert(
+        "jsonrpc".to_string(),
+        serde_json::Value::String("2.0".to_string()),
+    );
     m.insert("id".to_string(), serde_json::Value::String(id.to_string()));
     match result {
         Ok(v) => {
@@ -148,10 +154,7 @@ pub fn api_call(
 pub fn decode_reply(reply: &serde_json::Value) -> Result<serde_json::Value, ApiCallError> {
     if let Some(err) = reply.get("error") {
         return Err(ApiCallError::Rpc {
-            code: err
-                .get("code")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(-32000) as i32,
+            code: err.get("code").and_then(|v| v.as_i64()).unwrap_or(-32000) as i32,
             message: err
                 .get("message")
                 .and_then(|v| v.as_str())
@@ -220,6 +223,9 @@ mod tests {
 
         // 缺 result/error：协议错误
         let bad = serde_json::json!({ "jsonrpc": "2.0", "id": "req-1" });
-        assert!(matches!(decode_reply(&bad), Err(ApiCallError::Malformed(_))));
+        assert!(matches!(
+            decode_reply(&bad),
+            Err(ApiCallError::Malformed(_))
+        ));
     }
 }

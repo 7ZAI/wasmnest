@@ -29,7 +29,7 @@ import { toPluginAssetUrl } from '@/plugin/assets'
 import { getShellRegistry } from '@/shell/registry'
 import { iconKindOf } from '../utils'
 import type { PluginInfo } from '@/plugin/types'
-import type { ShellApp, ShellAppSource, ShellAppState, ShellPermissionGrant } from '../types'
+import type { ShellApp, ShellAppSource, ShellAppState, ShellPermissionGrant, ShellGlobalEntry } from '../types'
 import { isLockedPermission } from '../permissions'
 
 /** 数据源标识（与插件系统解耦后改名不影响调用方） */
@@ -110,8 +110,29 @@ export function toShellApp(info: PluginInfo): ShellApp {
     update: info.update,
     // 运行面不从清单下发：插件的 UI 入口在激活后才注册进插件注册表，
     // 因此在 resolveSurface 里按需解析（见下）
-    contributions: {},
+    // 全局入口从清单 contributes.globalEntries 解析（票 04 / spec §4.3）
+    contributions: {
+      globalEntries: parseGlobalEntries(info.contributes?.globalEntries),
+    },
   }
+}
+
+/** 解析 contributes.globalEntries（防御性：可能不是数组） */
+function parseGlobalEntries(
+  entries: import('@binblink/wasmnest-plugin-sdk-mobile').GlobalEntryContribution[] | undefined,
+): ShellGlobalEntry[] {
+  if (!Array.isArray(entries)) return []
+  return entries
+    .filter(
+      (e): e is import('@binblink/wasmnest-plugin-sdk-mobile').GlobalEntryContribution =>
+        e !== null && typeof e === 'object' && typeof e.id === 'string',
+    )
+    .map((e) => ({
+      id: e.id,
+      title: e.title,
+      icon: e.icon,
+      order: e.order,
+    }))
 }
 
 /**

@@ -65,6 +65,21 @@ pub const PERMISSION_TUNNEL_CONNECT: &str = "tunnel:connect";
 /// 移动端没有配置中心页面，本位为与 core 真源集合相等而登记；探测本身零持久
 /// 副作用（不建 reservation、不映射端口），只做可达性 + 身份 + RTT。
 pub const PERMISSION_TUNNEL_PROBE: &str = "tunnel:probe";
+/// 通用应用调用桥（前端贡献面，无 WASM 宿主函数对应）：`AppControlAPI`
+///
+/// 允许插件前端调用**其他应用已声明**的应用命令（列应用 / 调声明工具 / 打开
+/// 应用），宿主做白名单与审计。**强权限**：持有者可代表用户触发目标应用的
+/// 已声明命令，审批文案必须写明这一点，不能弱化成「读取应用信息」。
+///
+/// 门禁落点：宿主桥实现（桌面 `AppControlAPI` 注入前的权限校验、移动插件
+/// 上下文注入处）；未声明本位的插件前端拿不到 `apps` 桥。
+pub const PERMISSION_APPS_CONTROL: &str = "apps:control";
+/// 全局入口贡献（纯前端贡献面，无 WASM 宿主函数对应）：manifest
+/// `contributes.globalEntries` 在壳的全局入口区登记入口
+///
+/// 入口只对「已安装、已启用、激活成功」的应用渲染；停用即消失。
+/// 门禁落点：宿主聚合 `globalEntries` 时按本位过滤。
+pub const PERMISSION_UI_GLOBAL_ENTRY: &str = "ui:globalEntry";
 
 /// 权限词汇全量表（pub：宿主机制层〔wasm-core-mobile 权限漂移锁〕与生成物
 /// 校验消费；新增权限必须在此登记，否则 grant 静默丢弃）
@@ -90,6 +105,8 @@ pub static VALID_PERMISSIONS: &[&str] = &[
     PERMISSION_TUNNEL_SERVE,
     PERMISSION_TUNNEL_CONNECT,
     PERMISSION_TUNNEL_PROBE,
+    PERMISSION_APPS_CONTROL,
+    PERMISSION_UI_GLOBAL_ENTRY,
 ];
 
 /// 已退役权限位（票 2026-10-10 批次 C2）：`ui:toolbox` / `ui:navtab` / `ui:input`
@@ -101,70 +118,104 @@ static RETIRED_PERMISSIONS: &[&str] = &["ui:toolbox", "ui:navtab", "ui:input"];
 static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
     // 票 12：terminal-stream.forwardOutput（终端输出流窄转发）复用本词汇；
     // TerminalAPI（sendInput/onOutput）已随票 15 阶段 B 退役，terminal.onOutput 同批移除
-    (PERMISSION_TERMINAL_OUTPUT, &["terminal-stream.forwardOutput"]),
-    (PERMISSION_SESSION_READ, &["session.list", "session.get", "session.onStatusChange"]),
+    (
+        PERMISSION_TERMINAL_OUTPUT,
+        &["terminal-stream.forwardOutput"],
+    ),
+    (
+        PERMISSION_SESSION_READ,
+        &["session.list", "session.get", "session.onStatusChange"],
+    ),
     (PERMISSION_UI_SETTINGS, &["ui.registerSettingsSection"]),
-    (PERMISSION_UI_ROUTE, &["ui.registerRoute", "ui.openPage", "ui.goBack"]),
+    (
+        PERMISSION_UI_ROUTE,
+        &["ui.registerRoute", "ui.openPage", "ui.goBack"],
+    ),
     (PERMISSION_UI_DIALOG, &["ui.showDialog"]),
     (PERMISSION_UI_BACK, &["ui.onBackPressed"]),
     (PERMISSION_NETWORK_HTTP, &["http.registerEndpoint"]),
-    (PERMISSION_STORAGE, &["storage.get", "storage.set", "storage.delete"]),
+    (
+        PERMISSION_STORAGE,
+        &["storage.get", "storage.set", "storage.delete"],
+    ),
     (PERMISSION_FS_READ, &["fs.read", "fs.copy"]),
     (PERMISSION_FS_WRITE, &["fs.write", "fs.copy"]),
-    (PERMISSION_BUS, &["bus.publish", "bus.subscribe", "bus.unsubscribe"]),
-    (PERMISSION_SYSTEM_OPEN, &["system.openFile", "system.revealInDir", "system.revealReceivedFileLocation"]),
-    (PERMISSION_PEER, &[
-        "peer.listDevices",
-        "peer.dial",
-        "peer.disconnect",
-        "peer.respondConsent",
-        "peer.listTrusted",
-        "peer.revokeTrusted",
-        "peer.sendFiles",
-        "peer.listTransfers",
-        "peer.cancelTransfer",
-        "peer.retryTransfer",
-        "peer.clearTransferHistory",
-        "peer.listReceiving",
-        "peer.respondTransfer",
-        "peer.cancelReceiving",
-        "peer.clearReceivingHistory",
-        "peer.getReceiveSettings",
-        "peer.setReceivePolicy",
-        "peer.listSharedDirectories",
-        "peer.removeSharedDirectory",
-        "peer.addSharedDirectory",
-        "peer.listSharedRoots",
-        "peer.browseDirectory",
-        "peer.pullFiles",
-        "peer.pickFiles",
-        // ADR 0022 v2 新增原语
-        "peer.dialEndpoint",
-        "peer.close",
-        "peer.setSharedRoots",
-    ]),
-    (PERMISSION_MDNS, &[
-        "mdns.browse",
-        "mdns.stopBrowse",
-        "mdns.advertise",
-        "mdns.stopAdvertise",
-        "mdns.isAdvertising",
-    ]),
-    (PERMISSION_WS_CLIENT, &[
-        "ws.connect",
-        "ws.sendText",
-        "ws.sendBinary",
-        "ws.close",
-        "ws.isConnected",
-    ]),
+    (
+        PERMISSION_BUS,
+        &["bus.publish", "bus.subscribe", "bus.unsubscribe"],
+    ),
+    (
+        PERMISSION_SYSTEM_OPEN,
+        &[
+            "system.openFile",
+            "system.revealInDir",
+            "system.revealReceivedFileLocation",
+        ],
+    ),
+    (
+        PERMISSION_PEER,
+        &[
+            "peer.listDevices",
+            "peer.dial",
+            "peer.disconnect",
+            "peer.respondConsent",
+            "peer.listTrusted",
+            "peer.revokeTrusted",
+            "peer.sendFiles",
+            "peer.listTransfers",
+            "peer.cancelTransfer",
+            "peer.retryTransfer",
+            "peer.clearTransferHistory",
+            "peer.listReceiving",
+            "peer.respondTransfer",
+            "peer.cancelReceiving",
+            "peer.clearReceivingHistory",
+            "peer.getReceiveSettings",
+            "peer.setReceivePolicy",
+            "peer.listSharedDirectories",
+            "peer.removeSharedDirectory",
+            "peer.addSharedDirectory",
+            "peer.listSharedRoots",
+            "peer.browseDirectory",
+            "peer.pullFiles",
+            "peer.pickFiles",
+            // ADR 0022 v2 新增原语
+            "peer.dialEndpoint",
+            "peer.close",
+            "peer.setSharedRoots",
+        ],
+    ),
+    (
+        PERMISSION_MDNS,
+        &[
+            "mdns.browse",
+            "mdns.stopBrowse",
+            "mdns.advertise",
+            "mdns.stopAdvertise",
+            "mdns.isAdvertising",
+        ],
+    ),
+    (
+        PERMISSION_WS_CLIENT,
+        &[
+            "ws.connect",
+            "ws.sendText",
+            "ws.sendBinary",
+            "ws.close",
+            "ws.isConnected",
+        ],
+    ),
     // 票 14 阶段 B：认证编排域（host-auth）——编排在插件，凭据零过境（C4）
-    (PERMISSION_AUTH, &[
-        "auth.requestPairing",
-        "auth.verifyPairingCode",
-        "auth.qrConnect",
-        "auth.biometricAuthenticate",
-        "auth.hasCredentials",
-    ]),
+    (
+        PERMISSION_AUTH,
+        &[
+            "auth.requestPairing",
+            "auth.verifyPairingCode",
+            "auth.qrConnect",
+            "auth.biometricAuthenticate",
+            "auth.hasCredentials",
+        ],
+    ),
     // ABI v18：系统通知与提醒反馈（host-notify 域，notify/vibrate/play-sound）——
     // WASM-only 权限（插件经 WasmHost trait 调用，无前端 API 面），
     // 宿主在 host fn 层仲裁；空映射同前端表 peer 先例
@@ -176,10 +227,25 @@ static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
     // `tunnel/plugin_binding.rs::require_either`）。
     (
         PERMISSION_TUNNEL_SERVE,
-        &["tunnel.expose", "tunnel.unexpose", "tunnel.issuePairingTicket"],
+        &[
+            "tunnel.expose",
+            "tunnel.unexpose",
+            "tunnel.issuePairingTicket",
+        ],
     ),
-    (PERMISSION_TUNNEL_CONNECT, &["tunnel.connect", "tunnel.close"]),
+    (
+        PERMISSION_TUNNEL_CONNECT,
+        &["tunnel.connect", "tunnel.close"],
+    ),
     (PERMISSION_TUNNEL_PROBE, &["tunnel.probeRelay"]),
+    // 通用应用调用桥（前端贡献面）：`AppControlAPI` 的三个方法都是前端注入面，
+    // 无 WASM 宿主函数；门禁落点 = 宿主桥实现（注入前校验本位 + 白名单 + 审计）。
+    (
+        PERMISSION_APPS_CONTROL,
+        &["apps.list", "apps.invoke", "apps.open"],
+    ),
+    // `ui:globalEntry` 是纯 manifest 贡献面（contributes.globalEntries），无前端
+    // API 方法，按「无 API 方法的权限省略映射条目」约定不登记（同 `broadcast`）。
 ];
 
 pub struct PermissionManager {
@@ -187,7 +253,11 @@ pub struct PermissionManager {
 }
 
 impl PermissionManager {
-    pub fn new() -> Self { Self { granted: std::sync::RwLock::new(HashMap::new()) } }
+    pub fn new() -> Self {
+        Self {
+            granted: std::sync::RwLock::new(HashMap::new()),
+        }
+    }
 
     /// 为插件授权：只授予 manifest 声明且在词汇表内的位
     ///
@@ -196,7 +266,11 @@ impl PermissionManager {
     /// 默认位——它会质变为「不声明也有」，与宿主授权链（只授生效权限）不一致。
     pub fn grant_permissions(&self, plugin_id: &str, requested: &[String]) -> HashSet<String> {
         let valid_set: HashSet<&str> = VALID_PERMISSIONS.iter().copied().collect();
-        let granted: HashSet<String> = requested.iter().filter(|p| valid_set.contains(p.as_str())).cloned().collect();
+        let granted: HashSet<String> = requested
+            .iter()
+            .filter(|p| valid_set.contains(p.as_str()))
+            .cloned()
+            .collect();
         let mut lock = self.granted.write().unwrap_or_else(|e| e.into_inner());
         lock.insert(plugin_id.to_string(), granted.clone());
         granted
@@ -204,14 +278,21 @@ impl PermissionManager {
 
     pub fn check(&self, plugin_id: &str, permission: &str) -> bool {
         let lock = self.granted.read().unwrap_or_else(|e| e.into_inner());
-        lock.get(plugin_id).map(|perms| perms.contains(permission)).unwrap_or(false)
+        lock.get(plugin_id)
+            .map(|perms| perms.contains(permission))
+            .unwrap_or(false)
     }
 
     pub fn check_api(&self, plugin_id: &str, api_method: &str) -> bool {
         let lock = self.granted.read().unwrap_or_else(|e| e.into_inner());
-        let perms = match lock.get(plugin_id) { Some(p) => p, None => return false };
+        let perms = match lock.get(plugin_id) {
+            Some(p) => p,
+            None => return false,
+        };
         for (perm, apis) in PERMISSION_API_MAP {
-            if apis.iter().any(|a| *a == api_method) { return perms.contains(*perm); }
+            if apis.iter().any(|a| *a == api_method) {
+                return perms.contains(*perm);
+            }
         }
         false
     }
@@ -228,7 +309,9 @@ impl PermissionManager {
 }
 
 impl Default for PermissionManager {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -238,10 +321,13 @@ mod tests {
     #[test]
     fn test_grant_filters_invalid() {
         let pm = PermissionManager::new();
-        let granted = pm.grant_permissions("test-plugin", &[
-            "terminal:output".to_string(),
-            "invalid:permission".to_string(),
-        ]);
+        let granted = pm.grant_permissions(
+            "test-plugin",
+            &[
+                "terminal:output".to_string(),
+                "invalid:permission".to_string(),
+            ],
+        );
         assert!(granted.contains("terminal:output"));
         assert!(!granted.contains("invalid:permission"));
         // 无默认位（桌面同构）：storage 只有 manifest 声明才授予
@@ -274,10 +360,7 @@ mod tests {
     fn test_check_api_mobile_specific() {
         // 移动端特有权限门：UI 扩展点按 API 方法名映射
         let pm = PermissionManager::new();
-        pm.grant_permissions("p", &[
-            "ui:settings".to_string(),
-            "ui:route".to_string(),
-        ]);
+        pm.grant_permissions("p", &["ui:settings".to_string(), "ui:route".to_string()]);
         assert!(pm.check_api("p", "ui.registerSettingsSection"));
         assert!(pm.check_api("p", "ui.registerRoute"));
         assert!(pm.check_api("p", "ui.openPage"));

@@ -205,6 +205,12 @@ impl PluginLoader {
                         continue;
                     }
 
+                    // ==================== 全局入口权限一致性（票 04 / spec §4.3） ====================
+                    // contributes.globalEntries 是 ui:globalEntry 门控的纯 manifest 贡献面；
+                    // 声明入口却未持权 = 清单配置缺口。warn 不阻断：壳前端按权限过滤渲染，
+                    // 这里让缺口在日志里点名（fail-visible，不静默返回空）。
+                    manifest.check_global_entry_permission();
+
                     let source = Self::detect_source(&path);
 
                     // WASM 插件：编译 + 实例化（组件路径；core module 在此编译失败，

@@ -85,6 +85,7 @@ describe('权限分组', () => {
     const covered = new Set(SHELL_PERMISSION_GROUPS.flatMap((g) => g.keys))
     expect([...covered].sort()).toEqual(
       [
+        'apps:control',
         'auth',
         'broadcast',
         'bus',
@@ -105,6 +106,7 @@ describe('权限分组', () => {
         'transfer',
         'ui:back',
         'ui:dialog',
+        'ui:globalEntry',
         'ui:input',
         'ui:navtab',
         'ui:route',

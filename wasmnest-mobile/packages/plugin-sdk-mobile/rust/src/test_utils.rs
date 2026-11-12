@@ -51,7 +51,10 @@ impl PluginStorageAccess for MockStorage {
         plugin_id: &str,
         key: &str,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<serde_json::Value>>> + Send>> {
-        self.calls.lock().unwrap().push((plugin_id.to_string(), key.to_string()));
+        self.calls
+            .lock()
+            .unwrap()
+            .push((plugin_id.to_string(), key.to_string()));
         let key = key.to_string();
         Box::pin(async move { Ok(Some(serde_json::json!({ "stored": key }))) })
     }
@@ -62,7 +65,10 @@ impl PluginStorageAccess for MockStorage {
         key: &str,
         _value: serde_json::Value,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
-        self.calls.lock().unwrap().push((plugin_id.to_string(), key.to_string()));
+        self.calls
+            .lock()
+            .unwrap()
+            .push((plugin_id.to_string(), key.to_string()));
         Box::pin(async { Ok(()) })
     }
 
@@ -71,7 +77,10 @@ impl PluginStorageAccess for MockStorage {
         plugin_id: &str,
         key: &str,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
-        self.calls.lock().unwrap().push((plugin_id.to_string(), key.to_string()));
+        self.calls
+            .lock()
+            .unwrap()
+            .push((plugin_id.to_string(), key.to_string()));
         Box::pin(async { Ok(()) })
     }
 }
@@ -83,7 +92,12 @@ impl SessionQuery for MockSessionQuery {
     fn list_sessions(
         &self,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<serde_json::Value>>> + Send>> {
-        Box::pin(async { Ok(vec![serde_json::json!({ "id": "s1" }), serde_json::json!({ "id": "s2" })]) })
+        Box::pin(async {
+            Ok(vec![
+                serde_json::json!({ "id": "s1" }),
+                serde_json::json!({ "id": "s2" }),
+            ])
+        })
     }
 
     fn get_session(
@@ -119,7 +133,10 @@ impl Default for MockEventEmitter {
 impl EventEmitter for MockEventEmitter {
     fn emit(&self, event: &str, payload: serde_json::Value) {
         self.emit_count.fetch_add(1, Ordering::SeqCst);
-        self.emitted.lock().unwrap().push((event.to_string(), payload));
+        self.emitted
+            .lock()
+            .unwrap()
+            .push((event.to_string(), payload));
     }
 }
 
@@ -146,7 +163,10 @@ impl FileAccess for MockFileAccess {
         plugin_id: &str,
         path: &str,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<String>>> + Send>> {
-        self.reads.lock().unwrap().push((plugin_id.to_string(), path.to_string()));
+        self.reads
+            .lock()
+            .unwrap()
+            .push((plugin_id.to_string(), path.to_string()));
         let path = path.to_string();
         Box::pin(async move { Ok(Some(format!("content-of-{}", path))) })
     }
@@ -157,10 +177,11 @@ impl FileAccess for MockFileAccess {
         path: &str,
         data: &str,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
-        self.writes
-            .lock()
-            .unwrap()
-            .push((plugin_id.to_string(), path.to_string(), data.to_string()));
+        self.writes.lock().unwrap().push((
+            plugin_id.to_string(),
+            path.to_string(),
+            data.to_string(),
+        ));
         Box::pin(async { Ok(()) })
     }
 
@@ -209,7 +230,10 @@ impl BusAccess for MockBusAccess {
         plugin_id: &str,
         topic: &str,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
-        self.subscriptions.lock().unwrap().push((plugin_id.to_string(), topic.to_string()));
+        self.subscriptions
+            .lock()
+            .unwrap()
+            .push((plugin_id.to_string(), topic.to_string()));
         Box::pin(async { Ok(()) })
     }
 
@@ -218,7 +242,10 @@ impl BusAccess for MockBusAccess {
         plugin_id: &str,
         topic: &str,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
-        self.unsubscriptions.lock().unwrap().push((plugin_id.to_string(), topic.to_string()));
+        self.unsubscriptions
+            .lock()
+            .unwrap()
+            .push((plugin_id.to_string(), topic.to_string()));
         Box::pin(async { Ok(()) })
     }
 }

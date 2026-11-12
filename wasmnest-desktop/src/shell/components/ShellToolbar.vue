@@ -79,6 +79,20 @@
       </button>
     </nav>
 
+    <!-- 全局入口（manifest contributes.globalEntries + ui:globalEntry 门控；票 04） -->
+    <div class="flex items-center gap-0.5 global-entries shrink-0">
+      <button
+        v-for="entry in globalEntries"
+        :key="entry.appId + '/' + entry.entryId"
+        class="tb-btn"
+        :title="entry.title"
+        :aria-label="entry.title"
+        @click="openEntry(entry.appId)"
+      >
+        <ShellIcon name="bolt" :size="15" />
+        <span class="tb-entry-label">{{ entry.title }}</span>
+      </button>
+    </div>
     <!-- 全局入口 + 窗口控制 -->
     <div class="flex items-center gap-0.5 ml-auto shrink-0">
       <button
@@ -161,12 +175,14 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useSettingsStore } from '@/stores/settings'
 import { useTheme } from '@/composables/useTheme'
 import { useShellState } from '../composables/useShellState'
+import { useGlobalEntries } from '../composables/useGlobalEntries'
 import ShellIcon from './ShellIcon.vue'
 
 const { t } = useI18n()
 const state = useShellState()
 const settingsStore = useSettingsStore()
 const { isSystemDark } = useTheme()
+const { entries: globalEntries } = useGlobalEntries()
 
 // 窗口控制：Tauri 环境取真窗口；浏览器预览（无 __TAURI_INTERNALS__）时降级空操作，
 // 工具栏不因窗口 API 缺失而整体挂掉（TitleBar 同源 API，此处显式兜底）
@@ -307,10 +323,26 @@ function requestClose() {
   state.dialog.value = 'exit'
 }
 
+/** 打开全局入口对应的应用（openApp 收口：preauthorize → activate → 进全屏） */
+function openEntry(appId: string) {
+  void state.openApp(appId)
+}
+
+/** 壳内快捷键 Ctrl/Cmd+Shift+A：打开第一个全局入口（票 04；不引入 Tauri 全局快捷键插件） */
+function onKeyDown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+    e.preventDefault()
+    const first = globalEntries.value[0]
+    if (first) openEntry(first.appId)
+  }
+}
+
 onMounted(checkMaximized)
 window.addEventListener('resize', onWindowResize)
+window.addEventListener('keydown', onKeyDown)
 onUnmounted(() => {
   window.removeEventListener('resize', onWindowResize)
+  window.removeEventListener('keydown', onKeyDown)
   if (resizeTimer) clearTimeout(resizeTimer)
 })
 </script>
@@ -474,5 +506,18 @@ onUnmounted(() => {
 }
 .tb-win.close:active {
   filter: brightness(0.92);
+}
+/* 全局入口标签（工具栏尾部）：与 tb-btn 同口径，收窄字号避免拥挤 */
+.tb-entry-label {
+  font-size: calc(11px * var(--ui-scale));
+  white-space: nowrap;
+}
+/* 全局入口容器：紧凑排列，不占窗口控制区 */
+.global-entries {
+  margin-right: 4px;
+}
+/* 全局入口为空时不占位（flex 容器零宽度） */
+.global-entries:empty {
+  display: none;
 }
 </style>

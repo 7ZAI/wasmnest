@@ -356,17 +356,24 @@ fn test_plugin_type_wire_lowercase() {
 fn test_plugin_type_retired_values_rejected_with_migration_path() {
     // 退役值 fail-visible：逐一点名拒绝，错误文案含迁移出路——不静默降级、
     // 不笼统「unknown variant」
-    for (old, expect_path) in [("ts-only", "'frontend'"), ("rust", "'backend'"), ("rust-ts", "'full'")] {
-        let err =
-            serde_json::from_value::<PluginType>(serde_json::json!(old)).expect_err("retired value must be rejected");
+    for (old, expect_path) in [
+        ("ts-only", "'frontend'"),
+        ("rust", "'backend'"),
+        ("rust-ts", "'full'"),
+    ] {
+        let err = serde_json::from_value::<PluginType>(serde_json::json!(old))
+            .expect_err("retired value must be rejected");
         let msg = err.to_string();
         assert!(msg.contains(old), "须点名旧值 {old}: {msg}");
-        assert!(msg.contains(expect_path), "须给出新值出路 {expect_path}: {msg}");
+        assert!(
+            msg.contains(expect_path),
+            "须给出新值出路 {expect_path}: {msg}"
+        );
         assert!(msg.contains("已退役"), "须说明退役事实: {msg}");
     }
     // 完全未知的值：点名值本身并列出合法集
-    let err =
-        serde_json::from_value::<PluginType>(serde_json::json!("gopher")).expect_err("unknown value must be rejected");
+    let err = serde_json::from_value::<PluginType>(serde_json::json!("gopher"))
+        .expect_err("unknown value must be rejected");
     assert!(err.to_string().contains("'gopher'"));
     assert!(err.to_string().contains("frontend / backend / full"));
 }

@@ -82,10 +82,14 @@ pub fn user_facing_string(code: &'static str, params: Value) -> String {
 #[macro_export]
 macro_rules! bail_with_code {
     ($code:expr $(,)?) => {
-        return Err(::anyhow::Error::from($crate::PluginError::business_simple($code)))
+        return Err(::anyhow::Error::from($crate::PluginError::business_simple(
+            $code,
+        )))
     };
     ($code:expr, $params:expr $(,)?) => {
-        return Err(::anyhow::Error::from($crate::PluginError::business($code, $params)))
+        return Err(::anyhow::Error::from($crate::PluginError::business(
+            $code, $params,
+        )))
     };
 }
 
@@ -128,7 +132,10 @@ mod tests {
     #[test]
     fn user_facing_string_matches_plugin_error_display() {
         let direct = PluginError::business("com.wasmnest.x", json!({ "k": 1 })).to_string();
-        assert_eq!(user_facing_string("com.wasmnest.x", json!({ "k": 1 })), direct);
+        assert_eq!(
+            user_facing_string("com.wasmnest.x", json!({ "k": 1 })),
+            direct
+        );
     }
 
     /// bail_with_code! 展开：产生携带标记的 anyhow::Error，source 可还原 PluginError
@@ -142,10 +149,16 @@ mod tests {
         }
 
         let e = fail_no_params().unwrap_err();
-        assert_eq!(e.to_string(), r#"{"__wasmnest_error__":true,"code":"com.wasmnest.demo.simple","params":null}"#);
+        assert_eq!(
+            e.to_string(),
+            r#"{"__wasmnest_error__":true,"code":"com.wasmnest.demo.simple","params":null}"#
+        );
 
         let e = fail_with_params().unwrap_err();
-        assert_eq!(e.to_string(), r#"{"__wasmnest_error__":true,"code":"com.wasmnest.demo.throttled","params":{"waitSecs":5}}"#);
+        assert_eq!(
+            e.to_string(),
+            r#"{"__wasmnest_error__":true,"code":"com.wasmnest.demo.throttled","params":{"waitSecs":5}}"#
+        );
         // 错误链保留 PluginError（宿主可用 source() 还原，虽宿主桥只按字符串解析）
         assert!(e.downcast_ref::<PluginError>().is_some());
     }

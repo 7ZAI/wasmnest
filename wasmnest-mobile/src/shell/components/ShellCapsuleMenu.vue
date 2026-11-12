@@ -70,14 +70,49 @@ interface CapsuleEntry {
 const { t } = useI18n()
 const nav = useShellNavigation()
 const overlays = useShellOverlays()
-const { getApp, stop } = useShellApps()
+const { apps, getApp, stop, launch } = useShellApps()
 
 const appId = computed(() => overlays.capsuleAppId.value)
 const app = computed(() => (appId.value ? getApp(appId.value) : undefined))
 
+/**
+ * 全局入口（票 04 / spec §4.3）：manifest 声明 contributes.globalEntries 且持有
+ * ui:globalEntry 权限的应用，在胶囊菜单平台项之前插入入口。
+ * 入口只对「已安装、已启用、激活成功」的应用渲染。
+ */
+const globalEntries = computed(() => {
+  const result = []
+  for (const a of apps.value) {
+    // 隐藏条件：未启用 / 未声明 globalEntries / 未持有 ui:globalEntry
+    if (a.enabled === false) continue
+    if (!a.contributions.globalEntries || a.contributions.globalEntries.length === 0) continue
+    const grants = a.permissions ?? []
+    const hasGlobalEntry = grants.some(
+      (g) => typeof g === 'object' && g !== null && 'key' in g && g.key === 'ui:globalEntry',
+    )
+    if (!hasGlobalEntry) continue
+    for (const entry of a.contributions.globalEntries) {
+      result.push({
+        id: `global:${a.id}/${entry.id}`,
+        label: entry.title,
+        icon: 'M13 2 3 14h9l-1 8 10-12h-9l1-8Z', // bolt
+        order: entry.order ?? 5, // 平台项之前（order < 10）
+        run: async () => {
+          overlays.closeCapsule()
+          await launch(a.id)
+        },
+      })
+    }
+  }
+  return result.sort((a, b) => a.order - b.order)
+})
+
 const items = computed<CapsuleEntry[]>(() => {
   const id = appId.value
   if (!id) return []
+
+  // 全局入口在平台项之前（order < 10）
+  const globalItems = globalEntries.value
 
   const platformItems: CapsuleEntry[] = [
     {
@@ -118,7 +153,7 @@ const items = computed<CapsuleEntry[]>(() => {
     },
   }))
 
-  return [...platformItems, ...appItems].sort((a, b) => a.order - b.order)
+  return [...globalItems, ...platformItems, ...appItems].sort((a, b) => a.order - b.order)
 })
 
 async function select(item: CapsuleEntry): Promise<void> {

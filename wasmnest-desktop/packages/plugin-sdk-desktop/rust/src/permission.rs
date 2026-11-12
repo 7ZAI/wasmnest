@@ -173,6 +173,21 @@ pub const PERMISSION_TUNNEL_CONNECT: &str = "tunnel:connect";
 /// 那是比「测一下通不通」大得多的权力；配置中心（`servers/net-config`）只为一
 /// 个诊断按钮，不应获得端口映射能力。本位不蕴含任何写面。
 pub const PERMISSION_TUNNEL_PROBE: &str = "tunnel:probe";
+/// 通用应用调用桥（前端贡献面，无 WASM 宿主函数对应）：`AppControlAPI`
+///
+/// 允许插件前端调用**其他应用已声明**的应用命令（列应用 / 调声明工具 / 打开
+/// 应用），宿主做白名单与审计。**强权限**：持有者可代表用户触发目标应用的
+/// 已声明命令，审批文案必须写明这一点，不能弱化成「读取应用信息」。
+///
+/// 门禁落点：宿主桥实现（桌面 `AppControlAPI` 注入前的权限校验、移动插件
+/// 上下文注入处）；未声明本位的插件前端拿不到 `apps` 桥。
+pub const PERMISSION_APPS_CONTROL: &str = "apps:control";
+/// 全局入口贡献（纯前端贡献面，无 WASM 宿主函数对应）：manifest
+/// `contributes.globalEntries` 在壳的全局入口区登记入口
+///
+/// 入口只对「已安装、已启用、激活成功」的应用渲染；停用即消失。
+/// 门禁落点：宿主聚合 `globalEntries` 时按本位过滤。
+pub const PERMISSION_UI_GLOBAL_ENTRY: &str = "ui:globalEntry";
 
 /// 权限词汇反射表：`(常量标识符, 权限串)`
 ///
@@ -181,18 +196,33 @@ pub const PERMISSION_TUNNEL_PROBE: &str = "tunnel:probe";
 /// 「每一条词汇都有真实门禁落点」（见桌面 `src-tauri/src/plugin/permission.rs` 的词汇漂移锁），
 /// 而不需要再手抄一份清单。
 pub const PERMISSION_VOCABULARY: &[(&str, &str)] = &[
-    (stringify!(PERMISSION_TERMINAL_INPUT), PERMISSION_TERMINAL_INPUT),
-    (stringify!(PERMISSION_TERMINAL_OUTPUT), PERMISSION_TERMINAL_OUTPUT),
+    (
+        stringify!(PERMISSION_TERMINAL_INPUT),
+        PERMISSION_TERMINAL_INPUT,
+    ),
+    (
+        stringify!(PERMISSION_TERMINAL_OUTPUT),
+        PERMISSION_TERMINAL_OUTPUT,
+    ),
     (stringify!(PERMISSION_SESSION_READ), PERMISSION_SESSION_READ),
-    (stringify!(PERMISSION_CONNECTION_READ), PERMISSION_CONNECTION_READ),
+    (
+        stringify!(PERMISSION_CONNECTION_READ),
+        PERMISSION_CONNECTION_READ,
+    ),
     (stringify!(PERMISSION_UI_SIDEBAR), PERMISSION_UI_SIDEBAR),
     (stringify!(PERMISSION_UI_TOOLBOX), PERMISSION_UI_TOOLBOX),
     (stringify!(PERMISSION_UI_STATUSBAR), PERMISSION_UI_STATUSBAR),
     (stringify!(PERMISSION_UI_DIALOG), PERMISSION_UI_DIALOG),
-    (stringify!(PERMISSION_UI_PAGE_TOOLBAR), PERMISSION_UI_PAGE_TOOLBAR),
+    (
+        stringify!(PERMISSION_UI_PAGE_TOOLBAR),
+        PERMISSION_UI_PAGE_TOOLBAR,
+    ),
     (stringify!(PERMISSION_UI_SETTINGS), PERMISSION_UI_SETTINGS),
     (stringify!(PERMISSION_UI_INPUT), PERMISSION_UI_INPUT),
-    (stringify!(PERMISSION_UI_FILE_HANDLER), PERMISSION_UI_FILE_HANDLER),
+    (
+        stringify!(PERMISSION_UI_FILE_HANDLER),
+        PERMISSION_UI_FILE_HANDLER,
+    ),
     (stringify!(PERMISSION_NETWORK_HTTP), PERMISSION_NETWORK_HTTP),
     (stringify!(PERMISSION_STORAGE), PERMISSION_STORAGE),
     (stringify!(PERMISSION_FS_READ), PERMISSION_FS_READ),
@@ -217,11 +247,25 @@ pub const PERMISSION_VOCABULARY: &[(&str, &str)] = &[
     (stringify!(PERMISSION_CRYPTO_KDF), PERMISSION_CRYPTO_KDF),
     (stringify!(PERMISSION_METRICS_READ), PERMISSION_METRICS_READ),
     (stringify!(PERMISSION_NOTIFY), PERMISSION_NOTIFY),
-    (stringify!(PERMISSION_CLIPBOARD_READ), PERMISSION_CLIPBOARD_READ),
-    (stringify!(PERMISSION_CLIPBOARD_WRITE), PERMISSION_CLIPBOARD_WRITE),
+    (
+        stringify!(PERMISSION_CLIPBOARD_READ),
+        PERMISSION_CLIPBOARD_READ,
+    ),
+    (
+        stringify!(PERMISSION_CLIPBOARD_WRITE),
+        PERMISSION_CLIPBOARD_WRITE,
+    ),
     (stringify!(PERMISSION_TUNNEL_SERVE), PERMISSION_TUNNEL_SERVE),
-    (stringify!(PERMISSION_TUNNEL_CONNECT), PERMISSION_TUNNEL_CONNECT),
+    (
+        stringify!(PERMISSION_TUNNEL_CONNECT),
+        PERMISSION_TUNNEL_CONNECT,
+    ),
     (stringify!(PERMISSION_TUNNEL_PROBE), PERMISSION_TUNNEL_PROBE),
+    (stringify!(PERMISSION_APPS_CONTROL), PERMISSION_APPS_CONTROL),
+    (
+        stringify!(PERMISSION_UI_GLOBAL_ENTRY),
+        PERMISSION_UI_GLOBAL_ENTRY,
+    ),
 ];
 
 /// 合法权限集合 — 桌面端权限词汇的**唯一真源**（由 [`PERMISSION_VOCABULARY`] 派生）
@@ -273,16 +317,36 @@ pub static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
             "session.isTerminalOpen",
         ],
     ),
-    (PERMISSION_UI_SIDEBAR, &["ui.registerSidebarPanel", "ui.registerPage"]),
+    (
+        PERMISSION_UI_SIDEBAR,
+        &["ui.registerSidebarPanel", "ui.registerPage"],
+    ),
     (PERMISSION_UI_TOOLBOX, &["ui.registerToolboxPage"]),
-    (PERMISSION_UI_STATUSBAR, &["ui.registerStatusBarItem", "ui.registerTitleBarItem"]),
+    (
+        PERMISSION_UI_STATUSBAR,
+        &["ui.registerStatusBarItem", "ui.registerTitleBarItem"],
+    ),
     (PERMISSION_UI_DIALOG, &["ui.showDialog"]),
     (PERMISSION_UI_PAGE_TOOLBAR, &["ui.registerPageToolbarItem"]),
     (PERMISSION_UI_SETTINGS, &["ui.registerSettingsSection"]),
-    (PERMISSION_UI_INPUT, &["ui.registerInputExtension", "ui.registerTerminalToolbarItem"]),
+    (
+        PERMISSION_UI_INPUT,
+        &[
+            "ui.registerInputExtension",
+            "ui.registerTerminalToolbarItem",
+        ],
+    ),
     (PERMISSION_UI_FILE_HANDLER, &["ui.registerFileHandler"]),
     (PERMISSION_NETWORK_HTTP, &["http.registerEndpoint"]),
-    (PERMISSION_STORAGE, &["storage.get", "storage.set", "storage.delete", "storage.flush"]),
+    (
+        PERMISSION_STORAGE,
+        &[
+            "storage.get",
+            "storage.set",
+            "storage.delete",
+            "storage.flush",
+        ],
+    ),
     // 票 08（websocket 业务下沉）：`broadcast.sync` 随 host-events.broadcast-sync
     // 退役（插件事件走 bus/emit）——PERMISSION_BROADCAST 不再映射任何宿主方法。
     // `broadcast` 位保留：前端 events.on/emit 仍经 manifest-gen FRONTEND_PERMISSION_RULES
@@ -291,71 +355,107 @@ pub static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
     (PERMISSION_FS_WRITE, &["fs.write", "fs.copy"]),
     // 系统文件选择器（WASM-only：宿主 `host-platform.pick-*`，无前端调用点）。
     // 与权限位同源命名，前缀 `platform.` 区别于 `fs.*`（后者是 host-fs 域）
-    (PERMISSION_FS_PICK, &["platform.pickFiles", "platform.pickFolder", "platform.pickFolders"]),
+    (
+        PERMISSION_FS_PICK,
+        &[
+            "platform.pickFiles",
+            "platform.pickFolder",
+            "platform.pickFolders",
+        ],
+    ),
     (PERMISSION_TIMER, &["timer.register"]),
     (PERMISSION_PROCESS, &["process.run", "process.kill"]),
     (PERMISSION_APP_CLI, &["app.cliInstall", "app.cliUninstall"]),
     // 用户级 PATH 目录登记：审批文案必须点明「新开终端生效」（持久化用户环境面）
-    (PERMISSION_APP_PATH, &["app.pathRegister", "app.pathUnregister"]),
-    (PERMISSION_PEER, &[
-        "peer.listDevices",
-        "peer.dial",
-        "peer.disconnect",
-        "peer.respondConsent",
-        "peer.listTrusted",
-        "peer.revokeTrusted",
-        "peer.sendFiles",
-        "peer.listTransfers",
-        "peer.cancelTransfer",
-        "peer.retryTransfer",
-        "peer.clearTransferHistory",
-        "peer.listReceiving",
-        "peer.respondTransfer",
-        "peer.cancelReceiving",
-        "peer.clearReceivingHistory",
-        "peer.getReceiveSettings",
-        "peer.setReceivePolicy",
-        "peer.listSharedDirectories",
-        "peer.removeSharedDirectory",
-        "peer.addSharedDirectory",
-        "peer.listSharedRoots",
-        "peer.browseDirectory",
-        "peer.pullFiles",
-        "peer.pickFiles",
-        // ADR 0022 v2 新增原语
-        "peer.dialEndpoint",
-        "peer.close",
-        "peer.setSharedRoots",
-    ]),
-    (PERMISSION_MDNS, &[
-        "mdns.browse",
-        "mdns.stopBrowse",
-        "mdns.advertise",
-        "mdns.stopAdvertise",
-        "mdns.isAdvertising",
-    ]),
-    (PERMISSION_WS_CLIENT, &[
-        "ws.connect",
-        "ws.sendText",
-        "ws.sendBinary",
-        "ws.close",
-        "ws.isConnected",
-    ]),
-    (PERMISSION_WS_SERVER, &[
-        "ws.registerEndpoint",
-        "ws.sendTextToClient",
-        "ws.sendBinaryToClient",
-        "ws.broadcastText",
-        "ws.broadcastBinary",
-        "ws.closeClient",
-        "ws.unregisterEndpoint",
-        "ws.listClients",
-        "ws.listEndpoints",
-    ]),
+    (
+        PERMISSION_APP_PATH,
+        &["app.pathRegister", "app.pathUnregister"],
+    ),
+    (
+        PERMISSION_PEER,
+        &[
+            "peer.listDevices",
+            "peer.dial",
+            "peer.disconnect",
+            "peer.respondConsent",
+            "peer.listTrusted",
+            "peer.revokeTrusted",
+            "peer.sendFiles",
+            "peer.listTransfers",
+            "peer.cancelTransfer",
+            "peer.retryTransfer",
+            "peer.clearTransferHistory",
+            "peer.listReceiving",
+            "peer.respondTransfer",
+            "peer.cancelReceiving",
+            "peer.clearReceivingHistory",
+            "peer.getReceiveSettings",
+            "peer.setReceivePolicy",
+            "peer.listSharedDirectories",
+            "peer.removeSharedDirectory",
+            "peer.addSharedDirectory",
+            "peer.listSharedRoots",
+            "peer.browseDirectory",
+            "peer.pullFiles",
+            "peer.pickFiles",
+            // ADR 0022 v2 新增原语
+            "peer.dialEndpoint",
+            "peer.close",
+            "peer.setSharedRoots",
+        ],
+    ),
+    (
+        PERMISSION_MDNS,
+        &[
+            "mdns.browse",
+            "mdns.stopBrowse",
+            "mdns.advertise",
+            "mdns.stopAdvertise",
+            "mdns.isAdvertising",
+        ],
+    ),
+    (
+        PERMISSION_WS_CLIENT,
+        &[
+            "ws.connect",
+            "ws.sendText",
+            "ws.sendBinary",
+            "ws.close",
+            "ws.isConnected",
+        ],
+    ),
+    (
+        PERMISSION_WS_SERVER,
+        &[
+            "ws.registerEndpoint",
+            "ws.sendTextToClient",
+            "ws.sendBinaryToClient",
+            "ws.broadcastText",
+            "ws.broadcastBinary",
+            "ws.closeClient",
+            "ws.unregisterEndpoint",
+            "ws.listClients",
+            "ws.listEndpoints",
+        ],
+    ),
     (PERMISSION_PTY_SPAWN, &["pty.spawn", "pty.kill"]),
-    (PERMISSION_PTY_IO, &["pty.write", "pty.resize", "pty.ringFetch", "pty.isRunning"]),
-    (PERMISSION_CRYPTO_AEAD, &["crypto.aeadEncrypt", "crypto.aeadDecrypt", "crypto.aeadGenerateKey", "crypto.aeadGenerateNonce"]),
-    (PERMISSION_CRYPTO_ASYM, &["crypto.keyAgreementGenerate", "crypto.keyAgreementShared"]),
+    (
+        PERMISSION_PTY_IO,
+        &["pty.write", "pty.resize", "pty.ringFetch", "pty.isRunning"],
+    ),
+    (
+        PERMISSION_CRYPTO_AEAD,
+        &[
+            "crypto.aeadEncrypt",
+            "crypto.aeadDecrypt",
+            "crypto.aeadGenerateKey",
+            "crypto.aeadGenerateNonce",
+        ],
+    ),
+    (
+        PERMISSION_CRYPTO_ASYM,
+        &["crypto.keyAgreementGenerate", "crypto.keyAgreementShared"],
+    ),
     (PERMISSION_CRYPTO_KDF, &["crypto.kdfDerive"]),
     // 运行监控（WASM-only：宿主 `host-metrics.snapshot`，无前端调用点）
     (PERMISSION_METRICS_READ, &["metrics.snapshot"]),
@@ -369,11 +469,26 @@ pub static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
     // 专属的审计名（门禁在 `tunnel/plugin_binding.rs` 的 `require_either`）。
     (
         PERMISSION_TUNNEL_SERVE,
-        &["tunnel.expose", "tunnel.unexpose", "tunnel.issuePairingTicket"],
+        &[
+            "tunnel.expose",
+            "tunnel.unexpose",
+            "tunnel.issuePairingTicket",
+        ],
     ),
-    (PERMISSION_TUNNEL_CONNECT, &["tunnel.connect", "tunnel.close"]),
+    (
+        PERMISSION_TUNNEL_CONNECT,
+        &["tunnel.connect", "tunnel.close"],
+    ),
     // T19：只读连通性探测（与 serve / connect 都不共享权力面）
     (PERMISSION_TUNNEL_PROBE, &["tunnel.probeRelay"]),
+    // 通用应用调用桥（前端贡献面）：`AppControlAPI` 的三个方法都是前端注入面，
+    // 无 WASM 宿主函数；门禁落点 = 宿主桥实现（注入前校验本位 + 白名单 + 审计）。
+    (
+        PERMISSION_APPS_CONTROL,
+        &["apps.list", "apps.invoke", "apps.open"],
+    ),
+    // `ui:globalEntry` 是纯 manifest 贡献面（contributes.globalEntries），无前端
+    // API 方法，按「无 API 方法的权限省略映射条目」约定不登记（同 `broadcast`）。
     // 内嵌 worker 调度（WASM-only：宿主 `host-worker.submit/cancel`，无前端调用点）
     (PERMISSION_WORKER_RUN, &["worker.submit", "worker.cancel"]),
 ];
@@ -445,9 +560,7 @@ impl PermissionManager {
     /// 获取插件的已授予权限列表
     pub fn get_granted(&self, plugin_id: &str) -> HashSet<String> {
         let lock = self.granted.read().unwrap_or_else(|e| e.into_inner());
-        lock.get(plugin_id)
-            .cloned()
-            .unwrap_or_default()
+        lock.get(plugin_id).cloned().unwrap_or_default()
     }
 }
 
@@ -464,10 +577,13 @@ mod tests {
     #[test]
     fn test_grant_filters_invalid() {
         let pm = PermissionManager::new();
-        let granted = pm.grant_permissions("test-plugin", &[
-            "terminal:input".to_string(),
-            "invalid:permission".to_string(),
-        ]);
+        let granted = pm.grant_permissions(
+            "test-plugin",
+            &[
+                "terminal:input".to_string(),
+                "invalid:permission".to_string(),
+            ],
+        );
         assert!(granted.contains("terminal:input"));
         assert!(!granted.contains("invalid:permission"));
         // 票 02：storage 不再是「人人自动持有」的默认位
@@ -557,7 +673,10 @@ mod tests {
         ] {
             let pm = PermissionManager::new();
             let granted = pm.grant_permissions("com.wasmnest.contrib", &[perm.to_string()]);
-            assert!(granted.contains(perm), "{perm} 声明后被过滤——SDK 词汇表缺位");
+            assert!(
+                granted.contains(perm),
+                "{perm} 声明后被过滤——SDK 词汇表缺位"
+            );
         }
     }
 
@@ -597,7 +716,10 @@ mod tests {
                 VALID_PERMISSIONS.contains(perm),
                 "PERMISSION_API_MAP 含词汇表外的键 {perm}"
             );
-            assert!(!apis.is_empty(), "{perm} 登记了空 API 清单（应直接省略该条目）");
+            assert!(
+                !apis.is_empty(),
+                "{perm} 登记了空 API 清单（应直接省略该条目）"
+            );
         }
     }
 

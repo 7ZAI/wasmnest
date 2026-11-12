@@ -91,11 +91,27 @@ export interface ShellCapsuleItem {
   onSelect?: (appId: string) => void | Promise<void>
 }
 
+/** 全局入口声明（`contributes.globalEntries` 条目；票 04 / spec §4.3） */
+export interface ShellGlobalEntry {
+  id: string
+  title: string
+  /** 图标文件名（可选） */
+  icon?: string
+  /** 排序权重（缺省 100；小者靠前） */
+  order?: number
+}
+
 /** 应用对宿主壳的全部贡献（可整体随清单下发，也可运行时逐项注册） */
 export interface ShellAppContributions {
   slots?: ShellSlotContribution[]
   surface?: ShellSurfaceContribution
   capsuleItems?: ShellCapsuleItem[]
+  /**
+   * 全局入口声明（`ui:globalEntry` 权限门控，票 04 / spec §4.3）：本应用在壳的
+   * 全局入口区登记一个入口。入口只对「已安装、已启用、激活成功」的应用渲染；
+   * 停用 / 卸载 / 未声明权限 / 用户关闭即消失。
+   */
+  globalEntries?: ShellGlobalEntry[]
 }
 
 /** 宿主壳中的应用模型 */

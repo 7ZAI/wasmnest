@@ -278,6 +278,86 @@ export function validateManifest(dir) {
     }
   }
 
+  // contributes.assistantTools（通用应用调用桥的能力声明，票 01 / spec §4.2）
+  // 应用声明「可被系统助手调用」的命令；宿主据此在 AppControlAPI 暴露 + 白名单校验。
+  // 非法条目会让桥「列得出来、调不通」或绕过白名单，故构建期判死。
+  const assistantTools = manifest.contributes?.assistantTools
+  if (assistantTools !== undefined && assistantTools !== null) {
+    if (!Array.isArray(assistantTools)) {
+      errors.push('contributes.assistantTools 必须是数组')
+    } else {
+      const RISK_LEVELS = ['read', 'ui', 'write', 'danger']
+      const toolIds = new Set()
+      const commandIds = new Set(
+        (Array.isArray(manifest.contributes?.commands) ? manifest.contributes.commands : [])
+          .map((c) => (c && typeof c === 'object' ? c.id : undefined)),
+      )
+      for (const entry of assistantTools) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          errors.push(`contributes.assistantTools 条目形态非法: ${JSON.stringify(entry)}`)
+          continue
+        }
+        if (typeof entry.id !== 'string' || entry.id.trim() === '') {
+          errors.push(`contributes.assistantTools 条目缺非空 id: ${JSON.stringify(entry)}`)
+        } else if (toolIds.has(entry.id)) {
+          errors.push(`contributes.assistantTools 重复 id: ${entry.id}`)
+        } else {
+          toolIds.add(entry.id)
+        }
+        if (typeof entry.title !== 'string' || entry.title.trim() === '') {
+          errors.push(`contributes.assistantTools 条目缺非空 title: ${JSON.stringify(entry)}`)
+        }
+        if (typeof entry.description !== 'string' || entry.description.trim() === '') {
+          errors.push(`contributes.assistantTools 条目缺非空 description: ${JSON.stringify(entry)}`)
+        }
+        if (typeof entry.command !== 'string' || entry.command.trim() === '') {
+          errors.push(`contributes.assistantTools 条目缺非空 command: ${JSON.stringify(entry)}`)
+        } else if (!commandIds.has(entry.command)) {
+          errors.push(`contributes.assistantTools 条目 command 未在 contributes.commands 声明: ${entry.command}`)
+        }
+        if (!entry.argsSchema || typeof entry.argsSchema !== 'object' || Array.isArray(entry.argsSchema)) {
+          errors.push(`contributes.assistantTools 条目 argsSchema 必须是 object: ${JSON.stringify(entry)}`)
+        }
+        if (!RISK_LEVELS.includes(entry.risk)) {
+          errors.push(`contributes.assistantTools 条目 risk 越界（须为 ${RISK_LEVELS.join(' | ')}）: ${JSON.stringify(entry)}`)
+        }
+        if (entry.output !== undefined && !['text', 'json'].includes(entry.output)) {
+          errors.push(`contributes.assistantTools 条目 output 越界（须为 text | json）: ${JSON.stringify(entry)}`)
+        }
+      }
+    }
+  }
+
+  // contributes.globalEntries（全局入口声明，票 01 / spec §4.3）
+  // 只登记 id / title / icon / order；入口是否渲染由壳按权限与启停状态决定。
+  const globalEntries = manifest.contributes?.globalEntries
+  if (globalEntries !== undefined && globalEntries !== null) {
+    if (!Array.isArray(globalEntries)) {
+      errors.push('contributes.globalEntries 必须是数组')
+    } else {
+      const entryIds = new Set()
+      for (const entry of globalEntries) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          errors.push(`contributes.globalEntries 条目形态非法: ${JSON.stringify(entry)}`)
+          continue
+        }
+        if (typeof entry.id !== 'string' || entry.id.trim() === '') {
+          errors.push(`contributes.globalEntries 条目缺非空 id: ${JSON.stringify(entry)}`)
+        } else if (entryIds.has(entry.id)) {
+          errors.push(`contributes.globalEntries 重复 id: ${entry.id}`)
+        } else {
+          entryIds.add(entry.id)
+        }
+        if (typeof entry.title !== 'string' || entry.title.trim() === '') {
+          errors.push(`contributes.globalEntries 条目缺非空 title: ${JSON.stringify(entry)}`)
+        }
+        if (entry.order !== undefined && !Number.isFinite(entry.order)) {
+          errors.push(`contributes.globalEntries 条目 order 非法（须为数字）: ${JSON.stringify(entry)}`)
+        }
+      }
+    }
+  }
+
   // contributes.httpEndpoints（票 16 路径白名单、票 08 追加认证档位）
   // 宿主**只认声明**：未声明路径 404，未声明清单等于没有 HTTP 面。条目两形态并存——
   // 纯路径段（档位 = 宿主最严缺省 jwt）或 `{ path, auth }`。条目非法会让声明侧

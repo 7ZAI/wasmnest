@@ -24,10 +24,14 @@ pub trait WasmNestPlugin: Send + Sync + 'static {
     fn manifest() -> PluginManifest;
 
     /// 激活插件
-    fn activate(context: RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>;
+    fn activate(
+        context: RustPluginContext,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>;
 
     /// 停用插件（可选，默认为空操作）
-    fn deactivate(_context: RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
+    fn deactivate(
+        _context: RustPluginContext,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
         Box::pin(async { Ok(()) })
     }
 
@@ -64,7 +68,8 @@ pub struct WasmNestPluginEntry {
     pub id: &'static str,
     pub create_manifest: fn() -> PluginManifest,
     pub activate: fn(RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>,
-    pub deactivate: fn(RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>,
+    pub deactivate:
+        fn(RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>,
     pub register_commands: fn() -> Vec<PluginCommand>,
     pub terminal_handlers: fn() -> Vec<Box<dyn TerminalHandler>>,
     pub on_startup: fn() -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>,
@@ -128,7 +133,9 @@ mod tests {
             }
         }
 
-        fn activate(_context: RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
+        fn activate(
+            _context: RustPluginContext,
+        ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
             Box::pin(async { Ok(()) })
         }
     }
@@ -139,8 +146,9 @@ mod tests {
     #[test]
     fn test_inventory_collects_registered_plugin() {
         // 宿主通过 inventory::iter 收集全部静态注册插件 —— 注册即契约
-        let ids: Vec<&str> =
-            inventory::iter::<WasmNestPluginEntry>().map(|e| e.id).collect();
+        let ids: Vec<&str> = inventory::iter::<WasmNestPluginEntry>()
+            .map(|e| e.id)
+            .collect();
         assert!(
             ids.contains(&"com.wasmnest.test-plugin"),
             "registered plugin not found in inventory: {:?}",

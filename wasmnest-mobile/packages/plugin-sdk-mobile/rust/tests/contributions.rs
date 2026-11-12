@@ -22,8 +22,7 @@ fn test_nav_tab_contribution_wire_format() {
             "order": 2
         })
     );
-    let minimal =
-        serde_json::json!({ "id": "t", "title": "T", "icon": "i", "component": "C" });
+    let minimal = serde_json::json!({ "id": "t", "title": "T", "icon": "i", "component": "C" });
     let back: NavTabContribution = serde_json::from_value(minimal).unwrap();
     assert_eq!(back.order, 0);
 }

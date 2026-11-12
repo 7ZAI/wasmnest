@@ -74,11 +74,17 @@ fn test_manifest_preauth_urls_parse() {
     let m: PluginManifest = serde_json::from_value(json).unwrap();
     assert_eq!(
         m.preauth_urls,
-        vec!["https://*.openai.com/*".to_string(), "https://api.deepseek.com/*".to_string()]
+        vec![
+            "https://*.openai.com/*".to_string(),
+            "https://api.deepseek.com/*".to_string()
+        ]
     );
     // 序列化回写保持 camelCase
     let back = serde_json::to_value(&m).unwrap();
-    assert_eq!(back["preauthUrls"], serde_json::json!(["https://*.openai.com/*", "https://api.deepseek.com/*"]));
+    assert_eq!(
+        back["preauthUrls"],
+        serde_json::json!(["https://*.openai.com/*", "https://api.deepseek.com/*"])
+    );
 }
 #[test]
 fn test_manifest_round_trip_fills_defaults() {

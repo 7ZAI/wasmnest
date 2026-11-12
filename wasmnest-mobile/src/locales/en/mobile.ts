@@ -87,6 +87,8 @@ export default {
         uiRoute: { title: 'Page Routing', desc: 'Register and open plugin-owned pages' },
         uiDialog: { title: 'Dialogs', desc: 'Use the host dialog and scrim' },
         uiBack: { title: 'Back Key', desc: 'Handle the Android system back key' },
+        appsControl: { title: 'App Control Bridge', desc: 'Invoke commands that other apps have declared for the assistant on your behalf (list apps / call declared tools / open apps); the target app must have declared and authorized it, and the host audits every call.' },
+        uiGlobalEntry: { title: 'Global Entry', desc: 'Register a quick entry in the shell global entry area; tapping it opens this app directly. The entry can be turned off at any time.' },
       },
       dialog: {
         confirm: 'OK',

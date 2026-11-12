@@ -45,11 +45,8 @@ pub trait HostPeer {
     /// `node_id` 必须是宿主已验证的对端身份（peer face 注入的 `peerNodeId`），
     /// 不得传客户端自报值；`display_name` 为空串按缺省处理。返回是否为新加入
     /// （幂等：已信任 false）
-    fn peer_trust_node(
-        &self,
-        node_id: &str,
-        display_name: Option<&str>,
-    ) -> Result<bool, HostError>;
+    fn peer_trust_node(&self, node_id: &str, display_name: Option<&str>)
+        -> Result<bool, HostError>;
     /// 向单个对端发送一批文件（扇出 = 对多个对端各调一次）。paths 元素双形态：
     /// 纯 string 或 `{ path, encrypt? }` 对象（任一元素 encrypt=true → 本批强制
     /// 加密）。返回传输句柄（batch-id 字符串）；仅接受 session 句柄寻址，
@@ -107,5 +104,8 @@ pub trait HostPeer {
     fn peer_active_transfers(&self) -> Result<serde_json::Value, HostError>;
     /// 收集发送源（v30）：paths = string[]，目录递归展开 + 批内同名去重
     /// → `[{ path, size }]`（仅元数据；路径应来自 pick-* 用户选择）
-    fn peer_collect_outgoing(&self, paths: &[serde_json::Value]) -> Result<serde_json::Value, HostError>;
+    fn peer_collect_outgoing(
+        &self,
+        paths: &[serde_json::Value],
+    ) -> Result<serde_json::Value, HostError>;
 }
