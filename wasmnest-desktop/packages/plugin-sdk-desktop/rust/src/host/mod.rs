@@ -58,7 +58,7 @@ pub use log::HostLog;
 pub use mdns::{mdns_event_topic, HostMdns, MDNS_FOUND, MDNS_LOST};
 pub use metrics::HostMetrics;
 pub use notify::{HostNotify, NotifyOptions};
-pub use peer::{HostPeer, PeerNodeConfig};
+pub use peer::{HostPeer, PeerNodeConfig, PeerNodeInfo};
 pub use platform::HostPlatform;
 pub use process::{HostProcess, ProcessSyncResult};
 pub use pty::{pty_event_topic, HostPty, PtyRingFetch, PtySpawnConfig, PTY_EXIT, PTY_OUTPUT};

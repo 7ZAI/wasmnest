@@ -23,6 +23,23 @@ pub struct PeerNodeConfig {
     pub listen_port: u16,
 }
 
+/// 本机 peer 节点只读投影（T21 / issue #27）
+///
+/// `relay_state` 取词 `relay-idle` / `relay-connecting` / `relay-reserved` /
+/// `relay-lost`；`addrs` 只在 `relay-reserved` 时含 circuit，其余情况只有 LAN。
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeerNodeInfo {
+    /// 本机节点 id（64 位小写 hex）
+    pub node_id: String,
+    /// 生效的设备名（空 = 宿主未命名）
+    pub device_name: String,
+    /// 可拨 multiaddr（LAN 在前；仅预留生效时追加 circuit）
+    pub addrs: Vec<String>,
+    /// relay 控制面状态词
+    pub relay_state: String,
+}
+
 /// 对等网络能力 trait —— 函数签名与 WIT `host-peer` 一一对应，
 /// JSON 载荷在绑定层完成字符串 ↔ Value 转换
 pub trait HostPeer {
@@ -108,4 +125,14 @@ pub trait HostPeer {
     /// 收集发送源（v30）：paths = string[]，目录递归展开 + 批内同名去重
     /// → `[{ path, size }]`（仅元数据；路径应来自 pick-* 用户选择）
     fn peer_collect_outgoing(&self, paths: &[serde_json::Value]) -> Result<serde_json::Value, HostError>;
+    /// 本机节点投影（T21）：nodeId / 设备名 / 可拨地址 / relay 状态。
+    /// 节点未启动时报错（fail-visible，不返回空身份）。
+    fn peer_node_info(&self) -> Result<PeerNodeInfo, HostError>;
+    /// 建立 / 释放本插件份额的 relay 预留（幂等，按插件 owner 记账）。
+    /// `enable = true` 时 `relay_addrs` 必非空且为 relay 端点（`.../tcp/<port>/p2p/<relay>`）。
+    fn peer_configure_relay(
+        &self,
+        relay_addrs: &[String],
+        enable: bool,
+    ) -> Result<PeerNodeInfo, HostError>;
 }

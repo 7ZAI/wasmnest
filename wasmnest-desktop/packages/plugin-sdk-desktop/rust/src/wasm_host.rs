@@ -19,7 +19,7 @@ use crate::host::{
     HostConfig, HostConnection, HostCrypto, HostError, HostEvents, HostFs, HostHttp, HostLog,
     HostMdns, HostMetrics, HostNotify, HostPeer, HostPlatform, HostPluginDatabase, HostProcess,
     HostPty, HostStorage, HostTask, HostTunnel, HostWebsocket, NotifyOptions, PeerNodeConfig,
-    ProcessSyncResult, PtyRingFetch, TunnelConfig, TunnelExposeConfig,
+    PeerNodeInfo, ProcessSyncResult, PtyRingFetch, TunnelConfig, TunnelExposeConfig,
 };
 use crate::wasm::wasmnest::app::host_app;
 use crate::wasm::wasmnest::auth_center::host_auth_center;
@@ -681,6 +681,33 @@ impl HostPeer for WasmHost {
             host_peer::collect_outgoing(&paths_json)
                 .map_err(|e| host_err("peer_collect_outgoing", e))?,
         )
+    }
+
+    fn peer_node_info(&self) -> Result<PeerNodeInfo, HostError> {
+        let info = host_peer::node_info().map_err(|e| host_err("peer_node_info", e))?;
+        Ok(PeerNodeInfo {
+            node_id: info.node_id,
+            device_name: info.device_name,
+            addrs: info.addrs,
+            relay_state: info.relay_state,
+        })
+    }
+
+    fn peer_configure_relay(
+        &self,
+        relay_addrs: &[String],
+        enable: bool,
+    ) -> Result<PeerNodeInfo, HostError> {
+        let relay_addrs_json = serde_json::to_string(relay_addrs)
+            .map_err(|e| host_err("peer_configure_relay", e.to_string()))?;
+        let info = host_peer::configure_relay(&relay_addrs_json, enable)
+            .map_err(|e| host_err("peer_configure_relay", e))?;
+        Ok(PeerNodeInfo {
+            node_id: info.node_id,
+            device_name: info.device_name,
+            addrs: info.addrs,
+            relay_state: info.relay_state,
+        })
     }
 }
 
