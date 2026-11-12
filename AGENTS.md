@@ -99,7 +99,7 @@
 | `docs/target-governance.md` | 构建资源与 target 治理：四仓落点全景（可清 / 禁清）/ 手工精确清理三级阶梯（测试产物 → `cargo clean -p` → incremental）/ 禁止项 / 完成验证 / 实测基线 |
 | `docs/architecture.md` | 架构硬约束：宿主薄壳六判据与三问全量 / 桌面挂载形态 / 退役面纪律 / 双端差异与锁步 / 权限与安全闸门总览 / 跨端协议 / 数据库 |
 | `docs/contracts.md` | 契约：release-manifest 判据 / WIT 真源链与 bump 政策 / WIT-ABI 变更 7 步流程 / 权限声明 / plugin.json / SDK / 生成物清单 |
-| `docs/frontend.md` | 前端规范：零资源访问三层封锁 / 挂载包与运行面形态 / 移动壳优先 / **UI 设计强制前置技能（`ui-ux-pro-max` + `design-taste-frontend`）** / 注释命名 i18n |
+| `docs/frontend.md` | 前端规范：零资源访问三层封锁 / 挂载包与运行面形态 / 移动壳优先 / **UI 设计强制前置技能（`ui-ux-pro-max` + `design-taste-frontend`）** / **动效强制前置技能（`emilkowalski/skills` 7 个：`animate` / `choreograph` / `animation-vocabulary` / `animation-performance` / `review-animations` / `improve-animations` / `find-animation-opportunities`，§4.3）** / 注释命名 i18n |
 | `docs/brand.md` | 对外品牌文案真源：主标（中/英）/ 副标句 / 技术意象句 / 备选池 / 使用规则 / 落地位置与现状（视觉 token 另见两端 `src` 下的 CSS 变量） |
 | `docs/backend.md` | Rust 规范：命名 / AppError / Command 纪律 / 调试面门控 / 注释命名（后端面）；写 / 审 Rust 前另须加载 `/skill:rust-best-practices`（§0.3） |
 | `docs/security.md` | 安全与日志红线：密钥禁令 / fail-closed / 加密引擎中性原语 / tracing 分级 / 结构化字段 |

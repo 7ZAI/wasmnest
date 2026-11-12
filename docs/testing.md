@@ -35,7 +35,7 @@
 
 **当前迁移期口径（用户 2026-10-18）**：不逐项跑集成 / 全量回归，收口后统一跑；日常改动至少跑**针对性单测 + 所在端测试**。以下为收口后的标准清单，按改动类型执行：
 
-- 改前端（任一宿主壳 / SDK UI）→ 该端 `pnpm run test:run` 全绿；根 `pnpm exec eslint .` 0 error；UI 改动至少在一个真实环境目验（桌面 `tauri:dev`；移动 dev-shell 或 Android dev）。**涉及 UI 设计决策的，先过 docs/frontend.md §4 的两个强制 skill 再下手。**
+- 改前端（任一宿主壳 / SDK UI）→ 该端 `pnpm run test:run` 全绿；根 `pnpm exec eslint .` 0 error；UI 改动至少在一个真实环境目验（桌面 `tauri:dev`；移动 dev-shell 或 Android dev）。**涉及 UI 设计决策的，先过 docs/frontend.md §4.1 / §4.2 的强制 skill 再下手；涉及动效的，按 §4.3 走动效 skill（设计与实现），完成后显式跑 `review-animations` 的判据过一遍。**
 - 改 app 产物接线 / dev 脚本 → 根 `pnpm run test:run` + 该端相关脚本锁；确认产物真写进 `src-tauri/resources/plugins/<end>/<id>/`。
 - 改宿主 Rust → 该端 `cd src-tauri && cargo test` 全绿（含锁测试）；需要随包产物的 e2e 先构建。
 - 改 SDK → 该端 SDK `test:run`；涉及发布 → `scripts/package-sdks.mjs` 全链绿。

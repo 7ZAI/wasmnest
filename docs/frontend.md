@@ -1,6 +1,6 @@
 # 前端规范（宿主壳 / SDK UI / 挂载包前端面）
 
-> **本文件是 `AGENTS.md` 的拆分文档（前端规范）**：零资源访问红线、三层封锁、移动宿主壳优先、挂载包 / 运行面前端形态、注释命名与 i18n、UI 设计强制前置技能。
+> **本文件是 `AGENTS.md` 的拆分文档（前端规范）**：零资源访问红线、三层封锁、移动宿主壳优先、挂载包 / 运行面前端形态、注释命名与 i18n、UI 设计与动效强制前置技能。
 > 本文件与 `AGENTS.md` 的硬约束（「必须 / 禁止」字样）**同级别**；静态锁真源 = 根 `eslint.config.js` + 各端 `src/__tests__/**` 锁测试 + 双端 `src-tauri/tests/capabilities_lock.rs`。
 
 ## 1. 零资源访问红线（前端只做 UI）
@@ -48,9 +48,9 @@
 - **业务不落壳**：终端 / 文件 / 会话 / 设备 / AI 等业务页面归各 wasm 应用（`registerSurface` / `registerSlot`）；壳只提供挂载、生命周期与权限闸门。壳自持三类：运行面挂载与生命周期、平台机制与安全闸门、宿主公共组件。
 - 迁移面不许缩水：壳内复制面文件清单被锁正面钉住（`shellConstraintLocks`），新增复制件同步登记锁内清单。
 
-## 4. UI 设计强制前置技能（开发与审核均必须使用）
+## 4. UI 设计与动效强制前置技能（开发与审核均必须使用）
 
-> **规则**：任何前端 UI 相关元素的**开发与审核**（宿主壳 / 系统页 / 挂载包 / SDK 组件 / 样式 / 交互 / 动效 / i18n 文案呈现），启动前与完成审核时**必须**先装载并遵循以下两个用户级 skill；不满足即视为未完成交付。
+> **规则**：任何前端 UI 相关元素的**开发与审核**（宿主壳 / 系统页 / 挂载包 / SDK 组件 / 样式 / 交互 / 动效 / i18n 文案呈现），启动前与完成审核时**必须**先装载并遵循 §4.1 / §4.2 两个设计 skill；**凡涉及动效的改动**（新增或修改过渡、动画、手势反馈、加载 / 空态动效、多元素编排）**另必须**按 §4.3 走动效技能。不满足即视为未完成交付。
 
 ### 4.1 `ui-ux-pro-max`（主查工具，全平台适用）
 
@@ -66,13 +66,41 @@
 - **边界（如实标注，避免误导）**：该 skill 自带脚本流程（`draw.mjs` / `inspect.mjs` / `assets.mjs` 与 `.taste-skill/` 工作区）面向**营销 / 公开页面**，其 description 声明不适配 dashboard / app screens。因此宿主壳与挂载包（应用 UI）以 **§4.1 ui-ux-pro-max 为主查工具**，本 skill 取其方法论（anti-slop 决策、真实浏览器检查、审阅循环）；网页形态的公开面（若有）则完整走其脚本流程。
 - 任何页面如果显得「模板化 / AI 味 / 平庸」（用户原话或自评命中），必须以本 skill 的方法重新设计，不得靠加阴影 / 渐变糊弄。
 
-### 4.3 工作流锚点
+### 4.3 动效强制前置技能（`emilkowalski/skills`，7 个）
 
-1. **动手前**：加载两个 skill → `ui-ux-pro-max` 检索设计系统 / 领域 / 栈判据 → 形成设计与交互决策（写进实现说明）→ 才允许写 CSS / 组件。
-2. **完成审核时**：对照两个 skill 的检查项逐项过（无障碍 / 响应式 / 触摸目标 / 排版 / 配色对比 / 状态与错误 / 动效），发现问题按 §1 原则修复；交付说明里列出「跑了哪个 skill、查了什么、怎么裁决的」。
-3. 知识沉淀：把本项目的 UI 决策（配色 / 排版 / 组件口径）沉淀到项目自身 token / 样式资产，不把 skill 输出当设计真源——设计真源仍是双端 `tailwind.config.js` / CSS token / 组件库。
+> **规则**：凡涉及动效的**设计、实现、审查**（过渡 / 进出场动画 / 手势反馈 / stagger 编排 / 加载与空态动效 / 掉帧性能），**必须**先加载下面对应 skill 再动手，审核时**必须**用同一套判据过一遍。凭「加个 transition 看起来就行」直接交付 = 流程违规。
 
-### 4.4 布局自解释：避免多余的次级标签与描述
+- skill 落点：`~/.agents/skills/<name>/SKILL.md`，源 = [emilkowalski/skills](https://github.com/emilkowalski/skills)（Emil Kowalski / animations.dev，Vercel / Linear 出身）；安装 `npx skills add emilkowalski/skills -s <name> -g -y`（可多个 `-s`），更新 `npx skills update -g`。
+- **职责分流（一次一件事，别拿错）**：
+
+| 阶段 | 技能 | 用在哪 |
+| --- | --- | --- |
+| 设计 / 实现（单元素） | `animate` | 先判「该不该动」，再定属性 / 曲线 / 时长 / 打断与退出；它负责写出实现 |
+| 设计 / 实现（多元素） | `choreograph` | 列表 stagger、英雄区入场、步骤切换、容器内换面、元素离开后兄弟收拢 |
+| 术语对齐 | `animation-vocabulary` | 说不清要什么效果时先把术语取准，再写实现 |
+| 性能 | `animation-performance` | 掉帧 / 卡顿 / 掉到 30fps、选属性、`will-change` 与合成层、CSS vs WAAPI vs rAF |
+| 审查（单次改动） | `review-animations` | 审本次 diff 的动效（默认挑错，通过要挣）。该 skill 标 `disable-model-invocation` ⇒ **必须显式 `/skill:review-animations` 调用**，不会自动触发 |
+| 审计（全仓） | `improve-animations` | 全仓动效盘点 → 分批可执行计划（只读，不改代码）；「该动没动 / 不该动却动了」用 `find-animation-opportunities` |
+
+- **本仓硬边界（技能不豁免这些，冲突时以本仓为准）**：
+  1. **不引入动效运行时依赖**：只用 CSS transition / `@keyframes` / WAAPI。Motion（`motion` / `motion-v`）/ GSAP / Framer / Lottie 运行时**禁止**装——技能里偏 React + Motion 的配方**只取取值规则**（曲线、时长、`transform-origin`、只动 `transform` / `opacity`），不取库。确需新依赖先问用户。
+  2. **移动插件产物必须单文件**（§2）：动效代码不得引入新的动态 `import()` 分包——asset 协议下相对 chunk 解析到 scope 外必 403（2026-11-12 bedcode 源码空白事故）。CSS 关键帧不产生 chunk，优先这条路。
+  3. **禁止常驻动画**：不得给主题 / 背景 / 大面积 `backdrop-filter` 面挂常驻动画（`background-position` 漂移实测 62fps → 11fps，§6 主题裁决）；动效只在交互瞬间存在。
+  4. **必须尊重 `prefers-reduced-motion`**：先例 = `SplashLoading.vue`、`useSlotCarousel`（切后台 / reduced motion 停走）、`pageTransition.test.ts` 对 reduce 分支的锁。新增动效一律给出 reduce 分支（位移 / 缩放降为淡入或直接终态），**禁止**「reduced motion 照旧播」。**Teleport 到 `body` 的覆盖层**（弹窗 / 抽屉 / 右键菜单 / toast）不在 `.shell-root` / `.shell-ui` 的统一兜底范围内，必须自带 reduce 分支。
+  5. **表面保活口径 ⇒ 动效不得依赖卸载 / 重挂载**（§2、`AGENTS.md` §2）：切走只是 `detach`（实例与 DOM 保留），所以「离开动画」只能在 detach 前播完或干脆不做；**禁止**把退出动效实现成「等动画结束再卸载」。
+  6. **后台不渲染**：容器脱文档即停，不得以「切后台继续跑动效 / 轮播」为设计前提。
+  7. **不阻塞输入、不顶替语义**：动画期间控件必须可点（不要靠 `pointer-events: none` 熬时长）；动效不得替代焦点 / 状态 / 错误语义（无障碍真源仍见 §4.1）。
+  8. **重访面不重播入场**：主屏 / 屏幕栈随路由重挂，错峰入场只在本次会话首访播（模块级标记，普通 `<script>` 而非 `<script setup>` 顶层），重访直接落终态；键盘搜索 / 高频动作一旦开始就不再补播。
+
+- **审核判据**（技能的标准 + 本仓边界，逐条过）：动效**有理由**吗（空间连续 / 状态指示 / 反馈 / 解释变化）；**与出现频率匹配**吗（键盘触发、每天上百次的操作不加动效）；曲线是 `ease-out` 类而非 `ease-in`；UI 动效 < 300ms；原点物理正确（popover 从触发器缩放，不 `scale(0)`）；掉帧必须给出真实 webview 目验（桌面 WebKitGTK + Android WebView），不接受「我机器上很顺」。
+
+### 4.4 工作流锚点
+
+1. **动手前**：加载 §4.1 / §4.2 两个 skill → `ui-ux-pro-max` 检索设计系统 / 领域 / 栈判据 → 形成设计与交互决策（写进实现说明）；**含动效的改动**再按 §4.3 走一遍动效决策（该不该动 / 曲线 / 时长 / 编排）→ 才允许写 CSS / 组件。
+2. **完成审核时**：对照各 skill 的检查项逐项过（无障碍 / 响应式 / 触摸目标 / 排版 / 配色对比 / 状态与错误 / 动效），动效面**显式**用 `review-animations` 的标准过一遍（§4.3 审核判据 + 本仓硬边界），发现问题按 §1 原则修复；交付说明里列出「跑了哪些 skill、查了什么、怎么裁决的」。
+3. 知识沉淀：把本项目的 UI 决策（配色 / 排版 / 组件口径 / 动效时长与缓动）沉淀到项目自身 token / 样式资产——页面过渡的时长与效果已有单一 token 与 `pageTransition.test.ts` 锁，新增动效沿用同一 token 体系；不把 skill 输出当设计真源（设计真源 = 双端 `tailwind.config.js` / CSS token / 组件库）。
+
+### 4.5 布局自解释：避免多余的次级标签与描述
 
 > **规则**：布局本身能说明的，不再用文字重复——**避免多余的次级标签与描述，让布局自己说明**（Let the layout do the explaining）。
 
