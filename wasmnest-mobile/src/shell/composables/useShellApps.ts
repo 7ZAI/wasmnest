@@ -15,6 +15,7 @@
 import { computed, ref, type Component, type ComputedRef, type Ref } from 'vue'
 import i18n from '@/locales'
 import { logger } from '@/utils/frontendLogger'
+import { parseInvokeError, showUserError, userErrorText } from '@/utils/userError'
 import { getShellRegistry } from '../registry'
 import type { ShellApp, ShellAppSource, ShellInstallRestoreDecider } from '../types'
 import { pushRecent } from './useShellRecent'
@@ -31,20 +32,16 @@ const APP_EVENT_ICONS = {
   failed: 'M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01',
 } as const
 
-/** 启动失败原因压成可读正文：Error 取 message，带 message 字段的 reject 对象取字段，
- *  其余 JSON 化——Tauri/SDK reject 出非 Error 时 String(e) 会把通知体打成
- *  「[object Object]」（2026-10-31 adb 审查实测），fail-visible 要求至少能读。 */
-function describeLaunchError(e: unknown): string {
-  if (typeof e === 'string') return e
-  if (e instanceof Error) return e.message
-  const message = (e as { message?: unknown } | null)?.message
-  if (typeof message === 'string' && message.trim().length > 0) return message
-  try {
-    return JSON.stringify(e) ?? String(e)
-  } catch (err) {
-    logger.debug('[Shell] launch error object is not JSON-serializable', err)
-    return String(e)
-  }
+/**
+ * 动作失败 → 用户可见正文（ADR 0030）
+ *
+ * Tauri/SDK 的 rejection 多为信封对象 `{code, request_id, params?}`（不是 Error），
+ * 直接 `String(e)` 会把通知体打成 `[object Object]`、把信封 JSON 打进 UI。
+ * 统一走错误消费层：用户面只出 `errors.<code>` 友好文案，原文由 showUserError 落日志。
+ */
+function actionErrorText(e: unknown): string {
+  // 纯映射（不落日志）：调用方已在 catch 里记录原始拒绝值 / request_id
+  return userErrorText(parseInvokeError(e))
 }
 
 /**
@@ -152,7 +149,7 @@ async function refresh(): Promise<void> {
           registry.upsertApps(source.id, list)
         } catch (e) {
           logger.error(`[Shell] app source list failed: source=${source.id}`, e)
-          lastError.value = e instanceof Error ? e.message : String(e)
+          lastError.value = actionErrorText(e)
         }
       }),
     )
@@ -190,11 +187,11 @@ async function launch(appId: string): Promise<boolean> {
     await refresh()
     return true
   } catch (e) {
-    const message = describeLaunchError(e)
+    const message = actionErrorText(e)
     logger.error(`[Shell] launch failed: appId=${appId}`, e)
     registry.patchApp(appId, { state: 'error', error: message })
     lastError.value = message
-    // 失败原因来自后端，属于「来源方给出的正文」，壳原样呈现不加工
+    // 失败原因归错误消费层：通知栏只出友好文案（技术详情已由 actionErrorText 落日志）
     notifyAppEvent('failed', app, { body: message })
     return false
   }
@@ -223,7 +220,7 @@ async function stop(appId: string): Promise<boolean> {
     useShellNavigation().closeAppRun(appId)
     return true
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
+    const message = actionErrorText(e)
     logger.error(`[Shell] stop failed: appId=${appId}`, e)
     registry.patchApp(appId, { state: 'error', error: message })
     lastError.value = message
@@ -251,7 +248,7 @@ async function approveApp(appId: string): Promise<boolean> {
     notifyAppEvent('approved', app)
     return true
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
+    const message = actionErrorText(e)
     logger.error(`[Shell] approve failed: appId=${appId}`, e)
     lastError.value = message
     return false
@@ -365,8 +362,11 @@ async function installFromLocalPackage(
     }
     return installedId
   } catch (e) {
+    // 安装失败对用户是「一次显式动作失败」：由错误消费层统一弹友好 toast（ADR 0030），
+    // 调用方不再各自拼 e.message（否则信封对象会被拼成 `[object Object]`）。
     logger.error('[Shell] install local package failed', e)
-    lastError.value = e instanceof Error ? e.message : String(e)
+    showUserError(e)
+    lastError.value = actionErrorText(e)
     return null
   }
 }
@@ -405,9 +405,8 @@ async function setAutostart(appId: string, autostart: boolean): Promise<boolean>
     lastError.value = null
     return true
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
     logger.error(`[Shell] set autostart failed: appId=${appId}`, e)
-    lastError.value = message
+    lastError.value = actionErrorText(e)
     return false
   }
 }
@@ -435,7 +434,7 @@ async function removeApp(appId: string, keepData = false): Promise<boolean> {
     return ok
   } catch (e) {
     logger.error(`[Shell] remove app failed: appId=${appId}`, e)
-    lastError.value = e instanceof Error ? e.message : String(e)
+    lastError.value = actionErrorText(e)
     return false
   }
 }

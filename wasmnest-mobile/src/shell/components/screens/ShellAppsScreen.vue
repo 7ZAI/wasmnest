@@ -169,6 +169,8 @@
 import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '../../composables/useToast'
+import { logger } from '@/utils/frontendLogger'
+import { showUserError } from '@/utils/userError'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
 import type { ShellApp } from '../../types'
@@ -275,7 +277,10 @@ async function handleInstall(): Promise<void> {
       await refresh()
     }
   } catch (e) {
-    toast.error(t('shell.apps.installFailed', { error: e instanceof Error ? e.message : String(e) }))
+    // 安装失败统一由错误消费层弹友好文案（ADR 0030：技术详情只进日志），
+    // 不再把后端错误原文拼进 toast。
+    logger.error('[Shell] install action failed', e)
+    showUserError(e)
   } finally {
     installing.value = false
   }

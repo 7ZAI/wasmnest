@@ -10,6 +10,7 @@ import { useI18nStore } from '@/stores/i18n'
 import { initPluginSystem } from './plugin'
 import { completeStartupTask } from '@/composables/useAppStartup'
 import { initFrontendLogger } from '@/utils/frontendLogger'
+import { useToast } from '@/composables/useToast'
 import { presetThemeBeforeMount } from '@/composables/useTheme'
 import './style.css'
 import './styles/mobile.css'
@@ -26,6 +27,19 @@ import './styles/theme-presets.css'
 import 'vue-sonner/style.css'
 
 const app = createApp(App)
+
+// 全局异常处理（与桌面端同口径）：Vue 组件渲染/生命周期错误与未捕获 Promise 拒绝
+// 统一提示，避免静默失败。技术详情全量进日志，toast 只做用户可见的通用提示
+// （ADR 0030：用户面永不渲染后端错误原文 / code / request_id）。
+app.config.errorHandler = (err, _instance, info) => {
+  logger.error(`[GlobalError] ${info || 'render'}:`, err)
+  useToast().error(i18n.global.t('mobile.runtimeUnexpected'))
+}
+
+window.addEventListener('unhandledrejection', (event) => {
+  logger.error('[GlobalError] unhandledrejection:', event.reason)
+  useToast().error(i18n.global.t('mobile.runtimeUnexpected'))
+})
 
 // 尽早初始化（debug 构建专属）：把前端日志经 frontendLogger 批量转发到 Rust（tracing → logcat），
 // AI agent 通过 tauri:android:dev:log 落盘文件 grep `frontend` 获取；release 两端 logger 均为空函数

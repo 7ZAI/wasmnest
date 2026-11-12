@@ -200,11 +200,11 @@ wasmnest-plugin create com.example.ui-only "UI Only" --ts-only
 | 子 API | 说明 |
 |---|---|
 | `context.ui` | 注册工具箱页 / navTab / 终端工具栏项 / 设置区 / 插件路由（registerRoute / openPage / goBack / onBackPressed） |
-| `context.commands` | 调用宿主命令（前端 handler 优先，未注册时回退 WASM 后端） |
+| `context.commands` | 调用宿主命令（前端 handler 优先，未注册时回退 WASM 后端）。失败抛出的 `Error.message` 已是可展示的友好文案（ADR 0030 `errors.<code>`），信封 `code/request_id/params` 挂在 Error 字段上供应用侧继续映射；**不要把 `err.message` 再交给 `context.i18n.t()` 当 key**，也无需自己拼接后端原文 |
 | `context.events` | 事件订阅与发射 |
 | `context.storage` | 插件键值存储（宿主 SQLite，dev-shell 中为 localStorage） |
 | `context.fileService` | 文件服务挂载（mount / updateRoots / dispose）与授权弹窗 |
-| `context.i18n` | 国际化（`registerMessages` / `t` 自动加插件 ID 前缀） |
+| `context.i18n` | 国际化（`registerMessages` / `t` 对已注册短 key 自动加插件 ID 前缀；未注册或传入错误正文时原样返回，不再回显前缀化 key） |
 | `context.logger` | 日志（转发宿主 tracing） |
 | `context.dialogs` | 弹窗 |
 | `context.notifications` | 系统通知 |

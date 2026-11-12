@@ -10,10 +10,12 @@
  */
 import { createI18n } from 'vue-i18n'
 import zhCNCommon from './zh-CN/common'
+import zhCNErrors from './zh-CN/errors'
 import zhCNMobile from './zh-CN/mobile'
 import zhCNSettings from './zh-CN/settings'
 import zhCNShell from './zh-CN/shell'
 import enCommon from './en/common'
+import enErrors from './en/errors'
 import enMobile from './en/mobile'
 import enSettings from './en/settings'
 import enShell from './en/shell'
@@ -25,12 +27,14 @@ const i18n = createI18n({
   messages: {
     'zh-CN': {
       ...zhCNCommon,
+      ...zhCNErrors,
       ...zhCNMobile,
       ...zhCNSettings,
       ...zhCNShell,
     },
     en: {
       ...enCommon,
+      ...enErrors,
       ...enMobile,
       ...enSettings,
       ...enShell,

@@ -5,6 +5,7 @@
  */
 
 import { logger as frontendLogger } from '@/utils/frontendLogger'
+import { parseInvokeError, userErrorText } from '@/utils/userError'
 import type {
   PluginContext,
   PluginInfo,
@@ -56,30 +57,34 @@ import { subscribeAppBackPressed } from './back-button'
 // 这里只做「插件 API → 分发层」的接线。
 
 /**
- * 提取 Tauri invoke 拒绝值的可读信息
+ * 插件命令失败 → 用户可见 Error（ADR 0030 错误信封消费侧）
  *
- * 拒绝值形态三类：
+ * Tauri invoke 的 reject 值形态：
  * 1. 宿主 Rust 命令 Err(AppError)：经 ADR 0030 信封序列化，reject 值 = `{ code, request_id, params? }`
- *    （真源 `wasmnest-server-base::error::AppError::Serialize`，移动宿主经 wasm-core re-export 共用；
- *    信封**永不携带**错误原文 / 堆栈，技术详情只进宿主日志）；
+ *    （真源 `wasmnest-server-base::error::AppError::Serialize`；信封**永不携带**错误原文 / 堆栈）；
  * 2. dev-shell / 单测环境：Error 实例；
  * 3. 兼容纯字符串形态（整核前移动端本地 error.rs `serialize_str` 行为，已退役）。
  *
- * 信封没有 message 字段，取 `code, request_id=<id>` 作可读标识——request_id 是宿主日志
- * 关联键（同条 tracing 的 `request_id` / `error` 字段），带上它才能从客户端侧 grep 到那一次失败。
+ * 用户面文案走 `errors.<code>` 友好文案（未注册 → `errors.host.internal`），
+ * 并把信封字段挂到 Error 上供插件侧错误消费层（`parsePluginError` 同构）继续映射。
+ *
+ * 2026-11-12 真机缺陷：此前把信封拼成 `Command not found: <cmd> (host.internal,
+ * request_id=…)` 抛出，插件侧的 `t(err.message)` 再把整串当前缀化 key 查表 →
+ * toast 直接显示 `com.wasmnest.<plugin>.Command not found: …`。技术详情只进日志，
+ * 插件拿到的 message 必须是可直接展示的友好文案。
  */
-function extractInvokeErrorMessage(e: unknown): string {
-  if (e instanceof Error) return e.message
-  if (typeof e === 'string') return e
-  if (e && typeof e === 'object') {
-    const obj = e as Record<string, unknown>
-    if (typeof obj.message === 'string') return obj.message
-    if (typeof obj.code === 'string') {
-      const rid = typeof obj.request_id === 'string' ? `, request_id=${obj.request_id}` : ''
-      return `${obj.code}${rid}`
-    }
+function pluginCommandError(e: unknown): Error {
+  const ue = parseInvokeError(e)
+  const error = new Error(userErrorText(ue)) as Error & {
+    code?: string
+    request_id?: string
+    params?: Record<string, unknown>
   }
-  return ''
+  error.name = 'PluginCommandError'
+  error.code = ue.code
+  if (ue.requestId) error.request_id = ue.requestId
+  if (ue.params) error.params = ue.params
+  return error
 }
 
 /** 宿主注入的能力钩子（loader 装配；测试可省略） */
@@ -157,9 +162,9 @@ export function createPluginContext(
     async execute(id: string, ...args: any[]): Promise<any> {
       const handler = commandHandlers.get(id)
       if (handler) return handler(...args)
-      // 本地 handler 查不到时回退到 WASM 命令桥（宿主 PluginManager.invoke_command）；
-      // 保留底层错误信息，避免把真实失败原因（如 WASM trap、插件未激活、无活跃对端）
-      // 统一掩盖成 Command not found。信封形态经 extractInvokeErrorMessage 取 code + request_id。
+      // 本地 handler 查不到时回退到 WASM 命令桥（宿主 PluginManager.invoke_command）。
+      // 失败按 ADR 0030 落到 pluginCommandError：message = 友好文案（技术详情只进日志），
+      // 并保留信封 code / request_id / params 供插件侧错误消费层继续映射。
       try {
         return await pluginCmds.pluginInvoke(
           info.id,
@@ -171,8 +176,7 @@ export function createPluginContext(
         // 原始拒绝值全量落盘（dev 控制台 + 攒批转发，release 也转发 error 级）：
         // 信封只有 code/request_id，细节在宿主日志，此处留形状供关联排查
         frontendLogger.error(`[PluginContext] command "${id}" failed:`, e)
-        const detail = extractInvokeErrorMessage(e)
-        throw new Error(detail ? `Command not found: ${id} (${detail})` : `Command not found: ${id}`)
+        throw pluginCommandError(e)
       }
     },
   }
@@ -441,7 +445,14 @@ export function createPluginContext(
       const hostI18n = (window as any).__WASMNEST_SHARED__?.i18n
       if (!hostI18n) return key
       const fullKey = `${info.id}.${key}`
-      return hostI18n.global.t(fullKey, params)
+      const text = hostI18n.global.t(fullKey, params)
+      // 未注册（vue-i18n 回显 key 原文）时**返回调用方原文**，不再回显前缀化 key：
+      // 插件常把错误正文 / 已完整 key 交给 t()，前缀化会产出
+      // `com.wasmnest.<plugin>.Command not found: …` 这类垃圾 key 直接进 toast
+      // （2026-11-12 真机实测）；也顺带兼容已带命名空间的 key。
+      if (text !== fullKey) return text
+      const raw = hostI18n.global.t(key, params)
+      return raw !== key ? raw : key
     },
   }
 

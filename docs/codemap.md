@@ -119,14 +119,15 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 | 路径 | 职责（头注释为准） |
 | --- | --- |
-| `main.ts` | 宿主入口 |
+| `main.ts` | 宿主入口（含全局 `errorHandler` / `unhandledrejection` → 友好兜底 toast，技术详情只进日志） |
+| `utils/userError.ts` | 错误信封消费层（ADR 0030，与桌面同口径）：`parseInvokeError` / `showUserError` / `userErrorText`，用户面永不渲染 code / request_id / 技术详情 |
 | `shell/` | ★ **移动宿主壳优先（强制）**：新功能 / 重构 / 样式调整默认落这里（docs/frontend.md §3） |
 | `shell/registry.ts` | 运行面注册表（**只注册不决策**；`registerSurface` 等） |
 | `shell/index.ts` · `types.ts` · `permissions.ts` · `utils.ts` | 壳类型面 / 权限面 / 工具 |
 | `shell/adapters/` · `components/` · `composables/` · `views/` | 壳公共组件 / 机制（复制进壳，不 import 旧目录，L7 锁） |
 | `plugin/` | 移动插件系统：`loader.ts`（插件装载）、`registry.ts`（注册表）、`context.ts`（invoke 上下文 + **四点退役扩展点抛错桩**）、`commands.ts`、`permission.ts`、`terminal-stream.ts`、`sessionCommands.ts`、`shared-runtime.ts`（`__WASMNEST_SHARED__` 代理）等 |
-| `utils/` | `frontendLogger.ts`（release 整体空实现，见头注释）、`connectionError.ts`、`clipboard.ts` 等 |
-| `locales/{zh-CN,en}/` | 宿主 i18n（含 `errorCodes.ts`） |
+| `utils/` | `frontendLogger.ts`（release 整体空实现，见头注释）、`userError.ts`（错误信封消费层）、`connectionError.ts`、`clipboard.ts` 等 |
+| `locales/{zh-CN,en}/` | 宿主 i18n（`errors.ts` = 错误信封 `errors.<code>` 文案，与桌面同码表） |
 | `components/` · `views/` · `composables/` · `stores/` · `services/` | 既有旧页面 / 服务（**只接受缺陷修复**，直到被 shell 彻底替换） |
 | `__tests__/` | vitest 测试树（shell 系列锁 22 个，见 §7） |
 

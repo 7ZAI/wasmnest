@@ -86,6 +86,8 @@ export default {
         cancel: '取消',
       },
     },
+    // 全局未捕获异常的兜底文案（renderer errorHandler / unhandledrejection）
+    runtimeUnexpected: '发生了未知错误，详情见日志',
     splash: {
       status: '正在启动…',
       tagline: '局域网远程终端',

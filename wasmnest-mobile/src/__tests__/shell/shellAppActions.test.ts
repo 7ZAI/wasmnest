@@ -11,7 +11,7 @@
  * | C-A3 | approveApp 异常 | 后端拒绝 | 返回 false + lastError 暴露原因 |
  * | C-A4 | launch 通知 | 启动成功 | 不落通知（启动是静默动作） |
  * | C-A5 | launch 通知去噪 | 已运行再启动（重挂前端模块） | 不落通知 |
- * | C-A6 | launch 失败 | 后端拒绝 | 状态置 error + 推「启动失败」并带后端原因 |
+ * | C-A6 | launch 失败 | 后端拒绝 | 状态置 error + 推「启动失败」；正文只出友好文案（技术详情进日志） |
  * | C-A7 | stop 通知 | 停止成功 | 不落通知（停止是静默动作） |
  * | C-A8 | install 通知 | 返回安装 id / 用户取消（null） | 有 id 才推「已安装」 |
  * | C-A9 | remove 通知 | 卸载成功 | 推「已卸载」（应用名取自卸载前快照） |
@@ -146,7 +146,9 @@ describe('C-A1..C-A3 审批动作', () => {
     const ok = await appsApi.approveApp('com.test.p')
 
     expect(ok).toBe(false)
-    expect(appsApi.lastError.value).toContain('hash mismatch')
+    // 错误消费层只暴露友好文案（code 原文 / 后端详情只进日志）
+    expect(appsApi.lastError.value).toBe('errors.host.internal')
+    expect(appsApi.lastError.value).not.toContain('hash mismatch')
   })
 })
 
@@ -183,7 +185,10 @@ describe('C-A4..C-A7 启动 / 停止通知', () => {
       n.title.includes('shell.notify.app.failed.title'),
     )
     expect(failed, '启动失败必须可见（通知栏 + 列表状态）').toBeTruthy()
-    expect(failed!.body, '失败原因来自后端，原样呈现').toContain('approval required')
+    // ADR 0030：用户面只出 errors.<code> 友好文案，后端原文 / 信封标识不进通知体。
+    // 本测试的 i18n 替身直接把 key 原样返回，故断言兜底 key（真机解析为中文文案）。
+    expect(failed!.body, '失败原因走错误消费层，不泄露技术详情').toBe('errors.host.internal')
+    expect(failed!.body).not.toContain('approval required')
   })
 
   it('should_notNotify_when_stopSucceeds', async () => {

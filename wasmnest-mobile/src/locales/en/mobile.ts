@@ -93,6 +93,9 @@ export default {
         cancel: 'Cancel',
       },
     },
+    // Fallback copy for globally uncaught exceptions (renderer errorHandler /
+    // unhandledrejection)
+    runtimeUnexpected: 'An unexpected error occurred. See logs for details',
     splash: {
       status: 'Starting…',
       tagline: 'LAN Remote Terminal',

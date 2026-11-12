@@ -17,6 +17,7 @@
 import { pluginInvoke } from '@/plugin/commands'
 import { ensureHostCredential } from '@/plugin/credentials'
 import { logger } from '@/utils/frontendLogger'
+import { userErrorText } from '@/utils/userError'
 import type { ApiResult } from '@/composables/useHttpApi'
 
 /** 移动端内置会话/终端插件（D6 选项 A：与桌面同名同构，职责为远程终端控制端） */
@@ -40,10 +41,10 @@ async function invokeSessionCommand<T>(command: string, args: Record<string, unk
       await ensureHostCredential(),
     )) as ApiResult<T>
   } catch (e: unknown) {
-    // Rust AppError 经 Tauri IPC 以纯字符串 reject（无 .message），需按类型提取
-    const message = typeof e === 'string' ? e : ((e as Error)?.message ?? String(e))
-    logger.error(`[SessionCommands] ${command} failed:`, message)
-    return { code: -1, message }
+    // ADR 0030：用户面只返回友好文案（errors.<code>），技术详情只进日志。
+    // 信封对象（{code, request_id}）直接 String() 会得到 `[object Object]`。
+    logger.error(`[SessionCommands] ${command} failed:`, e)
+    return { code: -1, message: userErrorText(e) }
   }
 }
 
