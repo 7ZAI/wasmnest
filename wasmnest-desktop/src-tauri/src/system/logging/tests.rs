@@ -538,17 +538,19 @@ fn console_filter_string_dev_adds_fallback_for_target_only_config() {
     // 宿主默认配置是纯 target 指令（EnvFilter 的默认指令为 OFF），dev 必须补全局兜底
     let widened = console_filter_string(true, "wasmnest_desktop_lib=debug,actix_web=info");
     assert_eq!(
-        widened, "wasmnest_desktop_lib=debug,actix_web=info,debug",
-        "dev 应在 target-only 配置后补全局 debug 兜底"
+        widened,
+        format!("wasmnest_desktop_lib=debug,actix_web=info,debug,{DEV_CONSOLE_NOISE_DIRECTIVES}"),
+        "dev 应在 target-only 配置后补全局 debug 兜底，并追加库噪音降噪指令"
     );
 }
 
 #[test]
 fn console_filter_string_keeps_existing_global_directive() {
-    // 配置已含全局级别：尊重开发者意图，不追加（否则会覆盖其全局级别）
+    // 配置已含全局级别：尊重开发者意图，不追加兜底（否则会覆盖其全局级别）；
+    // 库噪音降噪指令仍追加（不改变全局级别，只压掉心跳 target）
     assert_eq!(
         console_filter_string(true, "debug,actix_web=info"),
-        "debug,actix_web=info"
+        format!("debug,actix_web=info,{DEV_CONSOLE_NOISE_DIRECTIVES}")
     );
 }
 
@@ -567,7 +569,30 @@ fn console_filter_string_normalizes_separators() {
     // 尾随逗号 / 空白不应产生 `,,` 空指令
     assert_eq!(
         console_filter_string(true, " wasmnest_desktop_lib=debug , "),
-        "wasmnest_desktop_lib=debug,debug"
+        format!("wasmnest_desktop_lib=debug,debug,{DEV_CONSOLE_NOISE_DIRECTIVES}")
+    );
+}
+
+/// 回归锁：dev 控制台必须压掉对端传输栈的 keep-alive 心跳，但不殃及同 crate 的
+/// 连接/流生命周期 debug（用户实测：`yamux::connection::rtt` 每秒每连接刷一行）
+#[test]
+fn dev_console_filter_drops_peer_transport_keepalive_noise() {
+    let hits = dispatch_through(
+        &console_filter_string(true, &LogConfig::default().console_filter),
+        || {
+            tracing::debug!(
+                target: "yamux::connection::rtt",
+                "received pong 13, estimated round-trip-time 50.467135ms"
+            );
+            tracing::debug!(target: "yamux::connection", "new connection: 1 (Client)");
+            tracing::debug!(target: "libp2p_swarm", "Connection established");
+        },
+    );
+
+    assert_eq!(
+        hits,
+        vec!["yamux::connection", "libp2p_swarm"],
+        "dev 控制台应丢弃 yamux RTT 心跳，保留连接/协议栈排障 debug"
     );
 }
 

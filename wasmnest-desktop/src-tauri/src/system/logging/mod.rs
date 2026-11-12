@@ -196,6 +196,22 @@ const NON_BLOCKING_BUFFER_LINES: usize = 20_000;
 /// 只兜 `info` 会让「点开应用后没有日志滚动」的老症状残留一半。
 const DEV_CONSOLE_FALLBACK_LEVEL: &str = "debug";
 
+/// dev 控制台附加的库噪音降噪指令（`EnvFilter` target 语法，仅 dev 生效）
+///
+/// `yamux::connection::rtt`：yamux 的 keep-alive RTT 探活（`sending ping` /
+/// `received pong … estimated round-trip-time`）走 `log::debug!`，经 `LogTracer` 桥成
+/// tracing 事件后**每秒每条连接至少打一条**，开发者看到的就是无信息量的心跳刷屏。
+/// 该模块只产出探活记录；yamux 的连接 / 流生命周期 debug（`yamux::connection` 等
+/// 其它 target）照常放行。
+///
+/// 为什么不需要 `libp2p_swarm`：libp2p-swarm 的 `Swarm::poll` / `Connection::poll` /
+/// `Pool::poll` 是 `#[instrument]` **span**，桌面有真订阅器时 fmt 层不打印 span 事件
+/// （移动端经 tracing→log 桥接成行，故在那里按 span 名单独抑制）。
+///
+/// 指令不覆盖已有配置（target 指令优先级高于全局级别）；若要临时看全量库 debug，
+/// 用 `RUST_LOG`（优先级最高，整串覆盖）。
+const DEV_CONSOLE_NOISE_DIRECTIVES: &str = "yamux::connection::rtt=info";
+
 /// 判断过滤器表达式里是否已有「全局指令」（不带 `=` 的裸级别段，如 `info` / `debug`）
 fn has_global_directive(raw: &str) -> bool {
     raw.split(',').any(|seg| {
@@ -219,15 +235,23 @@ fn has_global_directive(raw: &str) -> bool {
 /// 优先级更高，`actix_web=info` 这类降噪设置继续生效）。release 不改写配置语义：
 /// 控制台默认关闭，显式开启者应拿到自己写的过滤器。需要换级别时用 `RUST_LOG`
 /// （优先级最高，由 `console_env_filter` 处理，不经过本函数）。
+///
+/// dev 另统一追加 `DEV_CONSOLE_NOISE_DIRECTIVES`（不受持久化配置影响）：设备侧
+/// logcat 的同类库心跳由 `wasmnest-mobile/src-tauri/src/system/logging.rs` 抑制，
+/// 两端同一口径。
 fn console_filter_string(dev: bool, configured: &str) -> String {
     let configured = configured.trim().trim_end_matches(',').trim();
-    if !dev || has_global_directive(configured) {
+    if !dev {
         return configured.to_string();
     }
-    if configured.is_empty() {
-        return DEV_CONSOLE_FALLBACK_LEVEL.to_string();
-    }
-    format!("{configured},{DEV_CONSOLE_FALLBACK_LEVEL}")
+    let widened = if has_global_directive(configured) {
+        configured.to_string()
+    } else if configured.is_empty() {
+        DEV_CONSOLE_FALLBACK_LEVEL.to_string()
+    } else {
+        format!("{configured},{DEV_CONSOLE_FALLBACK_LEVEL}")
+    };
+    format!("{widened},{DEV_CONSOLE_NOISE_DIRECTIVES}")
 }
 
 /// 控制台层过滤器：`RUST_LOG` 优先，其次按 `console_filter_string` 展开配置

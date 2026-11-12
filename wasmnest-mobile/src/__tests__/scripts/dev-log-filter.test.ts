@@ -19,6 +19,8 @@
  *   C-08 noFilter：完全关闭过滤，任何行都不判噪音
  *   C-09 补充构建/框架噪音：Gradle 缓存原因与 transform、cargo-mobile2 链接进展、Vite
  *        产物体积行、MIUI 属性探测告警均丢弃；构建失败行与 libc 崩溃行必须保留
+ *   C-10 libp2p-swarm poll 心跳 span 与 yamux RTT 探活行丢弃；同 crate 的拨号失败 /
+ *        协议协商失败 / Connection established 等 debug 事件必须保留
  */
 import { describe, expect, it } from 'vitest'
 
@@ -265,6 +267,75 @@ describe('createNoiseFilter 补充构建与框架噪音', () => {
 
   it('不误杀近似行_当 Vite 输出行缺少 gzip 汇总段', () => {
     expect(filter().isNoise('dist/index.js  139.42 kB')).toBe(false)
+  })
+})
+
+describe('createNoiseFilter libp2p 协议栈心跳噪音', () => {
+  const filter = () => createNoiseFilter({ devUrl: DEV_URL })
+
+  it('丢弃 libp2p-swarm poll 心跳 span 行_用户实测刷屏样例', () => {
+    const f = filter()
+    expect(f.isNoise(logcat('WasmNest', 'libp2p_swarm: Swarm::poll;'))).toBe(true)
+    expect(f.isNoise(logcat('WasmNest', 'libp2p_swarm::connection: Connection::poll;'))).toBe(true)
+    expect(
+      f.isNoise(logcat('WasmNest', 'libp2p_swarm::connection::pool: Pool::poll;')),
+    ).toBe(true)
+  })
+
+  it('丢弃 tracing Span::new 形态（++ 前缀）与带字段的同类行', () => {
+    const f = filter()
+    expect(f.isNoise(logcat('WasmNest', 'libp2p_swarm: ++ Swarm::poll;'))).toBe(true)
+    expect(
+      f.isNoise(
+        logcat(
+          'WasmNest',
+          'libp2p_swarm::connection: Connection::poll; addr=/ip4/192.168.1.5/tcp/4001',
+        ),
+      ),
+    ).toBe(true)
+  })
+
+  it('丢弃 yamux RTT 探活行', () => {
+    const f = filter()
+    expect(
+      f.isNoise(
+        logcat(
+          'WasmNest',
+          'yamux::connection::rtt: received pong 13, estimated round-trip-time 50.467135ms',
+        ),
+      ),
+    ).toBe(true)
+    expect(f.isNoise(logcat('WasmNest', 'yamux::connection::rtt: sending ping 14'))).toBe(true)
+  })
+
+  it('保留协议栈排障日志_只丢心跳', () => {
+    const f = filter()
+    expect(
+      f.isNoise(
+        logcat(
+          'WasmNest',
+          'libp2p_swarm: Connection attempt to peer failed with Transport([...])',
+        ),
+      ),
+    ).toBe(false)
+    expect(
+      f.isNoise(
+        logcat(
+          'WasmNest',
+          'libp2p_swarm::connection::pool: Failed to close connection to peer: KeepAliveTimeout',
+        ),
+      ),
+    ).toBe(false)
+    expect(f.isNoise(logcat('WasmNest', 'libp2p_swarm: Transport::dial; address=/ip4/10.0.0.2'))).toBe(
+      false,
+    )
+    expect(f.isNoise(logcat('WasmNest', 'yamux::connection: new connection: 1 (Client)'))).toBe(
+      false,
+    )
+    // 同名 span 名但来自业务 target（非 libp2p-swarm）：不套用本规则
+    expect(
+      f.isNoise(logcat('WasmNest', 'wasmnest_server_peer_net::swarm: Swarm::poll;')),
+    ).toBe(false)
   })
 })
 
