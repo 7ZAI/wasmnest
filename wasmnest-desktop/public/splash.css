@@ -1,0 +1,78 @@
+/**
+ * 静态首屏（Vue 挂载前的过渡帧）
+ *
+ * 为什么是独立静态文件、且**不能**搬回 index.html 内联 <style>：
+ *
+ *   Tauri v2 在 codegen 期给 index.html 里每个 <style> 打上 nonce 占位符
+ *   （tauri-codegen/src/context.rs → tauri-utils/src/html2.rs `inject_nonce(document,
+ *   "style", STYLE_NONCE_TOKEN)`），运行期再把它换成随机 nonce 并往 CSP 的
+ *   `style-src` 追加 `'nonce-…'`（tauri/src/manager/mod.rs `replace_csp_nonce`）。
+ *   而 CSP3 规定：directive 里一旦出现 nonce-source / hash-source，同一 directive 的
+ *   `'unsafe-inline'` **被忽略** —— 于是所有「运行时用 JS 插入的内联 <style>」全部被
+ *   `style-src-elem` 拒掉（`style.sheet === null`）。本项目四个 wasm 应用的前端样式
+ *   （ft-* / ah-* / session-task-* / md-body）都靠 `document.head.appendChild(style)`
+ *   注入，release 产物里会集体失效——dev 不炸是因为 devCsp 只配了 connect-src，
+ *   `tauri::manager::AppManager::csp()` 在 dev 分支不取 csp，无 nonce 注入。
+ *
+ *   结构锁：src-tauri/tests/capabilities_lock.rs::index_html_has_no_inline_style_or_script
+ *
+ * 放在 public/ 而非并入 src/style.css：src/style.css 由 main.ts 以 JS import 引入，
+ *   dev 期要等 JS 执行才生效；本文件要的是「HTML 一解析就有样式」的静态首屏，
+ *   走 <link> 在 dev / prod 行为一致，且不被 PostCSS/Tailwind 二次加工（字面值是
+ *   style.css token 的手工镜像，保持逐字可控）。
+ *
+ * 此刻 style.css 的 token 与应用内主题设置（AppConfig 的 ui.theme，经 Rust invoke
+ * 异步取回）都还没加载，JS 也一行未执行 —— 本帧只能跟随系统深浅色
+ * （与移动端 index.html 静态首屏同源的做法）。应用内手动选的深浅色从
+ * SplashLoading.vue 起才生效：本帧与品牌开屏之间会有一小段「系统色 → 设置色」的
+ * 交接，这是「不显示窗口 vs 先给一帧」的取舍结果，不是遗漏。
+ *
+ * 两套色值都是手工镜像，改真源需同步这里（C-04 / C-06 锁住）：
+ * - 浅色分支 ← style.css 浅色 token（--bg-page / --bg-sidebar / --border / --text-primary）
+ * - 深色分支 ← SplashLoading.vue 的 `html.dark .splash-root` 品牌 ink 渐变
+ *   （--splash-bg-from #16181c → --splash-bg-to #08090b、ambient #ece8dc）。
+ *   2026-10-29 前这里是退役的 slate 配色（#0f172a + 靛蓝环），与品牌开屏的暖黑
+ *   断层明显 —— 那段是浅色镜像时的遗留，已按品牌真源对齐。
+ */
+
+/* 系统减弱动态效果时降级为瞬时（与 src/style.css 同款约定） */
+.splash {
+  display: flex;
+  height: 100vh;
+  align-items: center;
+  justify-content: center;
+  /* 三层背景与 SplashLoading.vue 深色块逐层对应：中央高光 + 底部 vignette + 品牌 ink 渐变，
+     目的是让「本帧 → 品牌开屏」的交接不跳色（改这里必须同步真源，C-06 会转红） */
+  background:
+    radial-gradient(ellipse 68% 46% at 50% 40%, rgba(236, 232, 220, 0.06), transparent 70%),
+    radial-gradient(ellipse 100% 60% at 50% 110%, rgba(0, 0, 0, 0.6), transparent 60%),
+    linear-gradient(135deg, #16181c, #08090b);
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid rgba(236, 232, 220, 0.12);
+  border-top-color: rgba(236, 232, 220, 0.72);
+  animation: spin 0.8s linear infinite;
+}
+
+/* 浅色系统：镜像 style.css 浅色 token —— 底 #f5f4f0→#efede7（--bg-page→--bg-sidebar），
+   环身 #e4e1d8（--border），前进端 #26231b（--text-primary） */
+@media (prefers-color-scheme: light) {
+  .splash {
+    background: linear-gradient(135deg, #f5f4f0, #efede7);
+  }
+
+  .spinner {
+    border-color: #e4e1d8;
+    border-top-color: #26231b;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

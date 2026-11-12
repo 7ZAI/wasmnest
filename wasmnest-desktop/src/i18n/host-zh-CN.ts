@@ -1,0 +1,660 @@
+/**
+ * 宿主机制文案（中文）——桌面宿主前端下沉后由 app 前端持有
+ *
+ * 来源：宿主 `src/locales/zh-CN/{common,desktop,settings}.ts`（设备壳 shell.ts 与
+ * 应用中心 desktop.plugin.* 随退役面删除）。本文件与 host-en.ts 由同一机制面迁移
+ * 而来：全局错误信封（errors.*）、通用文案（common.*）、设置页平台分组
+ * （settings.*）、工作台/服务器/启动画面/退出确认（desktop.*）。
+ *
+ * 授权弹窗文案从 `desktop.plugin.*` 迁入 `desktop.auth.*`：应用中心删除后
+ * 「plugin」词汇退役，弹窗属安全闸门机制（fail-closed 语义不变，仅 key 换名）。
+ */
+
+export default {
+  shell: {
+    skipToContent: '跳到主内容',
+    home: {
+      where: '主屏',
+      aria: '主屏',
+      searchAria: '主屏搜索',
+      appsTitle: '应用',
+      installed: '已安装',
+      noApps: '没有匹配「{q}」的应用',
+      noneEnabled: '没有已启用的应用（在应用管理中重新启用）',
+      servicesTitle: '服务',
+      sysTitle: '系统',
+      sysHint: '全局管理页面（从后台应用面板打开）',
+      /* 宿主系统级服务在「服务」区的条目（auth-center / monitor）：
+         主屏应用网格与系统区都不显示服务，它们住在应用下方的“服务”区。 */
+      serviceAuthCenter: '认证中心',
+      serviceMonitor: '运行监控',
+      matches: '个匹配',
+    },
+    // 多任务面板（工具栏入口）：打开过 / 后台运行的面在此切换与关闭
+    recents: {
+      title: '后台应用',
+      countUnit: '个',
+      close: '收起后台应用',
+      closeAll: '全部关闭',
+      empty: '没有后台运行的应用',
+      open: '切换到 {name}',
+      closeOne: '关闭 {name}',
+      stopInstance: '停止实例',
+      closePage: '关闭页面',
+      sysPage: '系统页',
+    },
+    state: {
+      running: '运行中',
+      degraded: '降级',
+      dormant: '未启动',
+      approval: '待审批',
+      error: '错误',
+    },
+    nav: {
+      back: '返回',
+      backTitle: '返回（Esc）',
+      tasks: '切换应用',
+      tasksTitle: '切换应用：{count} 个在运行',
+      home: '主屏',
+      homeTitle: '回到主屏（应用继续在后台运行）',
+    },
+    /** 悬浮导航（开关开启后常驻在任意面之上；与移动端同键名同文案） */
+    floatingNav: {
+      back: '返回',
+      home: '回主屏',
+      recents: '切换应用',
+      move: '悬浮导航，可拖动；聚焦后可用方向键移动',
+    },
+    toolbar: {
+      notifs: '通知中心，{count} 条',
+      notifsTitle: '通知中心（{count} 条）',
+      quickSettings: '快捷设置',
+      themeToLight: '切换到浅色',
+      themeToDark: '切换到深色',
+      minimize: '最小化',
+      maximize: '最大化',
+      close: '关闭窗口',
+    },
+    statusBar: {
+      aria: '平台状态栏',
+      ready: '运行时就绪',
+      loading: '正在加载',
+      apps: '{count} 个应用',
+      approvals: '{count} 项待审批',
+      openPerms: '打开权限与授权',
+    },
+    sys: {
+      chip: '系统页 · 卡片',
+      apps: {
+        name: '应用管理',
+        desc: '安装 · 启停 · 卸载 · 配置',
+      },
+      perms: {
+        name: '权限与授权',
+        desc: '策略档位 · 授权记录 · 权限位',
+      },
+      settings: {
+        name: '设置',
+        desc: '外观 · 系统 · 日志 · 授权 · 关于',
+      },
+      appearance: {
+        name: '外观',
+        desc: '明暗模式 · 语言 · 字号 · 壁纸 · 主题',
+      },
+      shortcuts: {
+        name: '快捷键',
+        desc: '壳层键盘快捷键 · 可改可清空',
+      },
+    },
+    quickSettings: {
+      title: '快捷设置',
+      close: '收起快捷设置',
+      on: '开',
+      off: '关',
+      tileTheme: '深色主题',
+      tileAnim: '动画',
+      tileCrypto: '链路加密',
+      tileSleep: '防止休眠',
+      tileNav: '悬浮导航',
+    },
+    notif: {
+      title: '通知中心',
+      countUnit: '条',
+      close: '收起通知中心',
+      clearAll: '清除全部',
+      empty: '没有通知',
+      pending: '待处理',
+      notifications: '通知',
+      dismiss: '关闭通知：{title}',
+      justNow: '刚刚',
+      minutesAgo: '{mins} 分钟前',
+      hostSource: '宿主',
+      approval: {
+        title: '等待权限审批',
+        body: 'manifest 声明 {perms} 个权限位（{risks} 个高危），批准后才会激活。',
+        go: '去审批',
+      },
+      stopped: {
+        title: '已停止',
+        body: '实例已停用，可在主屏重新打开。',
+        toast: '{name} 已停止',
+      },
+      started: {
+        title: '已启动',
+        body: '{name} 已激活并挂载运行面',
+      },
+      uninstalled: {
+        title: '已卸载',
+        body: '{name} 已从本机移除',
+      },
+      approved: {
+        title: '已批准并启动',
+        body: '审批通知随之消失（派生自待审批清单，无独立生命周期）。',
+      },
+      closeAll: {
+        title: '已关闭 {count} 张卡片',
+        body: '应用实例已全部停用，系统页已关闭。',
+        toast: '已关闭 {count} 张卡片',
+      },
+      open: '查看',
+      reopen: '重新打开',
+      ready: {
+        title: '运行时就绪',
+        body: '已加载 {count} 个应用，授权策略层 fail-closed 自检通过。',
+      },
+    },
+    ctx: {
+      aria: '应用操作菜单',
+      open: '打开',
+      startOpen: '启动并打开',
+      manage: '应用管理',
+      perms: '权限与授权',
+      stop: '停用',
+      uninstall: '卸载',
+      uninstallDisabled: '请先停用应用后再卸载',
+    },
+    // 壳快捷键（ADR 0060）：动作名 / 录制交互 / 行内校验文案。
+    // 动作 id 集合见 shortcutsModel SHORTCUT_ACTIONS，key 段与动作一一对应。
+    shortcuts: {
+      cardTitle: '按键绑定',
+      hint: '录制时按下新组合键 · Esc 取消 · Backspace 清除（组合归还应用）。组合必须包含 Ctrl 或 Alt。',
+      unbound: '未绑定',
+      recording: '按下组合键…',
+      changeBinding: '更改「{action}」的快捷键',
+      resetRow: '恢复默认',
+      resetAll: '全部恢复默认',
+      conflict: '与「{action}」冲突，换个组合再试。',
+      reserved: '该组合可能被系统或内置浏览器截获，不保证生效。',
+      missingModifier: '组合必须包含 Ctrl 或 Alt。',
+      action: {
+        appNext: { name: '下一个应用', desc: '切到下一个运行中的应用' },
+        appPrev: { name: '上一个应用', desc: '切到上一个运行中的应用' },
+        multitask: { name: '多任务视图', desc: '开合多任务切换面板' },
+        home: { name: '回主屏', desc: '收起当前面回到主屏' },
+        settings: { name: '打开设置', desc: '打开「设置」系统页' },
+        appsManage: { name: '打开应用管理', desc: '打开「应用管理」系统页' },
+        theme: { name: '切换明暗模式', desc: '在浅色与深色之间切换' },
+        fontUp: { name: '增大界面字号', desc: '字号档位上调一档' },
+        fontDown: { name: '减小界面字号', desc: '字号档位下调一档' },
+      },
+    },
+    dialog: {
+      close: '关闭弹窗',
+      cancel: '取消',
+      approval: {
+        title: '批准「{name}」',
+        desc: 'manifest 声明 {perms} 个权限位。批准是整单裁决——逐位勾选会让高危位混在低位里被顺手放行。',
+        afterHint: '批准后返回实际授予的权限位清单；未授予的位在运行期仍被闸门拒绝。',
+        approving: '批准中…',
+        confirm: '批准并启动',
+        success: '{name} 已批准并启动',
+      },
+      strategy: {
+        title: '切换为「始终允许」？',
+        body: '「{name}」的{resource}请求将不再询问：没记录过的目标会直接放行，并以「未经确认」记入授权记录。切档不会一次性授予全部权限，只有该应用实际访问到的目标才会逐步累积。',
+        confirm: '确认切换',
+      },
+      uninstall: {
+        title: '卸载「{name}」？',
+        body: '默认删除应用数据；勾选可保留。审批 / 授权记录始终撤销，重装后需重新批准。',
+        keepData: '保留应用数据（重装后继续使用）',
+        deleteDataHint: '未勾选「保留应用数据」：将同时删除应用私有数据库与存储，不可恢复。',
+        confirm: '确认卸载',
+        success: '{name} 已卸载',
+      },
+      install: {
+        success: '「{name}」已安装',
+        upgradeSuccess: '「{name}」已升级',
+      },
+      installUpgrade: {
+        title: '升级「{name}」？',
+        body: '已安装同 id 应用。就地升级保留其数据（插件存储与授权记录）；包内容变更后，下次启动需重新审批。',
+        confirm: '升级',
+      },
+      installRestore: {
+        title: '恢复旧应用数据？',
+        body: '该应用上次卸载时保留了数据（私有库与存储）。可在此选择恢复；不恢复（默认）会删除旧数据，且不可撤销。',
+        discard: '不恢复并安装',
+        restore: '恢复数据并安装',
+      },
+      stopService: {
+        title: '停止服务「{name}」？',
+        body: '将停止服务「{name}」。服务停止后将不再对外提供能力，可在应用管理中重新启动。',
+        confirm: '停止服务',
+      },
+      exit: {
+        title: '退出 WasmNest？',
+        desc: '以下应用仍在运行：',
+        none: '没有应用在运行，可直接退出。',
+        confirm: '仍然退出',
+        quitting: '正在优雅关闭应用…',
+        quittingHint: '若长时间无响应，将自动强制退出。',
+        quittingButton: '正在退出…',
+      },
+    },
+    settings: {
+      // 外观入口卡（设置页首卡）：样式调整项在二级页 SysAppearanceView
+      appearanceEntry: {
+        title: '外观',
+        desc: '明暗模式、语言、字号、壁纸与主题',
+        open: '打开外观',
+      },
+      // 快捷键入口卡（设置页第二卡，2026-10-28）：录制 / 恢复在二级页 SysShortcutsView
+      shortcutsEntry: {
+        title: '快捷键',
+        desc: '查看与修改壳层键盘快捷键',
+        open: '打开快捷键',
+      },
+      nav: {
+        title: '导航',
+        label: '悬浮导航',
+      },
+      ui: {
+        title: '界面',
+        // 术语（2026-10-27）：「主题」只指主题预设；深浅色在壳页叫「明暗模式」。
+        // 不复用 settings.appearance.theme（那是与应用副本共享的旧标签）。
+        colorMode: '明暗模式',
+        themeLight: '浅色',
+        themeDark: '深色',
+        themeSystem: '跟随系统',
+        language: '语言',
+        fontSize: '字号',
+        // 字号滑杆五档划分（不再显示 px），键序即档位序（useFontSize FONT_SIZE_LEVELS）
+        fontLevel: {
+          xs: '极小',
+          s: '小',
+          normal: '正常',
+          l: '大',
+          xl: '超大',
+        },
+        animations: '动画',
+        animationsDesc: '屏幕切换与覆层动效（关闭即降级）',
+      },
+      background: {
+        title: '背景',
+        wallLabel: '壁纸',
+        dimLabel: '遮罩强度 · {pct}%',
+        customReplace: '更换图片…',
+        customRemove: '移除',
+        customHint: 'PNG / JPG / WebP，单张不超过 20 MB；图片会复制到应用数据目录。',
+        customSaved: '自定义壁纸已更新',
+        customRemoved: '自定义壁纸已移除',
+        wall: {
+          none: '无（纯色）',
+          aurora: '极光',
+          dune: '沙丘',
+          reef: '礁湖',
+          custom: '自定义',
+        },
+      },
+      permsEntry: {
+        title: '授权管理',
+        desc: '策略档位与授权记录',
+        hint: '安全闸门的管理入口，完整记录见「权限与授权」页',
+        open: '打开权限与授权',
+      },
+      themes: {
+        title: '主题',
+        desc: '平台外壳的整体外观；应用仍可自持配色。',
+        default: '默认',
+        defaultDesc: '暖调工作台，实心卡面',
+        glass: '玻璃拟态 · 液态玻璃',
+        glassDesc: '镜面棱线、多层折射、整屏玻璃语汇',
+        hyper: '超色彩主义',
+        hyperDesc: '高饱和色块，硬边投影',
+        dynamic: '动态',
+        hint: '主题覆盖平台外壳与图标语汇；应用根容器自己声明的配色优先。',
+      },
+    },
+    apps: {
+      sortHint:
+        '按授权风险排序（「始终允许」最宽松置顶）。运行中的应用不可卸载；启用方向先过审批门。',
+      listAria: '已安装应用列表',
+      install: '安装应用',
+      installDesc: '从本地 zip 应用包安装外部应用；同 id 已装时可在确认后就地升级（保留应用数据）',
+      // 应用更新面（应用版本更新全链路）：兼容判断在壳（useAppUpdates），不兼容
+      // 只给原因不出更新按钮；版本号参数只承载显示值
+      update: {
+        check: '检查更新',
+        apply: '更新到 v{version}',
+        checking: '正在检查更新…',
+        upToDate: '已是最新',
+        available: '可更新到 v{version}',
+        incompatible: '发现新版本 v{version}，但与当前平台不兼容',
+        updating: '正在下载并更新…',
+        failed: '更新检查失败，请稍后重试',
+        stopFirst: '请先停用应用后再更新（更新需替换插件目录）',
+        reason: {
+          noCompat: '该发布物缺少兼容声明（旧版发布格式），无法确认与当前平台兼容',
+          mountContract: '要求挂载契约 {required}，当前平台为 {current}',
+          hostRuntime: '要求宿主运行时 {required}，当前为 {current}；请先升级平台',
+          hostRuntimeInvalid: '兼容声明版本形态异常（{required}），已拒绝',
+        },
+      },
+      kvSource: '来源',
+      kvSize: '体积',
+      kvViews: '视图',
+      kvType: '类型',
+      approveStart: '批准并启动',
+      stop: '停用',
+      // 停止动作按装配角色分词语：系统服务（L1/L2）说「停止服务」（2026-10-23 用户裁决）
+      stopService: '停止服务',
+      open: '打开',
+      startOpen: '启动并打开',
+      uninstall: '卸载',
+      uninstallDisabled: '请先停用应用后再卸载',
+      approvalCallout: '待审批：manifest 声明 {perms} 个权限位（{risks} 个高危）。批准是整单裁决。',
+      strategyTitle: '授权策略',
+      strategyHint: '策略切换不追溯已落账记录；收紧需逐条撤销。完整记录见「权限与授权」。',
+      permsTitle: '权限位（manifest 声明 · 加载期整单裁决 · 只读）',
+      permsHint: '高危位标红：可执行任意命令 / 读写主库。',
+      configTitle: '应用配置',
+      configEmpty: '无可用的配置项（manifest contributes.configuration.properties 为空）。',
+      configSave: '保存',
+      configReset: '重置为默认',
+      configSaved: '配置已保存（写入插件存储）',
+      noSelection: '选择一个应用查看详情',
+      // 2026-10-17 壳恢复后（生命周期归宿主，前端无启停）：应用管理收敛为只读面目录
+      // 应用整包挂载面（ADR 0057 机制 B）：加载 / 失败两态文案。此前组件直接引用
+      // 未注册的 key，界面回显 `shell.apps.loading` 原文。
+      loading: '应用界面加载中…',
+      mountFailed: '应用界面加载失败，可重试；若持续失败请查看日志',
+      // 失败态只给壳自有文案，后端原文（WASM/linker 报错）只进日志（ADR 0030）
+      errorHint: '应用启动失败（实例未在运行）：可再次启动，或先到「权限与授权」核对授权后重试',
+      systemServices: '系统服务',
+      businessApps: '应用',
+      enabled: '启用',
+      enabledHint: '已启用 = 应用可用（偏好记录，不驱动启动）',
+      autostart: '自启',
+      autostartHint: '启动时自动激活（只改偏好，下次启动生效）',
+      surfaceHint: '宿主运行面：{route}',
+      permCardTitle: '权限与授权',
+      permHint: '策略分档、授权记录与内置免询问项的查看与管理，与设置页「应用授权」同一口径。',
+      permGo: '进入权限与授权',
+      source: {
+        builtin: '内置',
+        scanned: '已扫描',
+        wasm: 'WASM',
+        user: '本地安装',
+      },
+    },
+  },
+  common: {
+    button: {
+      cancel: '取消',
+      stop: '停止',
+    },
+  },
+  // ==================== 错误信封（ADR 0030）====================
+  // 顶层命名空间 errors.<code> ↔ 信封 code，零映射层；改码 = 破坏性变更。
+  // UI 呈现规则：toast / 页面只显示友好文案（模板 + params 插值），永不显示错误码 / request_id / 技术详情。
+  errors: {
+    retry: '重试',
+    host: {
+      internal: '操作未完成，请稍后重试',
+      invoke: {
+        timeout: '操作超时，请重试',
+      },
+      // 机制码（ADR 0030 注册表 v0）：应用管理面机制失败 + 运行时段（事件通道信封）
+      // ——同一 kind 对用户是同一件事 → 同一文案；插值参数只允许应用显示名
+      plugin: {
+        'not-activated': '该应用未启用，无法执行此操作',
+        'not-found': '应用不存在或已卸载',
+        trap: '应用「{name}」运行异常，已尝试自动恢复',
+        'recovery-failed': '应用「{name}」运行异常且未能自动恢复，请到应用中心处理',
+        'self-check-failed': '应用「{plugin}」启动自检失败，请检查配置',
+        degraded: '应用「{name}」降级运行，部分功能不可用',
+      },
+    },
+    frontend: {
+      internal: '操作未完成，请稍后重试',
+    },
+    shell: {
+      wallpaper: {
+        invalid: '无法使用这张图片：请选择 PNG / JPG / WebP，且不超过 20 MB',
+      },
+      install: {
+        builtinConflict: '「{name}」是随宿主分发的内置应用，不能覆盖安装',
+        runningConflict: '「{name}」正在运行，请先停用再升级',
+      },
+    },
+  },
+  desktop: {
+    splash: {
+      status: '正在启动…',
+      tagline: '多 WASM 应用运行平台',
+    },
+    // 全局未捕获异常的兜底文案（renderer errorHandler / unhandledrejection）
+    runtimeUnexpected: '发生了未知错误，详情见日志',
+    // 窗口控制三键的 tooltip 随应用自绘标题栏一起退役（标题栏归壳常驻，
+    // 壳用 shell.toolbar.*；终端窗口内的文案归 app 域 session.terminal.*）
+    // 退出确认（window-close-requested 透传运行中会话清单）
+    session: {
+      confirmExitTitle: '确认退出',
+      confirmExitMsg: '以下 {count} 个会话仍在运行，退出后将终止所有运行中的进程。',
+      confirmExitForce: '强制退出',
+    },
+    // 未匹配路由兜底页（D3 fail-visible：退役面直接访问时显性 not-found）
+    notFound: {
+      title: '页面不存在',
+      body: '你访问的页面不存在或已随版本更新移除',
+      back: '返回终端会话',
+    },
+    // ==================== 授权弹窗（安全闸门，fail-closed）====================
+    // 文件系统授权（票 03 起三档 + 记住）+ 网络出站授权（票 05，origin 粒度）。
+    // 应答经宿主面命令（需宿主凭证），前端只做展示与决定回传。
+    auth: {
+      fsAuthTitle: '文件访问授权',
+      fsAuthRead: '读取',
+      fsAuthWrite: '写入',
+      // 授权记录按操作拆分，弹窗要说清这次要的是读、写还是两者
+      fsAuthReadWrite: '读写',
+      fsAuthRequest: '应用 {plugin} 请求{operation}文件',
+      fsAuthPickerRequest: '你刚在系统选择框中选中以下路径，应用 {plugin} 请求{operation}',
+      fsAuthGrantScopeDir:
+        '勾选「记住」将按所在目录授权：该目录下其它文件的{operation}以后不再询问',
+      fsAuthPath: '文件路径',
+      fsAuthPaths: '文件路径（{count} 个目录）',
+      // 「记住」只记这次的操作（读 / 写 / 读写），文案必须跟着说清
+      fsAuthRemember: '记住此路径的{operation}授权，下次自动放行',
+      fsAuthAllow: '允许',
+      fsAuthDeny: '拒绝',
+      // 应答三态：「总是询问」档不提供「记住」，允许按钮只能承诺这一次；
+      // 「以后都拒绝」落 deny 记录（该目标与其子树此后被直接拒绝）
+      fsAuthAllowOnce: '允许本次',
+      fsAuthDenyAlways: '以后都拒绝',
+      netAuthTitle: '网络访问授权',
+      netAuthRequest: '应用 {plugin} 请求访问一个网络地址',
+      netAuthOrigin: '地址',
+      // 同意 = 此地址此后免询问：授权范围必须让用户看得见，否则只能靠猜
+      netAuthScope: '同意后，该地址（此主机与端口）以后不再询问；拒绝可在「设置 → 应用授权」里撤销',
+      // 「总是询问」档下的同一处说明：该档不落记录，说「以后不再询问」就是在骗用户
+      netAuthScopeOnce: '只放行这一批请求；该应用处于「总是询问」，下次访问仍会询问',
+      netAuthAllow: '允许',
+      netAuthDeny: '拒绝',
+      netAuthDenyAlways: '以后都拒绝',
+    },
+  },
+  settings: {
+    system: {
+      title: '系统设置',
+      preventSleep: '防止系统休眠',
+    },
+    // 链路加密（2026-11-04 用户裁决）：策略属于应用，宿主只执行与只读审计。
+    linkCrypto: {
+      title: '链路加密',
+      wsNotEncrypted:
+        '当前宿主版本不支持 WS 端点的帧级链路加密；应用策略只对 HTTP 生效，WS 流量仍为明文。更新宿主后 WS 帧才会加密。',
+      fingerprint: '本机指纹',
+      apps: '应用策略（只读）',
+      appsEmpty: '当前没有注册中的插件端点（应用未运行或未暴露端点）。',
+      endpointCount: '{count} 个端点',
+      policyRequired: '强制加密',
+      policyPreferred: '尽量加密',
+      policyOff: '不要求',
+      capabilityMissing: '当前宿主不提供按应用的链路加密能力（旧版本），状态不可用。',
+      loadFailed: '链路加密状态读取失败，请查看日志。',
+    },
+    log: {
+      title: '日志设置',
+      level: '日志级别',
+      levelDebug: '调试',
+      levelInfo: '信息',
+      levelWarn: '警告',
+      levelError: '错误',
+      levelApplied: '日志级别已切换',
+      format: '日志格式',
+      formatText: '文本',
+      formatJson: 'JSON',
+      maxFiles: '保留文件数',
+      capacityMb: '容量上限（MB）',
+      persist: '持久化配置',
+      openDir: '打开日志目录',
+      save: '保存配置',
+      saved: '日志配置已保存',
+      saveFailed: '日志配置保存失败',
+    },
+    // 授权策略与记录（2026-09-27 授权策略增强 · 票 01）：设置页二级入口「应用授权」
+    // 与授权管理页文案。档位措辞与 spec §4.1 逐字一致；resource 分类名对应宿主
+    // 读模型的 resource 值（fs / network）在界面上的说法
+    authorization: {
+      title: '应用授权',
+      entry: '应用授权记录',
+      back: '返回设置',
+      refresh: '刷新',
+      appCount: '{count} 个应用',
+      empty: '暂无可管理的应用',
+      emptyHint: '安装并启用应用后，这里会列出它们的授权情况',
+      recordCount: '{count} 条记录',
+      records: {
+        toggle: '展开授权记录',
+        fsTitle: '文件目录记录',
+        networkTitle: '网络地址记录',
+        empty: '该应用还没有文件授权记录',
+        fsEmpty: '该应用还没有文件授权记录',
+        networkEmpty: '该应用还没有网络授权记录',
+        revoke: '取消授权',
+        removeDeny: '移除拒绝',
+        revoked: '已取消该目录的授权，后续访问会被直接拒绝',
+        networkRevoked: '已取消该地址的授权，后续请求会被直接拒绝',
+        denyRemoved: '已移除拒绝记录，该目录回到未授权状态',
+        effect: {
+          allow: '已授权',
+          deny: '硬拒绝',
+        },
+        ops: {
+          read: '读',
+          write: '写',
+          read_write: '读写',
+        },
+        source: {
+          user: '用户确认',
+          always_allow: '免询问自动放行',
+          legacy: '旧版遗留',
+          user_deny: '用户拒绝',
+        },
+      },
+      // 四分区标题与空态（票 07 详情页 / 票 08 设置页共用，spec §9.2）：
+      // 用户已授权 / 免询问自动放行（未经确认）/ 内置免询问（第一方）/ 硬拒绝
+      sections: {
+        userGranted: '用户已授权',
+        autoAllowed: '免询问自动放行',
+        firstParty: '内置免询问',
+        denied: '硬拒绝',
+        // 免询问自动放行记录必须带「未经确认」标记并与用户确认记录视觉区分（spec §9.4）
+        unconfirmed: '未经确认',
+        empty: '暂无授权记录',
+        // 内置免询问项的两种形态（第一方清单：home 前缀 / 任意项目的具名段）
+        firstPartyHome: '家目录',
+        firstPartySegment: '项目目录',
+        revokeHint: '撤销后该目录后续访问会被直接拒绝',
+        // 该应用没有内置免询问项时的空态（与「有项」区分：空态是事实，不是缺数据）
+        firstPartyEmpty: '该应用没有内置免询问项',
+        firstPartyRevoked: '已取消该目录的免询问，后续访问会被直接拒绝',
+      },
+      strategy: {
+        always_ask: '总是询问',
+        default: '默认',
+        always_allow: '始终允许',
+      },
+      // 策略控件（票 03 起，票 04 放开「始终允许」）：三档都可选；切到「始终允许」
+      // 走二次确认，确认文案必须说清该档的语义边界（spec §4.3）——切档**不**一次性
+      // 授予全部权限，只有实际访问到的目标才逐步累积进记录（可持续累积，故仍要提示）
+      strategyControl: {
+        title: '{resource}请求策略',
+        saved: '策略已更新，下一次判定立即生效',
+        hint: {
+          // 「总是询问」跳过全部 allow 记录，所以已授权过的目标也照问——
+          // 写成「未记录的目标都会询问」会让用户以为已授权的静默通过（票 06 修正）
+          always_ask: '每次访问都询问（已授权过的目标也照问）',
+          default: '记录命中即放行，未记录才询问',
+          always_allow: '未记录的目标免询问放行，并自动记录（未经确认）',
+        },
+        confirmTitle: '改为「始终允许」？',
+        // 语义边界（spec §4.3）必须出现在确认里：用户以为「一次点开全盘」与
+        // 以为「什么都不会发生」都是错的认知
+        confirmBody:
+          '「{name}」的{resource}请求将不再询问：没记录过的目标会直接放行，并以「未经确认」记入授权记录。切档不会一次性授予全部权限，只有该应用实际访问到的目标才会逐步累积——持续访问会让这份清单持续变长，可随时在下方逐条取消授权。',
+        confirmOk: '改为始终允许',
+      },
+      resource: {
+        fs: '文件',
+        network: '网络',
+      },
+    },
+    appearance: {
+      theme: '主题',
+      lightMode: '浅色模式',
+      darkMode: '深色模式',
+      followSystem: '跟随系统',
+      language: '语言',
+      fontSize: '字体大小',
+      animations: '动画效果',
+      animationsDesc: '关闭后全局禁用页面切换与交互过渡动画',
+    },
+    about: {
+      title: '关于',
+      githubRepo: 'GitHub 仓库',
+      checkUpdate: '检查更新',
+      alreadyLatest: '已是最新版本',
+      checkingUpdate: '正在检查更新...',
+      checkFailed: '检查更新失败，请稍后重试',
+      newVersionAvailable: '发现新版本',
+      downloadingUpdate: '正在下载更新...',
+      downloadComplete: '下载完成，正在安装...',
+      installingUpdate: '正在安装更新...',
+      downloadUpdate: '立即更新',
+    },
+    reset: {
+      title: '恢复初始设置',
+      desc: '清除应用授权记录与个性化偏好，恢复默认设置',
+      action: '恢复初始设置',
+      confirmTitle: '恢复初始设置',
+      confirmBody:
+        '将清除所有应用的授权记录，删除已复制的自定义壁纸，并把全部设置恢复为默认值。此操作无法撤销。',
+      confirmOk: '恢复',
+      done: '已恢复初始设置',
+      failed: '恢复失败，请稍后重试',
+    },
+  },
+}

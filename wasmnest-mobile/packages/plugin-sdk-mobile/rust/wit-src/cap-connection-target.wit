@@ -1,0 +1,27 @@
+package wasmnest:connection-target@0.0.1;
+
+// 移动端能力域分片（WIT 按包拆分，ADR 0061）：一个能力域 = 一个独立包，
+// 版本独立演进——本包 WIT 变更只 bump 本包，不波及未 import 它的应用。
+// 端 `plugin` world 经 `include wasmnest:connection-target/cap-connection-target@0.0.1;` 并入本接口。
+
+/// 主连接事实读取（ABI v15 新增；会话控制迁插件复用同一地基）
+///
+/// **曾与桌面同名不同角色**：本 interface 曾是 `host-connection`（桌面同名），
+/// 但桌面是「在册连接清单」角色（`connections-list`）、移动端是「主连接目标」
+/// 角色（`primary-target`），函数集零交集；2026-10-11 统一契约（并集 world）
+/// 时按角色改名为 `-target`，桌面那侧为 `host-connection-registry`。
+/// **无权限门**（对齐 host-platform 例外先例）：
+/// 返回的是局域网服务地址等连接事实（非凭据、非隐私），地址不入日志
+/// 明文红线不受影响；真正的风险面是连接行为本身，已由 `ws:client` /
+/// `network:http` 等权限位门控。
+interface host-connection-target {
+    /// 当前主连接目标设备（camelCase JSON）：`{ address, port, connected }`。
+    /// `address` / `port` 是最后一次成功配置的目标（与宿主 HTTP / WS 面
+    /// 同源），`connected` 反映主连接当前状态。
+    /// 从未配置过任何目标 → Err（fail-visible，禁「返回空对象」）
+    primary-target: func() -> result<string, string>;
+}
+
+world cap-connection-target {
+    import host-connection-target;
+}

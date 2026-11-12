@@ -1,0 +1,435 @@
+//! Plugin Types (Mobile SDK)
+//!
+//! 移动端插件声明式描述类型 — 从宿主 types.rs 迁移的共享部分
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+/// 插件产物形态（语言无关三形态，2026-10-26 语义重定义，wasmnest-apps#21）
+///
+/// 词汇只表达**形态**（是否携带 wasm 后端 / 前端产物），不表达后端语言——
+/// 形态是宿主与装配真正消费的判据，语言不是。移动端旧值 `wasm` 的归属按
+/// app 逐个核定：有前端产物 → `full`，纯后端 worker → `backend`（见迁移审计）。
+///
+/// 旧值（rust / rust-ts / ts-only / wasm）已退役：研发起步期无兼容读入义务，
+/// 反序列化**点名拒绝并给出迁移出路**（fail-visible，不静默降级）。本枚举与
+/// lib wasm-core `manifest.rs`、桌面 SDK `types/state.rs` 的同形定义**逐字对齐**
+/// （三处独立 crate，无共享依赖，漂移面以文本一致纪律维护）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PluginType {
+    /// 纯前端（原 ts-only）：仅前端产物，无 wasm 后端
+    Frontend,
+    /// 纯后端（原 rust）：wasm 后端、无页面产物（worker / ephemeral 声明限此形态）
+    Backend,
+    /// 前后端（原 rust-ts；移动端原 `wasm` 形态按是否携带前端核定归属）
+    Full,
+}
+
+impl PluginType {
+    /// wire 值（错误文案 / 对比用；与 serde rename 同源）
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Frontend => "frontend",
+            Self::Backend => "backend",
+            Self::Full => "full",
+        }
+    }
+
+    /// 是否携带 wasm 后端（guest 生命周期 / 事件派发共用的「有实例」判据；
+    /// 原移动端 `PluginType::Wasm` 的全部消费点即此语义）
+    pub const fn has_backend(&self) -> bool {
+        matches!(self, Self::Backend | Self::Full)
+    }
+}
+
+impl<'de> Deserialize<'de> for PluginType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "frontend" => Ok(Self::Frontend),
+            "backend" => Ok(Self::Backend),
+            "full" => Ok(Self::Full),
+            "ts-only" => Err(retired_plugin_type::<D::Error>("ts-only", "frontend")),
+            "rust" => Err(retired_plugin_type::<D::Error>("rust", "backend")),
+            "rust-ts" => Err(retired_plugin_type::<D::Error>("rust-ts", "full")),
+            "wasm" => Err(serde::de::Error::custom(
+                "pluginType 'wasm' 已退役（形态三档重定义，2026-10-26，wasmnest-apps#21）：携带前端产物用 'full'，纯后端 worker 用 'backend'（移动端逐 app 核定）",
+            )),
+            other => Err(serde::de::Error::custom(format!(
+                "pluginType '{other}' 不是合法形态值（frontend / backend / full）"
+            ))),
+        }
+    }
+}
+
+/// 退役值 → 迁移出路的错误构造（点名旧值，不静默）
+fn retired_plugin_type<E: serde::de::Error>(old: &str, new: &str) -> E {
+    E::custom(format!(
+        "pluginType '{old}' 已退役（形态三档重定义，2026-10-26，wasmnest-apps#21）：改用 '{new}'——词汇只表达形态，不表达后端语言"
+    ))
+}
+
+impl Default for PluginType {
+    fn default() -> Self {
+        Self::Frontend
+    }
+}
+
+/// 应用适配平台（manifest `platform` 字段，必填）
+///
+/// 三值：`desktop`（仅桌面）/ `mobile`（仅移动）/ `both`（双端适配）。宿主在加载 /
+/// zip 安装时按本端校验（`supports`），单端声明遇到另一端即拒绝装载。
+///
+/// `Default` 取 `Both` **仅服务测试夹具与合成清单**（wire 层该字段必填、无 serde
+/// 缺省）：合成清单对两端都可装载，不把测试夹具钉死在某一个端。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum PluginPlatform {
+    /// 仅桌面端
+    Desktop,
+    /// 仅移动端
+    Mobile,
+    /// 双端适配（两端均可加载）
+    #[default]
+    Both,
+}
+
+impl PluginPlatform {
+    /// wire 值（错误文案 / 对比用；与 serde rename 同源）
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Desktop => "desktop",
+            Self::Mobile => "mobile",
+            Self::Both => "both",
+        }
+    }
+
+    /// 本声明是否适用于 `host`（宿主当前端；只应传 `Desktop` / `Mobile`）
+    ///
+    /// `both` 对任一端成立；单端声明只对本端成立——移动宿主装载 / 安装的门禁判据。
+    pub const fn supports(self, host: PluginPlatform) -> bool {
+        match (self, host) {
+            (Self::Both, _) => true,
+            (Self::Desktop, Self::Desktop) => true,
+            (Self::Mobile, Self::Mobile) => true,
+            _ => false,
+        }
+    }
+}
+
+/// 插件运行时状态
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum PluginState {
+    Loaded,
+    /// 激活进行中（auto-activation / 手动激活期间），列表可见的中间态
+    Activating,
+    Activated,
+    /// activate 成功但 on_startup 失败：实例可用、启动初始化未完成
+    Degraded { error: String },
+    /// 插件请求的权限尚未获得用户批准（需在插件管理页人工审批后才能激活）
+    NeedsApproval,
+    Deactivated,
+    Error { error: String },
+}
+
+impl Default for PluginState {
+    fn default() -> Self {
+        Self::Loaded
+    }
+}
+
+/// 组件装配角色（manifest `type` 字段，ADR 0032）
+///
+/// 与 `wasmnest-wasm-core` 的 `PluginKind` 保持 serde 拼写一致；本枚举仅服务于
+/// guest 面的 manifest 构造，宿主侧以 wasm-core 类型为准。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum PluginKind {
+    /// **L3 业务应用**（缺省）
+    #[default]
+    #[serde(alias = "application")]
+    BusinessApp,
+    /// **L1 基础服务**（历史拼写 `system` 仍被接受）
+    #[serde(alias = "system")]
+    BasicService,
+    /// **L2 内部统一业务应用**
+    InternalBusiness,
+}
+
+impl PluginKind {
+    /// 是否角色驱动（L1 / L2）
+    pub fn is_role_driven(self) -> bool {
+        matches!(self, Self::BasicService | Self::InternalBusiness)
+    }
+
+    /// serde skip_serializing_if 钩子：缺省角色（L3）不写入序列化输出
+    pub fn is_business_app(&self) -> bool {
+        matches!(self, Self::BusinessApp)
+    }
+}
+
+/// 插件清单
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginManifest {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    /// 适配平台：`desktop`（仅桌面）/ `mobile`（仅移动）/ `both`（双端适配）
+    ///
+    /// **必填项**（与 id/name/version 同档，无 serde 缺省）——宿主在**加载 / zip
+    /// 安装**时校验声明必须覆盖当前端（`PluginPlatform::supports`），不匹配即
+    /// fail-visible 拒绝：把一端的分发包装到另一端后「装了却不工作」比一次显性
+    /// 拒绝难排查得多。
+    pub platform: PluginPlatform,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub author: String,
+    /// 前端入口模块路径（相对于 dist/）
+    #[serde(default)]
+    pub main: String,
+    #[serde(default)]
+    pub plugin_type: PluginType,
+    /// 装配角色（manifest `type`）：`basic-service` / `internal-business` /
+    /// `business-app`（缺省）。宿主不再消费本镜像，但插件作者可在代码里声明。
+    #[serde(rename = "type", default, skip_serializing_if = "PluginKind::is_business_app")]
+    pub kind: PluginKind,
+    /// 对外可互调 api 清单（全限定名；与核心 manifest 同形）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub api: Vec<String>,
+    #[serde(default)]
+    pub permissions: Vec<String>,
+    #[serde(default)]
+    pub contributes: PluginContributes,
+    /// 插件图标：emoji、内联 <svg> 标记或相对插件目录的图片路径（如 "icon.png"/"icon.svg"）
+    /// 缺省时前端按插件 id 生成字母头像回退
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// WASM 文件 SHA256 哈希，用于远程下载校验
+    #[serde(default)]
+    pub wasm_hash: String,
+    /// Rust 库名（对应 WASM 文件名）
+    #[serde(default)]
+    pub rust_library: String,
+    /// 启用前预授权目录（移动端镜像桌面 wasiPreopenDirs）
+    ///
+    /// 宿主在 `preauthorize_plugin` 收集并展开后统一弹窗，避免插件 WASM
+    /// activate 内部 `fs_request_auth` 弹窗晚于前端 loading 遮罩（授权弹窗与
+    /// loading 同现的根因）。支持 `${downloads}` 模板（展开为宿主 app 下载目录，
+    /// 如 `{AppDownloadsDir}/ai-chatbox`）。
+    #[serde(default)]
+    pub preauth_dirs: Vec<String>,
+    /// 外网访问预授权 URL 声明（Egress L2，glob：`[scheme://][*.]host[:port][/path-prefix]`）
+    ///
+    /// 宿主在插件加载时收集进 Egress Policy 静态声明层，声明命中直接放行；
+    /// 未声明的外网 URL（如用户自定义 baseUrl）走 L3 授权弹窗（fail-closed）。
+    /// 仿 `preauthDirs` 先例。
+    #[serde(default)]
+    pub preauth_urls: Vec<String>,
+    /// 应用更新源声明（manifest `update`；缺省 = 不参与更新检查）
+    ///
+    /// 宿主按本段解析 GitHub 发布仓 / tag 前缀 / 资产 slug。缺省字段收敛到官方
+    /// 应用仓命名约定；第三方应用可声明自己的 repo / tagPrefix / slug。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update: Option<PluginUpdateDecl>,
+}
+
+/// manifest `update` 段（应用更新源声明；与中性 manifest 逐字段同形）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginUpdateDecl {
+    /// 更新来源类型；当前只支持 `github-release`
+    #[serde(default)]
+    pub provider: UpdateProvider,
+    /// GitHub 仓库 `owner/name`；缺省 = `7ZAI/wasmnest-apps`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+    /// Release tag 前缀（完整形态 `<tagPrefix>v<X.Y.Z>`）；缺省 `<slug>-`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag_prefix: Option<String>,
+    /// Release 资产前缀（`<slug>-<end>-v<version>.zip`）；缺省 = 插件 id 末段
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
+}
+
+/// 更新来源类型（未知取值反序列化即拒）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum UpdateProvider {
+    /// GitHub Release
+    #[default]
+    GithubRelease,
+}
+
+/// 插件扩展点声明
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginContributes {
+    #[serde(default)]
+    pub commands: Vec<CommandContribution>,
+    #[serde(default)]
+    pub views: Vec<ViewContribution>,
+    #[serde(default)]
+    pub terminal: Option<TerminalContribution>,
+    #[serde(default)]
+    pub nav_tab: Option<NavTabContribution>,
+    #[serde(default)]
+    pub settings: Option<SettingsContribution>,
+    #[serde(default)]
+    pub configuration: Option<PluginConfiguration>,
+    #[serde(default)]
+    pub lifecycle: Option<LifecycleContribution>,
+    /// 自定义监控面板声明（monitor 统一壳消费）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub monitor_panels: Vec<MonitorPanelContribution>,
+}
+
+/// 自定义监控面板声明（只登记元数据；实现住提供方应用工程）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitorPanelContribution {
+    pub id: String,
+    pub title: String,
+    /// 排序权重（小者靠前；缺省 100，与 core / 前端同口径）
+    #[serde(default = "default_monitor_panel_order")]
+    pub order: i32,
+}
+
+fn default_monitor_panel_order() -> i32 {
+    100
+}
+
+/// 命令扩展点
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandContribution {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub icon: Option<String>,
+}
+
+/// 视图扩展点
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewContribution {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub view_type: String,
+    pub title: String,
+    pub component: String,
+}
+
+/// 底部导航 Tab 扩展点（移动端特有）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NavTabContribution {
+    pub id: String,
+    pub title: String,
+    pub icon: String,
+    pub component: String,
+    #[serde(default)]
+    pub order: i32,
+}
+
+/// 设置页扩展点（移动端特有）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsContribution {
+    pub section: String,
+    pub component: String,
+}
+
+/// 终端扩展点
+///
+/// inputHandlers / outputParsers（terminal-hooks 声明面）已随票 15 阶段 B
+/// 整面退役——终端 UI 域在插件内闭环，宿主不再回调插件处理终端流。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalContribution {
+    #[serde(default)]
+    pub toolbar_items: Vec<TerminalToolbarItemContribution>,
+}
+
+/// 终端工具栏按钮
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalToolbarItemContribution {
+    pub id: String,
+    pub title: String,
+    pub icon: String,
+}
+
+/// 插件配置声明
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginConfiguration {
+    pub title: String,
+    pub properties: HashMap<String, ConfigProperty>,
+}
+
+/// 配置属性
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigProperty {
+    #[serde(rename = "type")]
+    pub prop_type: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub default: Option<serde_json::Value>,
+}
+
+/// 生命周期扩展点声明
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LifecycleContribution {
+    #[serde(default)]
+    pub on_startup: bool,
+    #[serde(default)]
+    pub on_shutdown: bool,
+    #[serde(default)]
+    pub on_auth_success: bool,
+    #[serde(default)]
+    pub on_disconnect: bool,
+    #[serde(default)]
+    pub on_session_created: bool,
+    #[serde(default)]
+    pub on_session_stopped: bool,
+}
+
+impl LifecycleContribution {
+    /// 检查是否声明了指定事件
+    pub fn is_declared(&self, event_name: &str) -> bool {
+        match event_name {
+            "onStartup" => self.on_startup,
+            "onShutdown" => self.on_shutdown,
+            "onAuthSuccess" => self.on_auth_success,
+            "onDisconnect" => self.on_disconnect,
+            "onSessionCreated" => self.on_session_created,
+            "onSessionStopped" => self.on_session_stopped,
+            _ => false,
+        }
+    }
+
+    /// 检查是否有任何声明
+    pub fn has_any_declared(&self) -> bool {
+        self.on_startup
+            || self.on_shutdown
+            || self.on_auth_success
+            || self.on_disconnect
+            || self.on_session_created
+            || self.on_session_stopped
+    }
+}
+
+// ==================== Tests ====================
+
+// 单元测试已全部迁至 `../tests/`（集成测试，只经 crate 公开 API 验证契约）。

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 启动期窗口/系统开屏背景:与前端开屏(SplashScreen.vue / SplashScreenNative.vue)
+         浅色首帧同源(即 mobile.css 的 mobile-bg-primary 浅色值);深色值见 values-night/colors.xml。
+         模板默认色板(purple/teal/black/white)已清理,均为零引用残留 -->
+    <color name="wasmnest_launch_bg">#F5F4F0</color>
+</resources>

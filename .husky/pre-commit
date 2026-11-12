@@ -1,0 +1,53 @@
+# ==================== WIT 分片拼装漂移锁 ====================
+# 端 `rust/wit/` 是生成物（真源 = 能力仓 submodule `packages/wasmnest-wasm-core/wit/core.wit`
+# + 能力域 / 端 cap 分片，端清单 `compose.json` 驱动）。生成物被手改、或分片真源改了
+# 没重拼，这里即红阻断。修复：`pnpm run check:wit` 看漂移文件，跑
+# `node scripts/compose-wit.mjs --all` 重拼后重新 git add。
+# node 缺失（未装 / PATH 无）时跳过：本锁依赖 node，不依赖 pnpm 依赖树。
+if command -v node >/dev/null 2>&1; then
+  if ! node "$(git rev-parse --show-toplevel)/scripts/compose-wit.mjs" --all --check; then
+    echo ":: WIT 生成物漂移，提交已阻断。重拼：node scripts/compose-wit.mjs --all"
+    exit 1
+  fi
+else
+  echo "node 不在 PATH，跳过 WIT 漂移锁。"
+fi
+
+# ==================== 前端 ESLint 门禁（仅校验暂存文件）====================
+# 只校验暂存的平台前端文件（两端 src / packages / SDK）；应用前端住独立应用仓，
+# 由 apps 仓自己的 eslint 配置接管。只因 error 阻断提交（warning 不卡，与 CI
+# `pnpm exec eslint .` 的 0-error 基准一致）。
+# node_modules 缺失（如未 pnpm install 的干净 clone）时跳过，不阻断提交。
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR \
+  | grep -E '^wasmnest-(desktop|mobile)/(src|packages)/.*\.(vue|js|jsx|cjs|mjs|ts|tsx|cts|mts)$' || true)
+
+if [ -n "$STAGED" ]; then
+  ESLINT="$(git rev-parse --show-toplevel)/node_modules/.bin/eslint"
+  if [ ! -x "$ESLINT" ]; then
+    echo "ESLint 未安装（根 node_modules 缺失，需在平台仓根执行 pnpm install），跳过前端门禁。"
+    exit 0
+  fi
+  echo "ESLint: 校验暂存的平台前端文件 ..."
+  echo "$STAGED" | xargs "$ESLINT" --quiet
+  if [ $? -ne 0 ]; then
+    echo ":: ESLint 发现 error，提交已阻断。请修复后重新 git add 再提交。"
+    exit 1
+  fi
+fi
+
+# ==================== markdown 死链锁（暂存含 .md 时全量跑）====================
+# 覆盖面 = 仓内跟踪 markdown 的相对链接（含图片）目标存在性；外链 URL 与纯锚点
+# 不探测（网络走代理不稳，跳过就明说，不做假绿）。详见 scripts/check-markdown-links.mjs
+# 头注释。触发条件 = 暂存文件里有 .md（控制钩子时长；全量扫描为毫秒级）。
+# node 缺失时跳过：本锁依赖 node，不依赖 pnpm 依赖树。
+STAGED_MD=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' || true)
+if [ -n "$STAGED_MD" ]; then
+  if command -v node >/dev/null 2>&1; then
+    if ! node "$(git rev-parse --show-toplevel)/scripts/check-markdown-links.mjs"; then
+      echo ":: markdown 死链检查未过，提交已阻断。修复链接后重新 git add。"
+      exit 1
+    fi
+  else
+    echo "node 不在 PATH，跳过 markdown 死链锁。"
+  fi
+fi

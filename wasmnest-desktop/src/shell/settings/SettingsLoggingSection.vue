@@ -1,0 +1,209 @@
+<template>
+  <!-- ==================== LOGGING（仅 dev 构建显示；正式版隐藏，后端功能保留） ==================== -->
+  <ShellCard
+    v-if="isDev"
+    :title="t('settings.log.title')"
+    icon="file"
+    data-testid="settings-logging"
+  >
+    <!-- 日志级别：分段控件（壳共享 .shell-seg），点击即时热调（不重启） -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.log.level') }}</b>
+      </div>
+      <ShellSeg
+        class="flex-shrink-0"
+        :options="logLevelOptions"
+        :model-value="logFileLevel"
+        @update:model-value="onLogLevelClick"
+      />
+    </div>
+
+    <!-- 日志格式：text/json（壳共享 .shell-seg），保存后重启生效 -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.log.format') }}</b>
+      </div>
+      <ShellSeg
+        class="flex-shrink-0"
+        :options="logFormatOptions"
+        :model-value="logFormat"
+        @update:model-value="logFormat = $event"
+      />
+    </div>
+
+    <!-- 保留文件数：按天轮转保留数量，保存后重启生效 -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.log.maxFiles') }}</b>
+      </div>
+      <input
+        class="shell-input wb-mono w-28 text-right"
+        type="text"
+        inputmode="numeric"
+        :value="logMaxFiles"
+        :aria-label="t('settings.log.maxFiles')"
+        @input="logMaxFiles = onIntInput($event, 1, logMaxFiles)"
+      />
+    </div>
+
+    <!-- 容量上限（MB）：保存后重启生效 -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.log.capacityMb') }}</b>
+      </div>
+      <input
+        class="shell-input wb-mono w-28 text-right"
+        type="text"
+        inputmode="numeric"
+        :value="logCapacityMb"
+        :aria-label="t('settings.log.capacityMb')"
+        @input="logCapacityMb = onIntInput($event, 1, logCapacityMb)"
+      />
+    </div>
+
+    <!-- 打开日志目录 + 保存配置 -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.log.persist') }}</b>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button class="shell-btn ghost" @click="onOpenLogDir">
+          {{ t('settings.log.openDir') }}
+        </button>
+        <button class="shell-btn" :disabled="logSaving" @click="onSaveLogConfig">
+          {{ t('settings.log.save') }}
+        </button>
+      </div>
+    </div>
+  </ShellCard>
+</template>
+
+<script setup lang="ts">
+/**
+ * 设置页 — 日志分组（SettingsView 拆分产物）
+ *
+ * 仅 dev 构建展示（正式版隐藏，后端功能保留）。日志级别即时热调，
+ * format / rotation / max_files / capacity 保存后重启生效。
+ */
+import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useToast } from '@/composables/useToast'
+import { useLogSettings } from '@/shell/settings/useLogSettings'
+import ShellSeg from '@/shell/components/ShellSeg.vue'
+import ShellCard from '@/shell/components/ShellCard.vue'
+import { logger } from '@/utils/frontendLogger'
+import { invoke } from '@/utils/invoke'
+import i18n from '@/i18n'
+
+const { t } = useI18n()
+const toast = useToast()
+
+// ==================== 日志设置（desktop-logging-overhaul 04） ====================
+// 仅 dev 构建展示（正式版用户不需要关心日志；后端配置能力保留，见 useLogSettings）
+const isDev = import.meta.env.DEV
+const { setLogLevel, openLogDir, saveLogSettings } = useLogSettings()
+
+// 分段控件（ShellSeg）直接渲染 label，所以这里先把 i18n key 解成文案；
+// computed 随 locale 切换重算（t 是响应式的）。
+const logLevelOptions = computed(() => [
+  { value: 'debug', label: t('settings.log.levelDebug') },
+  { value: 'info', label: t('settings.log.levelInfo') },
+  { value: 'warn', label: t('settings.log.levelWarn') },
+  { value: 'error', label: t('settings.log.levelError') },
+])
+const logFormatOptions = computed(() => [
+  { value: 'text', label: t('settings.log.formatText') },
+  { value: 'json', label: t('settings.log.formatJson') },
+])
+const logFileLevel = ref('info')
+const logFormat = ref('text')
+const logMaxFiles = ref(7)
+const logCapacityMb = ref(512)
+const logSaving = ref(false)
+
+/**
+ * 整数输入：`type="text"` + `inputmode="numeric"`，因为原生 `input[type=number]` 的步进器
+ * 不可 token 化、属禁止的系统原生 UI。非数字字符过滤；空串 / 低于下限时不写入并⑯回
+ * 输入框显示（保留上一个有效值），避免把 NaN 带进保存链路。
+ */
+function onIntInput(e: Event, min: number, current: number): number {
+  const el = e.target as HTMLInputElement
+  const digits = el.value.replace(/\D/g, '')
+  const n = Number(digits)
+  if (digits === '' || !Number.isFinite(n) || n < min) {
+    el.value = String(current)
+    return current
+  }
+  if (el.value !== digits) el.value = digits
+  return n
+}
+
+/** 从现有 AppConfig 的 log 段初始化（与 store 分离：store 的 Settings 类型不含 log 层） */
+async function loadLogSettings() {
+  try {
+    const cfg = await invoke<{
+      log: {
+        file_level: string
+        format: string
+        max_files: number
+        capacity_bytes: number
+      }
+    }>('get_app_settings')
+    logFileLevel.value = cfg.log?.file_level || 'info'
+    logFormat.value = cfg.log?.format || 'text'
+    logMaxFiles.value = cfg.log?.max_files ?? 7
+    logCapacityMb.value = Math.round((cfg.log?.capacity_bytes ?? 512 * 1024 * 1024) / (1024 * 1024))
+  } catch (e) {
+    logger.error('[Settings] Failed to load log settings:', e)
+  }
+}
+
+/** 日志级别即时热调（不重启；失败回显原级别并提示） */
+async function onLogLevelClick(level: string) {
+  const previous = logFileLevel.value
+  logFileLevel.value = level
+  try {
+    await setLogLevel(level)
+    toast.success(i18n.global.t('settings.log.levelApplied'))
+  } catch (e) {
+    logger.error('[Settings] set_log_level failed:', e)
+    logFileLevel.value = previous
+    toast.error(i18n.global.t('settings.log.saveFailed'))
+  }
+}
+
+async function onOpenLogDir() {
+  try {
+    await openLogDir()
+  } catch (e) {
+    logger.error('[Settings] open_log_dir failed:', e)
+    toast.error(i18n.global.t('settings.log.saveFailed'))
+  }
+}
+
+/** 持久化日志配置（format/rotation/max_files/capacity 重启生效） */
+async function onSaveLogConfig() {
+  logSaving.value = true
+  try {
+    await saveLogSettings({
+      fileLevel: logFileLevel.value,
+      rotation: 'daily',
+      maxFiles: logMaxFiles.value,
+      format: logFormat.value,
+      capacityBytes: logCapacityMb.value * 1024 * 1024,
+      consoleInRelease: false,
+    })
+    toast.success(i18n.global.t('settings.log.saved'))
+  } catch (e) {
+    logger.error('[Settings] save log settings failed:', e)
+    toast.error(i18n.global.t('settings.log.saveFailed'))
+  } finally {
+    logSaving.value = false
+  }
+}
+
+onMounted(() => {
+  loadLogSettings()
+})
+</script>

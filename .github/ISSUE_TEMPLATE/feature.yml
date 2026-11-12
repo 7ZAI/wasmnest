@@ -1,0 +1,41 @@
+name: 功能 / 任务
+description: 新能力、新应用、新机制请求。必填：需求 / 归属裁决 / 验收条件。
+title: "[feat] "
+labels: ["kind:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 归属裁决（宿主侧必填；命中 B1–B6 任一即业务代码 → 落应用 / 插件仓）
+        - B1 产品类型/字段  B2 业务编排/状态机  B3 业务真源  B4 业务投影  B5 业务默认值/策略  B6 业务生命周期挂钩
+        - 三问顺序：① 离宿主能实现吗？② 携带产品语义吗？③ 都不命中 → 宿主，且须 WIT 纯增量 / 权限位有门禁落点 / 停用可回收
+  - type: textarea
+    id: need
+    attributes:
+      label: 需求描述
+      description: 要解决什么问题、给谁用
+    validations:
+      required: true
+  - type: input
+    id: repo
+    attributes:
+      label: 主要落点仓（真源仓）
+      description: platform / lib / apps / test；跨仓契约开在真源仓，跨仓联动开协调 issue
+  - type: textarea
+    id: adjudication
+    attributes:
+      label: 归属裁决结论
+      description: 命中哪条判据 / 三问结论（宿主侧必填）；暂缺写「待补」
+      placeholder: "B1–B6 命中情况、三问结论、落点仓"
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收条件
+      description: 可验证的完成标准：锁 / 测试 / 命令；暂缺写「待补」
+    validations:
+      required: true
+  - type: textarea
+    id: related
+    attributes:
+      label: 相关契约与锁
+      description: WIT tag / 锁名 / release-manifest 字段 / 相关 issue（owner/repo#n）

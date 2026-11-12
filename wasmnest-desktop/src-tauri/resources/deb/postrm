@@ -1,0 +1,21 @@
+#!/bin/sh
+# WasmNest deb post-remove：卸载后提示用户数据位置（不自动删除）
+#
+# Linux 包管理器（apt/dpkg）卸载**非交互**，且 postrm 以 root 运行、无法可靠定位
+# /home 下各用户的目录——因此**不自动删除**用户数据（成熟 Linux 软件惯例：
+# remove 保留数据；purge 语义清除的是包配置与安装面，不越权删 /home 用户数据）。
+# 用户数据完全清除由用户手动执行（下方给出命令）；「选择 + 确认删除」的交互
+# 语义由 Windows NSIS 安装器承担（卸载确认页「删除应用程序数据」复选框）。
+
+case "$1" in
+  remove|purge)
+    echo "WasmNest 已卸载。用户数据保留（重新安装后可恢复），位置："
+    echo "  ~/.local/share/com.wasmnest.app   （主库 wasmnest.db / 用户插件 / 对等网络身份 / 日志）"
+    echo "  ~/.config/com.wasmnest.app        （应用配置）"
+    echo "  ~/.cache/com.wasmnest.app         （缓存）"
+    echo "如需完全清除，请确认 WasmNest 未在运行后手动执行："
+    echo "  rm -rf ~/.local/share/com.wasmnest.app ~/.config/com.wasmnest.app ~/.cache/com.wasmnest.app"
+    ;;
+esac
+
+exit 0

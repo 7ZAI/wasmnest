@@ -1,0 +1,575 @@
+/**
+ * Plugin Context
+ *
+ * 为每个插件创建 PluginContext 实例 — 权限检查 + API 代理
+ */
+
+import { logger as frontendLogger } from '@/utils/frontendLogger'
+import { parseInvokeError, userErrorText } from '@/utils/userError'
+import type {
+  PluginContext,
+  PluginInfo,
+  Disposable,
+  CommandRegistry,
+  SessionAPI,
+  UIRegistry,
+  EventAPI,
+  StorageAPI,
+  I18nAPI,
+  LifecycleAPI,
+  LoggerAPI,
+  DialogAPI,
+  NotificationAPI,
+  StatusAPI,
+  SystemAPI,
+  PluginRouteDescriptor,
+  PluginDialogOptions,
+  PluginDialogHandle,
+  ShellSurfaceContribution,
+  ShellSlotContribution,
+  ShellSurfaceIntent,
+  ShellCapsuleItem,
+  MonitorPanelHandle,
+  AppUpdateAPI,
+  AppUpdateCheckResult,
+} from './types'
+import { hasPermissionForApi } from './permission'
+import * as pluginCmds from './commands'
+import { ensureChannelToken } from './credentials'
+import * as pluginEvents from './events'
+import { defineComponent, h } from 'vue'
+import { getPluginRegistry } from './registry'
+import PluginViewHost from './components/PluginViewHost.vue'
+import { registerPluginRoute, openPluginRoute } from './routes'
+import { getSharedModule } from './shared-runtime'
+import { getShellRegistry } from '@/shell/registry'
+import { subscribeSurfaceIntent } from '@/shell/surfaceIntent'
+import { invoke } from '@tauri-apps/api/core'
+// 全局弹窗控制器：必须经包说明符解析（与 App.vue 挂载的 PluginGlobalDialog.vue 同源）。
+// 移动端 file: 依赖是快照拷贝，若直连源码相对路径会与组件产生两个模块实例，
+// openGlobalDialog 的广播到不了组件（弹窗静默不渲染）；包说明符保证同一拷贝文件。
+import { openGlobalDialog } from '@binblink/wasmnest-plugin-sdk-mobile/global-dialog'
+import { subscribeAppBackPressed } from './back-button'
+
+// ==================== Android 系统返回键（跨插件共享单例） ====================
+// 原生 listener 与分发顺序（应用层 → 平台层兜底）收敛在 `./back-button`：多消费者
+// 共享同一条原生监听，处理器返回 true 表示已消费（详见该文件头注）。
+// 这里只做「插件 API → 分发层」的接线。
+
+/**
+ * 插件命令失败 → 用户可见 Error（ADR 0030 错误信封消费侧）
+ *
+ * Tauri invoke 的 reject 值形态：
+ * 1. 宿主 Rust 命令 Err(AppError)：经 ADR 0030 信封序列化，reject 值 = `{ code, request_id, params? }`
+ *    （真源 `wasmnest-server-base::error::AppError::Serialize`；信封**永不携带**错误原文 / 堆栈）；
+ * 2. dev-shell / 单测环境：Error 实例；
+ * 3. 兼容纯字符串形态（整核前移动端本地 error.rs `serialize_str` 行为，已退役）。
+ *
+ * 用户面文案走 `errors.<code>` 友好文案（未注册 → `errors.host.internal`），
+ * 并把信封字段挂到 Error 上供插件侧错误消费层（`parsePluginError` 同构）继续映射。
+ *
+ * 2026-11-12 真机缺陷：此前把信封拼成 `Command not found: <cmd> (host.internal,
+ * request_id=…)` 抛出，插件侧的 `t(err.message)` 再把整串当前缀化 key 查表 →
+ * toast 直接显示 `com.wasmnest.<plugin>.Command not found: …`。技术详情只进日志，
+ * 插件拿到的 message 必须是可直接展示的友好文案。
+ */
+function pluginCommandError(e: unknown): Error {
+  const ue = parseInvokeError(e)
+  const error = new Error(userErrorText(ue)) as Error & {
+    code?: string
+    request_id?: string
+    params?: Record<string, unknown>
+  }
+  error.name = 'PluginCommandError'
+  error.code = ue.code
+  if (ue.requestId) error.request_id = ue.requestId
+  if (ue.params) error.params = ue.params
+  return error
+}
+
+/** 宿主注入的能力钩子（loader 装配；测试可省略） */
+export interface PluginContextHooks {
+  mountMonitorPanel?: (
+    container: HTMLElement,
+    appId: string,
+    panelId: string,
+  ) => Promise<MonitorPanelHandle>
+}
+
+/** 创建插件的 PluginContext */
+export function createPluginContext(
+  info: PluginInfo,
+  hooks: PluginContextHooks = {},
+): PluginContext {
+  /**
+   * 本插件运行期创建的可回收资源（停用时由 loader 统一 dispose）
+   *
+   * 条目在 `dispose()` 时**自摘**：早先只 push 不删，按组件生命周期订阅 / 解绑的
+   * 常见写法会在数组里留下已 dispose 的包装闭包（间接钉住组件状态），长会话里只增
+   * 不减。保持数组形态（不改 Set）是为了不动 SDK 对外暴露的 `_disposables: Disposable[]`
+   * 形状——应用与 dev-shell 都按它编译；自摘才是本缺陷的判据。
+   */
+  const disposables: Disposable[] = []
+  const permissions = info.permissions
+  let context: PluginContext | null = null
+
+  /**
+   * 登记资源并让 `dispose()` 自摘（幂等：重复 dispose 只影响底层资源，不再改数组）
+   *
+   * 返回包装句柄而不是原句柄：插件把返回值存起来手动 dispose 时，数组同步收缩。
+   */
+  function track(disposable: Disposable): Disposable {
+    const tracked: Disposable = {
+      dispose() {
+        const index = disposables.indexOf(tracked)
+        if (index >= 0) disposables.splice(index, 1)
+        disposable.dispose()
+      },
+    }
+    disposables.push(tracked)
+    return tracked
+  }
+
+  /** 快速失败：检查权限 */
+  function requirePermission(apiMethod: string): void {
+    if (!hasPermissionForApi(permissions, apiMethod)) {
+      throw new Error(`Plugin ${info.id} lacks permission for ${apiMethod}`)
+    }
+  }
+
+  /**
+   * 本插件的通道令牌（ADR 0058 / issue #28）
+   *
+   * 插件面命令（命令派发 / 存储 / 自报面）的身份来源：令牌决定调用方身份，
+   * 宿主拒签（插件未运行）时显性抛错——绝不落回「无凭证」调用。
+   * 懒签发：插件代码首次走到这些 API 时取，装载路径不依赖凭证。
+   */
+  function channelToken(): Promise<string> {
+    return ensureChannelToken(info.id)
+  }
+
+  // ==================== CommandRegistry ====================
+  const commandHandlers = new Map<string, (...args: any[]) => any>()
+
+  const commands: CommandRegistry = {
+    register(id: string, handler: (...args: any[]) => any): Disposable {
+      commandHandlers.set(id, handler)
+      const disposable = {
+        dispose() { commandHandlers.delete(id) },
+      }
+      return track(disposable)
+    },
+    async execute(id: string, ...args: any[]): Promise<any> {
+      const handler = commandHandlers.get(id)
+      if (handler) return handler(...args)
+      // 本地 handler 查不到时回退到 WASM 命令桥（宿主 PluginManager.invoke_command）。
+      // 失败按 ADR 0030 落到 pluginCommandError：message = 友好文案（技术详情只进日志），
+      // 并保留信封 code / request_id / params 供插件侧错误消费层继续映射。
+      try {
+        return await pluginCmds.pluginInvoke(
+          info.id,
+          id,
+          args.length === 1 ? args[0] : args,
+          await channelToken(),
+        )
+      } catch (e) {
+        // 原始拒绝值全量落盘（dev 控制台 + 攒批转发，release 也转发 error 级）：
+        // 信封只有 code/request_id，细节在宿主日志，此处留形状供关联排查
+        frontendLogger.error(`[PluginContext] command "${id}" failed:`, e)
+        throw pluginCommandError(e)
+      }
+    },
+  }
+
+  // ==================== SessionAPI ====================
+  const session: SessionAPI = {
+    async list(): Promise<any[]> {
+      requirePermission('session.list')
+      // 票 04：会话列表迁桌面 HTTP（`GET /api/sessions`）；权限判定不变
+      const { listSessions } = await import('@/plugin/sessionCommands')
+      const result = await listSessions()
+      if (result.code === 0 && result.data) {
+        return result.data.sessions || []
+      }
+      throw new Error(result.message || 'Failed to load sessions')
+    },
+    async get(sessionId: string): Promise<any> {
+      requirePermission('session.get')
+      const sessions = await session.list()
+      return sessions.find((s: any) => s.id === sessionId)
+    },
+    onStatusChange(handler: (event: any) => void): Disposable {
+      requirePermission('session.onStatusChange')
+      const disposable = pluginEvents.on(info.id, 'session:statusChange', handler)
+      return track(disposable)
+    },
+  }
+
+  // ==================== UIRegistry ====================
+  //
+  // 票 2026-10-10 批次 C2：`registerToolboxPage` / `registerNavTab` /
+  // `registerTerminalToolbarItem` / `registerTerminalView` 四个旧嵌入扩展点整面退役
+  // （宿主壳只认 registerSurface 一种运行面形态）。退役清单的防回接锁见
+  // src/__tests__/shell/retiredHostUIRetirementLocks.test.ts（R4）。
+  const ui: UIRegistry = {
+    async mountMonitorPanel(
+      container: HTMLElement,
+      appId: string,
+      panelId: string,
+    ): Promise<MonitorPanelHandle> {
+      if (!hooks.mountMonitorPanel) {
+        throw new Error('host does not support monitor panels')
+      }
+      return await hooks.mountMonitorPanel(container, appId, panelId)
+    },
+    registerSurface(surface: ShellSurfaceContribution): Disposable {
+      // 宿主壳运行面：应用自持 UI 的挂载位，无特权动作——不做 requirePermission
+      // 快速失败（真源仲裁仍在 Rust host 原语层；本面不触发任何宿主能力）。
+      // appId 一律 = 插件 id（壳内应用模型与该插件同 id）。
+      //
+      // 壳直渲染运行面（不经旧插件 UI 宿主路径），但插件组件靠 inject('pluginContext')
+      // 取上下文——在此套 PluginViewHost 包装补 provide；与 pluginAppSource.resolveSurface
+      // 的旧路径同款（插件形态细节收在插件系统内，壳不认识插件）。
+      const wrapped = defineComponent({
+        name: `ShellSurface-${info.id}`,
+        // 壳透传 { app } prop：声明吞掉，避免作为未知 attr 落到根节点
+        props: { app: { type: Object, default: null } },
+        setup() {
+          return () => h(PluginViewHost, { pluginId: info.id, component: surface.component })
+        },
+      })
+      const disposable = getShellRegistry().registerSurface(info.id, {
+        ...surface,
+        component: wrapped,
+      })
+      return track(disposable)
+    },
+    registerSlot(slot: ShellSlotContribution): Disposable {
+      const disposable = getShellRegistry().registerSlot(info.id, slot)
+      return track(disposable)
+    },
+    onSurfaceIntent(handler: (intent: ShellSurfaceIntent) => void): Disposable {
+      // 宿主 → 本应用运行面的入口意图通道（快捷卡片点击等）。载荷由应用自持，
+      // 宿主只按 appId 排队 / 投递；订阅前到达的意图由通道补投（不丢）。
+      return track(subscribeSurfaceIntent(info.id, handler))
+    },
+    registerCapsuleItem(item: ShellCapsuleItem): Disposable {
+      const disposable = getShellRegistry().registerCapsuleItem(info.id, item)
+      return track(disposable)
+    },
+    registerRoute(route: PluginRouteDescriptor): Disposable {
+      requirePermission('ui.registerRoute')
+      const disposable = registerPluginRoute(info.id, route)
+      return track(disposable)
+    },
+    openPage(routeId: string): void {
+      requirePermission('ui.openPage')
+      openPluginRoute(info.id, routeId)
+    },
+    goBack(): void {
+      requirePermission('ui.goBack')
+      getSharedModule('router').back()
+    },
+    onBackPressed(handler: (payload: { canGoBack: boolean }) => boolean | void): Disposable {
+      requirePermission('ui.onBackPressed')
+      const unsubscribe = subscribeAppBackPressed(handler)
+      const disposable = { dispose: unsubscribe }
+      return track(disposable)
+    },
+    showDialog(options: PluginDialogOptions): PluginDialogHandle {
+      requirePermission('ui.showDialog')
+      return openGlobalDialog({ ...options, pluginContext: context! })
+    },
+  }
+
+  // 已退役扩展点的显性抛错桩（§5.1.3 fail-visible 形态①：旧读路径不得静默降级）
+  //
+  // 为什么保留同名桩而不是直接删干净：旧插件调用时若拿到 undefined，
+  // 崩点会落在插件自己的调用处，报错只说「不是函数」，开发者会误判成自己写错。
+  // 这里当场抛出并指名扩展点 + 迁移出路，让断链可见、可定位。
+  // 桩不进 UIRegistry 类型——类型面必须让旧调用点**编译期**就红。
+  const retiredUi = (api: string): never => {
+    throw new Error(
+      `[plugin] ui.${api} 已于票 2026-10-10 整面退役：宿主壳只认 ui.registerSurface 一种运行面形态。` +
+        `请改用 registerSurface（应用自持整个运行面，含底部导航与页签），应用内子页用 registerRoute + openPage。`,
+    )
+  }
+  Object.assign(ui, {
+    registerToolboxPage: () => retiredUi('registerToolboxPage'),
+    registerNavTab: () => retiredUi('registerNavTab'),
+    registerTerminalToolbarItem: () => retiredUi('registerTerminalToolbarItem'),
+    registerTerminalView: () => retiredUi('registerTerminalView'),
+  })
+
+  // ==================== EventAPI ====================
+  const events: EventAPI = {
+    on(event: string, handler: (...args: any[]) => void): Disposable {
+      const disposable = pluginEvents.on(info.id, event, handler)
+      return track(disposable)
+    },
+    emit(event: string, ...args: any[]): void {
+      pluginEvents.emit(event, ...args)
+    },
+  }
+
+  // ==================== StorageAPI ====================
+  // 宿主侧三段校验：身份（本插件令牌）→ 目标激活态 → 目标 storage 权限（issue #28）
+  const storage: StorageAPI = {
+    async get<T = any>(key: string): Promise<T | undefined> {
+      const val = await pluginCmds.pluginStorageGet(info.id, key, await channelToken())
+      return val as T | undefined
+    },
+    async set(key: string, value: any): Promise<void> {
+      return pluginCmds.pluginStorageSet(info.id, key, value, await channelToken())
+    },
+    async delete(key: string): Promise<void> {
+      return pluginCmds.pluginStorageDelete(info.id, key, await channelToken())
+    },
+  }
+
+
+  // ==================== SystemAPI ====================
+
+  /** 检查 system:open 权限，失败时抛 i18n 文案错误 */
+  function requireSystemOpenPermission(apiMethod: string): void {
+    if (!hasPermissionForApi(permissions, apiMethod)) {
+      const hostI18n = (window as any).__WASMNEST_SHARED__?.i18n
+      const message = hostI18n
+        ? hostI18n.global.t('mobile.plugin.noSystemOpenPermission', { plugin: info.id })
+        : 'mobile.plugin.noSystemOpenPermission'
+      throw new Error(message)
+    }
+  }
+
+  const system: SystemAPI = {
+    async openFile(path: string, displayName?: string): Promise<void> {
+      requireSystemOpenPermission('system.openFile')
+      return pluginCmds.pluginOpenFile(info.id, path, displayName ?? '')
+    },
+    async revealInDir(path: string): Promise<void> {
+      requireSystemOpenPermission('system.revealInDir')
+      return pluginCmds.pluginOpenFileLocation(info.id, path)
+    },
+    async revealReceivedFileLocation(fileName: string): Promise<void> {
+      requireSystemOpenPermission('system.revealReceivedFileLocation')
+      return pluginCmds.pluginRevealReceivedFile(info.id, fileName)
+    },
+    /**
+     * 引导开启「所有文件访问」权限（打开公共 Download 目录所需；未授权时跳系统
+     * 设置页，返回跳转前的授权状态；授权后重试 revealReceivedFileLocation 即达）
+     */
+    async requestAllFilesAccess(): Promise<boolean> {
+      requireSystemOpenPermission('system.requestAllFilesAccess')
+      return pluginCmds.pluginOpenAllFilesAccess(info.id)
+    },
+    /** 打开系统公共下载目录（设置页下载目录区「打开」，核对文件是否落盘；
+     * 未授予「所有文件访问」时报 needs_all_files_access 前缀，前端据此引导授权） */
+    async openDownloadDir(): Promise<void> {
+      requireSystemOpenPermission('system.openDownloadDir')
+      return pluginCmds.pluginOpenDownloadDir(info.id)
+    },
+  }
+
+  // ==================== I18nAPI ====================
+  /**
+   * 把插件的消息树展平为「完整点分 key → 叶子值」的一层表
+   *
+   * 为什么必须展平（2026-10-14 实测修正）：宿主取文案走 `t('<插件id>.<域>.<键>')`，
+   * vue-i18n 按点号逐段寻路径。插件若把消息写成嵌套对象（如 `{ app: { title: '远程终端' } }`），
+   * 前缀后得到的是**键名带点的对象**（`'com.x.app' → {title}`）——路径寻址在第二段就断了，
+   * 全部文案回退成 key 字面量（实测 bedcode 应用整个运行面显示 `com.wasmnest.bedcode.app.title`）。
+   * 展平后每个键都是叶子，路径直达；数组与标量原样保留（vue-i18n 的列表/复数消息不能拆）。
+   */
+  function flattenMessages(
+    source: Record<string, unknown>,
+    prefix: string,
+    out: Record<string, unknown>,
+  ): void {
+    for (const [key, value] of Object.entries(source)) {
+      const fullKey = prefix ? `${prefix}.${key}` : key
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        flattenMessages(value as Record<string, unknown>, fullKey, out)
+      } else {
+        out[fullKey] = value
+      }
+    }
+  }
+
+  /**
+   * 检测「未经预编译的字符串消息」并**一次性告警**（fail-visible，2026-11-03）
+   *
+   * 背景：双端 `vite.config.ts` 已切到 `vue-i18n` 的 **runtime-only 构建**
+   * （`__INTLIFY_DROP_MESSAGE_COMPILER__: true` + alias 到 `vue-i18n.runtime.esm-bundler.js`）
+   * 以撤掉 CSP 的 `'unsafe-eval'`。该构建**不含消息编译器**，运行期喂进去的字符串
+   * 消息会走 `compileMessageFormat` 的 `messageCompiler == null` 分支，直接原样返回：
+   *
+   * - 默认 locale 的扁平字符串：`t()` 能拿到原串（看着没问题）
+   * - **非默认 locale**（如 `en`）：`t()` 返回 **key 字面量**
+   * - **插值全部失效**：`'失败：{reason}'` 原样输出 `{reason}` 不替换
+   *
+   * 宿主自己的文案已由 `scripts/i18n-precompile.mjs` 在构建期转成消息函数，不受影响；
+   * 但该插件**管不到插件运行期注册的消息**——插件文案需要在各自应用仓的构建期预编译
+   * （复用同一个 `i18nPrecompile` 插件，产物里直接是 `() => ...` 函数）。
+   *
+   * 这里不做运行期编译兜底（那会把编译器拖回产物、与撤 `'unsafe-eval'` 的目标冲突），
+   * 只保证**退化可见**：每插件每会话告警一次，点名是哪个插件、哪些 key 受影响。
+   */
+  const warnedUncompiled = new Set<string>()
+  function warnIfUncompiled(prefixed: Record<string, unknown>): void {
+    if (warnedUncompiled.has(info.id)) return
+    const samples: string[] = []
+    for (const [key, value] of Object.entries(prefixed)) {
+      if (typeof value === 'string') samples.push(key)
+      if (samples.length >= 3) break
+    }
+    if (samples.length === 0) return
+    warnedUncompiled.add(info.id)
+    frontendLogger.warn(
+      `[PluginContext] 插件 "${info.id}" 注册了未经预编译的字符串文案（如 ${samples.join(', ')}）——` +
+        `vue-i18n 运行在 runtime-only 构建下，非默认 locale 会返回 key 字面量、插值不会替换。` +
+        `请在应用仓构建期用 i18nPrecompile 预编译文案。`,
+    )
+  }
+
+  const i18n: I18nAPI = {
+    registerMessages(locale: string, messages: Record<string, unknown>): void {
+      const hostI18n = (window as any).__WASMNEST_SHARED__?.i18n
+      if (!hostI18n) return
+      const prefixed: Record<string, unknown> = {}
+      flattenMessages(messages, info.id, prefixed)
+      warnIfUncompiled(prefixed)
+      // 直接合并新消息，vue-i18n 会自动与现有消息深度合并
+      hostI18n.global.mergeLocaleMessage(locale, prefixed)
+    },
+    t(key: string, params?: Record<string, unknown>): string {
+      const hostI18n = (window as any).__WASMNEST_SHARED__?.i18n
+      if (!hostI18n) return key
+      const fullKey = `${info.id}.${key}`
+      const text = hostI18n.global.t(fullKey, params)
+      // 未注册（vue-i18n 回显 key 原文）时**返回调用方原文**，不再回显前缀化 key：
+      // 插件常把错误正文 / 已完整 key 交给 t()，前缀化会产出
+      // `com.wasmnest.<plugin>.Command not found: …` 这类垃圾 key 直接进 toast
+      // （2026-11-12 真机实测）；也顺带兼容已带命名空间的 key。
+      if (text !== fullKey) return text
+      const raw = hostI18n.global.t(key, params)
+      return raw !== key ? raw : key
+    },
+  }
+
+  // ==================== LifecycleAPI ====================
+  const lifecycle: LifecycleAPI = {
+    onAppStartup(handler: () => void): Disposable {
+      const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:appStartup', handler)
+      return track(disposable)
+    },
+    onAppShutdown(handler: () => void): Disposable {
+      const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:appShutdown', handler)
+      return track(disposable)
+    },
+    onAuthSuccess(handler: () => void): Disposable {
+      const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:authSuccess', handler)
+      return track(disposable)
+    },
+    onDisconnect(handler: (reason: string) => void): Disposable {
+      const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:disconnect', (payload: any) => handler(payload.reason))
+      return track(disposable)
+    },
+    onSessionCreated(handler: (sessionId: string) => void): Disposable {
+      const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:sessionCreated', (payload: any) => handler(payload.sessionId))
+      return track(disposable)
+    },
+    onSessionStopped(handler: (sessionId: string) => void): Disposable {
+      const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:sessionStopped', (payload: any) => handler(payload.sessionId))
+      return track(disposable)
+    },
+  }
+
+  // ==================== LoggerAPI ====================
+  const logger: LoggerAPI = {
+    info(message: string): void { pluginCmds.pluginLog(info.id, 'info', message) },
+    debug(message: string): void { pluginCmds.pluginLog(info.id, 'debug', message) },
+    warn(message: string): void { pluginCmds.pluginLog(info.id, 'warn', message) },
+    error(message: string): void { pluginCmds.pluginLog(info.id, 'error', message) },
+  }
+
+  // ==================== DialogAPI ====================
+  const dialogs: DialogAPI = {
+    showDialog(options) {
+      return getSharedModule('dialogs').showDialog(options)
+    },
+    showConfirm(options) {
+      return getSharedModule('dialogs').showConfirm(options)
+    },
+    showPrompt(options) {
+      return getSharedModule('dialogs').showPrompt(options)
+    },
+    showToast(message, type = 'info') {
+      getSharedModule('dialogs').showToast(message, type)
+    },
+  }
+
+  // ==================== NotificationAPI ====================
+  const notifications: NotificationAPI = {
+    async notify(title, body) {
+      // 走自定义 Kotlin 插件（TaskNotificationPlugin）：插件自主通知，不受设置页开关控制
+      try {
+        const check = await invoke<{ granted: boolean }>('plugin:task-notification|checkNotificationPermission')
+        if (!check.granted) {
+          const req = await invoke<{ granted: boolean }>('plugin:task-notification|requestNotificationPermission')
+          if (!req.granted) return
+        }
+        await invoke('plugin:task-notification|showPluginNotification', { title, body })
+      } catch (e) {
+        // 注意：此处是宿主侧通知失败日志，走前端 logger 落盘；
+        // 不能用下方插件 LoggerAPI 的 logger（单参、走 pluginLog 通道）
+        frontendLogger.warn('[PluginContext] notify failed:', e)
+      }
+    },
+  }
+
+  // ==================== StatusAPI ====================
+  // 自报面（issue #28）：令牌只能自报自己，宿主可代报任意目标
+  const status: StatusAPI = {
+    async reportReady() {
+      return pluginCmds.pluginReportReady(info.id, await channelToken())
+    },
+    async reportError(error) {
+      return pluginCmds.pluginMarkError(info.id, error, await channelToken())
+    },
+  }
+
+  // ==================== AppUpdateAPI ====================
+  // 宿主统一更新检查（GitHub Release 判定）：令牌只能查自己；失败归一化为
+  // status='error'（检查是被动动作，不把技术错误抛给设置页）。
+  const appUpdate: AppUpdateAPI = {
+    async check(): Promise<AppUpdateCheckResult> {
+      try {
+        return await invoke<AppUpdateCheckResult>('plugin_check_self_update', {
+          credential: await channelToken(),
+        })
+      } catch (e) {
+        frontendLogger.warn('[PluginContext] app update check failed:', e)
+        return { status: 'error' }
+      }
+    },
+  }
+
+  context = {
+    id: info.id,
+    commands,
+    session,
+    ui,
+    events,
+    storage,
+    i18n,
+    lifecycle,
+    logger,
+    dialogs,
+    notifications,
+    system,
+    status,
+    appUpdate,
+    _disposables: disposables,
+  }
+  return context!
+}

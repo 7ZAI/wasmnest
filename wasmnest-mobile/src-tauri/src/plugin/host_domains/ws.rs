@@ -1,0 +1,687 @@
+//! host-websocket 客户端域 —— 移动端薄适配器（ADR 0043 引擎抽根）
+//!
+//! 引擎机制（句柄表 / 属主仲裁 / reader-writer 双任务 / 心跳 / 退避重连 / 帧信封 /
+//! 停用回收）全部在通用能力 crate [`wasmnest_ws_client_engine`]（能力仓
+//! `packages/`，零 WIT / 零 SDK / 零平台形态）。本模块只保留两件事：
+//!
+//! 1. **5 条原语薄转发**：签名与历史一致（component.rs 接线 / host_impl 聚合入口
+//!    不变），body 改为调引擎域函数；
+//! 2. **移动端 [`StateWsClientPorts`] 适配器**：权限门（manifest
+//!    `granted_permissions`）/ 总线事件与帧投递 / 宿主运行时任务派生 / jwt 代发
+//!    token / 全局退避钳制与策略——五个平台差异面的移动端实现。
+//!
+//! **同步↔异步桥留在宿主侧**：WIT host fn 是同步上下文，而引擎 `connect` 是 async
+//! （握手 await）；`guarded_host_call`（panic 边界）+ `block_on_async`（重入安全桥）
+//! 两件事都是宿主运行时形态，故在适配层，本模块不碰 engine 以外的任何机制。
+//!
+//! **只做客户端域**：移动端不跑 WS 服务器（ADR 0018），服务端域 9 函数与
+//! `connection-context` 不跟演（ADR 0019 双端偏离）；不引入 `ws:server` 权限位。
+//!
+//! 与桌面端的能力域实现（`wasmnest-server-websocket` 的 `plugin_binding` 客户端段）
+//! **同构但分叉**：桌面那份与 actix 服务器栈 + 过滤器链同 crate 耦合；本 crate 用的
+//! 是零平台依赖的通用引擎，两份之间的显式重复（ADR 0041 D1 桌面侧条件未满足）留待
+//! 后续票据。
+//!
+//! 行为契约（权限门 fail-closed / 属主隔离 / 句柄生命周期 / close code 语义 /
+//! 队列满 fail-fast / purge 回收 / 入参校验 / 帧信封形状 / 重连钳制）由引擎自身
+//! 单测覆盖（`wasmnest-ws-client-engine` crate 测试，20 例），本模块只保薄转发
+//! 语义断言：端口装配正确（权限位读 manifest、token 读宿主认证状态、任务挂宿主
+//! 运行时）与「回收聚合入口只走一条路」。
+
+use std::sync::{Arc, Mutex};
+
+use wasmnest_link_crypto::{
+    b64_decode, generate_ephemeral, parse_negotiation, ClientWsCrypto, NEGOTIATION_HEADER, PROTOCOL_VERSION,
+    WS_PLUGIN_CHANNEL, WS_POLICY_HEADER, X25519_KEY_LEN,
+};
+use wasmnest_ws_client_engine::ports::{
+    BoxedTask, ReconnectPolicy, WsClientPorts, WsFrameCrypto, WsFrameCryptoFactory, WsTask,
+};
+
+use super::support::guarded_host_call;
+use super::{current_handle, host_ctx};
+use wasmnest_host_kit::WasmPluginState;
+use wasmnest_wasm_core::runtime_util::block_on_async;
+
+use wasmnest_wasm_core::host_api::ports::HostEnginePorts;
+use wasmnest_wasm_core::runtime_util::spawn_with_error_boundary_on;
+
+use crate::plugin::bindings::wasmnest;
+
+impl wasmnest::ws::host_websocket::Host for WasmPluginState {
+    fn connect(&mut self, config_json: String) -> Result<String, String> {
+        ws_connect(self, &config_json)
+    }
+
+    fn send_text(&mut self, handle: String, text: String) -> Result<(), String> {
+        ws_send_text(self, &handle, &text)
+    }
+
+    fn send_binary(&mut self, handle: String, payload: Vec<u8>) -> Result<(), String> {
+        ws_send_binary(self, &handle, payload)
+    }
+
+    fn close(&mut self, handle: String, close_json: String) -> Result<bool, String> {
+        ws_close(self, &handle, &close_json)
+    }
+
+    fn is_connected(&mut self, handle: String) -> Result<bool, String> {
+        ws_is_connected(self, &handle)
+    }
+}
+
+// ==================== 移动端 WsClientPorts 适配器 ====================
+
+/// 移动端端口适配：实现引擎 `WsClientPorts` 的五个平台差异面。
+///
+/// 按插件实例构建（[`Self::from_state`],权限门读该插件 manifest
+/// `granted_permissions`）；reader / writer / 重连任务会克隆本端口并长期持有
+/// （`'static`），故字段只放 `Arc` / 可克隆宿主句柄。
+struct StateWsClientPorts {
+    /// 插件消息总线（事件与帧的投递出口）
+    bus: Arc<wasmnest_wasm_core::bus::MessageBus>,
+    /// 宿主引擎端口（jwt token / 全局退避边界与策略的投影）
+    host_ports: Arc<dyn HostEnginePorts>,
+    /// 宿主运行时句柄（后台任务派生面：host fn 可能在无 runtime 上下文的线程上执行）
+    runtime: tokio::runtime::Handle,
+    /// 该插件实例是否已授权 `ws:client`（构造时结算，权限门零延迟）
+    permitted: bool,
+}
+
+impl StateWsClientPorts {
+    /// 从插件实例状态构建（宿主原语路径）；返回 trait 对象（引擎 API 要求）
+    fn from_state(state: &WasmPluginState) -> Arc<dyn WsClientPorts> {
+        Arc::new(Self {
+            bus: Arc::clone(&host_ctx(state).message_bus),
+            host_ports: Arc::clone(&host_ctx(state).ports),
+            runtime: current_handle().clone(),
+            // 权限真源 = 内核 PermissionManager（`WasmHostContext::has_permission`）；
+            // 构造时取快照（reader / writer 任务会长期持有本端口，权限门零延迟）
+            permitted: host_ctx(state)
+                .has_permission(&state.plugin_id, wasmnest_wasm_core::permission::PERMISSION_WS_CLIENT),
+        })
+    }
+}
+
+/// 宿主运行时任务包装（tokio JoinHandle → 引擎 `WsTask`）
+///
+/// `abort` 是幂等的（重复调用不 panic），符合引擎 `WsTask::cancel` 的契约。
+struct RuntimeTask(tokio::task::JoinHandle<()>);
+
+impl WsTask for RuntimeTask {
+    fn cancel(&self) {
+        self.0.abort();
+    }
+}
+
+/// 退避策略适配：把宿主的 `WsReconnectPolicyPort` 转成引擎的 `ReconnectPolicy`
+///
+/// 两个 trait 的三方法逐字同形（ADR 0040 共享核的机制同源），本包装只做类型转换，
+/// **不复制任何退避逻辑**——指数退避 / 抖动 / 下限钳制的真源始终在宿主
+/// `connection::reconnect`。
+struct StateReconnectPolicy(Box<dyn wasmnest_wasm_core::host_api::ports::WsReconnectPolicyPort>);
+
+#[async_trait::async_trait]
+impl ReconnectPolicy for StateReconnectPolicy {
+    async fn start(&self) -> Option<()> {
+        self.0.start().await
+    }
+
+    async fn get_delay(&self) -> std::time::Duration {
+        self.0.get_delay().await
+    }
+
+    async fn on_success(&self) {
+        self.0.on_success().await
+    }
+}
+
+impl WsClientPorts for StateWsClientPorts {
+    /// 权限门（fail-closed）：出站连接是 SSRF 面，未在 manifest 声明即拒
+    fn check_permission(&self, _plugin_id: &str) -> bool {
+        // 权限仲裁已统一到内核 PermissionManager（构造时向真源结算的快照，
+        // 与 mdns 域同语义）；引擎在每次原语入口先问本门，denied 时原语直接
+        // 拒绝并给出统一文案
+        self.permitted
+    }
+
+    /// 宿主 jwt token（代发首帧用；未认证时空串，引擎据此显性失败）
+    ///
+    /// **凭据不落插件**（C4）：只交出「代发时那一刻的 token 值」，本模块与引擎都
+    /// 不打印其值（日志只记长度）。
+    fn global_token(&self) -> String {
+        self.host_ports.global_token()
+    }
+
+    /// 全局退避钳制边界（宿主全局常量的投影）
+    fn reconnect_bounds(&self) -> (u64, u64) {
+        self.host_ports.reconnect_bounds()
+    }
+
+    fn reconnect_policy(&self, max_retries: u32, base_ms: u64, max_ms: u64) -> Box<dyn ReconnectPolicy> {
+        Box::new(StateReconnectPolicy(self.host_ports.reconnect_policy(
+            max_retries,
+            base_ms,
+            max_ms,
+        )))
+    }
+
+    /// 状态事件：引擎已拼好**完整 topic**（属主私有命名空间），本方法只负责
+    /// 「往这个 topic 上发」并由总线做订阅方隔离
+    ///
+    /// sender 恒 `"host"`：总线会过滤「发布者 == 订阅者」，若用插件 id 当 sender
+    /// 会把自己的事件一起过滤掉。
+    fn publish(&self, topic: &str, payload: serde_json::Value) {
+        self.bus.publish(topic, "host", payload);
+    }
+
+    /// 入站帧：属主私有二进制 topic（零 JSON 编解码）
+    fn publish_binary(&self, topic: &str, payload: Vec<u8>) {
+        self.bus.publish_binary(topic, "host", payload);
+    }
+
+    /// 宿主运行时任务派生 + panic 错误边界（任务 panic 不得静默终止，也不得污染
+    /// 宿主状态）
+    fn spawn(&self, task_name: &'static str, task: BoxedTask) -> Arc<dyn WsTask> {
+        Arc::new(RuntimeTask(spawn_with_error_boundary_on(
+            &self.runtime,
+            task_name,
+            task,
+        )))
+    }
+
+    /// WS 帧级链路加密工厂（2026-11-04）
+    ///
+    /// 裁决口径（与 HTTP 信封同源）：
+    /// - 持有配对 pin 就提案，**不看本端全局加密开关**（对端策略可能 `required`，
+    ///   开关关着不提案会让升级期直接 400；与事件 WS 同判据，见
+    ///   `connection/ws_connection.rs` 的 `WsCryptoOffer::from_context`）；
+    /// - 目标 host:port 是已声明的桌面目标（`egress.is_desktop_target`）——对
+    ///   第三方 WS 地址不提案，避免把宿主信任锚暴露给任意服务器；
+    /// - `strict_mode` 只影响「服务端回绝提案时是否断开」，不改变提案条件。
+    fn frame_crypto(&self, _plugin_id: &str, url: &str) -> Option<Arc<dyn WsFrameCryptoFactory>> {
+        if !should_offer_crypto(url) {
+            return None;
+        }
+        ws_crypto_factory(&crate::state::get_link_crypto_context())
+    }
+}
+
+/// 该 WS 目标是否应随升级请求提案链路加密
+///
+/// 判据 = **已声明的桌面目标**（`egress.is_desktop_target`），**不是**地址是否环回。
+///
+/// 为什么不能按环回跳过（不变量 15）：移动端没有本地桌面服务，隧道本地代理恰好绑
+/// `127.0.0.1`，但桌面接收端看到的是 **peer face**（面标记，不享受环回豁免）。
+/// bedcode 固定 `required`，代理流量不提案就会在 WS 升级期被 400
+/// （`plugin ws endpoint requires link encryption but the upgrade request carries
+/// no offer`）——真机回归：经 relay 连上后进入终端页，`bedcode.subscribe` 一直
+/// `terminal ws connect failed: HTTP error: 400 Bad Request`。
+///
+/// 未声明的环回地址（第三方本地 WS 服务）仍不提案：避免把宿主信任锚暴露给
+/// 任意服务器。
+fn should_offer_crypto(url: &str) -> bool {
+    let Some(parsed) = crate::egress::parse_url_lite(url) else {
+        return false;
+    };
+    if parsed.scheme != "ws" {
+        return false;
+    }
+    let Some(port) = parsed.port else {
+        return false;
+    };
+    crate::egress::policy().is_desktop_target(&parsed.host, Some(port))
+}
+
+/// 由运行期上下文构造 WS 提案（`None` = 未配对 / 无 pin）
+///
+/// **不看主开关**：对端应用策略可能是 `required`，本端开关关着就不提案会让升级期
+/// 被 400 拒；服务端策略 `off` 会回绝提案，非 strict 明文续跑，不构成降级。
+///
+/// pin 存在但格式非法 → 仍返回工厂（`complete` 显性失败），不静默降级明文。
+fn ws_crypto_factory(ctx: &crate::state::LinkCryptoContext) -> Option<Arc<dyn WsFrameCryptoFactory>> {
+    let kd_raw = ctx.kd_public_b64.as_deref()?;
+    let kd_public = match b64_decode(kd_raw) {
+        Ok(raw) => raw.try_into().ok(),
+        Err(error) => {
+            tracing::error!(%error, "ws link crypto: pinned key is not valid base64");
+            None
+        }
+    };
+    if kd_public.is_none() {
+        tracing::error!("ws link crypto: pinned key has invalid length (expect 32 bytes)");
+    }
+    let (ephemeral_private, ephemeral_public) = generate_ephemeral();
+    Some(Arc::new(MobileWsCryptoFactory {
+        ephemeral_private,
+        ephemeral_public_b64: wasmnest_link_crypto::b64_encode(&ephemeral_public),
+        kd_public,
+        strict: ctx.strict_mode,
+    }))
+}
+
+// ==================== WS 链路加密（移动端协议实现） ====================
+
+/// 一次建连的握手工厂（服务端 101 策略头 + 会话密钥回执）
+struct MobileWsCryptoFactory {
+    ephemeral_private: [u8; X25519_KEY_LEN],
+    ephemeral_public_b64: String,
+    /// 已 pin 的桌面端身份公钥（`None` = pin 损坏，握手显性失败）
+    kd_public: Option<[u8; X25519_KEY_LEN]>,
+    /// 严格模式：服务端回绝提案 / 缺回执 → 断开而非明文续跑
+    strict: bool,
+}
+
+impl WsFrameCryptoFactory for MobileWsCryptoFactory {
+    fn request_headers(&self) -> Vec<(String, String)> {
+        vec![(
+            NEGOTIATION_HEADER.to_string(),
+            format!("v{PROTOCOL_VERSION} {}", self.ephemeral_public_b64),
+        )]
+    }
+
+    fn complete(&self, response_headers: &[(String, String)]) -> Result<Option<Arc<dyn WsFrameCrypto>>, String> {
+        let header = |name: &str| {
+            response_headers
+                .iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value.as_str())
+        };
+
+        let accepted = header(NEGOTIATION_HEADER).and_then(parse_negotiation);
+        let server_policy = header(WS_POLICY_HEADER).unwrap_or("");
+
+        let Some(server_ek_b64) = accepted else {
+            // 应用策略 off（或旧宿主不支持此协商）：服务端不建立会话密码。
+            // - required 但无回执 = 协议违约，必须显性失败；
+            // - strict 模式 = 用户要求「不加密就断开」；
+            // - 其余 = 明文续跑（与 preferred 语义一致）。
+            if server_policy == "required" {
+                return Err(
+                    "link encryption required by the server but the upgrade response carries no \
+                     session key"
+                        .to_string(),
+                );
+            }
+            if self.strict {
+                return Err(format!(
+                    "link encryption downgrade: server app policy is '{}' (client strict mode)",
+                    if server_policy.is_empty() {
+                        "unknown/unsupported"
+                    } else {
+                        server_policy
+                    }
+                ));
+            }
+            tracing::warn!(
+                server_policy,
+                "ws link crypto: server declined the offer; continuing plaintext"
+            );
+            return Ok(None);
+        };
+
+        let Some(kd_public) = self.kd_public else {
+            return Err("link encryption is on but the pinned host key is invalid".to_string());
+        };
+        let ciphers = ClientWsCrypto::derive(
+            &self.ephemeral_private,
+            &self.ephemeral_public_b64,
+            server_ek_b64,
+            &kd_public,
+        )
+        .map_err(|error| format!("ws link crypto handshake failed: {error}"))?;
+
+        tracing::info!(
+            server_policy,
+            "ws link crypto: session key negotiated (AAD channel '{WS_PLUGIN_CHANNEL}')"
+        );
+        Ok(Some(Arc::new(MobileWsFrameCrypto {
+            inner: Mutex::new(ciphers),
+        })))
+    }
+}
+
+/// 单连接帧编解码（writer 只 seal / reader 只 open；序号状态由 `ClientWsCrypto` 持有）
+struct MobileWsFrameCrypto {
+    inner: Mutex<ClientWsCrypto>,
+}
+
+impl MobileWsFrameCrypto {
+    fn lock(&self) -> Result<std::sync::MutexGuard<'_, ClientWsCrypto>, String> {
+        self.inner
+            .lock()
+            .map_err(|_| "ws link crypto state poisoned".to_string())
+    }
+}
+
+impl WsFrameCrypto for MobileWsFrameCrypto {
+    fn seal_text(&self, text: String) -> Result<String, String> {
+        self.lock()?
+            .seal_text(WS_PLUGIN_CHANNEL, &text)
+            .map_err(|error| format!("ws frame encrypt failed: {error}"))
+    }
+
+    fn seal_binary(&self, payload: Vec<u8>) -> Result<Vec<u8>, String> {
+        self.lock()?
+            .seal_binary(WS_PLUGIN_CHANNEL, &payload)
+            .map_err(|error| format!("ws frame encrypt failed: {error}"))
+    }
+
+    fn open_text(&self, text: String) -> Result<String, String> {
+        self.lock()?
+            .open_text(WS_PLUGIN_CHANNEL, &text)
+            .map_err(|error| format!("ws frame decrypt failed: {error}"))
+    }
+
+    fn open_binary(&self, payload: Vec<u8>) -> Result<Vec<u8>, String> {
+        self.lock()?
+            .open_binary(WS_PLUGIN_CHANNEL, &payload)
+            .map_err(|error| format!("ws frame decrypt failed: {error}"))
+    }
+}
+
+// ==================== 5 条原语薄转发（签名与历史一致） ====================
+
+/// 建立出站 WS 连接（同步阻塞至握手完成；panic 边界 + 异步桥在宿主侧）
+pub(crate) fn ws_connect(state: &WasmPluginState, config_json: &str) -> Result<String, String> {
+    let ports = StateWsClientPorts::from_state(state);
+    let plugin_id = state.plugin_id.clone();
+    // 引擎 `connect` 是 async（握手 await），WIT host fn 是同步上下文：`block_on_async`
+    // 在宿主运行时上驱动；`guarded_host_call` 截获 panic（越界 UB 面）并返回与超时
+    // 同形的失败文案
+    guarded_host_call(
+        &state.plugin_id,
+        "host_websocket_connect",
+        Err("ws connect: handshake timed out after 5s".to_string()),
+        || {
+            block_on_async(
+                async move { wasmnest_ws_client_engine::engine::connect(&ports, &plugin_id, config_json).await },
+            )
+        },
+    )
+}
+
+/// 发送文本帧（UTF-8）
+pub(crate) fn ws_send_text(state: &WasmPluginState, handle: &str, text: &str) -> Result<(), String> {
+    let ports = StateWsClientPorts::from_state(state);
+    wasmnest_ws_client_engine::engine::send_text(&ports, &state.plugin_id, handle, text)
+}
+
+/// 发送二进制帧
+pub(crate) fn ws_send_binary(state: &WasmPluginState, handle: &str, payload: Vec<u8>) -> Result<(), String> {
+    let ports = StateWsClientPorts::from_state(state);
+    wasmnest_ws_client_engine::engine::send_binary(&ports, &state.plugin_id, handle, payload)
+}
+
+/// 主动关闭连接：返回是否命中（幂等：未知句柄 false；命中退避中的旧句柄即取消重连）
+pub(crate) fn ws_close(state: &WasmPluginState, handle: &str, close_json: &str) -> Result<bool, String> {
+    let ports = StateWsClientPorts::from_state(state);
+    wasmnest_ws_client_engine::engine::close(&ports, &state.plugin_id, handle, close_json)
+}
+
+/// 查询连接是否 open；仅属主可查（句柄不存在 ⇒ false）
+pub(crate) fn ws_is_connected(state: &WasmPluginState, handle: &str) -> Result<bool, String> {
+    let ports = StateWsClientPorts::from_state(state);
+    wasmnest_ws_client_engine::engine::is_connected(&ports, &state.plugin_id, handle)
+}
+
+// ==================== 停用回收 ====================
+
+/// 停用回收：下线该插件全部出站连接 + 取消全部重连会话（只碰本人句柄）
+///
+/// 无需装配端口：回收是纯表操作（任务中止 + 条目摘除），不发布任何事件。
+pub(crate) fn purge_for_plugin(plugin_id: &str) -> usize {
+    wasmnest_ws_client_engine::engine::purge_for_plugin(plugin_id)
+}
+
+// ==================== Tests（薄转发语义，零真实握手） ====================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasmnest_wasm_core::bus::MessageBus;
+
+    /// 无头插件状态：权限集按 `ws:client` 授权开关构建
+    ///
+    /// 旧 fork 版本的字段直构（host_ctx / runtime_handle / granted_permissions）随
+    /// 统一 host-kit state 退役；逐实例权限副本也已退役（2026-10-14）：现经
+    /// test_support 的 `build_host_ctx`（无头上下文同形夹具）+ 内核
+    /// `grant_permissions`（与生产激活路径同一入口）+ `WasmPluginState::new` 装配
+    /// （管理域测试同款路径，wasm-core-mobile-purity 票 04）。runtime 句柄不再进
+    /// state——ws 引擎侧统一走 `current_handle()`（无上下文线程回落 ambient）。
+    fn state(plugin_id: &str, ws_granted: bool, _runtime: tokio::runtime::Handle) -> WasmPluginState {
+        let ctx = wasmnest_wasm_core::test_support::build_host_ctx();
+        let granted: Vec<String> = if ws_granted {
+            vec![wasmnest_wasm_core::permission::PERMISSION_WS_CLIENT.to_string()]
+        } else {
+            Vec::new()
+        };
+        ctx.grant_permissions(plugin_id, &granted);
+        wasmnest_wasm_core::test_support::build_component_state_with_ctx(plugin_id, ctx)
+    }
+
+    /// 权限门 fail-closed：未授权时全部 5 条原语在引擎权限门处直接拒绝，
+    /// 且拒绝发生在**任何宿主能力被触碰之前**（零握手 / 零 spawn / 零发布）
+    #[tokio::test]
+    async fn ws_denied_without_permission_short_circuits_in_engine_gate() {
+        let s = state("deny-plugin", false, current_handle());
+        for err in [
+            ws_connect(&s, r#"{"url":"ws://127.0.0.1:1/"}"#).expect_err("connect must be denied"),
+            ws_send_text(&s, "wsc-x", "hi").expect_err("send-text must be denied"),
+            ws_send_binary(&s, "wsc-x", vec![1]).expect_err("send-binary must be denied"),
+            ws_close(&s, "wsc-x", "{}").expect_err("close must be denied"),
+            ws_is_connected(&s, "wsc-x").expect_err("is-connected must be denied"),
+        ] {
+            assert_eq!(
+                err,
+                format!(
+                    "permission denied: {}",
+                    wasmnest_wasm_core::permission::PERMISSION_WS_CLIENT
+                ),
+                "拒绝文案必须与移动 SDK 权限字面量一致"
+            );
+        }
+    }
+
+    /// 端口装配面：jwt token 与退避钳制边界**从宿主引擎端口取**（不在本模块留常量
+    /// 副本——双真源漂移），且未认证时 token 为空串（引擎据此显性失败而非伪发）
+    #[tokio::test]
+    async fn ports_read_token_and_backoff_bounds_from_host_engine_ports() {
+        let host_ports: Arc<dyn HostEnginePorts> = Arc::new(wasmnest_wasm_core::test_support::MockPorts::new());
+        let ports = StateWsClientPorts {
+            bus: Arc::new(MessageBus::new()),
+            host_ports,
+            runtime: current_handle(),
+            permitted: false,
+        };
+
+        // 退避边界：端口直接透传宿主全局常量（引擎侧再对 config 做钳制）
+        let (min_ms, max_ms) = ports.reconnect_bounds();
+        assert!(min_ms >= 1_000, "下限钳制是自愈风暴的教训沉淀（2026-09-29）");
+        assert!(max_ms >= min_ms);
+
+        // 未认证 ⇒ token 空串（凭据不落插件面；引擎据此显性失败而非伪发 auth 帧）
+        assert!(ports.global_token().is_empty(), "无头宿主未认证 ⇒ token 空串");
+
+        // 未授权插件 ⇒ 权限门假（fail-closed 的装配侧读数）
+        assert!(!ports.check_permission("probe-plugin"), "未授权即拒");
+    }
+
+    /// 停用回收空表零副作用（无端口装配：纯表操作，不发布事件）
+    #[tokio::test]
+    async fn purge_unknown_plugin_is_noop() {
+        assert_eq!(purge_for_plugin("ghost-plugin"), 0);
+    }
+
+    // ==================== WS 链路加密握手裁决（纯函数面） ====================
+
+    fn crypto_factory(strict: bool) -> (MobileWsCryptoFactory, [u8; X25519_KEY_LEN]) {
+        let (ephemeral_private, ephemeral_public) = generate_ephemeral();
+        let (kd_private, kd_public) = generate_ephemeral();
+        (
+            MobileWsCryptoFactory {
+                ephemeral_private,
+                ephemeral_public_b64: wasmnest_link_crypto::b64_encode(&ephemeral_public),
+                kd_public: Some(kd_public),
+                strict,
+            },
+            kd_private,
+        )
+    }
+
+    fn accepted_headers(
+        factory: &MobileWsCryptoFactory,
+        kd_private: &[u8; X25519_KEY_LEN],
+        policy: &str,
+    ) -> Vec<(String, String)> {
+        let (_s_priv, _s_pub) = generate_ephemeral();
+        let handshake =
+            wasmnest_link_crypto::derive_server_handshake(&factory.ephemeral_public_b64, kd_private, &_s_priv)
+                .expect("server handshake");
+        vec![
+            (
+                NEGOTIATION_HEADER.to_string(),
+                format!("v1 {}", handshake.server_ek_b64),
+            ),
+            (WS_POLICY_HEADER.to_string(), policy.to_string()),
+        ]
+    }
+
+    /// 提案头形状：`v1 <客户端临时公钥>`（服务端按同一 parse_negotiation 解析）
+    #[test]
+    fn crypto_factory_offers_ephemeral_key() {
+        let (factory, _) = crypto_factory(false);
+        let headers = factory.request_headers();
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].0, NEGOTIATION_HEADER);
+        assert!(headers[0].1.starts_with("v1 "));
+        assert_eq!(
+            parse_negotiation(&headers[0].1),
+            Some(factory.ephemeral_public_b64.as_str()),
+            "提案值必须能被服务端 parse_negotiation 解析"
+        );
+    }
+
+    /// 提案只看 pin，不看本端全局开关
+    ///
+    /// 真机回归：桌面 bedcode 固定 `required`，移动端主开关默认关时旧判据不提案，
+    /// 升级期被 400 拒。服务端策略 `off` 会回绝提案，非 strict 明文续跑。
+    #[test]
+    fn frame_crypto_proposal_ignores_local_master_switch() {
+        let pinned = wasmnest_link_crypto::b64_encode(&[9u8; X25519_KEY_LEN]);
+        let off = crate::state::LinkCryptoContext {
+            enabled: false,
+            strict_mode: false,
+            encrypt_http: true,
+            kd_public_b64: Some(pinned),
+        };
+        assert!(
+            ws_crypto_factory(&off).is_some(),
+            "已 pin 就必须提案（与本地主开关无关）"
+        );
+
+        let unpaired = crate::state::LinkCryptoContext {
+            kd_public_b64: None,
+            ..off.clone()
+        };
+        assert!(ws_crypto_factory(&unpaired).is_none(), "无 pin 无法提案");
+
+        let broken = crate::state::LinkCryptoContext {
+            kd_public_b64: Some("not-base64".to_string()),
+            ..off
+        };
+        assert!(
+            ws_crypto_factory(&broken).is_some(),
+            "损坏 pin 仍注入工厂（complete 显性失败，不静默明文）"
+        );
+    }
+
+    /// 不变量 15（T04/T09）：隧道本地代理是 `127.0.0.1`，但**不是**桌面端本地豁免面
+    ///
+    /// 真机回归：经 relay 连接后进入终端页，桌面 bedcode 固定 `required` 且接收端是
+    /// peer face；本端按「环回」跳过提案 → 升级期 400，`bedcode.subscribe` 永远失败。
+    /// 判据必须是「已声明的桌面目标」（`setApiBaseUrl` 在连接时声明），不是地址环回。
+    #[test]
+    fn should_offer_crypto_for_tunnel_loopback_target() {
+        let declared_port = 48631u16;
+        crate::egress::policy().add_desktop_target("127.0.0.1", declared_port);
+
+        let tunnel_url = format!("ws://127.0.0.1:{declared_port}/ws/plugin/com.wasmnest.bedcode/terminal");
+        assert!(
+            should_offer_crypto(&tunnel_url),
+            "隧道回环代理（已声明桌面目标）必须提案：对端按 peer 面不豁免，required 下不提案即 400"
+        );
+
+        // 未声明的环回端口 = 第三方本地 WS 服务，不提案（信任锚不外泄）
+        assert!(
+            !should_offer_crypto("ws://127.0.0.1:48632/ws"),
+            "未声明的环回目标不得提案"
+        );
+        // 非 ws / 无端口 / 未声明桌面目标：均不提案
+        assert!(!should_offer_crypto("http://127.0.0.1:48631/"));
+        assert!(!should_offer_crypto("ws://127.0.0.1/"));
+        assert!(!should_offer_crypto("ws://192.0.2.10:48631/ws"));
+
+        crate::egress::policy().clear_desktop_targets();
+    }
+
+    /// required + 无回执 = 协议违约 → 显性失败（不静默明文）
+    #[test]
+    fn crypto_factory_rejects_required_without_session_key() {
+        let (factory, _) = crypto_factory(false);
+        let headers = vec![(WS_POLICY_HEADER.to_string(), "required".to_string())];
+        let err = match factory.complete(&headers) {
+            Ok(_) => panic!("required without key must fail"),
+            Err(error) => error,
+        };
+        assert!(err.contains("no session key"), "{err}");
+    }
+
+    /// off + 非 strict = 明文续跑；off + strict = 降级断开
+    #[test]
+    fn crypto_factory_decline_honors_strict_mode() {
+        let headers = vec![(WS_POLICY_HEADER.to_string(), "off".to_string())];
+
+        let (plain, _) = crypto_factory(false);
+        assert!(matches!(plain.complete(&headers), Ok(None)), "非 strict 应明文续跑");
+
+        let (strict, _) = crypto_factory(true);
+        let err = match strict.complete(&headers) {
+            Ok(_) => panic!("strict 模式必须断开"),
+            Err(error) => error,
+        };
+        assert!(err.contains("downgrade") && err.contains("off"), "{err}");
+    }
+
+    /// 接受提案：缺策略头也按回执建会话（旧宿主兼容）；pin 损坏 → 显性失败
+    #[test]
+    fn crypto_factory_derives_session_for_accepted_offer() {
+        let (factory, kd_private) = crypto_factory(false);
+        let headers = accepted_headers(&factory, &kd_private, "required");
+        assert!(
+            factory.complete(&headers).expect("accepted offer").is_some(),
+            "合法回执必须建立会话编解码器"
+        );
+
+        // 无策略头（旧宿主只回回执）：仍建会话
+        let only_key = vec![headers[0].clone()];
+        assert!(factory.complete(&only_key).expect("legacy reply").is_some());
+
+        // pin 损坏：即使服务端接受也不得明文续跑
+        let (mut broken, kd_private) = crypto_factory(false);
+        broken.kd_public = None;
+        let headers = accepted_headers(&broken, &kd_private, "required");
+        let err = match broken.complete(&headers) {
+            Ok(_) => panic!("invalid pin must fail"),
+            Err(error) => error,
+        };
+        assert!(err.contains("pinned host key is invalid"), "{err}");
+
+        // 回执公钥格式非法：显性失败
+        let bad = vec![
+            (NEGOTIATION_HEADER.to_string(), "v1 not-base64!".to_string()),
+            (WS_POLICY_HEADER.to_string(), "required".to_string()),
+        ];
+        assert!(factory.complete(&bad).is_err());
+    }
+}

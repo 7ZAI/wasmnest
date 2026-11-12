@@ -1,0 +1,707 @@
+name: Product Release
+
+# 面向终端用户的**产品安装包**发布。平台仓**不再发布任何 tar.gz**（2026-10-28 裁决），
+# 这是唯一的分发出口。
+#
+# 触发：tag `v<product>` → Windows NSIS / Linux deb + AppImage / Android arm64 APK +
+#       桌面自动升级用的 `latest.json` → GitHub Release（标记 Latest）。
+#
+# 四个 job：
+#   1. vendor —— 下载应用仓已发布的成品包（zip + 元数据）铺进 `resources/plugins/desktop`，
+#      三道校验（zip sha256 / source.libRef == repos.lib.tag / plugin.json 的
+#      id·version·platform）。**安装包必须带应用**：该目录只入库 `.gitkeep`，漏了就发空壳。
+#   2. build  —— 桌面双平台打安装包（release profile），缺密钥即红，绝不产出未签名包。
+#   3. android —— 构建 arm64 release APK。**移动端没有可下载的成品包**（应用仓只发布
+#      desktop zip）：按 manifest 的 `repos.apps.tag` 检出应用仓源码，由 beforeBuildCommand
+#      现场构建插件（wasm32-unknown-unknown + componentize）打进 APK assets；
+#      APK 用独立 Android keystore 签名，缺密钥即红。
+#   4. publish —— 组装 latest.json + 建 Release（Latest）。
+#
+# 前置（人工；版本只在发布时设置，口径见 docs/public/versioning.md）：
+#   1. 改 `release-manifest.json` 的 `product` + 根 `package.json` 版本（必须一致）；
+#   2. secrets：
+#        TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD  ← 桌面自动升级签名（minisign）**【强制】**
+#        WINDOWS_CERTIFICATE_BASE64 / WINDOWS_CERTIFICATE_PASSWORD        ← Windows Authenticode **【可选】**
+#        ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD /
+#        ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD                         ← Android APK 签名 **【强制】**
+#      用户 2026-10-28 裁决「先不签」：缺 Windows 证书不再阻断发布，只打 warning，并在 Release
+#      说明里自动标「Windows 安装包未签名（SmartScreen 会提示未知发布者）」。updater 用 minisign，
+#      与 Authenticode 是两套东西——不签代码不影响自动升级。
+#      Linux deb/AppImage 不做发布签名（不自建 apt 源，装上即用）。
+#      Android keystore 生成一次即可（密码离线保管；base64 -w0 后写入 secret）：
+#        keytool -genkeypair -keystore wasmnest-release.keystore -alias wasmnest \
+#          -keyalg RSA -keysize 2048 -validity 10000
+#   3. `workflow_dispatch` 勾 dry_run 跑一遍（只上 Actions artifact，不建 Release）；
+#   4. git tag "v$(node -p "require('./release-manifest.json').product")" && git push origin <tag>
+#
+# Windows 证书形态：CA/B forum 2023-06 起不再签发可导出的纯软件证书。若改用云签名
+# （Azure Trusted Signing / SSL.com eSigner），把下面「导入证书」那一步换成 tauri 的
+# `bundle.windows.signCommand` 即可，其余步骤不变。
+#
+# 跨仓依赖：vendor 只读应用仓的 **Release 资产**（不检 apps 源码、不需要 wasip3 工具链）；
+# build 按 manifest 的 `repos.lib.tag` 检出兄弟目录 `../wasmnest-lib`（根 `.cargo/config.toml`
+# 的 [patch] 靠它落地）；android 还要按 `repos.apps.tag` 检出 `../wasmnest-apps` 源码
+# （移动插件没有成品包可下载，见 job 注释）。
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只构建并上传 Actions artifact（不创建 Release）'
+        type: boolean
+        default: true
+      unsigned:
+        description: '跳过签名（仅用于验证流水线；强制不发布）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: product-release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # 平台仓检出到 <workspace>/wasmnest；能力仓兄弟目录由 build job 自行克隆
+    # （R1 同场布局，根 .cargo/config.toml 的 [patch] 依赖它）。
+    working-directory: wasmnest
+
+env:
+  SCCACHE_CACHE_SIZE: '2147483648'
+  CARGO_BUILD_JOBS: '4'
+  # AppImage 打包器（linuxdeploy）在没有 FUSE 的 runner 上需要解包运行
+  APPIMAGE_EXTRACT_AND_RUN: '1'
+
+jobs:
+  # ------------------- 1) 铺随包应用（下载应用仓成品包，只做一遍）
+  # 为什么下载而不是本地构建：应用仓 app-release 已产出成品 zip + 元数据
+  # （sha256 / wasmHash / source.libRef），平台不需要 apps 源码、wasip3 nightly 与
+  # 6 套 node_modules；发布构建时间从 ~90min 压到 ~20min，应用集合由清单精确钉住。
+  # 校验三道：zip sha256 / libRef == repos.lib.tag / plugin.json 的 id·version·platform。
+  vendor:
+    name: 铺随包应用（apps 成品包）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 只依赖 node 内置 + 系统 unzip，不需要 pnpm / apps 源码 / wasm 工具链
+      - name: 下载并校验应用成品包
+        run: node scripts/vendor-apps.mjs --dest wasmnest-desktop/src-tauri/resources/plugins/desktop
+
+      - name: 校验随包应用落点（每个目录都有 plugin.json）
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir=wasmnest-desktop/src-tauri/resources/plugins/desktop
+          dirs="$(find "$dir" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+          jsons="$(find "$dir" -mindepth 1 -maxdepth 2 -name plugin.json | wc -l | tr -d ' ')"
+          echo "随包应用目录 ${dirs} 个 / plugin.json ${jsons} 个"
+          [ "$dirs" -ge 1 ] && [ "$dirs" -eq "$jsons" ] || { echo '::error::随包应用产物不完整'; exit 1; }
+
+      - name: 上传随包应用产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugins-desktop
+          path: wasmnest/wasmnest-desktop/src-tauri/resources/plugins/desktop/**
+          if-no-files-found: error
+
+  # ------------------- 2) 安装包构建（每平台一个 runner）
+  build:
+    name: build ${{ matrix.target }}
+    needs: vendor
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+            bundles: deb,appimage
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            bundles: nsis
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 0
+
+      - name: 校验 tag 与 manifest product 一致
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          expected="v$(node -p "require('./release-manifest.json').product")"
+          if [ "${GITHUB_REF_NAME}" != "$expected" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} 与 manifest.product 推导值 ${expected} 不一致"
+            exit 1
+          fi
+
+      - name: 校验 manifest.product 与根 package.json 版本一致
+        shell: bash
+        run: |
+          product="$(node -p "require('./release-manifest.json').product")"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$product" != "$pkg" ]; then
+            echo "::error::product=${product} 与根 package.json=${pkg} 不一致（发布前先同步）"
+            exit 1
+          fi
+          echo "PRODUCT=$product" >> "$GITHUB_ENV"
+
+      - name: 安装 Linux 宿主系统依赖（WebKitGTK / AppImage 打包工具）
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            libappindicator3-dev librsvg2-dev patchelf libfuse2 file \
+            libsoup-3.0-dev libssl-dev pkg-config libgtk-3-dev build-essential
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: wasmnest/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            wasmnest/pnpm-lock.yaml
+            wasmnest/wasmnest-desktop/pnpm-lock.yaml
+
+      # 根 .cargo/config.toml 的 patch 指回 ../wasmnest-lib/<crate>（缺目录 cargo 直接报错）
+      - name: 检出能力仓（兄弟目录，按 manifest 精确 tag）
+        shell: bash
+        run: |
+          set -euo pipefail
+          lib_tag="$(node -p "require('./release-manifest.json').repos.lib.tag")"
+          git clone --depth 1 --branch "$lib_tag" https://github.com/7ZAI/wasmnest-lib.git ../wasmnest-lib
+          echo "wasmnest-lib @ $lib_tag"
+
+      - name: 安装平台仓依赖 + 构建桌面 SDK
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir wasmnest-desktop install --frozen-lockfile
+          pnpm --dir wasmnest-desktop/packages/plugin-sdk-desktop run build
+
+      - name: 取回随包应用产物
+        uses: actions/download-artifact@v4
+        with:
+          name: plugins-desktop
+          path: wasmnest/wasmnest-desktop/src-tauri/resources/plugins/desktop
+
+      - name: 校验随包应用产物落地
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir=wasmnest-desktop/src-tauri/resources/plugins/desktop
+          dirs="$(find "$dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
+          jsons="$(find "$dir" -mindepth 1 -maxdepth 2 -name plugin.json 2>/dev/null | wc -l | tr -d ' ')"
+          echo "随包应用目录 ${dirs} 个 / plugin.json ${jsons} 个"
+          if [ "$dirs" -lt 1 ] || [ "$dirs" -ne "$jsons" ]; then
+            echo "::error::artifact 还原不完整（目录 ${dirs} / plugin.json ${jsons}）：安装包会是空壳"
+            exit 1
+          fi
+
+      # ------------------------------- 签名前置：缺密钥即显性失败（不产出未签名包）
+      - name: 校验自动升级签名密钥
+        if: inputs.unsigned != true
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "::error::缺 TAURI_SIGNING_PRIVATE_KEY —— 没有它不生成 .sig，latest.json 无法组装，自动升级失效"
+            exit 1
+          fi
+
+      # Windows 代码签名：**可选**（2026-10-28 用户裁决：先不签）。
+      # 有证书 → 导入，构建时按 thumbprint 签；无证书 → warning 继续，
+      # Release 说明会自动标「未签名」。不静默：缺代码签名不影响自动升级
+      # （updater 用 minisign，与 Authenticode 是两套东西）。
+      - name: 导入 Windows 代码签名证书（可选）
+        id: wincert
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE_BASE64) {
+            Write-Warning '未配置 WINDOWS_CERTIFICATE_BASE64：本次产出未签名安装包（SmartScreen 会提示「未知发布者」）'
+            "signed=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+          $secure = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $secure
+          if (-not $cert.Thumbprint) { Write-Error '证书导入后取不到 Thumbprint'; exit 1 }
+          "thumbprint=$($cert.Thumbprint)" >> $env:GITHUB_OUTPUT
+          "signed=true" >> $env:GITHUB_OUTPUT
+          Write-Host "证书 thumbprint=$($cert.Thumbprint)"
+
+      - name: 构建安装包（release profile）
+        shell: bash
+        # cwd 必须在宿主工程根：tauri 在当前 cwd 执行 beforeBuildCommand
+        # （`pnpm run shell:sync` 只存在于 wasmnest-desktop/package.json，
+        #  从仓库根跑会报 Missing script: shell:sync）
+        working-directory: wasmnest/wasmnest-desktop
+        env:
+          TARGET: ${{ matrix.target }}
+          BUNDLES: ${{ matrix.bundles }}
+          WIN_THUMBPRINT: ${{ steps.wincert.outputs.thumbprint }}
+          UNSIGNED: ${{ inputs.unsigned }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ "$UNSIGNED" = "true" ]; then
+            echo "::warning::unsigned=true：跳过签名，产物不可用于发布"
+          fi
+          cfg="{\"version\":\"${PRODUCT}\""
+          if [ -n "${WIN_THUMBPRINT:-}" ]; then
+            cfg="$cfg,\"bundle\":{\"windows\":{\"certificateThumbprint\":\"${WIN_THUMBPRINT}\"}}"
+          fi
+          cfg="$cfg}"
+          node scripts/tauri-build.js \
+            --target "${TARGET}" --bundles "${BUNDLES}" --config "$cfg"
+
+      - name: 校验产物齐备
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          BUNDLES: ${{ matrix.bundles }}
+        run: |
+          set -euo pipefail
+          base="wasmnest-desktop/src-tauri/target/${TARGET}/release/bundle"
+          for kind in ${BUNDLES//,/ }; do
+            [ -d "$base/$kind" ] || { echo "::error::缺产物目录 $base/$kind"; exit 1; }
+            ls -1 "$base/$kind"
+            count="$(find "$base/$kind" -maxdepth 1 -type f | wc -l | tr -d ' ')"
+            [ "$count" -gt 0 ] || { echo "::error::$base/$kind 为空"; exit 1; }
+          done
+
+      - name: 上传安装包 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-${{ matrix.target }}
+          # 只传产物文件，不传目录：appimage 目录里还有 Tauri 留下的
+          # WasmNest.AppDir/ 解包树（几十 MB 的 usr/lib 依赖），会把 artifact 吹大且
+          # 让后续摊平步骤撞名。.sig 必须一起传：latest.json 的 signature 取自它。
+          path: |
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe*
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb*
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage*
+          if-no-files-found: error
+
+  # ------------------- 3) Android APK（移动插件随构建现场产出，见文件头注释）
+  # 为什么不能像桌面一样下载成品：应用仓 app-release 只发布 desktop zip，移动端
+  # 插件（wasm32-unknown-unknown + componentize）没有发布物，必须在 beforeBuildCommand
+  # （`pnpm run build:all` → `plugins:build`）里从应用仓源码现构建后打进 APK assets。
+  # 应用集合仍由 manifest 钉住：`repos.apps.tag` 检出源码、`apps.<id>.ends.mobile` 决定随包范围。
+  # 注意：apps tag 的 app 依赖来自 npm / crates.io（`@binblink/wasmnest-plugin-sdk-mobile@0.0.1`
+  # + `wasmnest-plugin-api-mobile =0.0.1`），不是平台 checkout；npm 版 SDK CLI 找不到桌面
+  # componentize 工具，必须用 WASMNEST_COMPONENTIZE_MANIFEST 指向平台仓（见 job env）。
+  android:
+    name: build android (arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      # appsRoot() 的默认值就是同级兄弟目录；显式给出，避免 checkout 布局变化时静默找错
+      WASMNEST_APPS_ROOT: ${{ github.workspace }}/wasmnest-apps
+      # npm 版移动 SDK 的 componentize 搜索链不覆盖平台仓；与 plugin-build.js 共享 rust
+      # 分支的工具同源（平台 tag 内的 tools/componentize，避免多装应用仓根依赖）
+      WASMNEST_COMPONENTIZE_MANIFEST: ${{ github.workspace }}/wasmnest/wasmnest-desktop/packages/plugin-sdk-desktop/tools/componentize/Cargo.toml
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 1
+
+      - name: 校验 tag 与 manifest product 一致
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          expected="v$(node -p "require('./release-manifest.json').product")"
+          if [ "${GITHUB_REF_NAME}" != "$expected" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} 与 manifest.product 推导值 ${expected} 不一致"
+            exit 1
+          fi
+
+      - name: 校验 manifest.product 与根 package.json 版本一致
+        shell: bash
+        run: |
+          product="$(node -p "require('./release-manifest.json').product")"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$product" != "$pkg" ]; then
+            echo "::error::product=${product} 与根 package.json=${pkg} 不一致（发布前先同步）"
+            exit 1
+          fi
+          echo "PRODUCT=$product" >> "$GITHUB_ENV"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: wasmnest/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            wasmnest/pnpm-lock.yaml
+            wasmnest/wasmnest-mobile/pnpm-lock.yaml
+            wasmnest/wasmnest-mobile/packages/plugin-sdk-mobile/pnpm-lock.yaml
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Android release 构建的 target（宿主编译）+ Gradle 中间产物 + NDK 体积都不小，
+      # runner 预装的 dotnet / ghc / boost 本任务用不到，先腾出几个 GB 再装 NDK。
+      - name: 释放 runner 磁盘
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          df -h /
+
+      # gen/android 的 compileSdk/targetSdk = 36，NDK 版本必须与本地构建一致（29.0.14206865）。
+      # 不引 android-actions/setup-android：该动作在新镜像上执行 `sdkmanager tools`，
+      # 这个包已被 Google 下架 → 动作直接失败（run 40674433249 实测）。runner 自带
+      # ANDROID_HOME 与 cmdline-tools，直接用预装 sdkmanager，缺什么装什么。
+      - name: 安装 Android SDK 平台 / 构建工具 / NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$sdk_root" ]; then
+            echo "::error::找不到 Android SDK（$sdk_root）"
+            exit 1
+          fi
+          sdkmanager="$(command -v sdkmanager || true)"
+          if [ -z "$sdkmanager" ]; then
+            sdkmanager="$(find "$sdk_root/cmdline-tools" -maxdepth 3 -type f -name sdkmanager 2>/dev/null | sort | tail -1)"
+          fi
+          if [ -z "$sdkmanager" ] || [ ! -x "$sdkmanager" ]; then
+            echo "::error::找不到 sdkmanager（cmdline-tools 缺失）"
+            exit 1
+          fi
+          need=()
+          [ -d "$sdk_root/platforms/android-36" ] || need+=("platforms;android-36")
+          [ -d "$sdk_root/build-tools/36.0.0" ] || need+=("build-tools;36.0.0")
+          [ -d "$sdk_root/ndk/29.0.14206865" ] || need+=("ndk;29.0.14206865")
+          if [ "${#need[@]}" -gt 0 ]; then
+            echo "安装: ${need[*]}"
+            # license 交互在 pipefail 下会因 yes 收到 SIGPIPE 退出；只吞这一条，安装失败仍显性退出
+            yes | "$sdkmanager" --sdk_root="$sdk_root" --licenses > /dev/null || true
+            "$sdkmanager" --sdk_root="$sdk_root" --install "${need[@]}"
+          fi
+          {
+            echo "ANDROID_HOME=$sdk_root"
+            echo "ANDROID_SDK_ROOT=$sdk_root"
+            echo "NDK_HOME=$sdk_root/ndk/29.0.14206865"
+            echo "ANDROID_NDK_HOME=$sdk_root/ndk/29.0.14206865"
+          } >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # aarch64-linux-android = APK 宿主；wasm32-unknown-unknown = 移动插件
+          targets: aarch64-linux-android,wasm32-unknown-unknown
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+
+      # 根 .cargo/config.toml 的 patch 依赖 ../wasmnest-lib；移动插件源码在 ../wasmnest-apps
+      - name: 检出能力仓 + 应用仓（兄弟目录，按 manifest 精确 tag）
+        shell: bash
+        run: |
+          set -euo pipefail
+          lib_tag="$(node -p "require('./release-manifest.json').repos.lib.tag")"
+          apps_tag="$(node -p "require('./release-manifest.json').repos.apps.tag")"
+          git clone --depth 1 --branch "$lib_tag" https://github.com/7ZAI/wasmnest-lib.git ../wasmnest-lib
+          git clone --depth 1 --branch "$apps_tag" https://github.com/7ZAI/wasmnest-apps.git ../wasmnest-apps
+          echo "wasmnest-lib @ $lib_tag / wasmnest-apps @ $apps_tag"
+
+      - name: 安装平台仓 / 移动端 / 移动 SDK 依赖
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir wasmnest-mobile install --frozen-lockfile
+          # 移动 SDK 是独立 workspace（不属移动端 workspace 成员），CLI dist 供 app 工程 file: 链接消费
+          pnpm --dir wasmnest-mobile/packages/plugin-sdk-mobile install --frozen-lockfile
+          pnpm --dir wasmnest-mobile/packages/plugin-sdk-mobile run build
+
+      # plugin-build.js 在每个 app 目录里 `npx --no-install wasmnest-plugin`：依赖必须逐工程装
+      - name: 安装应用仓 mobile 工程依赖
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          found=0
+          for pkg in ../wasmnest-apps/apps/*/mobile/package.json \
+                     ../wasmnest-apps/servers/*/mobile/package.json; do
+            dir="$(dirname "$pkg")"
+            found=$((found + 1))
+            echo "::group::pnpm install $dir"
+            (cd "$dir" && pnpm install --frozen-lockfile)
+            echo "::endgroup::"
+          done
+          [ "$found" -gt 0 ] || { echo '::error::应用仓里没有任何 mobile 工程（APK 会是空壳）'; exit 1; }
+
+      # ------------------------------- Android 签名：缺密钥即显性失败（同桌面口径）
+      - name: 准备 Android 签名 keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          UNSIGNED: ${{ inputs.unsigned }}
+        run: |
+          set -euo pipefail
+          props="wasmnest-mobile/src-tauri/gen/android/key.properties"
+          if [ "$UNSIGNED" = "true" ]; then
+            # dry-run 用一次性 keystore 让整条构建链可验证；签名身份与发布不同，产物不可分发
+            echo "::warning::unsigned=true：用临时 keystore 签名，APK 不可用于发布"
+            ks="$RUNNER_TEMP/wasmnest-unsigned.keystore"
+            keytool -genkeypair -keystore "$ks" -storepass wasmnest -keypass wasmnest \
+              -alias wasmnest -keyalg RSA -keysize 2048 -validity 2 -dname "CN=WasmNest Unsigned"
+            printf 'storeFile=%s\nstorePassword=wasmnest\nkeyAlias=wasmnest\nkeyPassword=wasmnest\n' \
+              "$ks" > "$props"
+            exit 0
+          fi
+          missing=0
+          for var in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!var:-}" ]; then
+              echo "::error::缺 $var —— 没有它无法签名 APK（只验证流水线请用 workflow_dispatch 的 unsigned=true）"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          ks="$RUNNER_TEMP/wasmnest-release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$ks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$ks" "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS" "$ANDROID_KEY_PASSWORD" > "$props"
+          chmod 600 "$props" "$ks"
+
+      - name: 构建 APK（arm64 release）
+        working-directory: wasmnest/wasmnest-mobile
+        run: |
+          set -euo pipefail
+          # --ci 跳过 keystore 交互；--apk 只出 APK（不出 AAB）；版本用 product 覆盖
+          pnpm exec tauri android build \
+            --target aarch64 --apk --ci \
+            --config "{\"version\":\"${PRODUCT}\"}"
+
+      - name: 校验随包移动插件与清单一致
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t expected < <(node -e '
+            const manifest = require("./release-manifest.json")
+            for (const id of Object.keys(manifest.apps).filter((id) => manifest.apps[id].ends?.mobile).sort()) {
+              console.log(id)
+            }
+          ')
+          mapfile -t actual < <(find wasmnest-mobile/src-tauri/resources/plugins/mobile \
+            -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+          echo "清单 mobile 端应用：${expected[*]}"
+          echo "构建产物插件目录：${actual[*]}"
+          if ! diff -u <(printf '%s\n' "${expected[@]}") <(printf '%s\n' "${actual[@]}"); then
+            echo '::error::APK 随包插件与 release-manifest 的 apps.*.ends.mobile 不一致（多带/少带应用）'
+            exit 1
+          fi
+
+      - name: 校验 APK 并统一命名
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 不加 --split-per-abi 时 Tauri 构建 universal flavor，并用 --target 限制 abiList
+          # → arm64-only 的 APK 落在 universal/release 下（本地同名产物同此路径）
+          apk_dir="wasmnest-mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release"
+          mapfile -t apks < <(find "$apk_dir" -maxdepth 1 -type f -name '*.apk' 2>/dev/null | sort)
+          if [ "${#apks[@]}" -ne 1 ]; then
+            echo "::error::期望 $apk_dir 下恰有 1 个 APK，实际 ${#apks[@]} 个"
+            ls -la "$apk_dir" 2>/dev/null || true
+            exit 1
+          fi
+          # 空壳判据：APK 里必须有随包移动插件（assets/resources/plugins/<id>/）
+          plugins="$(unzip -l "${apks[0]}" | grep -c 'assets/resources/plugins/.*/plugin\.json' || true)"
+          echo "APK 内随包插件 plugin.json 数：$plugins"
+          if [ "$plugins" -lt 1 ]; then
+            echo '::error::APK 里没有随包插件（assets/resources/plugins/**）——构建出来是空壳'
+            exit 1
+          fi
+          out="$GITHUB_WORKSPACE/android-assets/WasmNest-${PRODUCT}-release-arm64.apk"
+          mkdir -p "$(dirname "$out")"
+          cp "${apks[0]}" "$out"
+          ls -lh "$out"
+
+      - name: 上传 APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-android
+          path: android-assets/WasmNest-*-release-arm64.apk
+          if-no-files-found: error
+
+  # ------------------- 4) 合并产物 + 组装 latest.json + 建 Release
+  publish:
+    name: 发布 GitHub Release（Latest）
+    needs: [build, android]
+    if: inputs.unsigned != true && (github.event_name == 'push' || inputs.dry_run == false)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出平台仓
+        uses: actions/checkout@v4
+        with:
+          path: wasmnest
+          fetch-depth: 1
+
+      - uses: actions/download-artifact@v4
+        with:
+          # 只合并安装包 artifact；plugins-desktop 是构建中间物，不能混进发布资产
+          pattern: product-*
+          path: release-assets
+          merge-multiple: true
+
+      # 桌面 artifact 上传时用了三个 glob（nsis / deb / appimage），upload-artifact 按
+      # 「多 glob 的最近公共祖先」保留层级 → 下载后是 release-assets/{nsis,deb,appimage}/<file>；
+      # Android artifact 是单 glob，文件名直接落在根层。统一摊平成一层，
+      # latest.json 的资产判定与 gh release 上传都按平铺目录工作。
+      - name: 摊平安装包目录
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ../release-assets
+          find . -mindepth 2 -maxdepth 2 -type f -exec mv -t . {} +
+          find . -mindepth 1 -maxdepth 1 -type d -empty -delete
+          ls -1
+
+      - name: 解析 release 元数据
+        shell: bash
+        run: |
+          set -euo pipefail
+          product="$(node -p "require('./release-manifest.json').product")"
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="v${product}"
+          fi
+          echo "PRODUCT=${product}" >> "$GITHUB_ENV"
+          echo "TAG=${tag}" >> "$GITHUB_ENV"
+
+      - name: 生成产物 sha256 边车（传输校验用）
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ../release-assets
+          shopt -s nullglob
+          for f in *-setup.exe *.deb *.AppImage *.AppImage.tar.gz *.apk; do
+            sha256sum "$f" > "$f.sha256"
+          done
+          ls -1
+
+      - name: 组装 latest.json（自动升级入口）
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/build-latest-json.mjs \
+            --assets-dir ../release-assets \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}" \
+            --version "${PRODUCT}" \
+            --out ../release-assets/latest.json
+          cat ../release-assets/latest.json
+
+      - name: 写发布说明
+        shell: bash
+        env:
+          WIN_CERT_PRESENT: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p ../release-notes
+          cat > ../release-notes/notes.md <<'EOF'
+          ## 安装
+
+          | 平台 | 下载 | 说明 |
+          | --- | --- | --- |
+          | Windows 10/11 x64 | `WasmNest-<version>-release-x64-setup.exe` | 装到 `Program Files`（需管理员）；代码签名状态见下方说明 |
+          | Debian / Ubuntu amd64 | `WasmNest-<version>-release-amd64.deb` | `sudo apt install ./WasmNest-<version>-release-amd64.deb` |
+          | 任意 Linux amd64 | `WasmNest_<version>_amd64.AppImage` | `chmod +x` 后直接运行；**唯一支持自动升级**的 Linux 形态 |
+          | Android 7.0+ arm64 | `WasmNest-<version>-release-arm64.apk` | 允许「未知来源」后安装；暂无自动升级，装新 APK 覆盖 |
+
+          `latest.json` 是**桌面宿主**自动升级的入口文件（客户端按它校验版本与签名），不需要手动下载。
+          每个产物都有同名 `.sha256`（`sha256sum -c <file>.sha256` 校验）。
+
+          Android 安装包用发布 keystore 签名，后续版本可直接覆盖安装（签名一致）；不上架应用商店，
+          自动升级尚未接入，升级方式 = 下载新 APK 覆盖安装。
+
+          > 平台仓不再发布 tar.gz（机器工件线已退役），本发布就是唯一分发出口。
+          EOF
+          sed -i "s/<version>/${PRODUCT}/g" ../release-notes/notes.md
+          if [ "${WIN_CERT_PRESENT}" != "true" ]; then
+            cat >> ../release-notes/notes.md <<'EOF'
+
+          > ⚠ **Windows 安装包未做 Authenticode 签名**：安装时 SmartScreen 会提示
+          > 「未知发布者 / Windows 已保护你的电脑」，需点「更多信息 → 仍要运行」。
+          > 不影响运行与自动升级（自动升级由独立的 minisign 签名保护）。
+          EOF
+          fi
+
+      # 重发同版本时清掉上一轮的陈旧资产：\`gh release upload --clobber\` 只覆盖同名文件，
+      # 改名 / 删产物后旧文件会永远躺在 Release 里（v0.0.1 实测残留过 6 个旧名文件）。
+      - name: 清理陈旧资产（只保留本次产物）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo 'release 尚不存在，跳过清理'
+            exit 0
+          fi
+          keep="$(cd ../release-assets && ls -1)"
+          gh release view "$TAG" --json assets --jq '.assets[].name' | while read -r name; do
+            if ! grep -qxF "$name" <<< "$keep"; then
+              echo "删除陈旧资产: $name"
+              gh release delete-asset "$TAG" "$name" --yes
+            fi
+          done
+
+      - name: 创建 Release（Latest）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" ../release-assets/* --clobber
+            # 重发（同 tag）必须同步说明：只 upload 会让资产换了、说明停在旧版本
+            # （v0.0.1 实测：Android APK 已上传但说明仍无 Android 行 / 仍称已签名）
+            gh release edit "$TAG" --notes-file ../release-notes/notes.md --latest
+          else
+            gh release create "$TAG" ../release-assets/* \
+              --title "WasmNest ${PRODUCT}" \
+              --notes-file ../release-notes/notes.md \
+              --latest
+          fi

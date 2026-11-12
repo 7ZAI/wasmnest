@@ -1,0 +1,25 @@
+package wasmnest:process@0.0.1;
+
+// 桌面端能力域分片（WIT 按包拆分，ADR 0061）：一个能力域 = 一个独立包，
+// 版本独立演进——本包 WIT 变更只 bump 本包，不波及未 import 它的应用。
+// 端 `plugin` world 经 `include wasmnest:process/cap-process@0.0.1;` 并入本接口。
+
+/// 进程执行（v8：host-process）——调度框架等插件需要执行外部命令/脚本
+///
+/// 异步执行：`run` 立即返回 run-id，进程结束后宿主经 `events.on-process-done`
+/// 回调插件（携带 exit_code / 超时标记）；`kill` 用于超时/取消。
+interface host-process {
+    run: func(request-json: string) -> result<string, string>;
+    kill: func(run-id: string) -> result<_, string>;
+    /// v19 函数级追加（工作区 git 域）：**同步**执行并捕获输出。
+    /// request-json 同 `run`（command / args / cwd / env / timeout_ms，无
+    /// output_path——输出由宿主捕获）；返回
+    /// `{exitCode, stdout, stderr, timedOut}`。同步阻塞等待进程结束，供插件
+    /// 同步路径（HTTP 端点命令面）使用；`run` 是异步事件模型（run-id +
+    /// on_process_done 回调），不适配「命令面里同步拿结果」。权限 `process:run`。
+    run-sync: func(request-json: string) -> result<string, string>;
+}
+
+world cap-process {
+    import host-process;
+}

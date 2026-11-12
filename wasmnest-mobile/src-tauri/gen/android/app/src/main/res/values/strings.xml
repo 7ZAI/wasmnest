@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">"WasmNest"</string>
+    <string name="main_activity_title">"WasmNest"</string>
+</resources>

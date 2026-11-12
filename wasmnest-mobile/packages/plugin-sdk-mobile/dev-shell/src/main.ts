@@ -1,0 +1,58 @@
+/**
+ * Dev Shell 入口
+ *
+ * 初始化顺序与宿主一致：pinia → router → i18n → 共享运行时（必须在导入插件前）→
+ * 加载调试对象（async）→ 挂载应用。mount 前先渲染 loading 骨架，对象就绪后展示真实内容。
+ *
+ * router 的职责收敛为一件事：承载**插件动态路由**（`/plugin/{pluginId}/{routeId}`，
+ * 由 mock-context 的 registerRoute 动态 addRoute）。宿主壳自己不走路由——它是一层
+ * 屏幕栈平台，路由只负责「进插件声明的整页跳转」，与宿主同构。
+ */
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import { createRouter, createWebHashHistory } from 'vue-router'
+import App from './App.vue'
+import { initSharedRuntime } from './shared-runtime'
+import { loadPlugins } from './loader'
+import { initTheme } from './theme'
+import { presetTasksApi } from './mock/preset-tasks'
+import { mobileApi } from './mock/mobile-api'
+import { dialogService } from './mock/dialog-service'
+// i18n 单例：main.ts 装配 + 模块级代码（通知文案 / 相对时间）共用
+import { i18n } from './i18n'
+import './styles/main.css'
+// token 走单一真源：monorepo 内指向宿主 src/styles/mobile.css（见 vite.config.ts），
+// npm 包内回落到 dev-shell 自带副本
+import '@wasmnest/mobile-styles/mobile.css'
+// 主屏壁纸样式（宿主 wall-* 真源的副本 / 别名接线，见 vite.config.ts）
+import '@wasmnest/mobile-styles/wallpaper.css'
+
+const app = createApp(App)
+const pinia = createPinia()
+
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes: [{ path: '/', component: { template: '<span />' } }],
+})
+
+app.use(pinia)
+app.use(router)
+app.use(i18n)
+
+// 主题初始化（index.html 内联脚本已消除首帧闪烁，这里建立监听/持久化）
+initTheme()
+
+// 共享运行时必须在插件模块导入之前就位（插件模块顶层可能调用 getVue() 等）
+await initSharedRuntime({
+  pinia,
+  router,
+  i18n,
+  presetTasks: presetTasksApi,
+  dialogs: dialogService,
+  mobileApi,
+})
+
+// 调试对象就绪后挂载（壳的应用清单依赖注册结果）
+await loadPlugins()
+
+app.mount('#app')

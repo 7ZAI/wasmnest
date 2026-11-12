@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WasmNest 自适应图标：前景 = 编织 W（mipmap-*/ic_launcher_foreground.png），
+     背景 = 品牌 ink 渐变（drawable/ic_launcher_background.xml），
+     单色层 = 实心 W（mipmap-*/ic_launcher_monochrome.png，Android 13+ 主题化图标用，
+     低版本忽略该子元素）。 -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+  <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+  <background android:drawable="@drawable/ic_launcher_background"/>
+  <monochrome android:drawable="@mipmap/ic_launcher_monochrome"/>
+</adaptive-icon>

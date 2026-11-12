@@ -1,0 +1,700 @@
+/**
+ * Host mechanism copy (English) — held by the app frontend after the desktop
+ * host-frontend downsink.
+ *
+ * Source: host `src/locales/en/{common,desktop,settings}.ts` (device-shell
+ * shell.ts and the app-center desktop.plugin.* group retired with the
+ * retirement surface). Migrated together with host-zh-CN.ts as one mechanism
+ * face: global error envelope (errors.*), common copy (common.*), settings
+ * platform sections (settings.*), workbench/server/splash/exit-confirm
+ * (desktop.*).
+ *
+ * Authorization dialog copy moved from `desktop.plugin.*` to `desktop.auth.*`:
+ * the "plugin" vocabulary retires with the app center; the dialogs are
+ * security-gate mechanisms (fail-closed semantics unchanged, key renamed only).
+ */
+
+export default {
+  shell: {
+    skipToContent: 'Skip to content',
+    home: {
+      where: 'Home',
+      aria: 'Home screen',
+      searchAria: 'Search on home',
+      appsTitle: 'Apps',
+      installed: 'installed',
+      noApps: 'No apps match "{q}"',
+      noneEnabled: 'No enabled apps (re-enable them in App management)',
+      servicesTitle: 'Services',
+      sysTitle: 'System',
+      sysHint: 'Global management pages (open from Background apps)',
+      /* Host-level system services in the Services section (auth-center / monitor):
+         neither the app grid nor the System section lists services; they sit in
+         their own Services section below Apps. */
+      serviceAuthCenter: 'Auth Center',
+      serviceMonitor: 'Monitor',
+      matches: 'matches',
+    },
+    // Recent-tasks panel (toolbar entry): opened / background faces switch and close here
+    recents: {
+      title: 'Background apps',
+      countUnit: 'running',
+      close: 'Hide background apps',
+      closeAll: 'Close all',
+      empty: 'No apps running in the background',
+      open: 'Switch to {name}',
+      closeOne: 'Close {name}',
+      stopInstance: 'Stop instance',
+      closePage: 'Close page',
+      sysPage: 'System page',
+    },
+    state: {
+      running: 'Running',
+      degraded: 'Degraded',
+      dormant: 'Idle',
+      approval: 'Approval needed',
+      error: 'Error',
+    },
+    nav: {
+      back: 'Back',
+      backTitle: 'Back (Esc)',
+      tasks: 'Switch apps',
+      tasksTitle: 'Switch apps: {count} running',
+      home: 'Home',
+      homeTitle: 'Home: apps keep running in the background',
+    },
+    /** Floating navigation (stays above any face once enabled; same keys and copy as mobile) */
+    floatingNav: {
+      back: 'Back',
+      home: 'Back home',
+      recents: 'Switch apps',
+      move: 'Floating navigation, draggable; focus it and use arrow keys to move',
+    },
+    toolbar: {
+      notifs: 'Notifications, {count}',
+      notifsTitle: 'Notification center ({count})',
+      quickSettings: 'Quick settings',
+      themeToLight: 'Switch to light',
+      themeToDark: 'Switch to dark',
+      minimize: 'Minimize',
+      maximize: 'Maximize',
+      close: 'Close window',
+    },
+    statusBar: {
+      aria: 'Platform status bar',
+      ready: 'Runtime ready',
+      loading: 'Loading',
+      apps: '{count} apps',
+      approvals: '{count} pending',
+      openPerms: 'Open permissions & authorization',
+    },
+    sys: {
+      chip: 'System page · Card',
+      apps: {
+        name: 'App Manager',
+        desc: 'Install · start/stop · uninstall · configure',
+      },
+      perms: {
+        name: 'Permissions & Authorization',
+        desc: 'Policy tiers · auth records · permission bits',
+      },
+      settings: {
+        name: 'Settings',
+        desc: 'Appearance · system · logging · permissions · about',
+      },
+      appearance: {
+        name: 'Appearance',
+        desc: 'Colour mode · Language · Font size · Wallpaper · Themes',
+      },
+      shortcuts: {
+        name: 'Shortcuts',
+        desc: 'Shell keyboard shortcuts · rebindable',
+      },
+    },
+    quickSettings: {
+      title: 'Quick settings',
+      close: 'Collapse quick settings',
+      on: 'On',
+      off: 'Off',
+      tileTheme: 'Dark theme',
+      tileAnim: 'Animations',
+      tileCrypto: 'Link crypto',
+      tileSleep: 'Prevent sleep',
+      tileNav: 'Floating nav',
+    },
+    notif: {
+      title: 'Notification Center',
+      countUnit: 'items',
+      close: 'Collapse notification center',
+      clearAll: 'Clear all',
+      empty: 'No notifications',
+      pending: 'Pending',
+      notifications: 'Notifications',
+      dismiss: 'Dismiss notification: {title}',
+      justNow: 'Just now',
+      minutesAgo: '{mins}m ago',
+      hostSource: 'Host',
+      approval: {
+        title: 'Waiting for permission approval',
+        body: 'manifest declares {perms} permission bits ({risks} high-risk); it activates only after approval.',
+        go: 'Review',
+      },
+      stopped: {
+        title: 'Stopped',
+        body: 'Instance deactivated; reopen from the home screen.',
+        toast: '{name} stopped',
+      },
+      started: {
+        title: 'Started',
+        body: '{name} activated and mounted',
+      },
+      uninstalled: {
+        title: 'Uninstalled',
+        body: '{name} was removed from this device',
+      },
+      approved: {
+        title: 'Approved & started',
+        body: 'The approval notification disappears automatically (derived, no lifecycle).',
+      },
+      closeAll: {
+        title: 'Closed {count} cards',
+        body: 'All app instances stopped and system pages closed.',
+        toast: 'Closed {count} cards',
+      },
+      open: 'View',
+      reopen: 'Reopen',
+      ready: {
+        title: 'Runtime ready',
+        body: '{count} apps loaded; authorization policy fail-closed self-check passed.',
+      },
+    },
+    ctx: {
+      aria: 'App actions',
+      open: 'Open',
+      startOpen: 'Start & open',
+      manage: 'App management',
+      perms: 'Permissions & authorization',
+      stop: 'Stop',
+      uninstall: 'Uninstall',
+      uninstallDisabled: 'Stop the app before uninstalling',
+    },
+    // Shell shortcuts (ADR 0060): action names / recording interaction / inline
+    // validation copy. Action id set lives in shortcutsModel SHORTCUT_ACTIONS;
+    // key segments map one-to-one to actions.
+    shortcuts: {
+      cardTitle: 'Key bindings',
+      hint: 'Press a new combo while recording · Esc cancels · Backspace clears (frees the combo for apps). A combo must include Ctrl or Alt.',
+      unbound: 'Unbound',
+      recording: 'Press a combo…',
+      changeBinding: 'Change shortcut for {action}',
+      resetRow: 'Reset',
+      resetAll: 'Reset all to defaults',
+      conflict: 'Already used by "{action}". Pick another combo.',
+      reserved: 'May be intercepted by the system or the webview; not guaranteed to fire.',
+      missingModifier: 'A combo must include Ctrl or Alt.',
+      action: {
+        appNext: { name: 'Next app', desc: 'Switch to the next running app' },
+        appPrev: { name: 'Previous app', desc: 'Switch to the previous running app' },
+        multitask: { name: 'Multitask view', desc: 'Toggle the task switcher' },
+        home: { name: 'Go home', desc: 'Return to the home screen' },
+        settings: { name: 'Open settings', desc: 'Open the Settings system page' },
+        appsManage: { name: 'Open app management', desc: 'Open the Apps system page' },
+        theme: { name: 'Toggle colour mode', desc: 'Switch between light and dark' },
+        fontUp: { name: 'Increase interface font', desc: 'One font-size level up' },
+        fontDown: { name: 'Decrease interface font', desc: 'One font-size level down' },
+      },
+    },
+    dialog: {
+      close: 'Close dialog',
+      cancel: 'Cancel',
+      approval: {
+        title: 'Approve "{name}"',
+        desc: 'manifest declares {perms} permission bits. Approval is all-or-nothing — per-bit selection would let high-risk bits slip through.',
+        afterHint:
+          'After approval you get the actually granted bits; ungranted bits stay blocked at runtime.',
+        approving: 'Approving…',
+        confirm: 'Approve & start',
+        success: '{name} approved & started',
+      },
+      strategy: {
+        title: 'Switch to "Always allow"?',
+        body: 'Requests of {name} for {resource} will no longer prompt: unseen targets are allowed directly and recorded as "unconfirmed". Switching does not grant everything at once — only targets actually accessed accumulate over time.',
+        confirm: 'Confirm switch',
+      },
+      uninstall: {
+        title: 'Uninstall "{name}"?',
+        body: 'App data is deleted by default; check the box to keep it. Approval / auth records are always revoked, so reinstall requires a new approval.',
+        keepData: 'Keep app data (reused after reinstall)',
+        deleteDataHint: 'Keep app data is unchecked (default): the private database and storage will be deleted. This cannot be undone.',
+        confirm: 'Confirm uninstall',
+        success: '{name} uninstalled',
+      },
+      install: {
+        success: '"{name}" installed',
+        upgradeSuccess: '"{name}" upgraded',
+      },
+      installUpgrade: {
+        title: 'Upgrade "{name}"?',
+        body: 'An app with the same id is already installed. Upgrading in place keeps its data (plugin storage and auth records); changed content requires re-approval on next launch.',
+        confirm: 'Upgrade',
+      },
+      installRestore: {
+        title: 'Restore old app data?',
+        body: 'Data from the previous install was kept (private database and storage). Choose whether to restore it; installing without data (the default) permanently deletes the old data.',
+        discard: 'Install without data',
+        restore: 'Restore data & install',
+      },
+      stopService: {
+        title: 'Stop service "{name}"?',
+        body: 'Stop service "{name}"? It will stop providing its capability; restart it from App management.',
+        confirm: 'Stop service',
+      },
+      exit: {
+        title: 'Quit WasmNest?',
+        desc: 'These apps are still running:',
+        none: 'No apps running; you can quit now.',
+        confirm: 'Quit anyway',
+        quitting: 'Shutting down gracefully…',
+        quittingHint: 'The app will force-quit if it stops responding.',
+        quittingButton: 'Quitting…',
+      },
+    },
+    settings: {
+      // Appearance entry card (first card on settings): style items live in the
+      // sub-page SysAppearanceView
+      appearanceEntry: {
+        title: 'Appearance',
+        desc: 'Colour mode, language, font size, wallpaper and themes',
+        open: 'Open appearance',
+      },
+      // Shortcuts entry card (second card, 2026-10-28): recording / reset live in
+      // the sub-page SysShortcutsView
+      shortcutsEntry: {
+        title: 'Shortcuts',
+        desc: 'View and rebind shell keyboard shortcuts',
+        open: 'Open shortcuts',
+      },
+      nav: {
+        title: 'Navigation',
+        label: 'Floating navigation',
+      },
+      ui: {
+        title: 'Appearance',
+        // Terminology (2026-10-27): "theme" means the preset only; light/dark is
+        // called "colour mode" here so one screen never has two things named Theme.
+        colorMode: 'Colour mode',
+        themeLight: 'Light',
+        themeDark: 'Dark',
+        themeSystem: 'System',
+        language: 'Language',
+        fontSize: 'Font size',
+        // Discrete font-size slider levels (no raw px); key order = level order
+        // (useFontSize FONT_SIZE_LEVELS)
+        fontLevel: {
+          xs: 'Smallest',
+          s: 'Small',
+          normal: 'Normal',
+          l: 'Large',
+          xl: 'Largest',
+        },
+        animations: 'Animations',
+        animationsDesc: 'Screen transitions and overlay effects (disable to degrade)',
+      },
+      background: {
+        title: 'Background',
+        wallLabel: 'Wallpaper',
+        dimLabel: 'Dim overlay · {pct}%',
+        customReplace: 'Replace image…',
+        customRemove: 'Remove',
+        customHint: 'PNG / JPG / WebP, up to 20 MB. The image is copied into app data.',
+        customSaved: 'Custom wallpaper updated',
+        customRemoved: 'Custom wallpaper removed',
+        wall: {
+          none: 'None (solid)',
+          aurora: 'Aurora',
+          dune: 'Dune',
+          reef: 'Reef',
+          custom: 'Custom',
+        },
+      },
+      permsEntry: {
+        title: 'Authorization',
+        desc: 'Policy tiers and auth records',
+        hint: 'Security-gate entry; full records live in Permissions & Authorization',
+        open: 'Open permissions',
+      },
+      themes: {
+        title: 'Themes',
+        desc: 'Overall look of the platform shell; apps keep their own palettes.',
+        default: 'Default',
+        defaultDesc: 'Warm workbench, solid surfaces',
+        glass: 'Glassmorphism · Liquid Glass',
+        glassDesc: 'Specular rims, layered refraction, glass across the whole shell',
+        hyper: 'Hyper colour',
+        hyperDesc: 'Saturated blocks, hard shadows',
+        dynamic: 'Animated',
+        hint: 'Themes cover the platform shell and icon language; palettes declared by an app root take precedence.',
+      },
+    },
+    apps: {
+      sortHint:
+        'Sorted by auth risk ("always allow" loosest first). Running apps cannot be uninstalled; enabling goes through the approval gate first.',
+      listAria: 'Installed apps',
+      install: 'Install app',
+      installDesc:
+        'Install an external app from a local zip package; if the same id is already installed, confirm to upgrade in place (app data is kept)',
+      // App update surface: compatibility is judged by the shell (useAppUpdates);
+      // incompatible releases show a reason and never get an update button
+      update: {
+        check: 'Check for updates',
+        apply: 'Update to v{version}',
+        checking: 'Checking for updates…',
+        upToDate: 'Up to date',
+        available: 'v{version} available',
+        incompatible: 'New version v{version} found, but it is incompatible with this platform',
+        updating: 'Downloading and updating…',
+        failed: 'Update check failed, try again later',
+        stopFirst: 'Stop the app before updating (the update replaces the plugin directory)',
+        reason: {
+          noCompat: 'The release lacks a compatibility declaration (legacy release format); compatibility cannot be confirmed',
+          mountContract: 'Requires mount contract {required}; this platform is {current}',
+          hostRuntime: 'Requires host runtime {required}; this platform is {current}. Upgrade the platform first',
+          hostRuntimeInvalid: 'Malformed compatibility version ({required}); refused',
+        },
+      },
+      kvSource: 'Source',
+      kvSize: 'Size',
+      kvViews: 'Views',
+      kvType: 'Type',
+      approveStart: 'Approve & start',
+      stop: 'Stop',
+      stopService: 'Stop service',
+      open: 'Open',
+      startOpen: 'Start & open',
+      uninstall: 'Uninstall',
+      uninstallDisabled: 'Stop the app before uninstalling',
+      approvalCallout:
+        'Pending approval: manifest declares {perms} permission bits ({risks} high-risk). Approval is all-or-nothing.',
+      strategyTitle: 'Authorization strategy',
+      strategyHint:
+        'Switching tiers does not affect existing records; tightening requires revoking one by one. Full records in Permissions & Authorization.',
+      permsTitle: 'Permission bits (manifest-declared · load-time all-or-nothing · read-only)',
+      permsHint: 'High-risk bits highlighted: arbitrary command execution / main DB access.',
+      configTitle: 'App configuration',
+      configEmpty: 'No configurable items (manifest contributes.configuration.properties empty).',
+      configSave: 'Save',
+      configReset: 'Reset to defaults',
+      configSaved: 'Configuration saved (written to plugin storage)',
+      noSelection: 'Select an app to view details',
+      // 2026-10-17 lifecycle-sync: face catalog revived to real lifecycle actions
+      // App bundle mount surface (ADR 0057 mechanism B): loading / failure states
+      loading: 'Loading app interface…',
+      mountFailed:
+        'Failed to load the app interface. You can retry; if it keeps failing, check the logs',
+      errorHint:
+        'The app failed to start (no running instance). Start it again, or review Permissions & Authorization and retry',
+      systemServices: 'System services',
+      businessApps: 'Apps',
+      enabled: 'Enabled',
+      enabledHint: 'Enabled = app available (preference record, does not trigger start)',
+      autostart: 'Autostart',
+      autostartHint: 'Auto-activate at startup (preference only; takes effect next boot)',
+      surfaceHint: 'Host-mounted surface: {route}',
+      permCardTitle: 'Permissions & Authorization',
+      permHint:
+        'Policy tiers, auth records and built-in first-party entries share the same view as the settings "App authorization" page.',
+      permGo: 'Open permissions & authorization',
+      source: {
+        builtin: 'Built-in',
+        scanned: 'Scanned',
+        wasm: 'WASM',
+        user: 'User-installed',
+      },
+    },
+  },
+  common: {
+    button: {
+      cancel: 'Cancel',
+      stop: 'Stop',
+    },
+  },
+  // ==================== Error Envelope (ADR 0030) ====================
+  // Top-level namespace: errors.<code> ↔ envelope code, zero mapping layer;
+  // renaming a code is a breaking change. UI rule: toasts/pages show friendly
+  // copy (template + params interpolation) only; never render the code,
+  // request_id, or technical detail.
+  errors: {
+    retry: 'Retry',
+    host: {
+      internal: 'Operation failed, please try again',
+      invoke: {
+        timeout: 'Operation timed out, please retry',
+      },
+      // Mechanism codes (ADR 0030 registry v0): app-management failures
+      // + runtime domain (event-channel envelopes) — one user-facing story
+      // per failure kind; interpolation params carry display names only
+      plugin: {
+        'not-activated': 'This app is not enabled, this action is unavailable',
+        'not-found': 'App not found or removed',
+        trap: 'App "{name}" misbehaved, auto-recovery attempted',
+        'recovery-failed': 'App "{name}" failed and could not recover; check the app center',
+        'self-check-failed': 'App "{plugin}" self-check failed, check its configuration',
+        degraded: 'App "{name}" is running degraded, some features unavailable',
+      },
+    },
+    frontend: {
+      internal: 'Operation failed, please try again',
+    },
+    shell: {
+      wallpaper: {
+        invalid: 'This image cannot be used: choose a PNG / JPG / WebP up to 20 MB',
+      },
+      install: {
+        builtinConflict: '"{name}" ships with the host and cannot be overwritten',
+        runningConflict: '"{name}" is running — stop it before upgrading',
+      },
+    },
+  },
+  desktop: {
+    splash: {
+      status: 'Starting up…',
+      tagline: 'Multi-WASM app runtime',
+    },
+    // Fallback copy for globally uncaught exceptions (renderer errorHandler /
+    // unhandledrejection)
+    runtimeUnexpected: 'An unexpected error occurred. See logs for details',
+    // Window-control tooltips retired with the app-drawn title bar: the title bar
+    // belongs to the shell (shell.toolbar.*); terminal-window copy lives in the
+    // app domain session.terminal.*
+    // Exit confirmation (window-close-requested carries the running-session list)
+    session: {
+      confirmExitTitle: 'Confirm Exit',
+      confirmExitMsg:
+        '{count} session(s) are still running. All running processes will be terminated if you exit.',
+      confirmExitForce: 'Force Exit',
+    },
+    // Unmatched-route fallback page (D3 fail-visible: explicit not-found when a
+    // retired surface is visited directly)
+    notFound: {
+      title: 'Page Not Found',
+      body: 'The page you visited does not exist or was removed in a version update',
+      back: 'Back to Sessions',
+    },
+    // ==================== Authorization dialogs (security gate, fail-closed) ====================
+    // Filesystem authorization (three tiers + remember since ticket 03) +
+    // outbound network authorization (ticket 05, origin granularity).
+    // Answers ride host-face commands (host credential required); the frontend
+    // only renders and relays the decision.
+    auth: {
+      fsAuthTitle: 'File Access Authorization',
+      fsAuthRead: 'read',
+      fsAuthWrite: 'write',
+      // Authorization records are split by operation — the dialog must say
+      // whether this request is for read, write, or both.
+      fsAuthReadWrite: 'read & write',
+      fsAuthRequest: 'App {plugin} requests {operation} access',
+      fsAuthPickerRequest:
+        'You just picked these paths in the system picker; {plugin} requests {operation} access',
+      fsAuthGrantScopeDir:
+        '“Remember” grants the containing folder for {operation}: other files in it will not be asked again',
+      fsAuthPath: 'File path',
+      fsAuthPaths: 'File paths ({count} directories)',
+      // “Remember” now only covers **this request's operations** (read / write / both)
+      fsAuthRemember: 'Remember {operation} access to this path',
+      fsAuthAllow: 'Allow',
+      fsAuthDeny: 'Deny',
+      // Three-way answer — the "always ask" tier offers no "Remember", so the
+      // allow button can only commit to this one time; "Always deny" lands a
+      // deny record (the target and its subtree are denied from then on).
+      fsAuthAllowOnce: 'Allow once',
+      fsAuthDenyAlways: 'Always deny',
+      netAuthTitle: 'Network Access Authorization',
+      netAuthRequest: 'App {plugin} requests access to a network address',
+      netAuthOrigin: 'Address',
+      // Consent scope must be visible: otherwise users can only guess what “Allow” means
+      netAuthScope:
+        'Once allowed, this address (host and port) will not be asked again; you can revoke it in Settings → App Authorization',
+      // Same dialog under the "Always Ask" tier: that tier records nothing, so
+      // promising "will not be asked again" would be a lie
+      netAuthScopeOnce:
+        'This batch of requests only — the app is set to "Always Ask", so the next request will ask again',
+      netAuthAllow: 'Allow',
+      netAuthDeny: 'Deny',
+      netAuthDenyAlways: 'Always deny',
+    },
+  },
+  settings: {
+    system: {
+      title: 'System Settings',
+      preventSleep: 'Prevent System Sleep',
+    },
+    // Link encryption (2026-11-04 decision): policy belongs to the app; the host
+    // only enforces and audits it read-only.
+    linkCrypto: {
+      title: 'Link Encryption',
+      wsNotEncrypted:
+        'This host does not support frame-level link encryption for WS endpoints (older build); app policy applies to HTTP only, and WS traffic stays plaintext. Update the host to encrypt WS frames.',
+      fingerprint: 'Local Fingerprint',
+      apps: 'App policies (read-only)',
+      appsEmpty: 'No plugin endpoints are currently registered (apps are stopped or expose none).',
+      endpointCount: '{count} endpoints',
+      policyRequired: 'Require encrypted',
+      policyPreferred: 'Prefer encrypted',
+      policyOff: 'Not required',
+      capabilityMissing:
+        'This host does not expose app-scoped link encryption capabilities (older version); status unavailable.',
+      loadFailed: 'Failed to read link encryption state; see logs.',
+    },
+    log: {
+      title: 'Logging',
+      level: 'Log Level',
+      levelDebug: 'Debug',
+      levelInfo: 'Info',
+      levelWarn: 'Warning',
+      levelError: 'Error',
+      levelApplied: 'Log level switched',
+      format: 'Log Format',
+      formatText: 'Text',
+      formatJson: 'JSON',
+      maxFiles: 'Retained Files',
+      capacityMb: 'Capacity Cap (MB)',
+      persist: 'Persist Config',
+      openDir: 'Open Log Directory',
+      save: 'Save Config',
+      saved: 'Log config saved',
+      saveFailed: 'Failed to save log config',
+    },
+    // Authorization strategy and records (2026-09-27 authorization-policy enhancement, ticket 01):
+    // settings second-level entry "App Authorization" and the management page copy.
+    // Tier wording matches spec §4.1 verbatim; resource names match the host
+    // read-model resource values (fs / network)
+    authorization: {
+      title: 'App Authorization',
+      entry: 'App Authorization Records',
+      back: 'Back to Settings',
+      refresh: 'Refresh',
+      appCount: '{count} app(s)',
+      empty: 'No manageable apps',
+      emptyHint: 'Installed and enabled apps will be listed here with their authorization status',
+      recordCount: '{count} record(s)',
+      records: {
+        toggle: 'Expand authorization records',
+        fsTitle: 'File Directory Records',
+        networkTitle: 'Network Address Records',
+        empty: 'No file authorization records for this app yet',
+        fsEmpty: 'No file authorization records for this app yet',
+        networkEmpty: 'No network authorization records for this app yet',
+        revoke: 'Revoke',
+        removeDeny: 'Remove Denial',
+        revoked: 'Authorization revoked for this directory; subsequent access will be denied',
+        networkRevoked:
+          'Authorization revoked for this address; subsequent requests will be denied',
+        denyRemoved: 'Denial record removed; this directory returns to unauthorized state',
+        effect: {
+          allow: 'Authorized',
+          deny: 'Hard Denied',
+        },
+        ops: {
+          read: 'Read',
+          write: 'Write',
+          read_write: 'Read & Write',
+        },
+        source: {
+          user: 'User Confirmed',
+          always_allow: 'No-Ask Auto-Allowed',
+          legacy: 'Legacy',
+          user_deny: 'User Denied',
+        },
+      },
+      // Four section titles and empty states (shared by ticket 07 detail page /
+      // ticket 08 settings page, spec §9.2): user-granted / no-ask auto-allowed
+      // (unconfirmed) / built-in no-ask (first party) / hard denied
+      sections: {
+        userGranted: 'User Granted',
+        autoAllowed: 'No-Ask Auto-Allowed',
+        firstParty: 'Built-in No-Ask',
+        denied: 'Hard Denied',
+        // No-ask auto-allowed records must carry the "unconfirmed" marker and be
+        // visually distinct from user-confirmed records (spec §9.4)
+        unconfirmed: 'Unconfirmed',
+        empty: 'No authorization records',
+        // Two shapes of built-in no-ask entries (first-party list: home prefix /
+        // named segment of any project)
+        firstPartyHome: 'Home Directory',
+        firstPartySegment: 'Project Directory',
+        revokeHint: 'After revoking, subsequent access to this directory will be denied',
+        // Empty state when the app has no built-in no-ask entries (distinct from
+        // "has entries": empty is a fact, not missing data)
+        firstPartyEmpty: 'This app has no built-in no-ask entries',
+        firstPartyRevoked: 'No-ask revoked for this directory; subsequent access will be denied',
+      },
+      strategy: {
+        always_ask: 'Always Ask',
+        default: 'Default',
+        always_allow: 'Always Allow',
+      },
+      // Strategy control (three tiers selectable since ticket 03/04): switching to
+      // "Always Allow" requires confirmation whose copy must state the tier's
+      // semantic boundary (spec §4.3) — switching does NOT grant everything at
+      // once; only actually-accessed targets accumulate into records
+      // (continuously accumulative, hence the reminder)
+      strategyControl: {
+        title: '{resource} Request Policy',
+        saved: 'Policy updated; the next decision applies immediately',
+        hint: {
+          // "Always Ask" skips all allow records, so already-authorized targets
+          // are asked too — writing "unrecorded targets will be asked" would
+          // make users think authorized ones pass silently (ticket 06 fix)
+          always_ask: 'Ask on every access (already-authorized targets included)',
+          default: 'Allow on record hit; ask only when unrecorded',
+          always_allow:
+            'Unrecorded targets pass without asking and are auto-recorded (unconfirmed)',
+        },
+        confirmTitle: 'Switch to "Always Allow"?',
+        // The semantic boundary (spec §4.3) must appear in the confirmation:
+        // both "one click opens everything" and "nothing will happen" are wrong
+        confirmBody:
+          '"{name}" {resource} requests will no longer be asked: unrecorded targets pass directly and are recorded as "unconfirmed". Switching does not grant all permissions at once — only targets the app actually accesses accumulate, so the list keeps growing with continued access; revoke individually below at any time.',
+        confirmOk: 'Switch to Always Allow',
+      },
+      resource: {
+        fs: 'File',
+        network: 'Network',
+      },
+    },
+    appearance: {
+      theme: 'Theme',
+      lightMode: 'Light Mode',
+      darkMode: 'Dark Mode',
+      followSystem: 'Follow System',
+      language: 'Language',
+      fontSize: 'Font Size',
+      animations: 'Animations',
+      animationsDesc: 'When off, page transitions and interactive animations are disabled globally',
+    },
+    about: {
+      title: 'About',
+      githubRepo: 'GitHub Repository',
+      checkUpdate: 'Check for Updates',
+      alreadyLatest: 'Already up to date',
+      checkingUpdate: 'Checking for updates...',
+      checkFailed: 'Update check failed, please try again',
+      newVersionAvailable: 'New version available',
+      downloadingUpdate: 'Downloading update...',
+      downloadComplete: 'Download complete, installing...',
+      installingUpdate: 'Installing update...',
+      downloadUpdate: 'Update Now',
+    },
+    reset: {
+      title: 'Reset to defaults',
+      desc: 'Clears app authorizations and personal preferences, and restores default settings',
+      action: 'Reset to defaults',
+      confirmTitle: 'Reset to defaults',
+      confirmBody:
+        'All app authorization records will be cleared, copied custom wallpapers will be deleted, and all settings will be restored to their defaults. This action cannot be undone.',
+      confirmOk: 'Reset',
+      done: 'Defaults restored',
+      failed: 'Reset failed, please try again',
+    },
+  },
+}

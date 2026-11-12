@@ -1,0 +1,41 @@
+name: 契约变更（Contract Change）
+description: WIT / ABI / wire / 权限 / 跨仓契约变更。真源仓内走 bump 流程，本模板做协调与核对。
+title: "[contract] "
+labels: ["kind:contract", "cross-repo"]
+body:
+  - type: textarea
+    id: change
+    attributes:
+      label: 变更内容
+      description: 改什么面（WIT / ABI / wire / 权限 / 包版本），函数级追加还是接口增删
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: 真源仓与版本
+      description: 契约真源在能力仓 lib；当前线 @wasmnest:plugin@0.0.1
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: 双端影响评估
+      description: 桌面 / 移动各自改动面；是否破坏性（ABI bump？插件产物是否需重建）
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 流程核对（bump 7 步）
+      value: |
+        - [ ] contracts/ 字面量同步（含硬编码 @x.y.z）
+        - [ ] 平台 compose-wit.mjs --all + check:wit
+        - [ ] 重建全部插件产物
+        - [ ] check:manifest --print-hash → check:manifest
+        - [ ] 相关锁（wire_drift / permission_vocabulary / wit_package_version…）
+  - type: textarea
+    id: locks
+    attributes:
+      label: 需同步的锁 / 副本
+      description: wire 自持副本、权限生成物、双端治理锁；逐项点名
