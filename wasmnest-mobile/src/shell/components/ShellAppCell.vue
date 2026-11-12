@@ -1,7 +1,7 @@
 <template>
   <button
     type="button"
-    class="flex flex-col items-center gap-2 py-2 rounded-[12px] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)] active:opacity-70"
+    class="flex flex-col items-center gap-2 py-2 rounded-[12px] transition-[transform,background-color] duration-200 active:scale-[0.96] active:bg-[var(--mobile-accent-muted)]"
     :aria-label="label"
     @click="$emit('open', app.id)"
   >

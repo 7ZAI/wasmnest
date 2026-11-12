@@ -823,6 +823,35 @@ button.settings-row:active {
   transform: translateY(100%);
 }
 
+/* 减弱动态：弹窗 / 抽屉都 Teleport 到 body，壳根 `.shell-ui` 的统一降级规则
+   够不到这里。保留淡入淡出（可见性），去掉缩放与上滑位移。 */
+@media (prefers-reduced-motion: reduce) {
+  /* toast 与桌面同口径：sonner 自带的 reduce 规则会禁用全部过渡；这里只保留
+     200ms 淡入淡出，去掉位移与 height 布局过渡。 */
+  [data-sonner-toast],
+  [data-sonner-toast] > * {
+    transition: opacity 200ms !important;
+  }
+  .center-modal-enter-active,
+  .center-modal-leave-active,
+  .bottom-sheet-enter-active,
+  .bottom-sheet-leave-active {
+    transition: opacity 120ms linear;
+  }
+  .center-modal-enter-active .modal-panel,
+  .center-modal-leave-active .modal-panel,
+  .bottom-sheet-enter-active .modal-panel,
+  .bottom-sheet-leave-active .modal-panel {
+    transition: none;
+  }
+  .center-modal-enter-from .modal-panel,
+  .center-modal-leave-to .modal-panel,
+  .bottom-sheet-enter-from .modal-panel,
+  .bottom-sheet-leave-to .modal-panel {
+    transform: none;
+  }
+}
+
 /* ==================== 主色色板（与桌面端同名 palette 同源） ====================
    仅覆盖主色相关 token（--mobile-accent 系 + text-on-accent），色值取自
    wasmnest-desktop/src/style.css 同名 palette（改色需双端同改）。

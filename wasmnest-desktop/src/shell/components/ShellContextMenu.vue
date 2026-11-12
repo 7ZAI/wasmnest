@@ -164,4 +164,12 @@ function uninstallApp() {
     transform: none;
   }
 }
+
+/* 菜单 Teleport 到 body，壳根的统一降级规则够不到：减弱动态下只保留瞬时显形，
+   不做从指针位置长出来的缩放。 */
+@media (prefers-reduced-motion: reduce) {
+  .shell-ctx-root {
+    animation: none;
+  }
+}
 </style>

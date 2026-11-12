@@ -69,7 +69,10 @@
   --shell-dur-fast: 150ms;   /* 按压反馈、色值切换等即时响应 */
   --shell-dur-base: 240ms;   /* 屏幕栈 / 抽屉 / 覆盖层等空间位移 */
   --shell-dur-slow: 320ms;   /* 大件入场、内容展开 */
-  --shell-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  /* 入场用强减速曲线（Emil Kowalski 动效技能 animate / AUDIT.md）：内置 ease-out
+     与 Material decelerate 前段都太软，用户注视的那一下会显得迟滞。
+     退场仍保留加速曲线（ui-ux-pro-max Easing：到达减速、离开加速）。 */
+  --shell-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --shell-ease-in: cubic-bezier(0.4, 0, 1, 1);
   --shell-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   /* 系统宫格图标与桌面壳同口径：中性 card 表面 + stroke 线稿（样式见
@@ -233,11 +236,17 @@
    横向位移用 26% 而非 100%：与移动端系统「上一级屏幕轻微后退」的手感一致，
    全屏位移在低端机上容易掉帧。
    ============================================================================ */
-.shell-screen-enter-active,
+/* 入场减速到达、退场加速离开：同一条 transition 声明会让退场也减速，
+   看起来像「被拖回去」而不是「被推走」。 */
+.shell-screen-enter-active {
+  transition:
+    transform var(--shell-dur-base) var(--shell-ease-out),
+    opacity var(--shell-dur-base) var(--shell-ease-out);
+}
 .shell-screen-leave-active {
   transition:
-    transform var(--shell-dur-base) var(--shell-ease-standard),
-    opacity var(--shell-dur-base) var(--shell-ease-standard);
+    transform var(--shell-dur-base) var(--shell-ease-in),
+    opacity var(--shell-dur-base) var(--shell-ease-in);
 }
 
 .shell-screen-forward-enter-from {
@@ -262,10 +271,17 @@
    进入时当前屏缩下去、多任务屏放大浮现；退出时反向，卡片像从应用窗口拉开。 */
 .shell-screen-recents-enter-active,
 .shell-screen-recents-leave-active {
+  transform-origin: center center;
+}
+.shell-screen-recents-enter-active {
   transition:
     transform var(--shell-dur-base) var(--shell-ease-out),
     opacity var(--shell-dur-base) var(--shell-ease-out);
-  transform-origin: center center;
+}
+.shell-screen-recents-leave-active {
+  transition:
+    transform var(--shell-dur-base) var(--shell-ease-in),
+    opacity var(--shell-dur-base) var(--shell-ease-in);
 }
 .shell-screen-recents-enter-from {
   transform: scale(0.9);
@@ -285,9 +301,12 @@
 /* ============================================================================
    底部抽屉（胶囊菜单 / 授权弹窗共用）
    ============================================================================ */
-.shell-sheet-enter-active,
-.shell-sheet-leave-active {
+/* 抽屉：入场 320ms 减速落位，退场 240ms 加速离场（系统响应比用户决定更快）。 */
+.shell-sheet-enter-active {
   transition: transform var(--shell-dur-slow) var(--shell-ease-out);
+}
+.shell-sheet-leave-active {
+  transition: transform var(--shell-dur-base) var(--shell-ease-in);
 }
 .shell-sheet-enter-from,
 .shell-sheet-leave-to {
@@ -499,11 +518,15 @@
 /* ============================================================================
    通知栏（Android 式独立覆盖层：自顶部滑下）
    ============================================================================ */
-.shell-shade-enter-active,
+.shell-shade-enter-active {
+  transition:
+    transform var(--shell-dur-base) var(--shell-ease-out),
+    opacity var(--shell-dur-fast) var(--shell-ease-out);
+}
 .shell-shade-leave-active {
   transition:
-    transform var(--shell-dur-base) var(--shell-ease-standard),
-    opacity var(--shell-dur-fast) var(--shell-ease-standard);
+    transform var(--shell-dur-base) var(--shell-ease-in),
+    opacity var(--shell-dur-fast) var(--shell-ease-in);
 }
 .shell-shade-enter-from,
 .shell-shade-leave-to {

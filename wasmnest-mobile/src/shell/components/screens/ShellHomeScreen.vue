@@ -62,7 +62,7 @@
            整张卡是宿主按钮：点击启动并打开贡献方应用，卡片内容由应用自持、
            不得自带交互（SDK QuickCard 是推荐外观）。 -->
       <template v-if="slotCards.length > 0">
-        <ShellSection :title="t('shell.home.slotsTitle')" class="shell-reveal shell-text-over-wall" :style="{ animationDelay: '80ms' }">
+        <ShellSection :title="t('shell.home.slotsTitle')" class="shell-text-over-wall" :class="{ 'shell-reveal': reveal }" :style="{ animationDelay: '80ms' }">
           <template v-if="slotCards.length > 1 && !reducedMotion" #action>
             <button
               type="button"
@@ -81,7 +81,7 @@
             </button>
           </template>
         </ShellSection>
-        <div ref="slotTrack" class="shell-slot-track shell-reveal" role="list" :style="{ animationDelay: '120ms' }">
+        <div ref="slotTrack" class="shell-slot-track" :class="{ 'shell-reveal': reveal }" role="list" :style="{ animationDelay: '120ms' }">
           <div v-for="card in slotCards" :key="card.key" class="shell-slot-item" role="listitem">
             <!-- 可访问名 = 隐藏动作前缀「打开 <应用>」+ 卡片内容：不覆盖应用自持的读数。
                  点击除打开应用外，还把应用现算的入口意图投递给它（卡片可直达会话 / 页）。 -->
@@ -99,14 +99,15 @@
            计数文案同为该反馈要求删除的内容，标题行不再承载任何附加信息。 -->
       <ShellSection
         :title="t('shell.home.appsTitle')"
-        class="shell-reveal shell-text-over-wall"
+        class="shell-text-over-wall"
+        :class="{ 'shell-reveal': reveal }"
         :style="{ animationDelay: '160ms' }"
       />
       <div class="px-4">
         <!-- gap-4 = 16px：在相邻触控目标间距 ≥8px（ui-ux-pro-max Touch Spacing）
      门槛之上对齐 Android 启动器的 4/8dp 栅格节奏；与下方服务 / 系统宫格同 gap，
      同屏同层必须同栅格（2026-10-24 用户反馈优化）。 -->
-        <div v-if="businessApps.length > 0" class="grid grid-cols-4 gap-4 shell-reveal" role="list" :style="{ animationDelay: '200ms' }">
+        <div v-if="businessApps.length > 0" class="grid grid-cols-4 gap-4" :class="{ 'shell-reveal': reveal }" role="list" :style="{ animationDelay: '200ms' }">
           <ShellAppCell v-for="app in businessApps" :key="app.id" :app="app" @open="open" />
         </div>
         <!-- 空态给出下一步（安装入口在应用管理页），而不是只留一句「暂无应用」 -->
@@ -120,9 +121,9 @@
 
       <!-- ======== 服务宫格（宿主系统级服务，与应用 / 系统同层） ======== -->
       <template v-if="serviceEntries.length > 0">
-        <ShellSection :title="t('shell.home.servicesTitle')" class="shell-reveal shell-text-over-wall" :style="{ animationDelay: '240ms' }" />
+        <ShellSection :title="t('shell.home.servicesTitle')" class="shell-text-over-wall" :class="{ 'shell-reveal': reveal }" :style="{ animationDelay: '240ms' }" />
         <div class="px-4">
-          <div class="grid grid-cols-4 gap-4 shell-reveal" role="list" :style="{ animationDelay: '280ms' }">
+          <div class="grid grid-cols-4 gap-4" :class="{ 'shell-reveal': reveal }" role="list" :style="{ animationDelay: '280ms' }">
             <button
               v-for="entry in serviceEntries"
               :key="entry.id"
@@ -156,9 +157,9 @@
       </template>
 
       <!-- ======== 系统宫格（平台自有面，与应用同层） ======== -->
-      <ShellSection :title="t('shell.home.sysTitle')" class="shell-reveal shell-text-over-wall" :style="{ animationDelay: '320ms' }" />
+      <ShellSection :title="t('shell.home.sysTitle')" class="shell-text-over-wall" :class="{ 'shell-reveal': reveal }" :style="{ animationDelay: '320ms' }" />
       <div class="px-4">
-        <div class="grid grid-cols-4 gap-4 shell-reveal" role="list" :style="{ animationDelay: '360ms' }">
+        <div class="grid grid-cols-4 gap-4" :class="{ 'shell-reveal': reveal }" role="list" :style="{ animationDelay: '360ms' }">
           <button
             v-for="entry in sysEntries"
             :key="entry.id"
@@ -199,6 +200,15 @@
   </div>
 </template>
 
+<script lang="ts">
+/**
+ * 本次应用会话是否已播过主屏分区入场。
+ * 必须放普通 `<script>`（模块作用域）：`<script setup>` 顶层绑定是每个实例的，
+ * 屏幕栈按 key 重挂后会复位，入场就会在每次「回家」时重播。
+ */
+let homeRevealed = false
+</script>
+
 <script setup lang="ts">
 /**
  * 平台主屏
@@ -228,6 +238,15 @@ import { isServiceKind } from '../../utils'
 import ShellAppCell from '../ShellAppCell.vue'
 import ShellBrandTile from '../ShellBrandTile.vue'
 import ShellSection from '../ShellSection.vue'
+
+/**
+ * 分区入场只在本次应用会话第一次进主屏时播。
+ * 屏幕栈按 key 重挂（ShellHost 的 `<Transition :key="screenKey">`），若每次回主屏
+ * 都重播，320ms 动画 + 最多 360ms 延迟会成为「回家」的固定等待（主屏几十次/天）。
+ * 模块级标记跨组件重挂保留；reduced-motion 仍由 shell.css 统一压成瞬时。
+ */
+const reveal = !homeRevealed
+homeRevealed = true
 
 const { t } = useI18n()
 const nav = useShellNavigation()

@@ -509,4 +509,16 @@ function confirmInstallUpgrade() {
 .shell-dlg-leave-to {
   opacity: 0;
 }
+
+/* 减弱动态：弹窗 Teleport 到 body，壳根 `.shell-root *` 的统一降级够不到这里。
+   保留淡入淡出（可见性反馈），去掉面板的缩放 / 位移入场动画。 */
+@media (prefers-reduced-motion: reduce) {
+  .shell-dlg-enter-active,
+  .shell-dlg-leave-active {
+    transition: opacity 120ms linear;
+  }
+  .shell-dlg-in {
+    animation: none;
+  }
+}
 </style>

@@ -53,7 +53,9 @@ const open = ref(props.defaultOpen)
 .acc .acc-body {
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows 0.25s ease;
+  /* 手风琴的高度过渡是「布局属性」的既定例外（无 transform 等价物）；
+     时长 / 缓动仍取壳 token，不另写一份 0.25s ease。 */
+  transition: grid-template-rows var(--shell-dur-base) var(--shell-ease-standard);
 }
 
 .acc.collapsed .acc-body {
@@ -61,10 +63,18 @@ const open = ref(props.defaultOpen)
 }
 
 .acc .chevron {
-  transition: transform 0.25s ease;
+  transition: transform var(--shell-dur-base) var(--shell-ease-standard);
 }
 
 .acc.collapsed .chevron {
   transform: rotate(-90deg);
+}
+
+/* 减弱动态：折叠直接落终态（保留箭头方向与内容可见性语义，不做高度补间）。 */
+@media (prefers-reduced-motion: reduce) {
+  .acc .acc-body,
+  .acc .chevron {
+    transition: none;
+  }
 }
 </style>

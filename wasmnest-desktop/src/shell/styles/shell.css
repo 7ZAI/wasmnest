@@ -360,11 +360,19 @@
     white-space: nowrap;
     transition:
       background-color var(--motion-duration-fast) var(--motion-ease),
-      color var(--motion-duration-fast) var(--motion-ease);
+      color var(--motion-duration-fast) var(--motion-ease),
+      transform var(--motion-duration-fast) var(--motion-ease);
   }
   .shell-mini:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+  }
+  /* 按压反馈：只缩视觉、不改布局（与 .shell-btn 的 1px 下沉同一档即时反馈） */
+  .shell-mini:active {
+    transform: scale(0.97);
+  }
+  .shell-mini:disabled:active {
+    transform: none;
   }
   .shell-mini.danger {
     color: var(--color-danger-ink);

@@ -3,7 +3,7 @@
     :type="type"
     :disabled="disabled || loading"
     :title="title"
-    class="inline-flex items-center justify-center gap-2 font-medium rounded-btn transition-[background-color,border-color,color,opacity,transform] duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-dark-900"
+    class="inline-flex items-center justify-center gap-2 font-medium rounded-btn transition-[background-color,border-color,color,opacity,transform] duration-150 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-dark-900"
     :class="[variantClass, sizeClass, { 'opacity-50 cursor-not-allowed': disabled || loading }]"
     @click="$emit('click', $event)"
   >

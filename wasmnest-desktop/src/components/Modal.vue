@@ -133,4 +133,21 @@ function close() {
 .modal-leave-to > div:last-child {
   transform: scale(0.98);
 }
+
+/* 减弱动态：保留淡入淡出（可见性），去掉缩放位移。弹窗 Teleport 到 body，
+   壳根 `.shell-root *` 的统一降级规则够不到这里，必须自带分支。 */
+@media (prefers-reduced-motion: reduce) {
+  .modal-enter-active,
+  .modal-leave-active {
+    transition: opacity 120ms linear;
+  }
+  .modal-enter-active > div:last-child,
+  .modal-leave-active > div:last-child {
+    transition: none;
+  }
+  .modal-enter-from > div:last-child,
+  .modal-leave-to > div:last-child {
+    transform: none;
+  }
+}
 </style>

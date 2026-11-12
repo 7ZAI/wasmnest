@@ -243,11 +243,15 @@ html.platform-linux {
 
   /* 交互动效：壳与挂载面共用同一组节奏（时长按距离 / 复杂度分档，缓动统一减速到达）。
      组件 scoped 样式里不再各写一份 0.15s/0.2s —— 见 ui-ux-pro-max ux 域
-     Duration Timing：用共享 token，别把同一组数字抄进每个过渡。 */
+     Duration Timing：用共享 token，别把同一组数字抄进每个过渡。
+     曲线取「强减速」档（Emil Kowalski 动效技能 animate / AUDIT.md）：入场用
+     cubic-bezier(0.23, 1, 0.32, 1) 而不是内置 ease-out —— 内置曲线前段太软，
+     用户盯着看的那一下会显得迟滞。退场仍保留加速曲线（ui-ux-pro-max Easing：
+     到达减速、离开加速）。 */
   --motion-duration-fast: 130ms;
   --motion-duration-base: 200ms;
   --motion-duration-slow: 320ms;
-  --motion-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --motion-ease: cubic-bezier(0.23, 1, 0.32, 1);
   --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
 
   /* 键盘焦点环（所有自绘控件共用）：实色 2px + 2px 间隙，任何底色上都可辨 */
@@ -758,9 +762,17 @@ body {
   box-shadow: var(--shadow-input-focus);
 }
 
+/* 只过渡真正会变的属性：`transition: all` 会把 width/height 等布局属性也纳入
+   过渡（按钮文字变化时整页重排），并且无法被合成器单独优化。 */
 .desktop-ui button,
 .desktop-ui a {
-  transition: all 200ms ease;
+  transition:
+    background-color var(--motion-duration-base) var(--motion-ease),
+    border-color var(--motion-duration-base) var(--motion-ease),
+    color var(--motion-duration-base) var(--motion-ease),
+    box-shadow var(--motion-duration-base) var(--motion-ease),
+    opacity var(--motion-duration-base) var(--motion-ease),
+    transform var(--motion-duration-base) var(--motion-ease);
 }
 
 /* ==================== Scrollbar ==================== */
@@ -932,7 +944,9 @@ html.anim-disabled *::after {
 :root {
   --motion-page-duration-in: 220ms;
   --motion-page-duration-out: 160ms;
-  --motion-page-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* 与 --motion-ease 同一档强减速曲线：页面入场是最常被注视的动效，
+     缓动强度不能比壳内小组件弱。 */
+  --motion-page-ease: cubic-bezier(0.23, 1, 0.32, 1);
   --motion-page-shift: 10px;
   --motion-page-scale: 0.985;
 }
@@ -1111,16 +1125,13 @@ html[data-page-fx='zoom'] .page-leave-to {
   --normal-border-hover: var(--border-strong) !important;
 }
 
-/* 覆盖 vue-sonner 自带的 prefers-reduced-motion 禁用规则：保留 toast 进出场过渡
-   （滑入淡入/滑出淡出），系统减弱动态效果不影响通知的可见性反馈 */
+/* 覆盖 vue-sonner 自带的 prefers-reduced-motion 禁用规则：保留 toast 的淡入淡出
+   （可见性反馈是必要的），但去掉位移动画与 height 等布局属性过渡，时长压到
+   200ms —— 减弱动态是「更轻」，不是「照旧播」。 */
 @media (prefers-reduced-motion: reduce) {
   [data-sonner-toast],
   [data-sonner-toast] > * {
-    transition:
-      transform 400ms,
-      opacity 400ms,
-      height 400ms,
-      box-shadow 200ms !important;
+    transition: opacity 200ms !important;
   }
 }
 
