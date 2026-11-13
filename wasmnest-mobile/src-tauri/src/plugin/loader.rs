@@ -209,7 +209,14 @@ impl PluginLoader {
                     // contributes.globalEntries 是 ui:globalEntry 门控的纯 manifest 贡献面；
                     // 声明入口却未持权 = 清单配置缺口。warn 不阻断：壳前端按权限过滤渲染，
                     // 这里让缺口在日志里点名（fail-visible，不静默返回空）。
-                    manifest.check_global_entry_permission();
+                    if !manifest.contributes.global_entries.is_empty()
+                        && !manifest.permissions.iter().any(|p| p == "ui:globalEntry")
+                    {
+                        tracing::warn!(
+                            "[PluginLoader] plugin {:?} 声明了 contributes.globalEntries 但未声明 ui:globalEntry 权限（壳不会渲染入口）",
+                            plugin_id
+                        );
+                    }
 
                     let source = Self::detect_source(&path);
 

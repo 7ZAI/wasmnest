@@ -33,6 +33,8 @@ import {
   APP_NOT_RUNNING,
   TOOL_NOT_DECLARED,
   PARAM_INVALID,
+  APP_OPEN_FAILED,
+  CALLER_UNAUTHORIZED,
 } from '@/shell/mount/appControlBridge'
 
 const mockedInvoke = vi.mocked(invoke)
@@ -66,6 +68,23 @@ function makeTool(overrides: Record<string, unknown> = {}) {
   }
 }
 
+/** 调用方条目（桥内二次校验要求调用方在宿主清单里且持有 apps:control） */
+const CALLER_ID = 'com.wasmnest.assistant'
+function callerInfo(overrides: Record<string, unknown> = {}) {
+  return makePluginInfo({
+    id: CALLER_ID,
+    name: 'Nest',
+    permissions: ['apps:control', 'storage', 'network:http', 'ui:globalEntry'],
+    contributes: {},
+    ...overrides,
+  })
+}
+
+/** 清单 = 本条用例的目标应用 + 调用方（调用方排末尾：list() 断言按下标取目标应用） */
+function withCaller<T>(list: T[]): T[] {
+  return [...list, callerInfo() as unknown as T]
+}
+
 describe('createAppControlBridge（通用应用调用桥）', () => {
   beforeEach(() => {
     mockedInvoke.mockReset()
@@ -77,7 +96,7 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
 
   describe('list()', () => {
     it('返回已安装应用及其声明给助手的工具', async () => {
-      mockedInvoke.mockResolvedValueOnce([
+      mockedInvoke.mockResolvedValueOnce(withCaller([
         makePluginInfo({
           id: 'com.wasmnest.monitor',
           contributes: { assistantTools: [makeTool()] },
@@ -88,10 +107,11 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
           state: { state: 'degraded' },
           contributes: { assistantTools: [] },
         }),
-      ])
+      ]))
       const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
       const apps = await bridge.list()
-      expect(apps).toHaveLength(2)
+      // 3 = monitor + bedcode + 调用方自身（清单里必须有调用方，桥内二次校验要用）
+      expect(apps).toHaveLength(3)
       expect(apps[0]).toMatchObject({
         id: 'com.wasmnest.monitor',
         name: 'Monitor',
@@ -109,10 +129,10 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
     })
 
     it('contributes 不是对象时 tools 为空数组（防御性解析）', async () => {
-      mockedInvoke.mockResolvedValueOnce([
+      mockedInvoke.mockResolvedValueOnce(withCaller([
         makePluginInfo({ contributes: 'not-an-object' }),
         makePluginInfo({ contributes: null }),
-      ])
+      ]))
       const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
       const apps = await bridge.list()
       expect(apps[0].tools).toEqual([])
@@ -122,12 +142,12 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
 
   describe('invoke()', () => {
     it('已声明工具可调通：白名单通过 + appInvoke 路由', async () => {
-      mockedInvoke.mockResolvedValueOnce([
+      mockedInvoke.mockResolvedValueOnce(withCaller([
         makePluginInfo({
           id: 'com.wasmnest.monitor',
           contributes: { assistantTools: [makeTool()] },
         }),
-      ])
+      ]))
       mockedAppInvoke.mockResolvedValueOnce({ apps: 3, uptime: 120 })
       const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
       const result = await bridge.invoke('com.wasmnest.monitor', 'monitor.snapshot')
@@ -144,13 +164,13 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
     })
 
     it('目标未运行 → app.not_running', async () => {
-      mockedInvoke.mockResolvedValueOnce([
+      mockedInvoke.mockResolvedValueOnce(withCaller([
         makePluginInfo({
           id: 'com.wasmnest.monitor',
           state: { state: 'dormant' },
           contributes: { assistantTools: [makeTool()] },
         }),
-      ])
+      ]))
       const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
       await expect(
         bridge.invoke('com.wasmnest.monitor', 'monitor.snapshot'),
@@ -162,12 +182,12 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
     })
 
     it('命令未声明 → tool.not_declared（白名单强制，不回退任意命令）', async () => {
-      mockedInvoke.mockResolvedValueOnce([
+      mockedInvoke.mockResolvedValueOnce(withCaller([
         makePluginInfo({
           id: 'com.wasmnest.monitor',
           contributes: { assistantTools: [makeTool({ command: 'monitor.snapshot' })] },
         }),
-      ])
+      ]))
       const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
       await expect(
         bridge.invoke('com.wasmnest.monitor', 'monitor.dangerous-undeclared'),
@@ -176,7 +196,7 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
     })
 
     it('参数不合 argsSchema → param.invalid（required）', async () => {
-      mockedInvoke.mockResolvedValueOnce([
+      mockedInvoke.mockResolvedValueOnce(withCaller([
         makePluginInfo({
           id: 'com.wasmnest.monitor',
           contributes: {
@@ -193,7 +213,7 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
             ],
           },
         }),
-      ])
+      ]))
       const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
       await expect(
         bridge.invoke('com.wasmnest.monitor', 'monitor.snapshot', {}),
@@ -202,7 +222,7 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
     })
 
     it('参数不合 argsSchema → param.invalid（additionalProperties）', async () => {
-      mockedInvoke.mockResolvedValueOnce([
+      mockedInvoke.mockResolvedValueOnce(withCaller([
         makePluginInfo({
           id: 'com.wasmnest.monitor',
           contributes: {
@@ -218,7 +238,7 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
             ],
           },
         }),
-      ])
+      ]))
       const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
       await expect(
         bridge.invoke('com.wasmnest.monitor', 'monitor.snapshot', { sneaky: true }),
@@ -226,7 +246,7 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
     })
 
     it('参数不合 argsSchema → param.invalid（枚举）', async () => {
-      mockedInvoke.mockResolvedValueOnce([
+      mockedInvoke.mockResolvedValueOnce(withCaller([
         makePluginInfo({
           id: 'com.wasmnest.monitor',
           contributes: {
@@ -242,7 +262,7 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
             ],
           },
         }),
-      ])
+      ]))
       const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
       await expect(
         bridge.invoke('com.wasmnest.monitor', 'monitor.snapshot', { format: 'xml' }),
@@ -250,9 +270,9 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
     })
 
     it('目标未安装 → app.not_installed', async () => {
-      mockedInvoke.mockResolvedValueOnce([
+      mockedInvoke.mockResolvedValueOnce(withCaller([
         makePluginInfo({ id: 'com.wasmnest.monitor' }),
-      ])
+      ]))
       const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
       await expect(
         bridge.invoke('com.wasmnest.nonexistent', 'some.command'),
@@ -260,12 +280,12 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
     })
 
     it('审计不记录参数原文', async () => {
-      mockedInvoke.mockResolvedValueOnce([
+      mockedInvoke.mockResolvedValueOnce(withCaller([
         makePluginInfo({
           id: 'com.wasmnest.monitor',
           contributes: { assistantTools: [makeTool()] },
         }),
-      ])
+      ]))
       mockedAppInvoke.mockResolvedValueOnce({ secret: 'value' })
       const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
       await bridge.invoke('com.wasmnest.monitor', 'monitor.snapshot')
@@ -276,14 +296,57 @@ describe('createAppControlBridge（通用应用调用桥）', () => {
     })
   })
 
+  describe('调用方权限二次校验（spec §4.2.2 step 1）', () => {
+    it('调用方未持 apps:control → caller.unauthorized（fail-closed）', async () => {
+      mockedInvoke.mockResolvedValueOnce([
+        makePluginInfo({ id: 'com.wasmnest.monitor', contributes: { assistantTools: [makeTool()] } }),
+        callerInfo({ permissions: ['storage'] }),
+      ])
+      const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
+      await expect(bridge.list()).rejects.toMatchObject({ code: CALLER_UNAUTHORIZED })
+      // list() 已消耗一次清单；invoke 再取一次，仍应被拒
+      mockedInvoke.mockResolvedValueOnce([
+        makePluginInfo({ id: 'com.wasmnest.monitor', contributes: { assistantTools: [makeTool()] } }),
+        callerInfo({ permissions: ['storage'] }),
+      ])
+      await expect(
+        bridge.invoke('com.wasmnest.monitor', 'monitor.snapshot'),
+      ).rejects.toMatchObject({ code: CALLER_UNAUTHORIZED })
+      expect(mockedAppInvoke).not.toHaveBeenCalled()
+    })
+
+    it('调用方不在清单里（已卸载）→ caller.unauthorized', async () => {
+      mockedInvoke.mockResolvedValueOnce([
+        makePluginInfo({ id: 'com.wasmnest.monitor', contributes: { assistantTools: [makeTool()] } }),
+      ])
+      const bridge = createAppControlBridge('com.wasmnest.assistant', vi.fn())
+      await expect(
+        bridge.invoke('com.wasmnest.monitor', 'monitor.snapshot'),
+      ).rejects.toMatchObject({ code: CALLER_UNAUTHORIZED })
+    })
+  })
+
   describe('open()', () => {
-    it('调用壳 openApp', async () => {
-      const openApp = vi.fn().mockResolvedValue(undefined)
+    it('调用壳 openApp（成功 = 已激活）', async () => {
+      mockedInvoke.mockResolvedValueOnce(withCaller([]))
+      const openApp = vi.fn().mockResolvedValue(true)
       const bridge = createAppControlBridge('com.wasmnest.assistant', openApp)
       await bridge.open('com.wasmnest.monitor')
       expect(openApp).toHaveBeenCalledWith('com.wasmnest.monitor')
       expect(logger.log).toHaveBeenCalledWith(
-        expect.stringContaining('command=open'),
+        expect.stringContaining('decision=allowed'),
+      )
+    })
+
+    it('激活失败（openApp 返回 false）→ app.open_failed，不假装成功', async () => {
+      mockedInvoke.mockResolvedValueOnce(withCaller([]))
+      const openApp = vi.fn().mockResolvedValue(false)
+      const bridge = createAppControlBridge('com.wasmnest.assistant', openApp)
+      await expect(bridge.open('com.wasmnest.monitor')).rejects.toMatchObject({
+        code: APP_OPEN_FAILED,
+      })
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining(`reason=${APP_OPEN_FAILED}`),
       )
     })
   })

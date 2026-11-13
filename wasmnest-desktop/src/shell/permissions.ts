@@ -11,7 +11,8 @@
  *
  * 词表口径：覆盖 SDK 权限常量全集 + 内置应用清单已声明的权限。
  * 缺一条的代价是「审批弹窗」里直接裸显英文 code，因此新增权限词时必须同步补这里
- * 与双语 locale。
+ * 与双语 locale——`src/__tests__/shell/permissionsI18nCoverage.test.ts` 是这条
+ * 纪律的锁（生成物里的每个权限词都必须有映射与双语 title/desc）。
  */
 
 /** 权限词 → 本地化文案 key 后缀（前缀统一 shell.apps.perm.） */
@@ -27,6 +28,26 @@ export const PERMISSION_I18N_KEY: Record<string, string> = {
   'ui:route': 'uiRoute',
   'ui:dialog': 'uiDialog',
   'ui:back': 'uiBack',
+  'ui:sidebar': 'uiSidebar',
+  'ui:statusbar': 'uiStatusbar',
+  'ui:pageToolbar': 'uiPageToolbar',
+  'ui:fileHandler': 'uiFileHandler',
+  'connection:read': 'connectionRead',
+  'timer:schedule': 'timerSchedule',
+  'app:cli': 'appCli',
+  'app:path': 'appPath',
+  'ws:server': 'wsServer',
+  'pty:io': 'ptyIo',
+  'task:run': 'taskRun',
+  'worker:run': 'workerRun',
+  'crypto:aead': 'cryptoAead',
+  'crypto:asym': 'cryptoAsym',
+  'crypto:kdf': 'cryptoKdf',
+  'clipboard:read': 'clipboardRead',
+  'clipboard:write': 'clipboardWrite',
+  'tunnel:serve': 'tunnelServe',
+  'tunnel:connect': 'tunnelConnect',
+  'tunnel:probe': 'tunnelProbe',
   'ui:globalEntry': 'uiGlobalEntry',
   'network:http': 'networkHttp',
   'fs:read': 'fsRead',

@@ -51,6 +51,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useShellApps } from '../composables/useShellApps'
+import { openShellApp } from '../composables/useShellOpen'
 import { useShellNavigation } from '../composables/useShellNavigation'
 import { useShellOverlays } from '../composables/useShellOverlays'
 import { isServiceKind } from '../utils'
@@ -70,7 +71,7 @@ interface CapsuleEntry {
 const { t } = useI18n()
 const nav = useShellNavigation()
 const overlays = useShellOverlays()
-const { apps, getApp, stop, launch } = useShellApps()
+const { apps, getApp, stop } = useShellApps()
 
 const appId = computed(() => overlays.capsuleAppId.value)
 const app = computed(() => (appId.value ? getApp(appId.value) : undefined))
@@ -78,13 +79,16 @@ const app = computed(() => (appId.value ? getApp(appId.value) : undefined))
 /**
  * 全局入口（票 04 / spec §4.3）：manifest 声明 contributes.globalEntries 且持有
  * ui:globalEntry 权限的应用，在胶囊菜单平台项之前插入入口。
- * 入口只对「已安装、已启用、激活成功」的应用渲染。
+ * 隐藏条件：未启用 / 上次启动失败（state=error）/ 未声明 globalEntries /
+ * 未持有 ui:globalEntry。
  */
 const globalEntries = computed(() => {
   const result = []
   for (const a of apps.value) {
-    // 隐藏条件：未启用 / 未声明 globalEntries / 未持有 ui:globalEntry
-    if (a.enabled === false) continue
+    // 隐藏条件：被停用 / 启动失败 / 未声明 globalEntries / 未持有 ui:globalEntry
+    // （移动壳的「停用」就是 state = disabled，没有独立的 enabled 字段）
+    if (a.state === 'disabled') continue
+    if (a.state === 'error') continue
     if (!a.contributions.globalEntries || a.contributions.globalEntries.length === 0) continue
     const grants = a.permissions ?? []
     const hasGlobalEntry = grants.some(
@@ -99,7 +103,14 @@ const globalEntries = computed(() => {
         order: entry.order ?? 5, // 平台项之前（order < 10）
         run: async () => {
           overlays.closeCapsule()
-          await launch(a.id)
+          // 走壳统一「启动 + 进运行面」收口（openShellApp）：不得用裸 launch——
+          // 那样只启动不导航，且失败返回值被丢弃（票 04「点击经 openApp 进全屏」）。
+          const ok = await openShellApp(a.id)
+          if (!ok) {
+            // 启动失败的具体原因已由 launch → lastError + 失败通知暴露，
+            // 这里不重复弹窗，也不假装成功（不回退成 closeCapsule 后就结束）
+            return
+          }
         },
       })
     }

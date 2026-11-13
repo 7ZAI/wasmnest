@@ -233,11 +233,14 @@ function syncFromRoute(path: string): void {
  *
  * 已在后台运行的应用再点图标 = **续接**：进入它上次停留的页面（app 自报记录），
  * 不重置到落地页——这是「记住运行中应用的状态」的落点。
+ *
+ * 返回值：true = 已激活（无论有没有挂载面）；false = 应用不存在 / 激活失败
+ * （调用方如需 fail-visible 错误，据此自行点名，例：应用调用桥的 `open()`）。
  */
-async function openApp(appId: string): Promise<void> {
+async function openApp(appId: string): Promise<boolean> {
   const apps = useShellApps()
   const app = apps.appOf(appId)
-  if (!app) return
+  if (!app) return false
 
   const ok = await apps.activate(appId)
   if (!ok) {
@@ -250,12 +253,12 @@ async function openApp(appId: string): Promise<void> {
     }
     // 其余失败已由 useShellApps.runAction → showUserError 统一 toast（ADR 0030），
     // 这里不再二次提示：lastError 是错误码，铺到 toast 上就是给用户看 code
-    return
+    return false
   }
 
   if (!app.route) {
     // 无宿主运行面：激活成功但无界面可挂载（运行态在主屏网格 chip 可见）
-    return
+    return true
   }
 
   // 服务型应用（L1/L2）不入卡：只进全屏面，多任务切换器 / 「全部关闭」都不见它
@@ -265,6 +268,7 @@ async function openApp(appId: string): Promise<void> {
     enterFace(appCardKey(appId))
   }
   void router.push(lastRouteOf(appId) ?? app.route)
+  return true
 }
 
 /** 开系统页卡（sub = 二级页段：同一张系统页卡内切子路由，不另产卡，如外观） */

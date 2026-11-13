@@ -29,6 +29,10 @@ export const APP_NOT_RUNNING = 'app.not_running'
 export const TOOL_NOT_DECLARED = 'tool.not_declared'
 /** 参数不合 argsSchema */
 export const PARAM_INVALID = 'param.invalid'
+/** 打开目标应用失败（壳激活失败 / 未安装 / 已停用） */
+export const APP_OPEN_FAILED = 'app.open_failed'
+/** 调用方未持有 apps:control（桥内二次校验，spec §4.2.2 step 1） */
+export const CALLER_UNAUTHORIZED = 'caller.unauthorized'
 
 /** 桥错误：带机器可读 code，供助手侧分流处理 */
 export class AppControlError extends Error {
@@ -76,21 +80,26 @@ function validateSchema(
   schema: Record<string, unknown>,
   args: unknown,
 ): string | null {
-  // undefined / null 视为空对象（invoke 的 args 可选）
+  // undefined / null 视为空对象（invoke 的 args 可选，缺省 = 无参数）
+  // argsSchema 形态异常（缺字段 / 非对象）不在这里判死：清单校验已在构建期保证，
+  // 桥只做基础结构校验，兜底按「无约束」处理而不是抛 TypeError。
+  const safeSchema = (schema && typeof schema === 'object' ? schema : {}) as Record<
+    string,
+    unknown
+  >
   const obj = (args ?? {}) as Record<string, unknown>
 
   // type 校验（只处理 object；其他类型由目标命令自行校验）
-  // undefined / null 视为空对象（invoke 的 args 可选，缺省 = 无参数）
-  const expectedType = schema.type
+  const expectedType = safeSchema.type
   if (expectedType === 'object' || expectedType === undefined) {
     if (args !== undefined && args !== null && (typeof args !== 'object' || Array.isArray(args))) {
       return '参数必须是 object'
     }
   }
 
-  const props = (schema.properties ?? {}) as Record<string, unknown>
-  const required = Array.isArray(schema.required) ? schema.required : []
-  const additionalProperties = schema.additionalProperties
+  const props = (safeSchema.properties ?? {}) as Record<string, unknown>
+  const required = Array.isArray(safeSchema.required) ? safeSchema.required : []
+  const additionalProperties = safeSchema.additionalProperties
 
   // required 校验
   for (const key of required) {
@@ -123,16 +132,36 @@ function validateSchema(
 /**
  * 创建应用调用桥（注入 `env.apps`）。
  *
- * @param callerAppId 调用方应用 id（审计用）
- * @param openApp 壳的 openApp（打开目标应用；由 AppMountSlot 注入）
+ * @param callerAppId 调用方应用 id（审计 + 桥内权限二次校验用）
+ * @param openApp 壳的 openApp（返回 false = 激活失败，由桥转成 fail-visible 错误）
  */
 export function createAppControlBridge(
   callerAppId: string,
-  openApp: (appId: string) => Promise<void>,
+  openApp: (appId: string) => Promise<boolean>,
 ): AppControlAPI {
   /** 拉取宿主清单（含 contributes.assistantTools） */
   async function listPlugins(): Promise<HostPluginInfo[]> {
     return invoke<HostPluginInfo[]>('plugin_list_with_prefs')
+  }
+
+  /**
+   * 桥内二次校验调用方权限（spec §4.2.2 step 1）。
+   *
+   * 注入点已按 manifest 门控，但运行期权限可被收回（应用管理页改策略）；
+   * 这里按宿主当前清单再判一次，不依赖注入时的快照。调用方不在清单里
+   * （已卸载）同样拒绝——fail-closed，不静默降级。
+   */
+  function assertCallerAuthorized(infos: HostPluginInfo[]): void {
+    const caller = infos.find((i) => i.id === callerAppId)
+    if (!caller || !(caller.permissions ?? []).includes('apps:control')) {
+      logger.warn(
+        `[AppControl] audit caller=${callerAppId} command=* risk=unknown decision=denied reason=${CALLER_UNAUTHORIZED}`,
+      )
+      throw new AppControlError(
+        CALLER_UNAUTHORIZED,
+        `调用方未持有 apps:control 权限: ${callerAppId}`,
+      )
+    }
   }
 
   return {
@@ -140,6 +169,8 @@ export function createAppControlBridge(
     async list(): Promise<AssistantAppDescriptor[]> {
       try {
         const infos = await listPlugins()
+        // 调用方权限二次校验（spec §4.2.2 step 1）：未持权不返回应用清单
+        assertCallerAuthorized(infos)
         return infos.map((info) => ({
           id: info.id,
           name: info.name,
@@ -160,16 +191,19 @@ export function createAppControlBridge(
       command: string,
       args?: unknown,
     ): Promise<T> {
-      // 1. 拉取目标清单（检查运行态 + 白名单）
-      let targetInfo: HostPluginInfo | undefined
+      // 1. 拉取宿主清单（同一份结果用于调用方权限 + 目标运行态 + 白名单）
+      let infos: HostPluginInfo[]
       try {
-        const infos = await listPlugins()
-        targetInfo = infos.find((i) => i.id === appId)
+        infos = await listPlugins()
       } catch (e) {
         logger.error(`[AppControl] invoke: list failed: caller=${callerAppId} target=${appId}`, e)
         throw e
       }
 
+      // 1.5 调用方权限二次校验（spec §4.2.2 step 1；与目标检查同一次 IPC）
+      assertCallerAuthorized(infos)
+
+      const targetInfo = infos.find((i) => i.id === appId)
       if (!targetInfo) {
         logger.warn(
           `[AppControl] audit caller=${callerAppId} target=${appId} command=${command} risk=unknown decision=denied reason=not_installed`,
@@ -225,12 +259,23 @@ export function createAppControlBridge(
       }
     },
 
-    /** 打开/切到目标应用（用户可见动作） */
+    /** 打开/切到目标应用（用户可见动作；激活失败 fail-visible，不假装成功） */
     async open(appId: string): Promise<void> {
+      const infos = await listPlugins()
+      assertCallerAuthorized(infos)
+      const ok = await openApp(appId)
+      if (!ok) {
+        logger.warn(
+          `[AppControl] audit caller=${callerAppId} target=${appId} command=open risk=ui decision=denied reason=${APP_OPEN_FAILED}`,
+        )
+        throw new AppControlError(
+          APP_OPEN_FAILED,
+          `打开应用失败: ${appId}（未安装 / 已停用 / 激活被拒）`,
+        )
+      }
       logger.log(
         `[AppControl] audit caller=${callerAppId} target=${appId} command=open risk=ui decision=allowed`,
       )
-      await openApp(appId)
     },
   }
 }

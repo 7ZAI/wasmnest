@@ -886,8 +886,11 @@ export interface PluginContext {
    *
    * **新增可选字段属兼容变更**：旧宿主不注入 = 无此能力，应用必须显性提示「未授权」
    * 并给出去哪里开启。宿主只做白名单与审计，不解释工具结果、不持有 AI 状态。
+   *
+   * 字段可变（非 `readonly`）：宿主在 `createPluginContext` 装配阶段按权限
+   * 注入（同一对象后续不再改动），标 `readonly` 会让注入点无法赋值。
    */
-  readonly apps?: AppControlAPI
+  apps?: AppControlAPI
   readonly _disposables: Disposable[]
 }
 

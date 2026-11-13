@@ -40,6 +40,8 @@ export const TOOL_NOT_DECLARED = 'tool.not_declared'
 export const PARAM_INVALID = 'param.invalid'
 /** 打开目标应用失败（壳启动失败） */
 export const APP_OPEN_FAILED = 'app.open_failed'
+/** 调用方未持有 apps:control（桥内二次校验，spec §4.2.2 step 1） */
+export const CALLER_UNAUTHORIZED = 'caller.unauthorized'
 
 /** 桥错误：带机器可读 code，供助手侧分流处理 */
 export class AppControlError extends Error {
@@ -93,20 +95,26 @@ function validateSchema(
   schema: Record<string, unknown>,
   args: unknown,
 ): string | null {
-  // undefined / null 视为空对象（invoke 的 args 可选）
+  // undefined / null 视为空对象（invoke 的 args 可选，缺省 = 无参数）
+  // argsSchema 形态异常（缺字段 / 非对象）不在这里判死：清单校验已在构建期保证，
+  // 桥只做基础结构校验，兜底按「无约束」处理而不是抛 TypeError。
+  const safeSchema = (schema && typeof schema === 'object' ? schema : {}) as Record<
+    string,
+    unknown
+  >
   const obj = (args ?? {}) as Record<string, unknown>
 
   // type 校验（只处理 object；其他类型由目标命令自行校验）
-  const expectedType = schema.type
+  const expectedType = safeSchema.type
   if (expectedType === 'object' || expectedType === undefined) {
     if (args !== undefined && args !== null && (typeof args !== 'object' || Array.isArray(args))) {
       return '参数必须是 object'
     }
   }
 
-  const props = (schema.properties ?? {}) as Record<string, unknown>
-  const required = Array.isArray(schema.required) ? schema.required : []
-  const additionalProperties = schema.additionalProperties
+  const props = (safeSchema.properties ?? {}) as Record<string, unknown>
+  const required = Array.isArray(safeSchema.required) ? safeSchema.required : []
+  const additionalProperties = safeSchema.additionalProperties
 
   // required 校验
   for (const key of required) {
@@ -151,6 +159,26 @@ export function createAppControlBridge(
     return pluginListLoaded()
   }
 
+  /**
+   * 桥内二次校验调用方权限（spec §4.2.2 step 1）。
+   *
+   * 注入点已按 manifest 门控，但运行期权限可被收回（应用详情页改策略）；
+   * 这里按宿主当前清单再判一次，不依赖注入时的快照。调用方不在清单里
+   * （已卸载）同样拒绝——fail-closed，不静默降级。
+   */
+  function assertCallerAuthorized(infos: HostPluginInfo[]): void {
+    const caller = infos.find((i) => i.id === callerAppId)
+    if (!caller || !(caller.permissions ?? []).includes('apps:control')) {
+      frontendLogger.warn(
+        `[AppControl] audit caller=${callerAppId} command=* risk=unknown decision=denied reason=${CALLER_UNAUTHORIZED}`,
+      )
+      throw new AppControlError(
+        CALLER_UNAUTHORIZED,
+        `调用方未持有 apps:control 权限: ${callerAppId}`,
+      )
+    }
+  }
+
   return {
     /** 列已安装/已加载应用及其声明给助手的工具 */
     async list(): Promise<AssistantAppDescriptor[]> {
@@ -176,16 +204,19 @@ export function createAppControlBridge(
       command: string,
       args?: unknown,
     ): Promise<T> {
-      // 1. 拉取目标清单（检查安装态 + 运行态 + 白名单）
-      let targetInfo: HostPluginInfo | undefined
+      // 1. 拉取宿主清单（同一份结果用于调用方权限 + 安装态 + 运行态 + 白名单）
+      let infos: HostPluginInfo[]
       try {
-        const infos = await listPlugins()
-        targetInfo = infos.find((i) => i.id === appId)
+        infos = await listPlugins()
       } catch (e) {
         frontendLogger.error(`[AppControl] invoke: list failed: caller=${callerAppId} target=${appId}`, e)
         throw e
       }
 
+      // 1.5 调用方权限二次校验（spec §4.2.2 step 1；与目标检查同一次 IPC）
+      assertCallerAuthorized(infos)
+
+      const targetInfo = infos.find((i) => i.id === appId)
       if (!targetInfo) {
         frontendLogger.warn(
           `[AppControl] audit caller=${callerAppId} target=${appId} command=${command} risk=unknown decision=denied reason=${APP_NOT_INSTALLED}`,
@@ -226,11 +257,16 @@ export function createAppControlBridge(
       // 5. 执行：经前端 plugin_invoke 调目标（目标自己的通道令牌决定调用方身份）
       const risk = tool.risk
       try {
-        const result = await pluginInvoke<T>(appId, command, args ?? null, await ensureChannelToken(appId))
+        const result = await pluginInvoke(
+          appId,
+          command,
+          args ?? null,
+          await ensureChannelToken(appId),
+        )
         frontendLogger.log(
           `[AppControl] audit caller=${callerAppId} target=${appId} command=${command} risk=${risk} decision=allowed`,
         )
-        return result
+        return result as T
       } catch (e) {
         // 目标命令执行失败：审计记 denied，错误信封原样上交
         frontendLogger.warn(
@@ -243,10 +279,12 @@ export function createAppControlBridge(
 
     /** 打开/切到目标应用（用户可见动作；壳启动失败 fail-visible） */
     async open(appId: string): Promise<void> {
+      const infos = await listPlugins()
+      assertCallerAuthorized(infos)
+      await openApp(appId)
       frontendLogger.log(
         `[AppControl] audit caller=${callerAppId} target=${appId} command=open risk=ui decision=allowed`,
       )
-      await openApp(appId)
     },
   }
 }

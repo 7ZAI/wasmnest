@@ -30,9 +30,11 @@ export interface GlobalEntry {
 /**
  * 计算全局入口列表。
  *
- * 过滤条件（四种隐藏条件）：
+ * 渲染条件（spec §4.3.1「已安装、已启用、激活成功」的壳侧落点）：
  * - 应用已安装（在注册表里）
  * - 应用已启用（enabled !== false）
+ * - 激活未失败（state !== 'error'；dormant / approval 仍可点：前者走激活，
+ *   后者进审批弹窗，都不是「点了必失败」）
  * - manifest 声明了 contributes.globalEntries（非空数组）
  * - 应用持有 ui:globalEntry 权限
  *
@@ -46,9 +48,11 @@ export function useGlobalEntries() {
     for (const app of appsStore.plugins.value) {
       // 隐藏条件 1：未启用
       if (app.enabled === false) continue
-      // 隐藏条件 2：未声明 globalEntries
+      // 隐藏条件 2：上次激活失败（入口不留给「点了必失败」的应用）
+      if (app.state === 'error') continue
+      // 隐藏条件 3：未声明 globalEntries
       if (!app.globalEntries || app.globalEntries.length === 0) continue
-      // 隐藏条件 3：未持有 ui:globalEntry 权限
+      // 隐藏条件 4：未持有 ui:globalEntry 权限
       if (!app.permissions.includes('ui:globalEntry')) continue
 
       for (const entry of app.globalEntries) {
