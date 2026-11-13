@@ -59,6 +59,10 @@
 - 高风险面按域拆分（`pty:spawn` / `pty:io`、`ws:client` / `ws:server`、`process:run` / `app:cli`、`task:run`、`crypto:*`、`fs:pick` vs `fs:read/write`……）：需要多少声明多少；文件走宿主授权链（docs/architecture.md §5），**不要试图绕过**。
 - 出站（egress）走三层判定 + 声明（docs/architecture.md §5；`preauthUrls` 见 §4.1）；HTTPS 目标再校验收紧口径见能力仓 `wasmnest-server-http` 注释。
 - 权限闸门的机制面（审批 SHA-256 钉扎 / fail-closed）见 docs/architecture.md §5 与 docs/security.md。
+- **前端贡献权限（无 WIT / 无 ABI bump，Nest M1 新增）**：
+  - `apps:control`：允许插件前端使用通用应用调用桥（`AppControlAPI`：列应用 / 调目标应用已声明的助手工具 / 打开应用）。强权限——持有者可代表用户调用其他应用**已声明**给助手的命令；审批文案必须如实写明这一点，不得弱化为「读取应用信息」。桥的白名单、基础 schema 校验与审计在宿主侧（docs/architecture.md §5.1）。
+  - `ui:globalEntry`：允许应用在壳的全局入口区登记入口（`contributes.globalEntries`）。入口只对「已安装、已启用、激活成功」的应用渲染；声明入口却未持权 = 清单配置缺口（构建期校验拒绝，加载期日志点名）。
+  - 两者都是**前端贡献权限**：不新增 host 函数、不需要 WIT 变更与 ABI bump；随包 `internal-business` 应用按现行信任域自动授予（用户仍可在应用管理页停用整个应用）。
 
 ## 5. plugin.json 与 manifest
 

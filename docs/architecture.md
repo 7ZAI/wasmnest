@@ -78,6 +78,19 @@
 - **能力层（Tauri ACL）与 CSP**：引擎级封禁前端直连（docs/frontend.md §1），ACL 未写即运行期拒。
 - **错误信封（ADR 0030）**：跨进程失败一律 `{ code, request_id, params? }`；`code` 即前端 i18n key，技术细节（错误原文 / 堆栈）不出产生方、只进宿主日志。
 
+### 5.1 应用调用桥与全局入口（Nest M1 通用机制，2026-11-12）
+
+> 系统级个人助手 Nest（`com.wasmnest.assistant`，应用仓 `servers/assistant`）所需的两个**通用机制**。宿主只做机制，不写任何 AI 语义（B1–B6 逐条过审，见 §1.1）。
+
+- **应用调用桥 `AppControlAPI`（`apps:control` 门控）**：宿主向持有权限的应用注入 `{ list, invoke, open }` 三方法桥，插件前端经它调度其他应用。
+  - `list()`：合并 `plugin_list_loaded` 与各应用 manifest 的 `contributes.assistantTools`，返回应用描述符（id / name / version / kind / state / 声明工具）；不含任何 AI 字段。
+  - `invoke(appId, command, args)`：宿主侧依次做——调用方权限二次校验（运行期权限可收回，不依赖注入快照）→ 目标运行态检查（未运行抛 `app.not_running`）→ **白名单**（目标 manifest 必须声明该 command 对应的工具，未声明抛 `tool.not_declared`，**不**回退任意命令）→ 基础 schema 校验（type / required / additionalProperties / 枚举；目标命令仍自行完整校验）→ 经 loader 会话 `plugin_invoke` 调目标 → 审计（caller / target / command / risk / decision 进宿主 tracing，**不**记参数与结果原文）。
+  - `open(appId)`：复用壳的 `openApp`；激活失败抛 `app.open_failed`（fail-visible，不假装成功）。
+  - 移动端桥走前端 `plugin_invoke`（`#[plugin_api]` 不可用），目标必须是运行中的应用——双端同构成立。
+  - 注入点：桌面 `AppMountEnv.apps?`（可选字段，不 bump `MOUNT_CONTRACT`）；移动 `PluginContext.apps?`。未声明权限 = 不注入，应用必须显性提示。
+- **全局入口（`ui:globalEntry` 门控）**：应用在 `contributes.globalEntries` 声明入口（id / title / icon / order），壳渲染到工具栏 / 状态栏（桌面）与胶囊菜单（移动）；点击经 `openApp` 打开应用。隐藏条件：未安装 / 已停用 / 激活失败（state=error）/ 未声明 / 未持权。入口不产生多任务卡（internal-business 服务型口径）。
+- **安全边界（诚实说明）**：`apps:control` 是强权限，M1 信任模型 = 第一方随包应用 + 用户批准；确认 UI 在助手侧（风险四档：read 自动 / ui 可见 / write 批准 / danger 二次），宿主侧只做白名单与审计。M2 如需宿主强制危险确认，再加通用确认弹层（不引入 AI 语义）。目标应用的权限仍按其自身执行，桥不代裁、不代授。
+
 ## 6. 跨端协议
 
 - HTTP / WS / QR / 认证 / 文件传输协议的改动**必须两端同步部署**，遵循「老端忽略未知字段」的增量原则，禁止破坏性替换。
