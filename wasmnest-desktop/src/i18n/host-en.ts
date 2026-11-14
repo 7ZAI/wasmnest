@@ -163,10 +163,6 @@ export default {
       },
       open: 'View',
       reopen: 'Reopen',
-      ready: {
-        title: 'Runtime ready',
-        body: '{count} apps loaded; authorization policy fail-closed self-check passed.',
-      },
     },
     ctx: {
       aria: 'App actions',
