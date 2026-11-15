@@ -2,8 +2,8 @@
 //!
 //! 域机制（6 条原语 + 句柄表 + 配额表 + 退出事件 + 限频通知 + WIT 接线）在
 //! `wasmnest_pty_engine::plugin_binding`；本文件是**宿主侧的另一半**——wasm-core
-//! 纯净性收口票 02 批次 02 整文件迁自 `wasmnest-wasm-core/src/host_api/pty.rs`
-//! （内核自此不依赖 `wasmnest-pty-engine`，也不再出现它的任何路径）：
+//! 整文件迁自内核 `host_api/pty.rs`（原文件已删除；内核
+//! 自此不依赖 `wasmnest-pty-engine`，也不再出现它的任何路径）：
 //!
 //! 1. [`HostPtyPorts`] —— 能力域端口 `PtyPorts` 的宿主实现；
 //! 2. [`PTY_PORTS_INSTALLER`] —— 装配回调（host-kit 自报表，内核装配链遍历调用）；
@@ -13,7 +13,7 @@
 //! 的调用点直接指过去（`system/lifecycle.rs` / `manager/host/activation.rs` 的钩子），
 //! **不经本文件转发**（不留路径兼容垫片）。
 //!
-//! ## 哪些机制**刻意留在宿主**（AGENTS §5.1.3 允许的四类薄壳）
+//! ## 哪些机制**刻意留在宿主**（允许保留的薄壳）
 //!
 //! - **权限门**（`pty:spawn` / `pty:io`）：复用 wasm-core 的 `host_api::check_permission`，
 //!   同一份 PermissionManager、同一条拒绝 warn 路径；
@@ -44,14 +44,14 @@ use wasmnest_wasm_core::system::config::AppConfig;
 
 // 能力模块白名单条目与强制引用行**必须同处**（本文件），两者不漂移——漏引用 ⇒
 // 该 crate 的 inventory 自报静态不进最终二进制（装载期 missing 方向点名）；漏白名单
-// ⇒ unlisted 方向点名。判据与纪律见 `wasmnest_host_kit::assembly` 模块文档。
+// ⇒ unlisted 方向点名。判据：白名单条目与强制引用行必须同处，漏一处即装载期点名。
 wasmnest_host_kit::expect_host_module!(wasmnest_pty_engine::plugin_binding::MODULE_NAME);
 use wasmnest_pty_engine as _;
 
 /// 端口的宿主实现
 ///
 /// 生产路径在**开机期**捕获宿主上下文（`PluginHost::new` 已建好），之后每条原语
-/// 零查表地取权限门 / 消息总线 / 配置快照（转型见模块文档）。
+/// 零查表地取权限门 / 消息总线 / 配置快照（从 `HostPorts` 向下转型回具体上下文）。
 pub struct HostPtyPorts {
     /// 宿主上下文（擦除形态；`ctx()` 向下转型取具体类型）
     ctx: Arc<dyn HostPorts>,
@@ -65,7 +65,7 @@ impl HostPtyPorts {
         Self { ctx }
     }
 
-    /// 向下转型回具体宿主上下文（类型不符即 panic：装配期编程错误，见模块文档）
+    /// 向下转型回具体宿主上下文（类型不符即 panic：这是装配期编程错误，不是运行期输入）
     fn ctx(&self) -> &WasmHostContext {
         downcast_host::<WasmHostContext>(self.ctx.as_ref())
     }
@@ -73,9 +73,9 @@ impl HostPtyPorts {
 
 impl PtyPorts for HostPtyPorts {
     fn check_permission(&self, plugin_id: &str, permission: &str, api: &str) -> bool {
-        // 权限门留宿主（AGENTS §5.1.3「安全闸门」——闸门不应可插拔）。复用
+        // 权限门留宿主（安全闸门——闸门不应可插拔）。复用
         // wasm-core 的 `host_api::check_permission`：同一份 PermissionManager、同一条
-        // 拒绝 warn 路径（AGENTS §8 结构化字段），不另起一套判定。拿不到权限管理器时
+        // 拒绝 warn 路径（结构化字段），不另起一套判定。拿不到权限管理器时
         // 它返回 false（fail-safe），能力域据此回 `permission denied: …`。
         check_permission(self.ctx(), plugin_id, permission, api)
     }
@@ -101,7 +101,7 @@ impl PtyPorts for HostPtyPorts {
 
     fn block_on_any<'a>(&self, fut: BoxedBlocked<'a>) -> Box<dyn Any + Send> {
         // 复用宿主那份唯一的同步↔异步桥（ambient runtime + actix current_thread
-        // 自锁规避都是实测产物，能力域不得复制第二份，见 ports 模块文档）
+        // 自锁规避都是实测产物，能力域不得复制第二份）
         wasmnest_wasm_core::runtime_util::block_on_async(fut)
     }
 

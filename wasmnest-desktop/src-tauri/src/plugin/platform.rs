@@ -1,10 +1,10 @@
-//! host-platform-desktop 宿主侧接线（路径 B：WIT 绑定 + `Host` impl + 域函数同处）
+//! host-platform-desktop 宿主侧接线（WIT 绑定 + `Host` impl + 域函数同处）
 //!
-//! v36 交集接口切片（票 02 批次 06）：`host-platform` 的桌面扩展函数拆入
-//! `host-platform-desktop`（桌面独有）。2026-10-13 功能级统一（ADR 0052 D3）后，
+//! v36 交集接口切片：`host-platform` 的桌面扩展函数拆入 `host-platform-desktop`
+//! （桌面独有）。2026-10-13 功能级统一后，
 //! `pick-folders` 已并入 core `host-platform`（内核实现 `host_api/platform.rs`），
 //! 本域只剩 `wsl-distros` / `local-ipv4-addresses` / `reveal-in-dir` 3 条
-//! （无权限门——平台事实 / 平台交互动作，ADR 0022 裁剪线）。
+//! （无权限门——平台事实 / 平台交互动作）。
 //!
 //! 域函数随 WIT impl 走宿主（迁移前内核 `host_api/platform.rs` 的对应函数整段
 //! 迁入，文案与判据逐字保留），**机制留内核**：平台分发
@@ -16,7 +16,7 @@ use wasmnest_wasm_core::runtime_util::block_on_async;
 
 use crate::plugin::bindings::wasmnest;
 
-// 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报）。路径 B 域
+// 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报）。直连绑定域
 // 的自报静态住在本 crate（宿主 lib 即最终二进制）⇒ 无需强制引用行。
 wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 
@@ -27,7 +27,7 @@ pub const MODULE_NAME: &str = "platform-desktop";
 pub const MODULE_INTERFACES: &[&str] = &["wasmnest:platform-desktop@0.0.1/host-platform-desktop"];
 
 /// 本域的权限位：空——`wsl-distros` / `local-ipv4-addresses` / `reveal-in-dir`
-/// 全是平台事实 / 平台交互动作，不叠加权限门（ADR 0022 裁剪线，真源在
+/// 全是平台事实 / 平台交互动作，不叠加权限门（真源在
 /// wasm-core `permission.rs` 的判据注释）。原 `pick-folders`（用 `fs:pick`）已随
 /// 2026-10-13 功能级统一1 归 core `host-platform`（门随函数留在内核实现）。
 pub const MODULE_PERMISSIONS: &[&str] = &[];
@@ -84,14 +84,14 @@ impl wasmnest::platform_desktop::host_platform_desktop::Host for WasmPluginState
 
 // ==================== 域函数（v36 自 wasm-core host_api/platform.rs 迁入） ====================
 //
-// 2026-10-13 功能级统一（ADR 0052 D3）：原 `platform_pick_folders` +
+// 2026-10-13 功能级统一：原 `platform_pick_folders` +
 // `authorize_picked` + `pick_folders` 对话框 + `require_pick_permission` /
 // `require_app` / `sync_result` / `path_to_string` 辅助链已整体退役——`pick-folders`
 // 统一为 core `host-platform.pick-folders`，实现与 `fs:pick` 权限门 / 选择后
 // 授权校验留在内核 `host_api/platform.rs::platform_pick_folders`（桌面与移动同源）。
 // 本域只剩不调对话框、不碰路径授权的三条平台事实 / 交互函数。
 
-/// WSL 发行版名枚举（v19 函数级追加，票 13）：`string[]` JSON，顺序保持
+/// WSL 发行版名枚举：`string[]` JSON，顺序保持
 /// `wsl --list --verbose` 输出顺序。
 ///
 /// 宿主无 WSL（非 Windows / 未安装 / 命令不可用）时**显性报错**而非空数组——
@@ -113,10 +113,10 @@ fn wsl_distro_names(distros: Vec<crate::system::wsl::WslDistro>) -> Result<Strin
     serde_json::to_string(&names).map_err(|e| format!("serialize wsl distros failed: {e}"))
 }
 
-/// 本机可访问 IPv4 地址列表（v19 函数级追加，票 14）→ `string[]` JSON
+/// 本机可访问 IPv4 地址列表 → `string[]` JSON（只要 IPv4、排除回环与链路本地）
 ///
-/// 与宿主命令面 `get_local_ip_addresses` 同口径（只要 IPv4、排除回环与链路本地）；
-/// **无可用地址时返回空数组**（与 `wsl-distros` 的显性报错口径不同）。
+/// 原宿主命令面已退役，本原语是唯一入口。**无可用地址时返回空数组**
+/// （与 `wsl-distros` 的显性报错口径不同：空列表是「本机没有可用地址」的正常结果）。
 /// 网卡枚举是阻塞调用，搬 `spawn_blocking` 以免占住 async store 所在 worker。
 fn platform_local_ipv4_addresses() -> Result<String, String> {
     let addresses = block_on_async(async {
@@ -149,14 +149,14 @@ fn filter_ipv4(interfaces: Vec<(String, std::net::IpAddr)>) -> Vec<String> {
 /// 在系统文件管理器中定位并选中文件/目录（v22 函数级追加）：`()`
 ///
 /// 与 `pick-*` **不同口径**：定位不调起选择器、也不交付任何路径（路径本就由调用方
-/// 提供），因此**不叠加权限门**（ADR 0022 裁剪线）。实现本体在
+/// 提供），因此**不叠加权限门**。实现本体在
 /// [`wasmnest_wasm_core::system::opener`]（同一份平台分发也被宿主 `open_log_dir`
 /// 使用）；本函数只做「PathBuf 语义校验 + 错误转 String」的适配。
 fn platform_reveal_in_dir(path: &str) -> Result<(), String> {
     crate::system::opener::reveal_existing_in_dir(path).map_err(|e| e.to_string())
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 #[cfg(test)]
 mod tests {
@@ -184,8 +184,8 @@ mod tests {
         assert!(err.contains("wsl distro list"), "got: {err}");
     }
 
-    /// IPv4 过滤契约（票 14）：只留 IPv4、排除回环与链路本地、IPv6 一律丢弃、
-    /// 输出顺序与输入一致——与宿主命令面 `get_local_ip_addresses` 同口径
+    /// IPv4 过滤契约：只留 IPv4、排除回环与链路本地、IPv6 一律丢弃、
+    /// 输出顺序与输入一致（顺序影响前端展示的稳定性）
     #[test]
     fn filter_ipv4_excludes_loopback_link_local_and_ipv6() {
         use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};

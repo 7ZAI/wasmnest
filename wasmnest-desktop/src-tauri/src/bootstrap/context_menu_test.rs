@@ -1,7 +1,7 @@
 //! `mark_first_context_menu_connect`（lib.rs）的单元测试 —— 「正式版抑制原生右键菜单」
 //! 的每 webview 一次性去重契约。
 //!
-//! 行为契约（见 `mark_first_context_menu_connect` 文档注释）：
+//! 行为契约：
 //! - 同一 label 首次连接、后续导航不再连接（`connect_context_menu` 追加处理器，重复叠加）
 //! - 不同 webview 各自独立连接（终端窗口不能因主窗口已连过而被跳过）
 //! - 锁中毒不 panic（页面加载钩子跑在主线程，panic 会连带拖垮窗口加载）

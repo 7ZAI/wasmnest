@@ -1,6 +1,6 @@
-//! host-clipboard 宿主侧接线（路径 B：WIT 绑定 + `Host` impl + 域函数同处）
+//! host-clipboard 宿主侧接线（WIT 绑定 + `Host` impl + 域函数同处）
 //!
-//! 2026-11-02 新建（ADR-0006 · notenote 剪贴板后端能力票）：桌面端经
+//! 2026-11-02 新建：桌面端经
 //! `tauri-plugin-clipboard-manager` 读写系统剪贴板，WIT 契约真源在能力仓
 //! `wasmnest-clipboard-engine/wit/clipboard.wit`（双端 caps.clipboard 直接消费）。
 //!
@@ -141,7 +141,7 @@ fn clipboard_write_text(ctx: &WasmHostContext, text: &str) -> Result<(), String>
         .map_err(|e| format!("clipboard write error: {}", e))
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 #[cfg(test)]
 mod tests {

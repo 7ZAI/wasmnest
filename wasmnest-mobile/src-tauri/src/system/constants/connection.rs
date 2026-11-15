@@ -49,8 +49,9 @@ pub const PLACEHOLDER_CLIENT_ADDR: &str = "0.0.0.0:0";
 pub const WS_DEFAULT_PATH: &str = "/";
 
 // 注：原 `WS_PLUGIN_TERMINAL_PATH`（终端流端点 `/ws/plugin/com.wasmnest.bedcode/terminal`）
-// 已随票 12 终端订阅协议客户端迁插件删除——端点 URL 的拼装真源在终端插件
-// （`wasm-apps/bedcode/rust/src/lib.rs` 的 TERMINAL_WS_PATH），宿主零消费。
+// 已随终端订阅协议客户端迁插件删除——端点 URL 的拼装真源在终端插件
+// （`wasmnest-apps/apps/bedcode/mobile/rust/src/link.rs` 的 TERMINAL_WS_PATH），
+// 宿主零消费。
 
 /// 桌面 wasm 应用 `com.wasmnest.bedcode` 的 WS 端点基础路径
 ///
@@ -64,31 +65,31 @@ pub const WS_DEFAULT_PATH: &str = "/";
 /// 写完整路径常量；若两者继续并存，需重新裁定谁是字面量真源。
 pub const WS_PLUGIN_BASE_PATH: &str = "/ws/plugin/com.wasmnest.bedcode";
 
-/// 常驻事件通道端点（票 03：`session-control`，替代已删除的 `/ws/event`）
+/// 常驻事件通道端点（`session-control`，替代已删除的 `/ws/event`）
 ///
 /// 认证首帧 `{"type":"auth","token":"<jwt>"}`；入站只有事件帧
-/// `{"type":"event","event":"<name>","payload":{...}}`（票 02 定稿帧壳）。
+/// `{"type":"event","event":"<name>","payload":{...}}`。
 pub const WS_PLUGIN_SESSION_CONTROL_PATH: &str = "/ws/plugin/com.wasmnest.bedcode/session-control";
 
-/// 认证类 WS 关闭码（桌面端语义，M1/ADR 0031）：4001 = 认证被拒（auth-policy
+/// 认证类 WS 关闭码（桌面端语义）：4001 = 认证被拒（auth-policy
 /// 拒绝/无中心 fail-closed）、4003 = 链路加密失败。收到这类 close 说明「重连前
 /// 需重新配对/认证」，自愈重连无意义——ConnMonitor 与自愈监督按致命处理：
 /// 不自愈、只发一次提示。非致命 code（1005/1006/网络断开等）走既有自愈路径。
 pub const WS_AUTH_FATAL_CLOSE_CODES: &[u16] = &[4001, 4003];
 
-/// 判定 WS 关闭码是否认证类致命（M1）
+/// 判定 WS 关闭码是否认证类致命
 pub fn is_auth_fatal_close_code(code: u16) -> bool {
     WS_AUTH_FATAL_CLOSE_CODES.contains(&code)
 }
 
-/// 协议层不可重试关闭码（RFC 6455 §7.4.1）
+/// 协议层不可重试关闭码（1002 / 1003 / 1007 / 1008 / 1009 / 1010 / 1011）
 ///
 /// 语义：**用相同参数重连必然得到相同结果**，重试只是浪费往返，并把真实原因
 /// （两端版本 / 协议不匹配）伪装成网络抖动。与认证类致命的区别是**处置不同**
 /// ——不是「重新配对」能救，而是「升级一端」才能救，故单列一档而不并入
 /// `WS_AUTH_FATAL_CLOSE_CODES`。
 ///
-/// | 码 | RFC 名称 | 为什么重试无用 |
+/// | 码 | 名称 | 为什么重试无用 |
 /// | --- | --- | --- |
 /// | 1002 | Protocol error | 对端按协议解析本端帧失败，重发同样的帧仍失败 |
 /// | 1003 | Unsupported Data | 本端发了对端声明不支持的数据类型 |
@@ -115,7 +116,7 @@ pub fn is_non_retryable_close_code(code: u16) -> bool {
 mod tests {
     use super::*;
 
-    /// 行为契约（RFC 6455 §7.4.1 + 2026-10-04 审计 P1-4）：
+    /// 行为契约（2026-10-04 实测）：
     /// 关闭码分三档，且后两档**互斥**；判错的后果是「白重连」或「本可自愈
     /// 却放弃」，两个方向都会让用户看到假的网络故障。
     ///

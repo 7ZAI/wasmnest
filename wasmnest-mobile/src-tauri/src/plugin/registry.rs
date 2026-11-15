@@ -1,6 +1,4 @@
-//! Mobile Plugin Registry
-//!
-//! 内置插件清单（已迁移到 APK assets 动态加载，此模块保留空实现）
+//! 内置插件清单（已迁 APK assets 动态加载，此模块只保留空实现兼容）
 
 use crate::plugin::types::*;
 

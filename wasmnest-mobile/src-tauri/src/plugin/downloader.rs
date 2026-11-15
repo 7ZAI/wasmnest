@@ -1,7 +1,7 @@
-//! Plugin Downloader / Installer（移动端）
+//! 插件下载与安装：本地文件或远程 URL → 解压 → 哈希校验 → 落插件目录
 //!
-//! 插件包（zip）统一安装：本地文件或远程 URL → 解压 → wasm_hash 校验 → 写来源标记 → 移动到插件目录
-//! 分发单元为单个 zip（内含 plugin.json、index.js 与可选的 .wasm）
+//! 分发单元为单个 zip（内含 `plugin.json`、`index.js` 与可选的 `.wasm`）；
+//! 安装前校验 `wasm_hash` 并写来源标记，安装本体与激活分离。
 
 use crate::egress::EgressDecision;
 use crate::plugin::validation::validate_plugin_id;

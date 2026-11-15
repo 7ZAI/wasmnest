@@ -10,11 +10,11 @@
 //! 历史注记：桌面端**曾经**有过 Channel 传输的终端输出流
 //! （`commands/terminal_stream.rs`：`subscribe_terminal_channel` /
 //! `terminal_channel_ack` / `unsubscribe_terminal_channel`，268 行），2026-09-22
-//! 随会话下沉（票 05 宿主终端兜底摘除）整体删除。删除原因是**架构**（宿主不留
+//! 随会话下沉（宿主终端兜底摘除）整体删除。删除原因是**架构**（宿主不留
 //! 终端兜底），不是性能——但那条流的形态（Raw 字节经 Channel 持续推送 + ack 背压）
-//! 与 output-ack 专项的 P2「宿主侧 push」是同一个问题，值得用数据回答。
+//! 与 output-ack 专项的「宿主侧 push」是同一个问题，值得用数据回答。
 //!
-//! # 边界（AGENTS §5.1）
+//! # 边界
 //!
 //! - **仅 `#[cfg(debug_assertions)]` 编译与注册**：release 产物无此命令面
 //!   （先例：`tauri-plugin-wdio` 同样只在 debug 注册，见 `lib.rs`）；

@@ -1,10 +1,10 @@
-//! Event WS Supervisor（票 03：认证成功后自动建连 + 意外断开自动自愈）
+//! 常驻事件 WS 监督任务：认证成功后自动建连 + 意外断开自动自愈
 //!
 //! HTTP 认证成功后（`MobileEvent::AuthSuccess` 广播契口）由单例监督任务自动建立
 //! `session-control` 插件端点常驻连接并发极简认证首帧（`establish_event_ws` 内部
 //! 完成，见 `connection/manager.rs`）；意外断开按 `ReconnectManager` 退避策略
 //! （指数退避 + 抖动 + 同因熔断）经 HTTP reauth 自愈后重建，全程常驻、不主动
-//! 断开、不干扰未来 P2 前端终端 WS。
+//! 断开、不干扰前端终端 WS。
 //!
 //! **本模块是自动重连的唯一执行者**（2026-10-04 收敛）：审计前前端
 //! `useMobileConnection.handleUnexpectedDisconnect` 另有一套固定间隔的重试
@@ -121,7 +121,7 @@ pub async fn run_supervisor(
                     match client_rx.recv().await {
                         // 断开类事件：清空 + 目标未变则自愈（reconnect 成功经
                         // apply_auth_success 广播 AuthSuccess → 外层重建事件 WS）。
-                        // M1/ADR 0031：认证类致命 close（4001/4003）**不自愈**——
+                        // 认证类致命 close（4001/4003）**不自愈**——
                         // 重连前需重新配对/认证，HTTP reauth 只会反复被拒（2026-09-29
                         // 616 次/98 秒日志风暴的直接放大器）；等新认证流（用户重扫 QR/
                         // 配对）再重建。
@@ -172,7 +172,7 @@ pub async fn run_supervisor(
                             if establish_target.as_ref() == manager.get_target().await.as_ref() {
                                 let m = manager.clone();
                                 let ah = app_handle.clone();
-                                // 自愈与 03 的 HTTP reauth 共用：无凭据时空 token
+                                // 自愈与 HTTP reauth 共用：无凭据时空 token
                                 // 快速失败（不触 HTTP），等新认证流再重建
                                 spawn_with_error_boundary("event_ws_reconnect", async move {
                                     if let Err(e) = m.reconnect(ah, None).await {

@@ -1,8 +1,9 @@
-//! mDNS Service Discovery
+//! mDNS 浏览：经类型中枢订阅局域网 `_wasmnest._tcp.local.` 服务
 //!
-//! 浏览局域网内的 _wasmnest._tcp.local. 服务
+//! 不直调 `daemon.browse`：同一服务类型全进程只允许一条 browse，直调会覆盖
+//! 其他订阅者（peer-net / 插件 browse）的信道。
 //!
-//! 浏览面经**类型中枢**（ADR 0054：全进程对同一服务类型只允许一条
+//! 浏览面经**类型中枢**（全进程对同一服务类型只允许一条
 //! `daemon.browse`，由中枢代持并进程内 fan-out）：本模块只挂中枢订阅 + 消费
 //! fan-out 事件，`stop` 释放订阅守卫即退订。宿主零 `daemon.browse` /
 //! `stop_browse` 直调——旧实现每次 start 直调 browse，按 mdns-sd 单 listener
@@ -24,7 +25,7 @@ pub struct MdnsDiscovery {
     services: Arc<RwLock<HashMap<String, DiscoveredService>>>,
     /// 是否正在扫描
     scanning: Arc<RwLock<bool>>,
-    /// 浏览订阅退订守卫（类型中枢，ADR 0054）：`start_inner` 铸造订阅时接管，
+    /// 浏览订阅退订守卫（类型中枢）：`start_inner` 铸造订阅时接管，
     /// [`MdnsDiscovery::stop`] 取走并释放即退订（中枢移除订阅者 → fan-out 通道
     /// 关闭 → 事件循环断连退出）。本类型**不解释**守卫内容（中枢实现细节），
     /// 只做生命周期托管——守卫若丢，订阅会永留中枢表、类型 browse 永不归零。
@@ -63,7 +64,7 @@ impl MdnsDiscovery {
             return Ok(());
         }
 
-        // 浏览经类型中枢（ADR 0054 / spec §6-D5）：全进程对 `_wasmnest._tcp.local.`
+        // 浏览经类型中枢：全进程对 `_wasmnest._tcp.local.`
         // 只允许一条 `daemon.browse`（由中枢代持并 fan-out），本处只挂订阅——
         // receiver 交给下方事件循环，守卫留在本管理器（stop 时释放 = 退订）
         let subscription = wasmnest_discovery_engine::subscribe_type(SERVICE_TYPE)
@@ -207,7 +208,7 @@ impl MdnsDiscovery {
         *scanning = false;
         drop(scanning); // 释放锁，让后台任务能读到 false
 
-        // 退订靠订阅守卫释放（类型中枢，ADR 0054 / spec §6-D5）：守卫 Drop → 中枢
+        // 退订靠订阅守卫释放（类型中枢）：守卫 Drop → 中枢
         // 移除本订阅者 → fan-out 通道关闭 → 事件循环 recv 断连退出。共享守护常驻
         // 不 shutdown，也不再直调 `daemon.stop_browse`（那会摘掉**整类型**的
         // listener，把同类型的 peer-net / 插件订阅一起杀掉）

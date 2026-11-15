@@ -1,4 +1,4 @@
-//! host-fs-mobile 宿主 adapter（移动独有域；wasm-core-mobile-purity 票 04 自 wasm-core 迁入）
+//! host-fs-mobile 宿主 adapter（移动独有域；自 wasm-core 迁入）
 //!
 //! 2 函数（`write-media-downloads` / `save-to-document`）：SAF 与 MediaStore 落盘。
 //! 均经权限位 `fs:write`（fail-closed）+ 入参 src 校验（必须是宿主解析的 app

@@ -1,7 +1,8 @@
-//! Application Context
+//! 全局应用上下文：桌面宿主进程级服务的单例容器
 //!
-//! 全局单实例容器，集中管理桌面端所有全局服务的引用
-//! 在 lib.rs 的 run() 中一次性创建，后续通过 AppContext::global() 获取
+//! 在 `lib.rs` 的 `run()` 中一次性创建，后续经 `AppContext::global()` 取用；
+//! 插件宿主、mDNS、`AppHandle` 等跨域服务集中在这一个对象上，避免每个模块
+//! 各自再 clone 一份引用。
 
 use crate::db::Database;
 use crate::system::info::SystemInfo;
@@ -18,14 +19,14 @@ use wasmnest_discovery_engine::advertiser::MdnsAdvertiser;
 pub struct AppContext {
     /// 数据库实例
     db: Arc<std::sync::Mutex<Database>>,
-    // 票 11：`session_manager` / `config_manager` 两个内核会话域字段已删除——
+    // `session_manager` / `config_manager` 两个内核会话域字段已删除——
     // 会话真源在 `com.wasmnest.bedcode` 登记域，宿主经 `session_gateway`
     // 窄转发层互调，不再持有内核会话对象。
     /// 插件宿主（生命周期管理）
     plugin_host: Arc<PluginHost>,
     /// mDNS 广播管理器
     mdns_advertiser: Arc<tokio::sync::RwLock<MdnsAdvertiser>>,
-    /// Tauri AppHandle
+    /// 前端事件与窗口操作入口（不参与能力裁决）
     ///
     /// Option 化：无头/测试上下文（`tauri::test::mock_app()` 只能产出
     /// MockRuntime 句柄，与 Wry 类型不兼容）允许 None，依赖前端事件的
@@ -63,7 +64,7 @@ impl AppContext {
         APP_CONTEXT.get_or_init(|| ctx)
     }
 
-    // ==================== Accessors ====================
+    // ==================== 访问器 ====================
 
     pub fn db(&self) -> &Arc<std::sync::Mutex<Database>> {
         &self.db

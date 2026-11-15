@@ -1,7 +1,7 @@
 //! 对等网络（peer-net）宿主模块：装配 / 端口 / 平台缝 / 选源 / 迁移。
 //!
-//! 引擎控制面真源在共享能力域 `../wasmnest-lib/wasmnest-server-peer-net`（双端同引，
-//! ADR 0048）；`host-peer` 的 WIT 实现也在该 crate 的 `common-host` 绑定层，宿主
+//! 引擎控制面真源在共享能力域 `../wasmnest-lib/wasmnest-server-peer-net`（双端同引）；
+//! `host-peer` 的 WIT 实现也在该 crate 的 `common-host` 绑定层，宿主
 //! **零 peer 原语代码**。本模块只保留 lib 要求的平台差异面：
 //!
 //! - [`net`]：装配（`peer_ctx` 是宿主唯一认识 `AppHandle` 的引擎装配点）+

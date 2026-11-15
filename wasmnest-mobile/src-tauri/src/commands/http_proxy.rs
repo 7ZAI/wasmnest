@@ -1,20 +1,19 @@
-//! HTTP 代理命令面（ticket 03）：`http_request` / `http_cancel`
+//! HTTP 代理命令面：`http_request` / `http_cancel`
 //!
-//! 移动端前端只负责 UI 渲染，所有 HTTP 经本代理由 Rust 发出（spec §3）：
+//! 移动端前端只负责 UI 渲染，所有 HTTP 经本代理由 Rust 发出：
 //! - 共享 `reqwest::Client`（连接池复用；`no_proxy()`——系统代理会劫持局域网目标，
 //!   与 AuthHttpClient 同策略）
-//! - Egress Policy 校验（ticket 02）：`kind="desktop"` 走 L1 桌面端目标校验（方案 a：
+//! - Egress Policy 校验：`kind="desktop"` 走 L1 桌面端目标校验（方案 a：
 //!   调用方声明 + Rust 校验在途/已连接目标，阻止任意外网 URL 借 desktop 逃逸）；
 //!   `kind="external"`（默认）走 L1/L2/L3 全层判定，未命中弹授权窗（fail-closed）
-//! - JWT 注入（`/api/auth/*` 白名单除外，spec §5 第 4 条）
+//! - JWT 注入（`/api/auth/*` 白名单除外）
 //! - 链路加密信封（wasmnest-link-crypto；`enabled ∧ encrypt_http ∧ 已 pin` 且非 auth
 //!   路径；GET/HEAD 无 body 仍带协商头；失败 fail-closed）
-//! - 超时默认 30s（D5）+ `http_cancel(request_id)`（oneshot + tokio::select!，
-//!   handoff §5.5 结论 2.2）
-//! - 报文对齐（§5 第 5 条）：forbidden 头丢弃、POST/PUT 无 body 补 `Content-Length: 0`、
+//! - 超时默认 30s + `http_cancel(request_id)`（oneshot + tokio::select!）
+//! - 报文对齐：forbidden 头丢弃、POST/PUT 无 body 补 `Content-Length: 0`、
 //!   Range 头补 `Accept-Encoding: identity`（桌面端实测 `allow_any_origin`，无需伪造
 //!   Origin；reqwest 默认 UA 桌面端不校验）
-//! - 结构化日志带 `request_id` 字段（§8 日志红线）
+//! - 结构化日志带 `request_id` 字段（日志红线）
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -33,10 +32,10 @@ use crate::Result;
 
 // ==================== 常量 ====================
 
-/// 默认请求超时（D5：30s）
+/// 默认请求超时（30s）
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// JWT 注入白名单前缀：`/api/auth/*` 不带 Bearer（与现状一致，spec §5 第 4 条）
+/// JWT 注入白名单前缀：`/api/auth/*` 不带 Bearer
 pub(crate) const AUTH_PATH_PREFIX: &str = "/api/auth/";
 
 /// 桌面端 HTTP 为局域网明文（单端口自定义），https 外网不得借 kind=desktop 逃逸
@@ -50,7 +49,7 @@ const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
 const MAX_REQUEST_ID_LEN: usize = 128;
 
 /// 请求头黑名单：浏览器禁止前端设置的 forbidden headers（对齐 Web fetch 语义，
-/// §5.5 结论 2.3）——大小写不敏感
+/// ——大小写不敏感
 const FORBIDDEN_HEADERS_EXACT: &[&str] = &[
     "connection",
     "cookie",
@@ -74,7 +73,7 @@ fn has_request_body(method: &str) -> bool {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HttpProxyRequest {
-    /// 调用方生成的 UUID（D3）：日志/追踪/取消标识，多路复用响应路由
+    /// 调用方生成的 UUID：日志/追踪/取消标识，多路复用响应路由
     pub request_id: String,
     pub method: String,
     pub url: String,
@@ -145,7 +144,7 @@ pub fn sanitize_headers(headers: &HashMap<String, String>) -> HashMap<String, St
         .collect()
 }
 
-/// 报文对齐补充头（§5.5 结论 2.3 / §5 第 5 条）：
+/// 报文对齐补充头：
 /// - POST/PUT 无 body → `Content-Length: 0`（桌面端按报文语义解析）
 /// - Range 头存在 → `Accept-Encoding: identity`（部分服务器对 Range 分段响应拒绝
 ///   压缩；reqwest 无 gzip feature 本就发 identity，这里显式对齐）
@@ -215,7 +214,7 @@ fn peer_requires_encryption(
     }
 }
 
-/// 对端显式拒绝的稳定码（`X-WasmNest-Crypto-Error`，内网穿透 T07）
+/// 对端显式拒绝的稳定码（`X-WasmNest-Crypto-Error`，内网穿透）
 ///
 /// 响应头名大小写不敏感（reqwest 归一小写）；值只认共享 crate 登记的两个码，
 /// 其他字符串返回 `None`——对端自报的任意值不得变成本地错误分类。
@@ -228,9 +227,9 @@ pub fn crypto_refusal_code(headers: &HashMap<String, String>) -> Option<&'static
 
 // ==================== 核心命令 ====================
 
-/// 统一 HTTP 代理命令（D1：invoke promise 路由回调用方）
+/// 统一 HTTP 代理命令（invoke promise 路由回调用方）
 ///
-/// ## 身份（安全审查 #43，2026-11-02）
+/// ## 身份（2026-11-02）
 ///
 /// 调用方必须附前端通道凭证（宿主 loader 会话 / 应用自己的通道令牌）：
 ///
@@ -550,7 +549,7 @@ pub async fn execute_proxy(
         body
     };
 
-    // 对端显式拒绝（带稳定码，内网穿透 T07）：无论本端是否判成加密，都按码
+    // 对端显式拒绝（带稳定码，内网穿透）：无论本端是否判成加密，都按码
     // 显性失败——明文路径打到 `required` 端点时，应用要的是「升级对端 / 重新
     // 配对」这条出路，不是一坨 HTTP 400 正文。典型时机：健康探测缓存尚未建立。
     // 码只认共享 crate 登记值，对端自报的任意串不得变成本地错误分类。
@@ -609,7 +608,7 @@ pub async fn execute_proxy(
         }
     }
 
-    // pin 刷新收束（handoff §3.5）：auth 响应携带 kdPublicB64 → Rust 落地 +
+    // pin 刷新收束：auth 响应携带 kdPublicB64 → Rust 落地 +
     // 广播 ws_link_crypto_pin（前端 localStorage 保留作设置页展示，裁决在 Rust）
     if path.starts_with(AUTH_PATH_PREFIX) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body_text) {
@@ -651,7 +650,7 @@ pub async fn execute_proxy(
 
 /// 取消在途请求（request_id 多路复用；不存在时静默成功）
 ///
-/// 身份（安全审查 #43）：按 `request_id` 取消是**宿主面**动作（前端超时兜底），
+/// 身份：按 `request_id` 取消是**宿主面**动作（前端超时兜底），
 /// 应用前端不得借已知 request_id 掐断他人请求。用 `resolve_caller` 而不要求宿主：
 /// 应用取消**自己的**请求是合法语义，身份只用于日志归因。
 #[tauri::command]
@@ -731,7 +730,7 @@ mod tests {
         assert!(!should_inject_jwt("/api/sessions", "", true));
     }
 
-    /// 应用发起的请求不得附带宿主 JWT（安全审查 #43：宿主机密不出 Rust）
+    /// 应用发起的请求不得附带宿主 JWT（宿主机密不出 Rust）
     #[test]
     fn jwt_never_injected_for_app_requests() {
         assert!(!should_inject_jwt("/api/sessions", "tok", false));

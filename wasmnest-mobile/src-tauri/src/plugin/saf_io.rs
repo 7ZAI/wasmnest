@@ -1,11 +1,11 @@
 //! SAF 存储访问抽象（主 seam，唯一新增 seam）
 //!
-//! 移动端文件传输 SAF 化改造（spec-mobile-saf-storage）的核心接口：
+//! 移动端文件传输 SAF 化改造的核心接口：
 //! Rust 侧全部 SAF 编排逻辑依赖 [`SafIo`] trait，Kotlin [`SafTransferPlugin`]
 //! 仅实现 ContentResolver/DocumentsContract 系统调用转发（不可测薄壳）；
 //! 宿主测试注入 fake 实现覆盖编排逻辑。
 //!
-//! 方法与 spec「Implementation Decisions」对应：
+//! 方法与职责对应：
 //! - [`SafIo::list_tree`]：列目录树条目（替代 std::fs::read_dir）
 //! - [`SafIo::read_to_cache`]：中转复制（Relay Copy）——SAF 源 → app 私有
 //!   cache 的顺序流复制（512KB 缓冲、OpenableColumns.SIZE 预检）。顺序流
@@ -13,7 +13,7 @@
 //!   [`SafIo::cancel_copy`] 轮询式桥接（WASM host fn 同步上下文无法承载
 //!   回调通道，轮询是跨桥最简编码）
 //! - [`SafIo::check_authorized`]：树授权有效性检测（持久化授权回收检测）
-//! - [`SafIo::write_media_downloads`]：MediaStore 落点（M2 落地版）——接收方向
+//! - [`SafIo::write_media_downloads`]：MediaStore 落点——接收方向
 //!   （移动端下载 + 桌面端推送）统一落系统公共下载目录，失败由调用方回退私有目录
 
 use crate::Result;
@@ -73,7 +73,7 @@ pub struct SafCopyStatus {
     pub dest_path: String,
 }
 
-/// SAF 流直传句柄（M3：上传 SAF 流直传的 Kotlin safOpen 返回）
+/// SAF 流直传句柄（上传 SAF 流直传的 Kotlin safOpen 返回）
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SafStreamHandle {
@@ -164,16 +164,16 @@ pub trait SafIo: Send + Sync {
     /// 检测树授权是否仍有效（用户回收持久化授权后返回 false）
     fn check_authorized(&self, tree_uri: &str) -> Result<bool>;
 
-    /// 写入 MediaStore.Downloads 公共下载目录（接收方向统一落点，M2）
+    /// 写入 MediaStore.Downloads 公共下载目录（接收方向统一落点）
     ///
     /// src_path 为 app 私有下载目录中的最终文件；流拷贝到公共 Download 目录
     /// （API 29+ 零权限）。失败（含 API<29 设备不支持）由调用方回退私有目录
     /// （调用方保留 src_path 副本即完成回退）。
     fn write_media_downloads(&self, src_path: &str, display_name: &str, mime_type: &str) -> Result<()>;
 
-    /// 打开 SAF 源为可流读句柄（M3 上传流直传）
+    /// 打开 SAF 源为可流读句柄（上传流直传）
     ///
-    /// offset 语义（spec M3 续传策略）：可 seek（文件流）直接 seek 到 offset
+    /// offset 语义（续传策略）：可 seek（文件流）直接 seek 到 offset
     /// 真续传；pipe 流（不可 seek）只能从头读，effective_offset 返回 0，
     /// 调用方（transfer.rs upload）发现与请求 offset 不一致时回报
     /// not-seekable-resume 触发全量重传。任务内断线重连重复打开同一 uri
@@ -193,7 +193,7 @@ pub trait SafIo: Send + Sync {
     /// 探测 SAF 源是否可 seek（getStatSize()==-1 为 pipe 流）
     fn stream_seekable(&self, uri: &str) -> Result<bool>;
 
-    /// 「保存到…」（M3）：弹出 ACTION_CREATE_DOCUMENT 单文件对话框（用户选
+    /// 「保存到…」：弹出 ACTION_CREATE_DOCUMENT 单文件对话框（用户选
     /// 位置）并把 src_path 流拷贝到所选位置（写完即达）
     ///
     /// 用户取消对话框视为失败（保留私有副本回退）；suggested_name 为
@@ -438,7 +438,7 @@ pub fn parse_saf_stream_handle(value: &serde_json::Value) -> Result<SafStreamHan
 
 /// 解析 Kotlin safRead 响应（data 为 base64 编码字节；EOF 为空串）
 ///
-/// 传输格式权衡（spec M3）：JSON 数组数字（每字节 4 字符）与 hex（2 字符）
+/// 传输格式权衡：JSON 数组数字（每字节 4 字符）与 hex（2 字符）
 /// 均劣于 base64（4/3 字符、无填充换行），选 base64 为跨桥最省空间格式。
 pub fn parse_saf_read_response(value: &serde_json::Value) -> Result<Vec<u8>> {
     use base64::Engine as _;
@@ -475,7 +475,7 @@ pub fn parse_save_to_document_response(value: &serde_json::Value) -> Result<()> 
     }
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 #[cfg(test)]
 mod tests {

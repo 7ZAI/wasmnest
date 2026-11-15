@@ -67,7 +67,7 @@ const LIBP2P_POLL_SPANS: &[&str] = &["Swarm::poll", "Connection::poll", "Pool::p
 /// yamux 的连接 / 流生命周期 debug 在 `yamux::connection` 等其它 target 上，照常保留。
 const YAMUX_RTT_TARGET: &str = "yamux::connection::rtt";
 
-/// HTTP 客户端库的 crate 名：只抑制其「连回环地址」的连接日志（见模块头注释）
+/// HTTP 客户端库的 crate 名：只抑制其「连回环地址」的连接日志（dev 下这类日志会刷满 logcat）
 const HTTP_CLIENT_CRATES: &[&str] = &["reqwest", "hyper_util", "hyper", "h2", "rustls", "tokio_rustls"];
 
 /// 回环 host 字面量（设备上的回环连接 ⇔ adb reverse 的 dev 代理）
@@ -96,7 +96,7 @@ pub fn init(log_level: LevelFilter) {
     }
 }
 
-/// 带 dev 噪音抑制的 android_logger 包装（判定逻辑见模块头注释）
+/// 带 dev 噪音抑制的 android_logger 包装（按 crate / span / 地址过滤，业务日志原样保留）
 ///
 /// 泛型只为单测可注入计数替身（生产恒为 `AndroidLogger`）；struct 私有，不外泄类型。
 struct DevNoiseFilter<L: Log> {

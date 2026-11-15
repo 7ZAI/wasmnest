@@ -1,17 +1,17 @@
-//! 插件事件帧路由（移动端适配专项票 03：`session-control` 常驻事件通道）
+//! 插件事件帧路由（`session-control` 常驻事件通道）
 //!
 //! ## 为什么是独立模块（替代 `handler/sync.rs`）
 //!
 //! 桌面端 WS 业务硬切（ABI v28）后 `/ws/event` 端点删除，业务事件改由
 //! `com.wasmnest.bedcode` 在声明端点 `session-control` 上广播，帧壳
-//! `{"type":"event","event":"<name>","payload":{...}}`（票 02 定稿）。旧链路
+//! `{"type":"event","event":"<name>","payload":{...}}`。旧链路
 //! （`Message::SyncData` 信封 → `SyncHandler`）随之失源——本模块把插件事件帧
 //! 翻译成既有 [`MobileEvent`] 变体，**前端 `ws_sync_*` 事件名与 store 收敛
 //! 逻辑零改动**（转发层 `router/event.rs` 照常 emit）。
 //!
-//! ## 契约（spec §6.2）
+//! ## 契约
 //!
-//! - **只读**：本连接只收事件，不发任何动作帧（动作走 HTTP，票 04）；
+//! - **只读**：本连接只收事件，不发任何动作帧（动作走 HTTP）；
 //! - **认证前的帧一律丢弃**（防御畸形服务端）：认证标记由
 //!   [`PluginEventRouter::mark_authenticated`] 在 auth 首帧发出后置位；
 //! - 未知事件名 / 缺字段 / 畸形载荷 → `debug` 留痕丢弃，**不 panic、不断连**
@@ -33,7 +33,7 @@ use crate::router::MobileEvent;
 
 // ==================== 帧壳与事件名（桌面 wire，逐字不可漂移） ====================
 
-/// 事件帧 `type`（票 02 帧壳：`{"type":"event",...}`）
+/// 事件帧 `type`（帧壳：`{"type":"event",...}`）
 pub const FRAME_TYPE_EVENT: &str = "event";
 
 /// `session:created`
@@ -104,7 +104,7 @@ struct ScheduledPayload {
 
 /// 纯函数：事件名 + 载荷 → `MobileEvent`（未知事件 / 畸形载荷 → `None`）
 ///
-/// 映射表逐条对应 spec §3.2（7 类事件 → 既有变体，前端事件名不变）。
+/// 映射表逐条对应 7 类事件 → 既有变体（前端事件名不变）。
 pub fn to_mobile_event(event_name: &str, payload: &Value) -> Option<MobileEvent> {
     match event_name {
         EVENT_SESSION_CREATED => {
@@ -171,7 +171,7 @@ pub fn to_mobile_event(event_name: &str, payload: &Value) -> Option<MobileEvent>
 /// 插件事件帧路由（每连接一个实例）
 ///
 /// 挂在 WS 收帧链路上（见 `connection/default_handler.rs`）：事件帧在此闭环，
-/// 非事件帧返回 `false` 交回旧信封链路（票 04 退役该链路）。
+/// 非事件帧返回 `false` 交回旧信封链路（该链路已退役）。
 pub struct PluginEventRouter {
     event_tx: broadcast::Sender<MobileEvent>,
     /// 认证门：auth 首帧发出前到达的帧一律丢弃（防御畸形服务端）
@@ -226,13 +226,13 @@ impl PluginEventRouter {
         tracing::info!("[PluginEvent] routed event: {}", event_name);
         if let Err(e) = self.event_tx.send(event) {
             // 无订阅者（转发层未启动）：不是致命错误，留痕即可——事件是旁路，
-            // 真源在 HTTP 回包与对账（spec §6.2）
+            // 真源在 HTTP 回包与对账
             tracing::debug!("[PluginEvent] no receiver for event {}: {}", event_name, e);
         }
     }
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 #[cfg(test)]
 mod tests {
@@ -244,7 +244,7 @@ mod tests {
         (PluginEventRouter::new(tx), rx)
     }
 
-    /// 事件帧（与票 01 夹具 `event_frame` 同形：`{"type":"event","event","payload"}`）
+    /// 事件帧（与夹具 `event_frame` 同形：`{"type":"event","event","payload"}`）
     fn frame(event: &str, payload: Value) -> String {
         serde_json::json!({ "type": FRAME_TYPE_EVENT, "event": event, "payload": payload }).to_string()
     }
@@ -359,7 +359,7 @@ mod tests {
     async fn task_status_changed_without_optional_fields_is_accepted() {
         let (r, mut rx) = router();
         r.mark_authenticated();
-        // 票 02 载荷纪律：可选字段缺席即不出现键（不伪造 null）
+        // 载荷纪律：可选字段缺席即不出现键（不伪造 null）
         assert!(r.route_text(&frame(
             EVENT_TASK_STATUS_CHANGED,
             serde_json::json!({ "session_id": "s1", "task_status": "completed" })
@@ -502,7 +502,7 @@ mod tests {
     async fn non_event_frames_fall_through_to_legacy_path() {
         let (r, _rx) = router();
         r.mark_authenticated();
-        // 非 JSON / 其它 type：交回旧信封链路（票 04 退役前仍存在）
+        // 非 JSON / 其它 type：交回旧信封链路（退役前仍存在）
         assert!(!r.route_text("not json at all"));
         assert!(!r.route_text("{\"type\":\"session_list\"}"));
         assert!(!r.route_text("{\"type\":\"error\",\"message\":\"boom\"}"));
@@ -523,8 +523,8 @@ mod tests {
 
     /// 结构锁：事件路由实现段不得出现 `Message::`（信封在 WS 生产路径零使用）
     ///
-    /// 票 03 起事件帧走本模块；若有人把事件塞回 `Message` 枚举，等于又把
-    /// 已退役的信封协议接回生产路径（票 04 正是要删掉它）。
+    /// 事件帧走本模块；若有人把事件塞回 `Message` 枚举，等于又把已退役的
+    /// 信封协议接回生产路径。
     #[test]
     fn event_routing_does_not_use_legacy_message_enum() {
         let root = env!("CARGO_MANIFEST_DIR");
@@ -548,7 +548,7 @@ mod tests {
         }
     }
 
-    /// 结构锁：7 事件名与 spec §3.1 表逐字一致（含桌面插件 `ws_events.rs` 同源）
+    /// 结构锁：7 事件名与映射表逐字一致（含桌面插件 `ws_events.rs` 同源）
     #[test]
     fn event_names_match_desktop_wire() {
         assert_eq!(EVENT_SESSION_CREATED, "session:created");

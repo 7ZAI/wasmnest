@@ -1,8 +1,8 @@
-//! 宿主引擎端口装配（票 17 批次 2b）——[`HostEnginePorts`] 的宿主侧唯一实现
+//! 宿主引擎端口装配——[`HostEnginePorts`] 的宿主侧唯一实现
 //!
 //! 插件机制面（统一 wasm-core `wasmnest-wasm-core`，单形态 2026-10-13 起无
 //! common/bare 之分）的所有「离宿主无法实现」
-//! 引擎调用经此注入：auth 引擎（C4 凭据零过境）/ egress 安全闸门（D5，判定 +
+//! 引擎调用经此注入：auth 引擎（凭据零过境）/ egress 安全闸门（判定 +
 //! 弹窗编排整体在宿主）/ 主连接事实 / WS 重连策略 / mDNS 共享守护 / android
 //! 平台桥（android_plugins + SAF）。DTO 以原始值 / JSON 过界，宿主类型不出宿主。
 //!
@@ -30,7 +30,7 @@ use wasmnest_wasm_core::host_api::ports::{
 
 // ==================== 子 trait 实现（宿主引擎类型直接 impl 外部端口 trait） ====================
 
-/// 认证引擎端口投影（C4：密码学与凭据在 [`crate::auth::manager::AuthManager`]，
+/// 认证引擎端口投影（密码学与凭据在 [`crate::auth::manager::AuthManager`]，
 /// 端口只透传调用结果；`get_credentials` 只投影存在性）
 #[async_trait]
 impl AuthEnginePort for crate::auth::manager::AuthManager {
@@ -63,7 +63,7 @@ impl AuthEnginePort for crate::auth::manager::AuthManager {
     }
 }
 
-/// 主连接事实端口投影（票 12 `host-connection.primary-target` 引擎读数）
+/// 主连接事实端口投影（`host-connection.primary-target` 引擎读数）
 #[async_trait]
 impl ConnectionEnginePort for crate::connection::manager::ConnectionManager {
     async fn primary_target(&self) -> wasmnest_wasm_core::Result<Option<(PrimaryTarget, bool)>> {
@@ -178,7 +178,7 @@ impl HostFactsPort for HostPorts {
 
 #[async_trait]
 impl HostEnginePorts for HostPorts {
-    // ==================== egress（D5：闸门整体在宿主） ====================
+    // ==================== egress（闸门整体在宿主） ====================
 
     /// 三层判定 + NeedConsent 授权弹窗一次完成（原 host_impl/http.rs
     /// `check_egress` 的宿主侧完整形态）
@@ -209,7 +209,7 @@ impl HostEnginePorts for HostPorts {
         crate::egress::redirect_policy()
     }
 
-    // ==================== auth / token（C4） ====================
+    // ==================== auth / token ====================
 
     fn auth_engine(&self) -> Option<Arc<dyn AuthEnginePort>> {
         Some(crate::state::get_auth_manager())
@@ -417,7 +417,7 @@ impl HostEnginePorts for HostPorts {
     }
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 #[cfg(test)]
 mod tests {

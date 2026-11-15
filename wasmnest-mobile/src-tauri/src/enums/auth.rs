@@ -1,6 +1,4 @@
-//! Auth Types
-//!
-//! 认证相关类型定义
+//! 认证相关共享类型
 
 use serde::{Deserialize, Serialize};
 
@@ -62,13 +60,13 @@ pub struct AuthPayload {
     /// 认证方式（pairing_code / qr / biometric / jwt）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<String>,
-    /// WS 链路加密协商（issue 09）：Reauthenticate 请求携临时公钥提案，
+    /// WS 链路加密协商：Reauthenticate 请求携临时公钥提案，
     /// 认证成功响应携服务端临时公钥回执（回执明文下发，此后帧加密）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub crypto: Option<CryptoProposal>,
 }
 
-/// WS 链路加密协商载荷（issue 09）：请求侧携客户端临时 X25519 公钥（ek），
+/// WS 链路加密协商载荷：请求侧携客户端临时 X25519 公钥（ek），
 /// 响应侧携服务端临时公钥回执。v 当前固定 1
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CryptoProposal {

@@ -1,13 +1,11 @@
-//! Router Module
-//!
-//! 消息路由器 - 包含路由注册器、业务路由器和事件转发
+//! 消息路由出口：路由注册器、业务路由与前端事件转发
 
 pub mod context;
 pub mod event;
 pub mod registry;
 pub mod router;
 
-// Re-export public types
+// 公开类型统一从本模块再导出
 pub use context::ClientRouteContext;
 pub use event::MobileEvent;
 pub use registry::{message_type_key, ClientRouteHandler, ClientRouteRegistry};

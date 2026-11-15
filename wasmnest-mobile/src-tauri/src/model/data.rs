@@ -1,6 +1,4 @@
-//! Data Models
-//!
-//! 移动端数据模型定义。
+//! 移动端数据模型
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

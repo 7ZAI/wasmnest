@@ -1,5 +1,4 @@
-//! 桌面兼容面桩（file-transfer 双端单产物，2026-10-13；规格
-//! `.scratch/2026-10-13-file-transfer-single-wasm/spec.md`）
+//! 桌面兼容面桩（file-transfer 双端单产物，2026-10-13）
 //!
 //! ## 为什么移动宿主要实现两个「桌面专属」interface
 //!

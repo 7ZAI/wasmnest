@@ -1,6 +1,4 @@
 //! 分区存储全文件访问授权引导（AllFilesAccessPlugin）
-//!
-//! 从 android_plugins.rs 拆分。
 
 use std::sync::OnceLock;
 use tauri::plugin::{Builder, PluginHandle};

@@ -1,4 +1,7 @@
-//! WasmNest - Entry Point
+//! 桌面宿主可执行入口：安装 panic hook 后转入 `wasmnest_desktop_lib::run`
+//!
+//! panic hook 只用 `eprintln!` + 追加写文件：hook 可能发生在 tracing subscriber
+//! 持锁期间，调用 `tracing::error!` 会死锁（日志红线）。
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -47,7 +50,8 @@ fn main() {
     wasmnest_desktop_lib::run()
 }
 
-/// 获取 panic 日志文件路径
+/// panic 日志落点：release 构建没有可见控制台，固定写到用户可找回的
+/// APPDATA / HOME 路径（写入失败只能放弃——panic 现场不允许再引入失败路径）
 fn panic_log_path() -> Result<std::path::PathBuf, ()> {
     #[cfg(target_os = "windows")]
     {

@@ -1,19 +1,19 @@
-//! host-notify 宿主侧接线（路径 B：WIT 绑定 + `Host` impl + 域函数同处）
+//! host-notify 宿主侧接线（WIT 绑定 + `Host` impl + 域函数同处）
 //!
-//! 2026-10-13 功能级统一（ADR 0052 D3 / domain-owned-contracts 票 04）：桌面
+//! 2026-10-13 功能级统一：桌面
 //! `host-events-desktop.notify(title, body)` 与移动
 //! `host-notify.notify(title, body, options-json)` 是同一功能 → 统一为共享域契约
 //! `host-notify`（真源 `../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit`，双端 caps
 //! 直接消费）。本文件是桌面端的实现：经 Tauri 事件发前端 toast（`plugin:notify`
 //! 事件，payload 与迁移前逐字一致）。
 //!
-//! 权限：`notify` **有权限门**（双端同一口径，2026-11-02 安全审查 #46 补齐）。
+//! 权限：`notify` **有权限门**（双端同一口径，2026-11-02 补齐）。
 //! 通知是「用户打扰面」——高频弹通知 / 冒充系统提示属能力滥用，且用户必须能在
 //! 应用详情页撤销它；因此与移动端 `plugin/notify.rs` 的 `require_notify` 逐字对齐，
 //! 域函数入口先过 `PermissionManager` 的 `notify` 位，未声明即 fail-visible 拒绝。
 //!
 //! options-json 与移动端同口径**严格解析**（非法 JSON / 字段类型错误 → Err，禁静默
-//! 降级成默认值），但取值在桌面**静默忽略**（无震动 / 提示音通道）——契约文档已声明
+//! 降级成默认值），但取值在桌面**静默忽略**（无震动 / 提示音通道）——契约已声明
 //! 「平台不支持的选项静默忽略」；报错会让只想发通知的桌面调用点无谓失败。
 
 use tauri::Emitter;
@@ -24,7 +24,7 @@ use wasmnest_wasm_core::permission::PERMISSION_NOTIFY;
 
 use crate::plugin::bindings::wasmnest;
 
-// 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报）。路径 B 域
+// 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报）。直连绑定域
 // 的自报静态住在本 crate（宿主 lib 即最终二进制）⇒ 无需强制引用行。
 wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 
@@ -39,7 +39,7 @@ pub const MODULE_PERMISSIONS: &[&str] = &[PERMISSION_NOTIFY];
 
 /// 能力模块描述符（机制面：接口路径 / 权限位 / ABI 下界；**禁带产品名词**）
 ///
-/// `abi_min = 38`：统一 `host-notify` 契约随 WIT 包 0.2.0 引入（ADR 0051 后整数
+/// `abi_min = 38`：统一 `host-notify` 契约随 WIT 包 0.2.0 引入（整数
 /// ABI 已退役，此处取桌面退役前最后一版号，仅作历史下界元数据）。
 const DESC: HostModuleDesc = HostModuleDesc {
     name: MODULE_NAME,
@@ -145,7 +145,7 @@ fn notify_desktop(app: &WasmHostContext, plugin_id: &str, title: &str, body: &st
         .map_err(|e| format!("notify error: emit failed: {}", e))
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 #[cfg(test)]
 mod tests {

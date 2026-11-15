@@ -1,6 +1,4 @@
-//! Client Route Registry - 路由注册器
-//!
-//! 负责注册和管理消息类型到处理器的映射
+//! 路由注册器：消息类型 → 处理器映射的注册与管理
 
 use async_trait::async_trait;
 use std::collections::HashMap;

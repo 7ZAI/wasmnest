@@ -6,8 +6,8 @@
 /// `connect_context_menu` 是**追加**信号处理器，重复连接会在同一 WebView 上叠加。
 /// 返回 `true` 表示首次见到该 label（应由本次调用去连接信号），`false` 表示已连过。
 ///
-/// **去重键只能是 label，且必须随窗口销毁清理**：会话终端窗口的 label 是
-/// `terminal-${session.id}`（`src/composables/useSessionWindows.ts`）——同一会话关窗后
+/// **去重键只能是 label，且必须随窗口销毁清理**：会话终端窗口的 label 形如
+/// `terminal-<sessionId>`（窗口由应用侧创建）——同一会话关窗后
 /// 重开得到的是**全新 WebView 实例**，但 label 一模一样。若不随销毁清理，重开的窗口会被
 /// 判成「已连过」而永不连接信号，Linux 正式版的原生右键菜单就在该窗口上复活。
 /// 清理入口是 [`forget_context_menu_label`]（挂 `WindowEvent::Destroyed`）。
@@ -56,11 +56,11 @@ pub(super) fn context_menu_ledger() -> &'static std::sync::Mutex<std::collection
 ///
 /// Windows（WebView2）/ macOS（WKWebView）由前端 `src/main.ts` 在 capture 阶段
 /// `preventDefault` 即可覆盖所有窗口；Linux 的 WebKitGTK 在 DOM `contextmenu` 的默认动作里
-/// 弹原生菜单，JS `preventDefault` 拦不住（wry#30），只能连接 `context-menu` 信号并返回
+/// 弹原生菜单，JS `preventDefault` 拦不住，只能连接 `context-menu` 信号并返回
 /// `true` 阻止默认弹出。
 ///
-/// **覆盖每个 webview**：钩子挂在页面加载上，主窗口与会话终端窗口（前端运行时创建的独立
-/// `WebviewWindow`，见 `src/composables/useSessionWindows.ts`）等每次页面加载都会触发；
+/// **覆盖每个 webview**：钩子挂在页面加载上，主窗口与会话终端窗口（应用侧运行时
+/// 创建的独立 `WebviewWindow`）等每次页面加载都会触发；
 /// 早期实现只在 setup 里给 `main` 连一次信号，运行期新建的窗口仍会弹原生菜单。
 ///
 /// dev 构建保留右键菜单（调试需要「检查元素」），故闭包内按 `debug_assertions` 提前返回；

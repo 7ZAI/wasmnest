@@ -3,7 +3,7 @@
 //! 组件路径（wasm_runtime/component.rs 的 Host trait impl → 逻辑层）专用。
 //! core 形态的 WASM 线性内存读写辅助已随 09 清理删除。
 
-// ==================== Host Call Panic Guard ====================
+// ==================== 宿主调用 panic 守卫 ====================
 /// 在 wasmtime host function 内执行阻塞宿主调用并捕获 panic
 ///
 /// wasmtime host function 经 extern "C" ABI 进入，panic 越过该边界是 UB

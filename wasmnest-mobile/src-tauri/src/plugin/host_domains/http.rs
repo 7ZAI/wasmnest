@@ -1,11 +1,11 @@
 //! host_http_fetch — HTTP 出站（转发：`wasmnest-server-http` 能力域）
 //!
-//! **2026-10-10 wasm-core-mobile-purity 票 05**：与票 03 的 peer-net 同款手法——
+//! **2026-10-10 能力域下沉**：与 peer-net 同款手法——
 //! 出站 HTTP 的执行本体（非流式请求 / SSE 流 / 上游限广大 byte / 重定向再校验）
 //! 在能力域 crate `wasmnest-server-http`（`plugin_binding::egress`），本文件只把
 //! 本端宿主服务接到能力域的 [`HttpPorts`]。
 //!
-//! **为什么 egress 判定（D9）不随之下沉**：三层判定（桌面端目标 / 声明 / 记忆）
+//! **为什么 egress 判定不随之下沉**：三层判定（桌面端目标 / 声明 / 记忆）
 //! 与 NeedConsent 授权弹窗是**宿主安全闸门**的内聚实现，能力域只见「放行 / 拒绝 /
 //! 判定失败」三态结论（[`OutboundAuth`]）——拆过界会让弹窗编排脱离宿主载体。
 //! 无 app_handle 的无头 / 测试上下文走 `CheckFailed`（fail-closed：弹窗事务没有
@@ -57,8 +57,8 @@ impl HttpPorts for StateHttpPorts {
     }
 
     fn authorize_outbound(&self, plugin_id: &str, url: &str, _may_prompt: bool) -> OutboundAuth {
-        // egress 三层判定（桌面端目标 / 声明 / 记忆）+ NeedConsent 弹窗编排留宿主引擎
-        // （D9）：能力域只见三态结论。无 app_handle 的无头 / 测试上下文 = 判定失败
+        // egress 三层判定（桌面端目标 / 声明 / 记忆）+ NeedConsent 弹窗编排留宿主引擎：
+        // 能力域只见三态结论。无 app_handle 的无头 / 测试上下文 = 判定失败
         // （fail-closed：弹窗事务没有载体，收紧而非放行）。
         let origin = normalize_origin(url);
         let Some(app_handle) = self.app_handle.clone() else {
@@ -94,7 +94,7 @@ impl HttpPorts for StateHttpPorts {
     }
 
     /// `"jwtAuth": true` 的全局 token 代注（移动侧独有能力的托管口径：token 的
-    /// 真源是宿主进程内状态，**不落插件**，C4；当下无 token 即显错，
+    /// 真源是宿主进程内状态，**不落插件**；当下无 token 即显错，
     /// 禁止静默降级为匿名请求）
     fn jwt_auth_token(&self, _plugin_id: &str) -> Result<Option<String>, String> {
         let token = self.ports.global_token();
@@ -317,8 +317,7 @@ impl HttpEventSink for AppHandleSink {
     }
 }
 
-/// 归一化 `scheme://host[:port]`（错误串只带这三者：不带 path / query，
-/// AGENTS §8 凭据红线）
+/// 归一化 `scheme://host[:port]`（错误串只带这三者：不带 path / query，凭据红线）
 fn normalize_origin(url: &str) -> String {
     let (scheme, rest) = match url.split_once("://") {
         Some((scheme, rest)) => (Some(scheme), rest),
@@ -650,7 +649,7 @@ mod tests {
         crate::state::set_link_crypto_context(crate::state::LinkCryptoContext::default());
     }
 
-    /// 权限门 fail-closed（票 13 显性锁）：未授予 `network:http` → 请求在
+    /// 权限门 fail-closed（显性锁）：未授予 `network:http` → 请求在
     /// 权限层即拒绝（不进入 egress 判定，也不发起网络请求）
     #[tokio::test]
     async fn permission_denied_without_network_http() {
@@ -706,7 +705,7 @@ mod tests {
         );
     }
 
-    /// 错误串只带归一化 origin（不带 path / query —— AGENTS §8 凭据红线）
+    /// 错误串只带归一化 origin（不带 path / query —— 凭据红线）
     #[test]
     fn normalize_origin_strips_path_and_query() {
         assert_eq!(

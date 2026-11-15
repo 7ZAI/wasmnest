@@ -1,17 +1,17 @@
 //! Egress Policy：外网访问声明与授权（fail-closed）
 //!
-//! 三层校验（借鉴 fs_auth 三层：白名单 → 声明 → 弹窗授权，docs/architecture.md §5）：
+//! 三层校验（借鉴 fs_auth 三层：白名单 → 声明 → 弹窗授权）：
 //! - **L1 桌面端目标**：目标 host:port = 连接模块当前/最近目标（配对/会话内，
 //!   无需声明；host:port 由连接模块注入，见 `add_desktop_target`）
 //! - **L2 静态声明**：宿主内置（GitHub API，`system::constants::egress`）+ 插件
 //!   manifest `preauthUrls`（插件加载时 `register_plugin_urls` 注册）
 //! - **L3 授权弹窗**：未命中声明 → 首次请求弹窗，用户确认后放行（会话级默认
-//!   + 可选持久「不再询问」，spec §9 D7）
+//!   + 可选持久「不再询问」）
 //! - **拒绝**：以上均未通过 → fail-closed，请求不发，返回
 //!   `EXTERNAL_URL_NOT_DECLARED` / `EXTERNAL_URL_DENIED`。
 //!
-//! 裁决与记忆在 Rust 端（§8 安全红线）：授权记忆存 Rust 持久层
-//! （`egress_grants.json`，app_data_dir），不落 localStorage（spec §5.6 机制要点 1）。
+//! 裁决与记忆在 Rust 端（安全红线）：授权记忆存 Rust 持久层
+//! （`egress_grants.json`，app_data_dir），不落 localStorage。
 //! 弹窗桥：Rust emit `egress_consent_request` → 前端渲染 → `egress_consent_resolve`
 //! 回 Rust 裁决（oneshot 通道 + 超时兜底，超时视为拒绝）。
 
@@ -93,7 +93,7 @@ pub fn redirect_decision(next_url: &str, previous: &[&str]) -> bool {
     !prev.is_empty() && prev.iter().all(|p| is_private_ip(&p.host))
 }
 
-/// reqwest 跳转策略：`redirect_decision` 的适配层（同步裁决，见其文档）
+/// reqwest 跳转策略：`redirect_decision` 的适配层（同步裁决，按目标首跳结论放行 / 拒绝）
 pub fn redirect_policy() -> reqwest::redirect::Policy {
     reqwest::redirect::Policy::custom(|attempt| {
         let prev: Vec<&str> = attempt.previous().iter().map(|u| u.as_str()).collect();

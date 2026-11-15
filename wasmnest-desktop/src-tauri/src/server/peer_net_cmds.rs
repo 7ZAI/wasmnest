@@ -1,11 +1,11 @@
-//! peer-net Tauri 命令壳 + 上下文装配（宿主壳；server-lib-split）
+//! peer-net Tauri 命令壳 + 上下文装配（宿主壳）
 //!
 //! peer-net 拆 lib 后不再持有 `AppHandle`（引擎函数一律 `&PeerCtx` / `Arc<PeerCtx>`）：
 //! 本模块是唯一还认识 `AppHandle` 的薄壳——[`peer_ctx`] 从 `AppHandle` 装配
 //! [`PeerCtx`]（端口 + 四个引擎状态），供 `PeerCtxProvider` 端口注入（lib 装配）
 //! 与节点引擎消费。前端命令面已整体退役：首连确认走插件命令（file-transfer
 //! respond-consent + 互调会话中心），信任列表/撤销与节点启停走 host-peer 原语
-//! （service-leases §7.2）。拆分前命令壳与引擎同文件，
+//! （服务租约机制）。拆分前命令壳与引擎同文件，
 //! 本模块是拆分产物；库函数本身不再标注 `#[tauri::command]`。
 
 use std::sync::Arc;

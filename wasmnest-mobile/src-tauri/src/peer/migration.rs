@@ -1,4 +1,4 @@
-//! 旧版对等网络数据一次性迁移（issue 13 Phase 4 步骤 9，移动端）
+//! 旧版对等网络数据一次性迁移（移动端）
 //!
 //! 引擎侧 `transfer_settings.json` / `shared_dirs.json` → file-transfer 插件
 //! 存储键（`transfer_settings` / `shared_roots`）。幂等：插件侧键已存在即跳过
@@ -27,7 +27,7 @@ fn fnv1a(data: &str) -> u64 {
 /// 迁移入口（setup 阶段调用一次；任何失败仅记日志不阻断启动——迁移是
 /// best-effort 兼容路径，用户始终可在插件设置里手动重建）
 ///
-/// 票 05b：storage 为 DB-backed（主库 plugin_storage 表），由 lib.rs 在
+/// storage 为 DB-backed（主库 plugin_storage 表），由 lib.rs 在
 /// 旧文件 KV 迁移（[`PluginStorage::migrate_file_store_to_db`]）之后注入
 pub(crate) fn migrate_legacy_peer_data(storage: &PluginStorage, app_data_dir: &PathBuf) {
     if let Err(e) = migrate_settings(storage, app_data_dir) {

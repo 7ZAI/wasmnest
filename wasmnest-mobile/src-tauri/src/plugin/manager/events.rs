@@ -1,3 +1,8 @@
+//! 插件生命周期事件分发：快照目标插件 → 单实例锁调用导出 → 前端事件
+//!
+//! 分发期间不持 `plugins` / `wasm_plugins` map 守卫，只锁单个插件实例，
+//! 避免 WASM 回调 host function 重入取 map 时死锁。
+
 use super::*;
 
 impl PluginManager {
@@ -100,7 +105,7 @@ pub(super) struct PluginManagerDispatcher {
 impl crate::plugin::message_bus::MessageDispatcher for PluginManagerDispatcher {
     /// 投递总线消息给 WASM 插件
     ///
-    /// 由投递 worker 任务调用（同步 trait 形态，票 02 M3 单形态收敛——wasm-core
+    /// 由投递 worker 任务调用（同步 trait 形态，单形态收敛——wasm-core
     /// `bus::MessageDispatcher` 统一为同步签名，异步依赖经 `runtime_util::block_on_async`
     /// 桥进入；本宿主再包装 async 闭包）：短读 map 取实例句柄 → drop map 守卫 →
     /// 持单插件锁执行 on_bus_message。投递串行进行，慢插件会推迟后续投递
@@ -109,7 +114,7 @@ impl crate::plugin::message_bus::MessageDispatcher for PluginManagerDispatcher {
         let wasm_plugins = self.wasm_plugins.clone();
         let pid = plugin_id.to_string();
         // 载荷形状真源 = `wasmnest-server-base::wire::BusMessage`（批 2 摘移动 SDK
-        // 依赖，issue #36；SDK 侧类型是 guest 面拷贝，形状由跨端 wire 漂移锁钉死）
+        // 依赖；SDK 侧类型是 guest 面拷贝，形状由跨端 wire 漂移锁钉死）
         // ——直接消费入参字段派发，不再经 SDK 类型中转。
         wasmnest_wasm_core::runtime_util::block_on_async(async move {
             let wasm_plugin = {

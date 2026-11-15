@@ -1,22 +1,22 @@
 //! host-peer 宿主侧适配器（能力域端口 `PeerPorts` 的宿主实现 + 装配自报）
 //!
 //! 域机制（21 条 `host-peer` 原语 + 引擎收发/远端/传输三面）在
-//! `wasmnest-server-peer-net`；本文件是**宿主侧的另一半**——wasm-core 纯净性收口票 02
-//! 批次 03 整文件迁自 `wasmnest-wasm-core/src/host_api/peer.rs`（内核自此不点名本域、
+//! `wasmnest-server-peer-net`；本文件是**宿主侧的另一半**——整文件迁自内核
+//! `host_api/peer.rs`（原文件已删除；内核自此不点名本域、
 //! 端口装配只有本文件一条来源）。
 //!
 //! **与 pty / mdns 的差异（Cargo 边保留）**：内核仍消费该 crate 的**引擎面**——
 //! `host_api::context::PeerCtxProvider` 的 `PeerCtx` 类型。生命周期耦合已随
-//! service-leases 移除（内核不再调 `release_node_for`，改经通用服务租约释放），
-//! 剩余类型边摘除要先搬 `PeerCtxProvider`，属另一件事。
+//! 服务租约移除（内核不再调 `release_node_for`，改经通用服务租约释放），剩余
+//! 类型边摘除要先搬 `PeerCtxProvider`，属另一件事。
 //!
 //! 四件同处（与 pty / mdns 样板一致）：端口实现 / `install` 装配自报 / 白名单声明 +
 //! 强制引用行 / 装配器静态。
 //!
-//! ## 哪些机制**刻意留在宿主**（AGENTS §5.1.3 允许的薄壳）
+//! ## 哪些机制**刻意留在宿主**（允许保留的薄壳）
 //!
 //! - **权限门**：复用 wasm-core 的 `host_api::check_permission`，同一份 PermissionManager、
-//!   同一条拒绝 warn 路径（AGENTS §8 结构化字段）；
+//!   同一条拒绝 warn 路径（结构化字段）；
 //! - **引擎上下文的装配动作**：`peer_ctx` 由 `PeerCtxProvider` 端口给出（lib 注入
 //!   `peer_net_cmds::peer_ctx`），未注入（无头 / 测试）与无 `app_handle` 同报
 //!   `HEADLESS_UNAVAILABLE`——本 crate 的 `peer_net_cmds` 仍是唯一认识 `AppHandle`
@@ -49,7 +49,7 @@ use wasmnest_wasm_core::host_api::context::WasmHostContext;
 
 // 能力模块白名单条目与强制引用行**必须同处**（本文件），两者不漂移——漏引用 ⇒
 // 该 crate 的 inventory 自报静态不进最终二进制（装载期 missing 方向点名）；漏白名单
-// ⇒ unlisted 方向点名。判据与纪律见 `wasmnest_host_kit::assembly` 模块文档。
+// ⇒ unlisted 方向点名。判据：白名单条目与强制引用行必须同处，漏一处即装载期点名。
 wasmnest_host_kit::expect_host_module!(wasmnest_server_peer_net::plugin_binding::MODULE_NAME);
 use wasmnest_server_peer_net as _;
 
@@ -76,14 +76,14 @@ impl HostPeerPorts {
 
 impl PeerPorts for HostPeerPorts {
     fn check_permission(&self, plugin_id: &str, permission: &str, api: &str) -> bool {
-        // 权限门留宿主（AGENTS §5.1.3「安全闸门」——闸门不应可插拔）。复用 wasm-core 的
+        // 权限门留宿主（安全闸门——闸门不应可插拔）。复用 wasm-core 的
         // `host_api::check_permission`：同一份 PermissionManager、同一条拒绝 warn 路径，
         // 拿不到权限管理器时它返回 false（fail-safe），能力域据此回权限错误。
         check_permission(self.ctx(), plugin_id, permission, api)
     }
 
     fn peer_ctx(&self) -> Result<Arc<PeerCtx>, String> {
-        // 引擎上下文的**装配动作**留宿主（见模块文档第 2 条），无头口径与文案由能力域定义
+        // 引擎上下文的**装配动作**留宿主（宿主认识 AppHandle，能力域不认识），无头口径与文案由能力域定义
         let ctx = self.ctx();
         let app = ctx.app_handle().ok_or_else(|| HEADLESS_UNAVAILABLE.to_string())?;
         let provider = ctx
@@ -93,12 +93,12 @@ impl PeerPorts for HostPeerPorts {
     }
 
     fn block_on_any(&self, fut: BoxedBlocked) -> Box<dyn Any + Send> {
-        // 复用宿主那份唯一的同步↔异步桥（见模块文档第 3 条）
+        // 复用宿主唯一的同步↔异步桥（`block_on_async`，重入安全）
         wasmnest_wasm_core::runtime_util::block_on_async(fut)
     }
 
     fn service_registry(&self) -> Option<Arc<wasmnest_server_base::service::ServiceRegistry>> {
-        // 应用作用域服务租约（service-leases §4.1）：启动 / 停止节点按插件 id 记账。
+        // 应用作用域服务租约：启动 / 停止节点按插件 id 记账。
         // 宿主上下文未注入（无头测试）或本 crate 未开 desktop 装配时为 None →
         // 能力域退化为直连引擎并落一次 warn。
         self.ctx().service_registry()

@@ -1,7 +1,7 @@
-//! Plugin Loader（移动端）
+//! 插件加载器：APK assets 解压 + app_data 扫描 + WASM 组件实例化
 //!
-//! APK assets 内置插件解压 + app_data_dir 插件扫描
-//! 解析 plugin.json，编译并实例化 WASM 组件（Component Model，迁移 ticket 06）
+//! 先解压内置插件、再扫 `app_data_dir` 的用户插件，解析 `plugin.json` 后按
+//! Component Model 编译并实例化；加载期不激活（激活归 `manager`）。
 
 use crate::plugin::types::*;
 use crate::plugin::validation::{validate_dir_binding, validate_plugin_id};
@@ -192,11 +192,11 @@ impl PluginLoader {
                     }
 
                     // ==================== 退役权限位闸门 ====================
-                    // 票 2026-10-10 批次 C2：宿主壳改纯 surface 形态后，`ui:toolbox` /
+                    // 宿主壳改纯 surface 形态后，`ui:toolbox` /
                     // `ui:navtab` / `ui:input` 三个权限位随对应扩展点整面退役。
                     // 这里**显式拒绝装载**而不是让它落进 grant 的静默丢弃分支——
                     // 否则旧插件会「加载成功但功能凭空消失」，排查方向被带偏
-                    // （§5.1.3 fail-visible 形态③）。
+                    // （fail-visible 形态）。
                     if let Err(e) =
                         wasmnest_wasm_core::permission::check_retired_permissions(&plugin_id, &manifest.permissions)
                     {
@@ -402,7 +402,7 @@ fn copy_dir_all(src: &Path, dest: &Path) -> crate::Result<()> {
 mod tests {
     use super::*;
 
-    /// 迁移 ticket 06 验收：生产加载路径（PluginLoader::load_all）直接吃组件产物
+    /// 生产加载路径（PluginLoader::load_all）直接吃组件产物
     ///
     /// 覆盖 manifest 解析 → 组件编译（AOT 缓存）→ instantiate_component → 实例落表；
     /// 再经实例调用 activate 导出（SDK wasm_entry! 宏产物）。

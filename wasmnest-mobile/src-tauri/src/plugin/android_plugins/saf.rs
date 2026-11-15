@@ -1,7 +1,5 @@
-//! SafIo 桥 — 把 saf_io.rs 的 trait 方法经 run_mobile_plugin_async
-//! 转发到 Kotlin SafTransferPlugin（响应解析在 saf_io.rs，可单测）
-//!
-//! 从 android_plugins.rs 拆分。
+//! SafIo 桥：把 `saf_io.rs` 的 trait 方法经 `run_mobile_plugin_async`
+//! 转发到 Kotlin `SafTransferPlugin`（响应解析留在 `saf_io.rs`，可单测）
 
 // ==================== SafIo 桥（SafTransferPlugin 转发） ====================
 //
@@ -96,7 +94,7 @@ pub async fn saf_check_authorized(tree_uri: &str) -> crate::Result<bool> {
     Ok(response.get("authorized").and_then(|v| v.as_bool()).unwrap_or(false))
 }
 
-/// 写入 MediaStore.Downloads 公共下载目录（接收方向统一落点，M2）
+/// 写入 MediaStore.Downloads 公共下载目录（接收方向统一落点）
 ///
 /// src_path 为 app 私有下载目录中的最终文件；mime_type 为空串时由 Kotlin
 /// 按扩展名推断。失败（含 API<29 设备不支持）返回错误，调用方回退私有目录。
@@ -119,7 +117,7 @@ pub async fn saf_write_media_downloads(src_path: &str, display_name: &str, mime_
     crate::plugin::saf_io::parse_media_write_response(&response)
 }
 
-/// 打开 SAF 源为可流读句柄（M3 上传流直传；offset 语义见 SafIo::open_stream）
+/// 打开 SAF 源为可流读句柄（上传流直传；offset 语义见 SafIo::open_stream）
 #[cfg(target_os = "android")]
 pub async fn saf_stream_open(uri: &str, offset: u64) -> crate::Result<crate::plugin::saf_io::SafStreamHandle> {
     let handle = super::picker::SAF_TRANSFER_HANDLE
@@ -204,7 +202,7 @@ pub async fn saf_stream_seekable(uri: &str) -> crate::Result<bool> {
     crate::plugin::saf_io::parse_saf_seekable_response(&response)
 }
 
-/// 「保存到…」（M3）：弹 ACTION_CREATE_DOCUMENT 对话框并流拷贝到用户选择的位置
+/// 「保存到…」：弹 ACTION_CREATE_DOCUMENT 对话框并流拷贝到用户选择的位置
 ///
 /// 用户取消视为失败（保留私有副本回退）。suggested_name 为对话框默认文件名，
 /// mime_type 为空串时按扩展名推断。

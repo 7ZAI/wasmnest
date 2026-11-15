@@ -1,8 +1,8 @@
-//! host-connection-target 宿主 adapter（移动独有 `primary-target`；wasm-core-mobile-purity 票 04 自 wasm-core 迁入）
+//! host-connection-target 宿主 adapter（移动独有 `primary-target`；自 wasm-core 迁入）
 //!
 //! 只暴露**引擎事实**（最后配置的目标地址 / 端口 + 连接状态），零业务投影：
 //! 不返回设备展示名（name 归插件自持）、不解释连接语义（B1–B6 零命中）。
-//! 无权限门（ADR 0022 例外先例 = host-platform）：地址是非凭据的局域网服务事实；
+//! 无权限门（先例 = host-platform）：地址是非凭据的局域网服务事实；
 //! 连接行为本身已由 `ws:client` / `network:http` 等权限位门控。
 //!
 //! 从未配置过任何目标 → Err（fail-visible，禁「返回空对象」——真源读取缺链必须
@@ -21,7 +21,7 @@ pub const MODULE_NAME: &str = "mobile-connection";
 /// 本域提供的 WIT 接口（必须与生成物 `deps/connection-target/` 分片逐字一致）
 pub const MODULE_INTERFACES: &[&str] = &["wasmnest:connection-target@0.0.1/host-connection-target"];
 
-/// 本域无权限门（ADR 0022 已登记的例外，见模块头注）
+/// 本域无权限门（已登记的例外，见模块头注）
 pub const MODULE_PERMISSIONS: &[&str] = &[];
 
 /// 能力模块描述符

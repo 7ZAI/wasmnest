@@ -290,7 +290,8 @@ struct SourceState {
 ///
 /// 装配点：桌面宿主 bootstrap（`PluginHost::new` 之后、
 /// `MetricsRegistry::register_source("process", ...)`）。**注册名固定为
-/// `process`**：与应用侧 Monitor 的 `process` 段解析（`utils/process.ts`）成对。
+/// `process`**：与应用侧 Monitor 的 `process` 段解析
+///（`wasmnest-apps/servers/monitor/desktop/src/utils/process.ts`）成对。
 pub struct ProcessMetricsSource {
     state: std::sync::Mutex<SourceState>,
 }

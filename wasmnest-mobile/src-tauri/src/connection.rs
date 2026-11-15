@@ -1,6 +1,7 @@
-//! Connection Module
+//! 连接模块：底层 WS 客户端与业务层连接管理的统一出口
 //!
-//! WebSocket 客户端和远程通信 - 合并了底层 WS 客户端和业务层连接管理
+//! 对外只暴露稳定的再导出路径，子模块（ws_client / manager / reconnect / ...）
+//! 可独立演进。
 
 pub mod client_router;
 pub mod codec;
@@ -19,7 +20,7 @@ pub mod ws_connection;
 
 use serde::{Deserialize, Serialize};
 
-// Re-export from ws_client layer
+// 底层 WS 客户端层再导出
 pub use client_router::MessageRouter;
 pub use codec::{JsonCodec, MessageCodec};
 pub use default_handler::ClientDefaultMessageHandler;
@@ -32,7 +33,7 @@ pub use traits::{HandlerResult, MessageHandler};
 pub use ws_client::WsClient;
 pub use ws_connection::{WsClientConfig, WsConnectionManager};
 
-// Re-export from business layer
+// 业务层再导出（连接状态 / 管理器）
 pub use manager::ConnectionManager;
 pub use request::AuthRequest;
 
@@ -49,7 +50,7 @@ pub enum WsClientEvent {
     Error {
         message: String,
     },
-    /// 服务端主动关闭（保留 close **code**，M1/ADR 0031）：认证类 code（4001 /
+    /// 服务端主动关闭（保留 close **code**）：认证类 code（4001 /
     /// 4003）是**致命**关闭（重新配对前重连无意义），ConnMonitor / 自愈监督据此
     /// 不自愈、只提示重新配对；非致命 code 走既有网络断连自愈路径
     ServerClosed {

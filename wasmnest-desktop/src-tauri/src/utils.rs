@@ -1,11 +1,10 @@
-//! Utils Module
+//! 宿主工具面：认证桥接、加密与会话互调窄转发
 //!
-//! 工具模块 - 认证、加密 + 会话互调窄转发
-//!
-//! **整核抽出（wasm-core-whole-crate）**：`auth/auth_center`、`auth/test_tokens`、
-//! `session_gateway` 已迁入 `wasmnest-wasm-core` crate；本文件保留 `crate::utils::*`
-//! 路径（`pub use` 垫片，spec §3.1），`identity` / `crypto` 真源在 base / crypto
-//! crate，原样保留。
+//! - `auth::auth_center` / `auth::test_tokens` 与 `session_gateway` **住本仓**：
+//!   它们分别是认证中心桥接（宿主薄壳）和会话插件互调的唯一收口点，随
+//!   wasm-core 纯净性收口从内核迁回/留在宿主；
+//! - `auth::identity` / `crypto` 是真源在 `wasmnest-server-base` /
+//!   `wasmnest-crypto-engine` 的路径 shim，保留 `crate::utils::*` 旧路径零改动。
 
 pub mod auth;
 pub mod crypto;

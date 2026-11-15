@@ -3,8 +3,8 @@
 //! 来源：wasm-core 单形态收口（2026-10-13 用户裁决「将差异放到实现层，也就是宿主」）。
 //! 单形态之前这两项端事实写在 wasm-core 里按 `desktop-assembly` 编译期二选一
 //! （`host_api::platform::platform_id` 的 `"desktop"` / `"mobile"` 字面量、
-//! `host_api::config` 的 `NetworkPort` 臂直读 ServerSupervisor）——按 ADR 0049 D1
-//! 的判定口径（「桌面这样写、移动那样写」就不是机制）应变现宿主的端事实。
+//! `host_api::config` 的 `NetworkPort` 臂直读 ServerSupervisor）——按
+//! 「桌面这样写、移动那样写就不是机制」的判定口径，应显现在宿主的端事实上。
 //! 现在内核只消费 `wasmnest_wasm_core::host_api::ports::HostFactsPort`，
 //! 本文件是桌面实现（移动对应实现：
 //! `wasmnest-mobile/src-tauri/src/plugin/host_ports.rs`）。
@@ -22,7 +22,7 @@ pub struct DesktopHostFacts;
 impl HostFactsPort for DesktopHostFacts {
     fn platform_id(&self) -> String {
         // 双端契约取值之一（guest 侧 file-transfer 单产物据此分支；取值不再是
-        // 内核按 feature 二选一，见文件头）
+        // 内核按 feature 二选一）
         "desktop".to_string()
     }
 

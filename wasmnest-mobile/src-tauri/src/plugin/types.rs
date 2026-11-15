@@ -1,6 +1,5 @@
-//! Mobile Plugin Types (Host)
+//! 宿主侧插件类型（manifest 词汇真源 = `wasmnest_wasm_core::manifest`）
 //!
-//! **manifest 词汇真源 = `wasmnest_wasm_core::manifest`**（与桌面宿主同源）。
 //! 移动 SDK 的 `wasmnest-plugin-api-mobile::types` 是 guest 面 wire 镜像，
 //! 编到 wasm32 时不能依赖 wasm-core；宿主侧不再消费它。
 
@@ -35,7 +34,7 @@ pub struct LoadedPlugin {
     pub extension_path: String,
 }
 
-/// 插件生命周期事件（真源 = fork crate `manager::types`，批次 2b 迁入；
+/// 插件生命周期事件（真源 = fork crate `manager::types`；
 /// 此处 re-export 保 `crate::plugin::types::PluginLifecycleEvent` 路径——
 /// handler/auth.rs 与 connection/manager.rs 的分发面零改动）
 pub use wasmnest_wasm_core::manager::types::PluginLifecycleEvent;
@@ -51,7 +50,7 @@ pub struct MobilePluginInfo {
     pub author: String,
     pub main: String,
     pub plugin_type: PluginType,
-    /// 装配角色（L1 基础服务 / L2 内部业务 / L3 应用）；缺省 = L3。
+    /// 装配角色（基础服务 / 内部业务 / 业务应用）；缺省 = 业务应用。
     /// 与桌面 `HostPluginInfo.kind` 同形，系统服务区 / 服务监控的唯一判据。
     pub kind: PluginKind,
     pub permissions: Vec<String>,
@@ -106,7 +105,7 @@ fn dir_size(path: &std::path::Path) -> u64 {
 pub struct MobileShellPluginInfo {
     #[serde(flatten)]
     pub plugin: MobilePluginInfo,
-    /// 启动时自动激活偏好（缺省按装配角色：L1/L2 开、L3 关；与
+    /// 启动时自动激活偏好（缺省按装配角色：基础服务 / 内部业务开；与
     /// `PluginManager::is_autostart` 逐字一致）
     pub autostart: bool,
 }

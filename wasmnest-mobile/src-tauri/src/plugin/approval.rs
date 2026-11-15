@@ -14,7 +14,7 @@
 //!
 //! 持久化：`plugin_storage` 表 `__system__` 空间 `plugin_approvals` key，
 //! 不占用任何插件自身的存储空间。
-//! 完整设计见 docs/implementation-plans/mobile-plugin-trust-hardening.md。
+//! 信任链的完整形态：权限门 + 内容钉扎 + 来源标记三层，任一不满足即拒绝激活。
 
 use crate::plugin::storage::PluginStorage;
 use crate::AppError;

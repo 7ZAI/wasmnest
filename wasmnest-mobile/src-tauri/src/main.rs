@@ -1,4 +1,7 @@
-//! WasmNest - Entry Point
+//! 移动宿主可执行入口：安装 panic hook 后转入 `wasmnest_mobile_lib::run`
+//!
+//! panic hook 只用 `eprintln!` + 追加写文件：hook 可能发生在 tracing subscriber
+//! 持锁期间，调用 `tracing::error!` 会死锁（日志红线）。
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 

@@ -1,18 +1,18 @@
-//! host-terminal-stream 域（移动独有 interface，ADR 0018）：WIT adapter + 零解析窄转发网关
+//! host-terminal-stream 域（移动独有 interface）：WIT adapter + 零解析窄转发网关
 //!
 //! ## 本文件持有的两段
 //!
 //! 1. **窄转发表**（[`TerminalStreamGateway`]）：会话 → 前端页面通道（Tauri Channel）
 //!    的登记与裸字节转发。Channel 是 Tauri IPC 机制、WASM 插件无法持有，所以登记
 //!    （命令面 `terminal_page_subscribe`）与转发（本域 WIT 出口）共用同一张表。
-//!    票 05 绑定归位前这张表住 wasm-core（`terminal_stream_gateway.rs`），随本域
+//!    这张表曾住 wasm-core（`terminal_stream_gateway.rs`），随本域
 //!    整体迁入移动宿主——它是移动独有域的机制，内核不该带端词汇。
 //! 2. **WIT layer**（`Host for WasmPluginState`）：权限门（`terminal:output`）+
 //!    空 id 校验 + 转发；错误文案由网关持有（无登记 Channel → 网关自身 fail-visible）。
 //!
-//! C3 红线（ADR 0022 四类薄壳④）：字节全程零 JSON / 零 base64——本层不读字节内容、
+//! 红线（窄转发薄壳）：字节全程零 JSON / 零 base64——本层不读字节内容、
 //! 不识别终端协议、不缓存；协议状态机（订阅门控 / ack / resync / 重连）全在插件侧。
-//! 判据自查（ADR 0022 B1–B6）：session_id 仅是**寻址键**，本层不定义产品类型、
+//! 判据自查（宿主薄壳六判据）：session_id 仅是**寻址键**，本层不定义产品类型、
 //! 不做编排、不持业务事实、不解释事件——零命中。
 //!
 //! `host-terminal-stream` 是移动独有 interface：桌面无此域（`events` 客户端化后

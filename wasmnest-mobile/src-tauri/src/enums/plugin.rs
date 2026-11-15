@@ -1,6 +1,4 @@
-//! Plugin Types
-//!
-//! 插件相关共享类型定义，桌面端和移动端均可使用
+//! 插件相关共享类型（双端可用）
 
 use serde::{Deserialize, Serialize};
 

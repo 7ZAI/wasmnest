@@ -4,7 +4,7 @@
 
 use tauri::Manager;
 
-/// 前端插件通道会话的生命周期钩子（审计票 06）
+/// 前端插件通道会话的生命周期钩子
 ///
 /// 页面加载重置**该 webview** 的 loader 会话密钥与全部插件令牌：宿主前端 bootstrap 会在导入
 /// 任何插件模块之前重新取得密钥，而插件代码只在模块被导入后才开始运行——「首个调用者生效」
@@ -12,7 +12,7 @@ use tauri::Manager;
 ///
 /// **按 webview 分区**（2026-09-26）：本钩子对每个 webview（主窗口 / 终端窗口 / 未来任何
 /// 独立窗口）都触发，凭证表按 label 分域——否则终端窗口加载会回收主窗口凭证，使主窗口插件面
-/// 命令全数被拒（`缺少有效通道凭证`）。详见 `security::frontend_channel` 模块注释。
+/// 命令全数被拒（`缺少有效通道凭证`）：凭证表按 label 隔离，是前端通道身份门的支点。
 pub(super) fn frontend_channel_session_hook() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri::plugin::Builder::<tauri::Wry>::new("wasmnest-frontend-channel")
         .on_page_load(|webview, payload| {

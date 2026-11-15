@@ -1,14 +1,14 @@
-//! Authentication Module
+//! 认证与配对入口：认证管理器、认证状态与凭据类型
 //!
-//! 认证和配对 - 认证管理器与认证状态（本地配对码的生成 / 持有 / 校验面已于票 14
-//! 退役：移动端不是配对码颁发方，配对码由桌面端生成，本端只做提交与凭据落地）
+//! 本地配对码的生成 / 持有 / 校验面已退役：移动端不是配对码颁发方（配对码由
+//! 桌面端生成），本端只做提交与凭据落地。
 
 pub mod http;
 pub mod manager;
 
 use serde::{Deserialize, Serialize};
 
-// Re-export public types
+// 公开类型再导出：调用方经 `crate::auth::*` 取用，不直接依赖子模块路径
 pub use manager::AuthManager;
 
 /// 认证凭据

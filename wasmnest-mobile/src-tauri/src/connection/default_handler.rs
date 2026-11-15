@@ -1,7 +1,4 @@
-//! Client Default Message Handler
-//!
-//! 客户端默认消息处理器，实现 MessageHandler trait
-//! 使用编解码器解码消息，再委托给单个 MessageRouter 处理
+//! 默认消息处理器：解码入站消息后委托给单个 `MessageRouter`
 
 use crate::connection::client_router::MessageRouter;
 use crate::connection::codec::{JsonCodec, MessageCodec};
@@ -15,7 +12,7 @@ use tokio_tungstenite::tungstenite::protocol::Message as WsMsg;
 /// 客户端默认消息处理器
 ///
 /// 处理流程：
-/// 1. 插件事件帧优先（`{"type":"event",...}`，票 03）：命中即闭环返回
+/// 1. 插件事件帧优先（`{"type":"event",...}`）：命中即闭环返回
 /// 2. 其余帧使用 codec 解码 WebSocket 消息为 Message
 /// 3. 委托给单个 MessageRouter 处理
 pub struct ClientDefaultMessageHandler {
@@ -70,7 +67,7 @@ impl MessageHandler for ClientDefaultMessageHandler {
     ) {
         tracing::debug!("[ClientDefaultMessageHandler] handle() called");
 
-        // 插件事件帧优先（票 03）：`{"type":"event",...}` 不是 `Message` 信封，
+        // 插件事件帧优先：`{"type":"event",...}` 不是 `Message` 信封，
         // 交给 codec 必然解码失败刷 warn——命中即在此闭环（已路由或按契约丢弃）
         if let (WsMsg::Text(text), Some(plugin_event)) = (&raw_message, &self.plugin_event) {
             if plugin_event.route_text(text) {

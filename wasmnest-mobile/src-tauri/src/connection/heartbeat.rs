@@ -1,9 +1,7 @@
-//! Heartbeat Module - Ping/Pong Keep-Alive
+//! 心跳保活：定期 Ping、检测 Pong、超时判死
 //!
-//! 职责：心跳保活机制
-//! 1. 定期发送 Ping（协议层）
-//! 2. 检测 Pong 响应
-//! 3. 超时检测
+//! 任意入站帧都证明链路还通，接收循环据此刷新活动时间；长时间无入站帧才判死
+//! （只认 Pong 会漏掉只收不发的心跳形态）。
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -283,7 +281,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_connection_lost_becomes_true_after_mark_connected_without_pong() {
-        // 回归锁（2026-10-04 审计 P1-3）：建连后**首个 Pong 到达前**的半开检测。
+        // 回归锁（2026-10-04 实测）：建连后**首个 Pong 到达前**的半开检测。
         // 旧实现 `last_pong == None => false` 让这段窗口内的检测完全失效——TCP 半开时
         // send(Ping) 只写本地缓冲区并成功返回，两条判据都不触发，死连接无限期挂着。
         // 修复后基准回落到建连时刻，超时即判死。

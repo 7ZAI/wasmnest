@@ -1,4 +1,4 @@
-//! 宿主壳端口实现（server-lib-split spec §2 端口表「注入实现（宿主壳）」列）
+//! 宿主壳端口实现（端口表「注入实现（宿主壳）」列）
 //!
 //! 本模块**留在宿主内**（不随 lib 走）：server 各 lib 反向需要的宿主能力
 //! （AppContext / AppHandle / MessageBus / power / mdns / auth_center / config）
@@ -251,7 +251,7 @@ impl MdnsAdvertiserPort for HostMdnsAdvertiserPort {
             );
             return Err("mDNS advertisement unavailable: advertiser handle unavailable".to_string());
         };
-        // await 到登记完成：supervisor.start 返回时广播必须已生效（§4.5）
+        // await 到登记完成：supervisor.start 返回时广播必须已生效
         let advertiser = advertiser.read().await;
         let config = wasmnest_discovery_engine::types::AdvertiseConfig {
             service_name,
@@ -285,7 +285,7 @@ pub struct HostServerLifecyclePort;
 impl ServerLifecyclePort for HostServerLifecyclePort {
     async fn start_server(&self, port: u16) -> Result<()> {
         let manager = wasmnest_server_websocket::WebSocketManager::global();
-        // faces 由组合根装配（ws 面不认识 http 面，I1 靠注入而非引用）
+        // faces 由组合根装配（ws 面不认识 http 面，零横向靠注入而非引用）
         manager
             .start(port, crate::server::composition::transport_faces())
             .await
@@ -334,11 +334,11 @@ impl ConfigPort for HostConfigPort {
 
 /// peer-net 发现守护接入（`wasmnest-discovery-engine` 引擎函数包装）
 ///
-/// **方向倒置已终结**（wasm-core-lib-split 票 03）：改造前三函数取自
+/// **方向倒置已终结**：改造前三函数取自
 /// `wasm_core::host_api::mdns`——即宿主 server 的端口层依赖 wasm_core 的**插件
-/// 绑定模块**（ADR 0022 裁剪线要消除的方向）。现在直接依赖平台无关引擎 crate。
+/// 绑定模块**（要消除的方向）。现在直接依赖平台无关引擎 crate。
 ///
-/// **浏览面归类型中枢**（ADR 0054 / 票 04）：`subscribe_type` /
+/// **浏览面归类型中枢**：`subscribe_type` /
 /// `request_type_requery` 同样直转引擎——全进程对该服务类型的 `daemon.browse`
 /// 只由中枢发起（peer-net 的重查不再覆盖插件 browse 的 listener）。两个值形态
 /// （引擎 `MdnsBrowseSubscription` / 端口 `MdnsTypeSubscription`）只在这里转换，
@@ -381,7 +381,7 @@ pub fn assemble(app_handle: Option<Arc<tauri::AppHandle>>) -> ServerPorts {
         auth_center: Arc::new(HostAuthCenter),
         bus: Arc::new(HostBusPort::late_bound(
             current_bus,
-            // 帧投递窄端口工厂（票 02 批次 03）：晚绑形态下按**当下的总线**现造——
+            // 帧投递窄端口工厂：晚绑形态下按**当下的总线**现造——
             // 端口与总线必须同源（多上下文下错绑会把帧投进别的实例）。
             // 第 4 步 adapter 迁宿主后，此处的构造改由本目录 `src/plugin/ws.rs` 提供。
             Arc::new(|bus| Arc::new(crate::plugin::ws::HostWsPorts::from_bus(Arc::clone(bus)))),
