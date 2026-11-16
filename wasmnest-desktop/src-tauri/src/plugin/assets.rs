@@ -42,3 +42,65 @@ pub fn plugin_get_asset_dir(dir: State<'_, AppAssetsDir>) -> crate::Result<Strin
     }
     Ok(path.to_string_lossy().into_owned())
 }
+
+/// 单个文本资源的大小上限（图标为 KB 量级；防止把整包大文件读进 WebView）。
+const MAX_TEXT_ASSET_BYTES: usize = 256 * 1024;
+
+/// 读取应用整包内的文本资源（当前用途：SVG 图标）
+///
+/// 壳前端按 capabilities 没有 fs 权限；且 WebKitGTK 不把自定义 `asset://` 协议下的
+/// SVG 交给 `<img>` 渲染（2026-11-14 实机：URL 解析成功但图标静默回退通用 glyph）。
+/// 由宿主读出文本，前端转成 `data:image/svg+xml` URL 再交给 `<img>`。
+///
+/// # Errors
+/// 路径片段不合法、文件读不到、超过 [`MAX_TEXT_ASSET_BYTES`]、内容非 UTF-8 时报错。
+#[tauri::command]
+pub fn plugin_get_asset_text(app_id: String, file: String, dir: State<'_, AppAssetsDir>) -> crate::Result<String> {
+    if !is_safe_segment(&app_id) || !is_safe_segment(&file) {
+        return Err(crate::AppError::Plugin(format!(
+            "invalid app asset path: {app_id}/{file}"
+        )));
+    }
+    let path = dir.0.join(&app_id).join(&file);
+    let bytes = std::fs::read(&path)
+        .map_err(|e| crate::AppError::Plugin(format!("app asset unreadable: {} ({e})", path.display())))?;
+    if bytes.len() > MAX_TEXT_ASSET_BYTES {
+        return Err(crate::AppError::Plugin(format!(
+            "app asset too large: {} ({} bytes)",
+            path.display(),
+            bytes.len()
+        )));
+    }
+    String::from_utf8(bytes)
+        .map_err(|e| crate::AppError::Plugin(format!("app asset is not utf-8: {} ({e})", path.display())))
+}
+
+/// 路径片段是否安全（不含分隔符与 `..`，只允许文件名字符集）。
+fn is_safe_segment(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && !value.contains("..")
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_safe_segment;
+
+    #[test]
+    fn asset_segments_reject_traversal_and_separators() {
+        for bad in ["", "..", "../icon.svg", "a/b", r"a\b", "icon..svg"] {
+            assert!(!is_safe_segment(bad), "should reject {bad:?}");
+        }
+        assert!(!is_safe_segment(&"x".repeat(129)), "should reject overlong segment");
+    }
+
+    #[test]
+    fn asset_segments_accept_plugin_ids_and_icon_files() {
+        for good in ["com.wasmnest.bedcode", "icon.svg", "my_icon-1.png", ".hidden"] {
+            assert!(is_safe_segment(good), "should accept {good:?}");
+        }
+    }
+}

@@ -13,7 +13,7 @@
       :src="logo"
       alt=""
       draggable="false"
-      @error="logoFailed = true"
+      @error="onLogoError"
     />
     <ShellIcon v-else :name="icon" :size="iconSize" :stroke-width="1.7" />
   </span>
@@ -34,6 +34,7 @@
 import { computed, ref, watch } from 'vue'
 import ShellIcon from './ShellIcon.vue'
 import { appIconUrl } from '../composables/appIcons'
+import { logger } from '@/utils/frontendLogger'
 import type { AppTone } from '../composables/state'
 
 const props = withDefaults(
@@ -66,6 +67,14 @@ const logoUrl = ref<string | null>(null)
 const logoFailed = ref(false)
 
 const logo = computed(() => (logoFailed.value ? null : logoUrl.value))
+
+/** 图片加载失败写日志（装饰性降级不拦操作，但排障必须能看见 URL） */
+function onLogoError() {
+  logger.warn(
+    `[Shell] app icon img failed: pluginId=${props.pluginId} url=${logoUrl.value ?? 'null'}`,
+  )
+  logoFailed.value = true
+}
 
 // 同一图块换绑不同应用（如多任务列表复用节点）时重新解析；旧结果不得串到新 id
 watch(
