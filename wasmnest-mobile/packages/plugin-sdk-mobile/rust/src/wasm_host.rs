@@ -455,6 +455,15 @@ impl HostPeer for WasmHost {
         host_peer::set_shared_roots(&dirs_json).map_err(|e| host_err("peer_set_shared_roots", e))
     }
 
+    fn peer_set_config_snapshot(&self, snapshot_json: &str) -> Result<(), HostError> {
+        host_peer::set_config_snapshot(snapshot_json)
+            .map_err(|e| host_err("peer_set_config_snapshot", e))
+    }
+
+    fn peer_fetch_config(&self, session: &str) -> Result<Option<String>, HostError> {
+        host_peer::fetch_config(session).map_err(|e| host_err("peer_fetch_config", e))
+    }
+
     fn peer_list_shared_roots(&self, session: &str) -> Result<serde_json::Value, HostError> {
         peer_json("peer_list_shared_roots", host_peer::list_shared_roots(session).map_err(|e| host_err("peer_list_shared_roots", e))?)
     }

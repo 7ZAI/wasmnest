@@ -67,6 +67,22 @@ pub trait HostPeer {
     fn peer_resume_transfer(&self, batch_id: &str) -> Result<(), HostError>;
     /// 全量幂等替换引擎广播源：条目 `[{ id, name, safTreeUri }]`（SAF 树 URI）
     fn peer_set_shared_roots(&self, dirs: &[serde_json::Value]) -> Result<(), HostError>;
+    /// 写入本机穿透配置快照（不透明 JSON 对象，≤16 KiB；对端可经
+    /// `peer_fetch_config` 按需拉取）。旧宿主未实现时返回错误（不静默丢写）
+    fn peer_set_config_snapshot(&self, _snapshot_json: &str) -> Result<(), HostError> {
+        Err(HostError::custom(
+            -1,
+            "peer_set_config_snapshot unsupported by this host",
+        ))
+    }
+    /// 拉取可信对端的穿透配置快照（session 句柄寻址；`None` = 对端未设置）。
+    /// 旧宿主未实现时返回错误（不把「读不到」伪装成「没有配置」）
+    fn peer_fetch_config(&self, _session: &str) -> Result<Option<String>, HostError> {
+        Err(HostError::custom(
+            -1,
+            "peer_fetch_config unsupported by this host",
+        ))
+    }
     /// 浏览对端共享根清单（仅 session 句柄寻址；断线自动重拨）
     fn peer_list_shared_roots(&self, session: &str) -> Result<serde_json::Value, HostError>;
     /// 目录下钻（仅 session 句柄寻址；断线自动重拨）
