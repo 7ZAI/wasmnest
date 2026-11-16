@@ -145,7 +145,7 @@ WasmNest consists of four peer repositories, expected in a sibling layout:
 | --- | --- | --- |
 | **[wasmnest](https://github.com/7ZAI/wasmnest)** (this repo) | Host and release surface | Desktop / mobile hosts, per-end SDKs, WIT composition, cross-repo version manifest |
 | **[wasmnest-lib](https://github.com/7ZAI/wasmnest-lib)** | Reusable mechanisms | wasm runtime core, host API implementations, transports and capability engines |
-| **[wasmnest-apps](https://github.com/7ZAI/wasmnest-apps)** | Business home | BedCode, AI Chatbox, File Transfer, Monitor, Auth Center and other wasm apps |
+| **[wasmnest-apps](https://github.com/7ZAI/wasmnest-apps)** | Business home | Business apps BedCode, AI Chatbox, File Transfer, Lanbitou and more, plus system services Monitor, Auth Center, Net Config and more |
 | **[wasmnest-test](https://github.com/7ZAI/wasmnest-test)** | Cross-end gate | Real mobile client ↔ real desktop server interop |
 
 ## Desktop and Mobile
@@ -167,6 +167,7 @@ Releases currently cover Windows, Linux and Android; macOS / iOS are not part of
 | [**BedCode**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/bedcode) | `com.wasmnest.bedcode` | desktop + mobile | Terminal session center: pairing and trust, session orchestration, task queue and agent integration; the mobile side is a remote terminal controller |
 | [**AI Chatbox**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/ai-chatbox) | `com.wasmnest.ai-chatbox` | desktop + mobile | Multi-provider AI chat: streaming output, multi-session management, JSONL conversation logs |
 | [**File Transfer**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/file-transfer) | `com.wasmnest.file-transfer` | desktop + mobile | LAN peer discovery and bidirectional file transfer: queues, pause/resume, resumable transfers, shared directories |
+| [**Lanbitou**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/lanbitou) | `com.wasmnest.lanbitou` | desktop | Lightweight Markdown notepad: plain-text editing with live preview, auto-save, time-based separators, system clipboard integration |
 
 **System services** do not appear in the task switcher; the only close entry is "Disable" on the app management page (desktop) / app details page (mobile).
 
@@ -174,6 +175,7 @@ Releases currently cover Windows, Linux and Android; macOS / iOS are not part of
 | --- | --- | --- | --- |
 | [**Monitor**](https://github.com/7ZAI/wasmnest-apps/tree/dev/servers/monitor) | `com.wasmnest.monitor` | desktop + mobile | Runtime monitoring: read-only runtime metrics for loaded wasm apps |
 | [**Auth Center**](https://github.com/7ZAI/wasmnest-apps/tree/dev/servers/auth-center) | `com.wasmnest.auth-center` | desktop | Authentication center: the sole fail-closed authority for inbound connections; pairing codes / QR / trust / auth policy / biometric credentials |
+| [**Net Config**](https://github.com/7ZAI/wasmnest-apps/tree/dev/servers/net-config) | `com.wasmnest.net-config` | desktop | Network configuration center (T18): the single source of truth for tunneling config across apps — one place to import relay addresses, a per-plugin "allow WAN" registry, deployment text generation and address validation; the only exception is the read-only connectivity probe (tunnel:probe) |
 
 ## Develop an App
 
@@ -191,6 +193,10 @@ For project layout, debugging and test requirements, see the apps repo [README](
 | Architecture and the thin-host boundary | [`docs/architecture.md`](docs/architecture.md) |
 | WIT / permission / SDK contracts | [`docs/contracts.md`](docs/contracts.md) |
 | Security and logging red lines | [`docs/security.md`](docs/security.md) |
+| Frontend conventions (mount bundle form / i18n) | [`docs/frontend.md`](docs/frontend.md) |
+| Dependency directions / cross-repo locks / prohibition list | [`docs/boundaries.md`](docs/boundaries.md) |
+| NAT traversal (relay deployment and troubleshooting) | [`docs/nat-traversal.md`](docs/nat-traversal.md) |
+| Commit rollback and Git rules | [`docs/git.md`](docs/git.md) |
 | Testing and definition of done | [`docs/testing.md`](docs/testing.md) |
 | Architecture decision records (ADRs) | [`docs/adr/`](docs/adr/README.md) |
 
