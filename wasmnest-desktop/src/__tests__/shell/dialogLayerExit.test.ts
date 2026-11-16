@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   dialogAppId: { value: null as string | null },
   quitInProgress: { value: false },
   installTarget: { value: null as unknown },
-  plugins: { value: [] as Array<{ id: string; state: string }> },
+  plugins: { value: [] as Array<{ id: string; name?: string; state: string; kind?: string }> },
   windowLabel: 'main',
   closeHandler: null as ((event: { payload: unknown }) => void) | null,
   unlisten: vi.fn(),
@@ -86,6 +86,7 @@ beforeEach(() => {
   mocks.dialogAppId.value = null
   mocks.quitInProgress.value = false
   mocks.installTarget.value = null
+  mocks.plugins.value = []
   mocks.windowLabel = 'main'
   mocks.closeHandler = null
   mocks.listen.mockClear()
@@ -143,6 +144,40 @@ describe('退出确认弹窗', () => {
     expect(mocks.dialog.value).toBe('exit')
     expect(wrapper.find('[data-testid="exit-quitting"]').exists()).toBe(false)
     expect(buttonByText(wrapper, 'shell.dialog.exit.confirm')).toBeTruthy()
+  })
+
+  it('退出清单只列运行中的业务应用，系统服务不计入', async () => {
+    mocks.dialog.value = 'exit'
+    mocks.plugins.value = [
+      { id: 'com.wasmnest.auth-center', name: '认证中心', state: 'running', kind: 'internal-business' },
+      { id: 'com.wasmnest.net-config', name: '网络配置', state: 'degraded', kind: 'basic-service' },
+      { id: 'com.wasmnest.monitor', name: '监控', state: 'running', kind: 'internal-business' },
+      { id: 'com.example.tool', name: '业务应用', state: 'running', kind: 'business-app' },
+      { id: 'com.example.sleep', name: '休眠应用', state: 'dormant', kind: 'business-app' },
+    ]
+    const wrapper = mountLayer()
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('业务应用')
+    expect(text).not.toContain('认证中心')
+    expect(text).not.toContain('网络配置')
+    expect(text).not.toContain('监控')
+    expect(text).not.toContain('休眠应用')
+  })
+
+  it('只有系统服务在运行时不列出任何应用，提示可直接退出', async () => {
+    mocks.dialog.value = 'exit'
+    mocks.plugins.value = [
+      { id: 'com.wasmnest.auth-center', name: '认证中心', state: 'running', kind: 'internal-business' },
+      { id: 'com.wasmnest.monitor', name: '监控', state: 'degraded', kind: 'internal-business' },
+    ]
+    const wrapper = mountLayer()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('认证中心')
+    expect(wrapper.text()).not.toContain('监控')
+    expect(wrapper.text()).toContain('shell.dialog.exit.none')
   })
 
   it('独立终端窗口不监听退出确认事件', async () => {
