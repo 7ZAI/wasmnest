@@ -37,7 +37,7 @@ An app's frontend shares the host's webview and trust domain; the security bound
 
 WasmNest aims to make it fast to build **a personal local "mini-programs" platform**: write a small tool, drop it into the host and it just works; what it can do is decided permission by permission — nothing granted by default, everything approved explicitly.
 
-> The project is in its early development phase (`0.0.1`): there are no real users yet and no external ABI compatibility obligations, so interfaces and shapes may change directly. What is stable is the design boundary, not the version number.
+> The project is in its early development phase (`0.0.2`): there are no real users yet and no external ABI compatibility obligations, so interfaces and shapes may change directly. What is stable is the design boundary, not the version number.
 
 ## Screenshots
 
@@ -212,7 +212,7 @@ For the complete documentation index see [`docs/codemap.md`](docs/codemap.md) §
 
 ## Project Status
 
-- Version line `0.0.1`, early development; interfaces may change destructively.
+- Version line `0.0.2`, early development; interfaces may change destructively.
 - Platform tags look like `vX.Y.Z`; capability `lib-vX.Y.Z`, apps `apps-vX.Y.Z`, tests `test-vX.Y.Z`.
 - Versions and tags are bumped only for releases; day-to-day development does not bump.
 - Roadmap and task backlog are maintained in GitHub Issues.

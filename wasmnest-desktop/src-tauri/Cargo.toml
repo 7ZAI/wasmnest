@@ -10,7 +10,7 @@
 # 安装通道 = crates.io（平台仓刻意无根 workspace，`cargo install --git` 不能定位本 crate，
 # 见票据「关键裁决」）。批 2（issue #36）起宿主不再依赖桌面 SDK，发布无 SDK 前置。
 name = "wasmnest-desktop-runtime"
-version = "0.0.1"
+version = "0.0.2"
 license = "MIT"
 description = "WasmNest Desktop runtime - Tauri shell + plugin host for wasm apps (generic, full WIT)"
 authors = ["binblink"]

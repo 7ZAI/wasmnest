@@ -63,7 +63,7 @@
 | 壳同步 / 漂移锁 | `node scripts/sync-shell-dist.mjs` / `node scripts/sync-shell-dist.mjs --check`（源 `dist/` 缺失时 fail-visible） |
 | 发布门禁 | `node scripts/check-runtime-crate.mjs`（`cargo package --list` 必备条目 + crate 身份 + `cargo metadata --no-deps` + 壳漂移） |
 | 本地安装 | `cargo install --path wasmnest-desktop/src-tauri --root <dir>` |
-| 发布安装 | `cargo install wasmnest-desktop-runtime --version =0.0.1 --root <dir>`（SDK `wasmnest-plugin-api =0.0.1` 必须已上 crates.io） |
+| 发布安装 | `cargo install wasmnest-desktop-runtime --version =0.0.2 --root <dir>`（SDK `wasmnest-plugin-api =0.0.2` 必须已上 crates.io） |
 
 **安装通道偏离 CONTRACT §5.4（owner 裁决留档）**：CONTRACT 默认写「git tag 安装」，
 但平台仓**刻意没有根 workspace**（30+ 独立 Cargo.toml / 8 个 target 落点，见根

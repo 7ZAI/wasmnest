@@ -1,6 +1,6 @@
 [package]
 name = "wasmnest-mobile"
-version = "0.0.1"
+version = "0.0.2"
 license = "MIT"
 description = "WasmNest Mobile - Remote terminal for Claude Code"
 authors = ["binblink"]
