@@ -84,8 +84,26 @@
     "tunnel": {
       "file": "../wasmnest-lib/wasmnest-server-peer-net/wit/tunnel.wit",
       "package": "wasmnest:tunnel"
+    },
+    "audio": {
+      "file": "../wasmnest-lib/wasmnest-audio-engine/wit/audio.wit",
+      "package": "wasmnest:audio"
+    },
+    "stt": {
+      "file": "../wasmnest-lib/wasmnest-stt-engine/wit/stt.wit",
+      "package": "wasmnest:stt"
     }
   },
-  "worlds": ["plugin", "plugin-binary", "plugin-ws", "plugin-task", "plugin-auth-policy", "plugin-system", "desktop-compat"],
-  "abi": { "version": 38 }
+  "worlds": [
+    "plugin",
+    "plugin-binary",
+    "plugin-ws",
+    "plugin-task",
+    "plugin-auth-policy",
+    "plugin-system",
+    "desktop-compat"
+  ],
+  "abi": {
+    "version": 38
+  }
 }

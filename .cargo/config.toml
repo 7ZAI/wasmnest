@@ -111,6 +111,8 @@ wasmnest-server-core = { path = "../wasmnest-lib/wasmnest-server-core" }
 wasmnest-server-http = { path = "../wasmnest-lib/wasmnest-server-http" }
 wasmnest-server-websocket = { path = "../wasmnest-lib/wasmnest-server-websocket" }
 wasmnest-server-peer-net = { path = "../wasmnest-lib/wasmnest-server-peer-net" }
+wasmnest-audio-engine = { path = "../wasmnest-lib/wasmnest-audio-engine" }
+wasmnest-stt-engine = { path = "../wasmnest-lib/wasmnest-stt-engine" }
 
 [patch.crates-io]
 # 桌面 Rust SDK：wasmnest-wasm-core 的 desktop-assembly feature 依赖 `wasmnest-plugin-api`

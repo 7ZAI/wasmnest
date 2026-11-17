@@ -192,6 +192,13 @@ wasmnest-server-http = { version = "0.0.1", git = "https://github.com/7ZAI/wasmn
 wasmnest-server-websocket = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["common-host"] }
 # server-lib-split 票 06：对等网络引擎域（节点身份/节点与发现守护生命周期/host-peer 引擎转发）
 wasmnest-server-peer-net = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["common-host", "relay"] }
+# 音频采集能力域（host-audio）：设备枚举 / 会话 / PCM 归一 / 帧环 / 电平。
+# backend-cpal 是 native 后端（Linux 需 libasound2-dev），由宿主显式开启。
+wasmnest-audio-engine = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["common-host", "backend-cpal"] }
+# 本地语音识别能力域（host-stt）：模型目录 / PCM 会话 / 异步任务。
+# backend-whisper 是 native 后端（whisper.cpp，构建需 cmake + C++ 工具链）；
+# model-download 装配 HTTP 模型下载与 SHA-256 校验。
+wasmnest-stt-engine = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["common-host", "backend-whisper", "model-download"] }
 inventory = "0.3"
 
 # Power management (prevent system sleep)
