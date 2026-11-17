@@ -862,6 +862,52 @@
   opacity: var(--drag-opacity, 1);
 }
 
+/* ============================================================================
+   关闭渐隐（单关 / 全关 两种语义，2026-11-12）
+   ----------------------------------------------------------------------------
+   单关 = 只有这一张原地淡出（基础时长，强减速曲线——关闭是「已经决定了」的动作，
+   不留拖尾）；全部关闭 = 同一条渐隐 + 按序错峰（+22ms/张，封顶 5 步）+ 下沉 / 缩小
+   多一点 + 时长收到 fast，整组读成「一次清场」。位移只走 transform / opacity；
+   交错延迟与上滑方向由组件内联注入（--recents-close-delay / --recents-close-y）。
+   渐隐期间卡片仍是渲染清单里的一个 flex 项（幽灵占位）：布局不在卡还看得见时
+   收拢，窗口结束后整组一次性落位。
+   ============================================================================ */
+.shell-recents-card.is-closing {
+  pointer-events: none;
+  /* 关闭操作不需要入场动画；animation 关掉才不会盖住过渡的 transform */
+  animation: none;
+  opacity: 0;
+  transform: translate3d(0, var(--recents-close-y, 10px), 0) scale(0.96);
+  transition:
+    opacity var(--shell-dur-base) var(--shell-ease-out),
+    transform var(--shell-dur-base) var(--shell-ease-out);
+  transition-delay: var(--recents-close-delay, 0ms);
+}
+/* 全部关闭：整组一起退场，每张多下沉 / 多缩一点，时长收到 fast——张数多时逐张
+   240ms 会读成「排队」 */
+.shell-recents-grid--clearing .shell-recents-card.is-closing {
+  transform: translate3d(0, var(--recents-close-y, 16px), 0) scale(0.94);
+  transition-duration: var(--shell-dur-fast);
+}
+/* 关闭中的缩略区：实例已停用，品牌卡回退也跟着熄掉——只留缩略区底色，像屏幕熄灭；
+   不遮的话会在渐隐中途闪一张明亮的品牌渐变卡 */
+.shell-recents-card.is-closing .shell-live-fallback {
+  opacity: 0;
+}
+
+/* 空态：清场 / 关掉最后一张后淡入，避免「一片空白突然出现」 */
+.shell-recents-empty {
+  animation: shell-recents-empty-in var(--shell-dur-base) var(--shell-ease-out) backwards;
+}
+@keyframes shell-recents-empty-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* 信息条：图标打头 + 名称（异常态才追加状态行）。右侧 44px 留给关闭键，
    padding 让名称 / 状态不钻到关闭键下面。 */
 .shell-recents-meta {
@@ -1073,6 +1119,8 @@
   .shell-shade-leave-active,
   .shell-recents-grid-inner,
   .shell-recents-card,
+  .shell-recents-card.is-closing,
+  .shell-recents-empty,
   .shell-live-fallback,
   .shell-live-surface,
   .shell-reveal,
@@ -1080,6 +1128,11 @@
   .notify-card--flee {
     transition-duration: 0.01ms;
     animation: none;
+  }
+  /* 关闭渐隐也不能等交错延迟（delay 是内联变量，只有 !important 压得住） */
+  .shell-recents-card.is-closing {
+    transition-delay: 0ms !important;
+    transform: none;
   }
   /* 位移 / 缩放型过渡收敛为瞬时 */
   .notify-card,

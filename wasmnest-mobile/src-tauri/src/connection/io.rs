@@ -1,7 +1,6 @@
-//! IO Module - WebSocket Read/Write Operations
+//! WebSocket 读写循环：读取循环与写入通道
 //!
-//! 职责：处理 WebSocket 消息的读取循环和写入通道
-//! 与连接管理分离：只负责 IO，不处理连接建立
+//! 与连接管理分离：只负责 IO，不处理连接建立 / 断开。
 
 use std::sync::Arc;
 use tokio::sync::broadcast;

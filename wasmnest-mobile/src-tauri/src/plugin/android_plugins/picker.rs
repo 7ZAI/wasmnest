@@ -1,6 +1,4 @@
-//! SAF 目录/文件选择（SafPickerPlugin + SafTransferPlugin）
-//!
-//! 从 android_plugins.rs 拆分。
+//! SAF 目录 / 文件选择（SafPickerPlugin + SafTransferPlugin）
 
 use std::sync::OnceLock;
 use tauri::plugin::{Builder, PluginHandle};
@@ -175,8 +173,8 @@ fn saf_response_to_path(response: &serde_json::Value, kind: &str) -> crate::Resu
 
 /// 弹系统目录树选择器，返回 SAF 树元数据（共享目录条目用，不做真实路径解析）
 ///
-/// 共享目录条目存储 content://tree URI + documentId + 展示名（spec：
-/// 共享目录 = SAF URI 存储）；真实路径解析仅旧选路需要，SAF 化后废除。
+/// 共享目录条目存储 content://tree URI + documentId + 展示名（共享目录 = SAF URI
+/// 存储）；真实路径解析仅旧选路需要，SAF 化后废除。
 /// 用户取消返回 Ok(None)；持久化授权由 Kotlin 侧 takePersistableUriPermission
 /// 完成（重启仍有效）。
 #[cfg(target_os = "android")]

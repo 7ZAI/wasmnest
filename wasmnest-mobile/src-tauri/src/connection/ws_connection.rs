@@ -1,7 +1,6 @@
-//! Connection Module - WebSocket Connection Management
+//! WS 连接建立与断开：只负责 TCP/TLS 握手，不处理消息收发
 //!
-//! 职责：管理 WebSocket 连接建立、断开、重连逻辑
-//! 与 IO 模块分离：只负责 TCP/TLS 握手，不处理消息收发
+//! 与 IO 模块分离：连接状态与帧收发各自演进，避免握手逻辑混进读写循环。
 
 use crate::connection::lifecycle::{ConnectionStatus, LifecycleManager};
 use crate::Result;
@@ -258,7 +257,7 @@ impl WsConnectionManager {
         let url = self.config.url();
         info!("[WsConnectionManager] Connecting to {}", url);
 
-        // 升级期链路加密协商（T07/C2）：移动端开启加密且已 pin 桌面身份公钥时
+        // 升级期链路加密协商：移动端开启加密且已 pin 桌面身份公钥时
         // 必须在升级请求里带提案；否则桌面应用策略为 `required` 时会以 400
         // 拒绝事件通道升级（旧实现只 connect_async(url)，没有任何协商头）。
         let crypto_offer = WsCryptoOffer::from_context();
@@ -399,7 +398,7 @@ mod tests {
         ]
     }
 
-    /// C2 核心：`required` + 服务端回执 → 会话密码就位，出站帧为信封
+    /// 协商核心：`required` + 服务端回执 → 会话密码就位，出站帧为信封
     #[test]
     fn required_server_handshake_derives_session_crypto() {
         let kd_secret = StaticSecret::random_from_rng(OsRng);

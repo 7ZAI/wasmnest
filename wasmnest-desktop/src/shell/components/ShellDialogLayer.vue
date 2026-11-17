@@ -231,7 +231,7 @@ import { ensureHostCredential } from '@/utils/appCommands'
 import { logger } from '@/utils/frontendLogger'
 import { isHighRisk } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
-import { useShellApps } from '../composables/useShellApps'
+import { isServiceKind, useShellApps } from '../composables/useShellApps'
 import ShellIcon from './ShellIcon.vue'
 
 const { t } = useI18n()
@@ -288,8 +288,14 @@ const app = computed(() =>
   state.dialogAppId.value ? appsStore.appOf(state.dialogAppId.value) : undefined,
 )
 
+/**
+ * 退出提醒只列业务应用：系统服务（L1/L2，`isServiceKind`）是常驻能力，
+ * 不算用户「未关闭的应用」（与多任务不产卡同口径，2026-10-23 裁决）。
+ */
 const runningApps = computed(() =>
-  appsStore.plugins.value.filter((p) => p.state === 'running' || p.state === 'degraded'),
+  appsStore.plugins.value.filter(
+    (p) => (p.state === 'running' || p.state === 'degraded') && !isServiceKind(p.kind),
+  ),
 )
 
 const permsCount = computed(() => app.value?.permissions.length ?? 0)

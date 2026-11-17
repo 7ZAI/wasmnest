@@ -158,10 +158,6 @@ export default {
       },
       open: '查看',
       reopen: '重新打开',
-      ready: {
-        title: '运行时就绪',
-        body: '已加载 {count} 个应用，授权策略层 fail-closed 自检通过。',
-      },
     },
     ctx: {
       aria: '应用操作菜单',

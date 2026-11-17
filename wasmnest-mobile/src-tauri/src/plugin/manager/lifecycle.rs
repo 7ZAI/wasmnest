@@ -1,3 +1,8 @@
+//! 插件激活 / 停用 / 卸载生命周期（含 preauth 与 Degraded 重试）
+//!
+//! 锁约定：执行 WASM 导出函数期间不持 `plugins` / `wasm_plugins` map 守卫，
+//! 仅持单插件实例锁——回调 host function 重入取 map 锁会死锁。
+
 use super::*;
 
 impl PluginManager {
@@ -278,7 +283,7 @@ impl PluginManager {
         let result = self.deactivate_inner(plugin_id).await;
         if result.is_ok() {
             self.release_services_for(plugin_id, "plugin deactivated").await;
-            // 前端通道令牌随停用回收（ADR 0058 / issue #28）：令牌是「该插件当前这次
+            // 前端通道令牌随停用回收：令牌是「该插件当前这次
             // 激活」的凭证，停用后旧令牌不得继续解析出身份。未运行态（Loaded / Error）
             // 也走这里——Error 残留的令牌同样不能活到下一轮。下次激活由 loader 重新签发。
             // 与桌面 `PluginHost::deactivate_plugin` 的 revoke_plugin 同位同义。
@@ -288,7 +293,7 @@ impl PluginManager {
     }
 
     async fn deactivate_inner(&self, plugin_id: &str) -> Result<()> {
-        // mDNS 基础能力服务（spec v2 §5.1）：插件停用即回收其全部浏览 + 广播
+        // mDNS 基础能力服务：插件停用即回收其全部浏览 + 广播
         // 句柄（host-mdns v2 生命周期随属主；只碰本人，宿主/它插件登记不受影响）
         crate::plugin::host_domains::purge_for_plugin(plugin_id);
 
@@ -371,12 +376,12 @@ impl PluginManager {
 }
 
 impl PluginManager {
-    /// 卸载插件（L3 应用；系统服务拒绝）
+    /// 卸载插件（业务应用；系统服务拒绝）
     ///
     /// `keep_data` = 保留应用数据（私有库 `plugin.db` 家族 + 主库 KV）。
     /// - 用户安装应用：删代码文件，保留数据目录（无 `plugin.json`，loader 跳过）；
     ///   重装时 downloader 把私有库搬进新包目录；
-    /// - **所有 L3 应用**都写 `plugins/.uninstalled/<id>` 标记（不止内置）：内置应用被
+    /// - **所有业务应用**都写 `plugins/.uninstalled/<id>` 标记（不止内置）：内置应用被
     ///   zip 更新后来源会变成 `FileInstall` / `RemoteDownload`，按来源判定会漏写，卸载
     ///   后下次启动解压器从 APK assets 重新解压 → 应用复活。安装 / 下载命令成功后清
     ///   标记，因此对非内置 id 只是一枚无害的空标记。
@@ -387,7 +392,7 @@ impl PluginManager {
             let plugin = plugins
                 .get(plugin_id)
                 .ok_or_else(|| crate::AppError::Plugin(format!("Plugin not found: {}", plugin_id)))?;
-            // 系统服务（L1/L2）随宿主分发，卸载入口只为 L3 应用保留。
+            // 系统服务（基础服务 / 内部业务）随宿主分发，卸载入口只为业务应用保留。
             // 判据 = manifest kind，不依赖来源标记（防绕过 apk-asset 标记的构造路径）。
             plugin.manifest.kind
         };
@@ -413,7 +418,7 @@ impl PluginManager {
         if let Some(runtime) = self.wasm_runtime.get() {
             runtime.monitor().remove(plugin_id);
         }
-        // Egress：卸载清策略 + 记录 + URL 声明（重装即全新授权，ADR 0022 §8 生命周期）
+        // Egress：卸载清策略 + 记录 + URL 声明（重装即全新授权）
         crate::egress::policy().purge_plugin(plugin_id);
 
         // 清理启用 / 自启动偏好、审批记录与插件存储

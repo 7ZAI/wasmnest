@@ -1,13 +1,13 @@
-//! 测试夹具：经认证中心签发设备入场 token（ADR 0033）
+//! 测试夹具：经认证中心签发设备入场 token
 //!
-//! **为什么需要这个模块**：v33 起宿主**没有任何签发面**——测试再也不能自己造一枚
+//! **为什么需要这个模块**：宿主**没有任何签发面**——测试再也不能自己造一枚
 //! 「合法 token」了。唯一诚实的造法是走生产签发路径：认证中心的 `auth-grant` /
 //! `jwt` / `issue` 动作（宿主经 `auth-method-invoke` 零解析转发进去）。这样每个
 //! 断言都在真实链路上：中心自持密钥签出来的 token，中心自己当然认。
 //!
 //! **落点变迁**：原住 wasm-core `utils/auth/test_tokens.rs`（依赖其内部
-//! `test_seed_plugin_secret`）；wasm-core 纯净性收口票 02 批次 04 把 host-auth 域
-//! （含该种子函数）迁宿主 `src/plugin/auth.rs` 后，本夹具**随依赖迁回 lib**——
+//! `test_seed_plugin_secret`）；host-auth 域（含该种子函数）迁宿主
+//! `src/plugin/auth.rs` 后，本夹具**随依赖迁回 lib**——
 //! 旧理由（「迁回会让 wasm-core 自己的闭环测试失去造 token 通路」）随域迁出失效。
 //! 消费方 = lib 集成测试（`src-tauri/tests/*`：session_e2e / system_component_test /
 //! auth_center_perf），经 `wasmnest_desktop_lib::utils::auth::test_tokens` 消费；
@@ -15,7 +15,7 @@
 //!
 //! 前置条件：中心已在册（`host_api::auth_center::is_registered()`）且其注册 methods 含
 //! `jwt`——`com.wasmnest.bedcode` 的 `activate` 会自注册
-//! `["pairing_code", "qr", "biometric", "jwt"]`（ADR 0031 K9）。
+//! `["pairing_code", "qr", "biometric", "jwt"]`。
 
 use wasmnest_wasm_core::host_api::auth_center;
 use wasmnest_wasm_core::host_api::context::WasmHostContext;

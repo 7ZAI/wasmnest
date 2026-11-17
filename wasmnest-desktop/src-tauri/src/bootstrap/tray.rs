@@ -5,7 +5,10 @@
 use crate::Result;
 use tauri::Manager;
 
-/// Setup system tray
+/// 装配托盘菜单：显示 / 隐藏主窗口、退出宿主
+///
+/// 退出项先走窗口关闭（触发 `CloseRequested` → 生命周期钩子 → 确认弹窗），
+/// 只有主窗口不存在时才直接 `app.exit(0)`——托盘退出不能绕过优雅关闭流程。
 pub(super) fn setup_tray(app: &tauri::AppHandle) -> Result<()> {
     use tauri::{
         menu::{Menu, MenuItem},

@@ -1,4 +1,4 @@
-//! host-websocket 客户端域 —— 移动端薄适配器（ADR 0043 引擎抽根）
+//! host-websocket 客户端域 —— 移动端薄适配器（引擎抽根）
 //!
 //! 引擎机制（句柄表 / 属主仲裁 / reader-writer 双任务 / 心跳 / 退避重连 / 帧信封 /
 //! 停用回收）全部在通用能力 crate [`wasmnest_ws_client_engine`]（能力仓
@@ -14,13 +14,12 @@
 //! （握手 await）；`guarded_host_call`（panic 边界）+ `block_on_async`（重入安全桥）
 //! 两件事都是宿主运行时形态，故在适配层，本模块不碰 engine 以外的任何机制。
 //!
-//! **只做客户端域**：移动端不跑 WS 服务器（ADR 0018），服务端域 9 函数与
-//! `connection-context` 不跟演（ADR 0019 双端偏离）；不引入 `ws:server` 权限位。
+//! **只做客户端域**：移动端不跑 WS 服务器，服务端域 9 函数与 `connection-context`
+//! 不跟演（双端偏离）；不引入 `ws:server` 权限位。
 //!
 //! 与桌面端的能力域实现（`wasmnest-server-websocket` 的 `plugin_binding` 客户端段）
 //! **同构但分叉**：桌面那份与 actix 服务器栈 + 过滤器链同 crate 耦合；本 crate 用的
-//! 是零平台依赖的通用引擎，两份之间的显式重复（ADR 0041 D1 桌面侧条件未满足）留待
-//! 后续票据。
+//! 是零平台依赖的通用引擎；两份之间的显式重复暂时保留——桌面侧尚未满足共用条件。
 //!
 //! 行为契约（权限门 fail-closed / 属主隔离 / 句柄生命周期 / close code 语义 /
 //! 队列满 fail-fast / purge 回收 / 入参校验 / 帧信封形状 / 重连钳制）由引擎自身
@@ -116,7 +115,7 @@ impl WsTask for RuntimeTask {
 
 /// 退避策略适配：把宿主的 `WsReconnectPolicyPort` 转成引擎的 `ReconnectPolicy`
 ///
-/// 两个 trait 的三方法逐字同形（ADR 0040 共享核的机制同源），本包装只做类型转换，
+/// 两个 trait 的三方法逐字同形（共享核的机制同源），本包装只做类型转换，
 /// **不复制任何退避逻辑**——指数退避 / 抖动 / 下限钳制的真源始终在宿主
 /// `connection::reconnect`。
 struct StateReconnectPolicy(Box<dyn wasmnest_wasm_core::host_api::ports::WsReconnectPolicyPort>);
@@ -147,7 +146,7 @@ impl WsClientPorts for StateWsClientPorts {
 
     /// 宿主 jwt token（代发首帧用；未认证时空串，引擎据此显性失败）
     ///
-    /// **凭据不落插件**（C4）：只交出「代发时那一刻的 token 值」，本模块与引擎都
+    /// **凭据不落插件**：只交出「代发时那一刻的 token 值」，本模块与引擎都
     /// 不打印其值（日志只记长度）。
     fn global_token(&self) -> String {
         self.host_ports.global_token()
@@ -447,7 +446,7 @@ mod tests {
     /// 统一 host-kit state 退役；逐实例权限副本也已退役（2026-10-14）：现经
     /// test_support 的 `build_host_ctx`（无头上下文同形夹具）+ 内核
     /// `grant_permissions`（与生产激活路径同一入口）+ `WasmPluginState::new` 装配
-    /// （管理域测试同款路径，wasm-core-mobile-purity 票 04）。runtime 句柄不再进
+    /// （管理域测试同款路径）。runtime 句柄不再进
     /// state——ws 引擎侧统一走 `current_handle()`（无上下文线程回落 ambient）。
     fn state(plugin_id: &str, ws_granted: bool, _runtime: tokio::runtime::Handle) -> WasmPluginState {
         let ctx = wasmnest_wasm_core::test_support::build_host_ctx();

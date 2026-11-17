@@ -1,4 +1,4 @@
-//! 第一方免弹窗目录归属清单（**产品数据真源**，wasm-core-purity 票 08 / P0-2）
+//! 第一方免弹窗目录归属清单（**产品数据真源**）
 //!
 //! 这是宿主 lib 侧唯一一份「哪些插件、哪些目录免弹窗」的清单。判定**逻辑**
 //! （`first_party_dir_matches_with_home`）是机制，留在 `wasmnest-wasm-core` 的
@@ -48,7 +48,7 @@ pub fn first_party_dirs() -> Vec<(&'static str, Vec<TrustedDir>)> {
 mod tests {
     use super::*;
 
-    /// 清单本身是审计面（产品清单 well-formed 锁，随票 08 出口 lib）：
+    /// 清单本身是审计面（产品清单 well-formed 锁）：
     /// 条目非空、id 不重复、只放第一方、已知消费者清单钉死——增删条目必须
     /// 同时交代这里的归属注释与消费函数，否则红。
     #[test]

@@ -1,9 +1,11 @@
-// ==================== 状态机单元测试（spec §3.3 / issue 01 验证清单） ====================
+//! 插件管理状态机单元测试：激活 / 降级 / 重试 / 停用 / 生命周期分发
+//!
+// ==================== 状态机单元测试 ====================
 //
 // 设计依据：
 // - 与桌面端 host.rs:test_activate_degraded_on_startup_failure_then_retry_recovers
 //   同模式（真组件 + storage 开关）
-// - 移动端 plugin-component-test 已有 `on-startup-fail` feature（L107-109），
+// - 移动端 plugin-component-test 已有 `on-startup-fail` feature，
 //   `wasm_runtime/component.rs:745 build_test_component(features)` 编译产物
 // - 行为覆盖：activate 失败→Degraded / Degraded 可重试→Activated /
 //   Degraded 停用→Deactivated / dispatch_lifecycle 跳过 AppStartup 二次调用
@@ -35,7 +37,7 @@ async fn setup_manager() -> (PluginManager, TempDir) {
     let plugin_db = StdArc::new(std::sync::Mutex::new(Database::from_connection(
         rusqlite::Connection::open_in_memory().expect("in-memory sqlite"),
     )));
-    // 票 05b：镜像生产启动顺序——DB 开库后跑内核 schema 初始化
+    // 镜像生产启动顺序——DB 开库后跑内核 schema 初始化
     // （单一真源 = wasm-core `db/schema.sql`；宿主不自持 DDL 副本）
     plugin_db
         .lock()
@@ -180,7 +182,7 @@ async fn test_activate_degraded_retry_to_activated() {
     );
 
     // manager.rs:586 守卫：Activated | Degraded 重入早返回 Ok，**不重试 on_startup**
-    // — spec §3.3 「Degraded 可重试激活但重入无副作用」明确走幂等路径
+    // — 「Degraded 可重试激活但重入无副作用」明确走幂等路径
     // 要重试必须先 deactivate 干净回落，再换 Ok 形态组件 activate
     manager.deactivate(TEST_PID_RETRY).await.expect("deactivate to reset");
     // 替换 wasm 实例为 Ok 形态（不破坏 Deactivated 终态约束，仅换实例）
@@ -319,7 +321,7 @@ async fn test_dispatch_lifecycle_app_startup_skips_wasm_side() {
     );
 }
 
-// ==================== 审计 P0：init 失败 / 权限闸门 / uninstall 副作用 ====================
+// ==================== 审计：init 失败 / 权限闸门 / uninstall 副作用 ====================
 
 /// 构造非信任源（RemoteDownload）插件记录：approval 闸门对这类插件生效
 async fn seed_user_plugin(
@@ -679,7 +681,7 @@ async fn test_uninstall_rolls_back_marker_when_dir_removal_fails() {
     );
 }
 
-/// 系统服务（L1/L2）不可卸载：判据 = manifest kind，不依赖来源标记。
+/// 系统服务（基础服务 / 内部业务）不可卸载：判据 = manifest kind，不依赖来源标记。
 #[tokio::test]
 async fn test_uninstall_system_service_rejected_by_kind() {
     let (manager, _tmp) = setup_manager().await;
@@ -782,7 +784,7 @@ async fn test_auto_start_candidates_default_off() {
     );
 }
 
-/// 系统服务（L1/L2）缺省自启：未写偏好 = true；显式 false 优先。
+/// 系统服务（基础服务 / 内部业务）缺省自启：未写偏好 = true；显式 false 优先。
 #[tokio::test]
 async fn test_auto_start_defaults_on_for_role_driven_services() {
     let (manager, _tmp) = setup_manager().await;

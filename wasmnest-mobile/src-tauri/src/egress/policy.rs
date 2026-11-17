@@ -65,11 +65,11 @@ pub enum EgressDecision {
     Deny(EgressError),
 }
 
-// ==================== 授权策略（三档，ADR 0022 2026-09-28 节对齐） ====================
+// ==================== 授权策略（三档） ====================
 
 /// 授权策略档位（每插件 × network 资源；与桌面 `security::auth_policy::AuthStrategy` 同形）
 ///
-/// 裁决要点（ADR 0022）：策略只回答一件事——遇到授权记录**未覆盖**的目标时，
+/// 裁决要点：策略只回答一件事——遇到授权记录**未覆盖**的目标时，
 /// 要不要问用户。它不是业务默认值（B5 不命中），是安全闸门（薄壳②）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthStrategy {
@@ -125,7 +125,7 @@ pub enum Tier {
     AutoAllow,
 }
 
-/// 策略层给出的下一步（档位 → 动作映射的**单点**；票 19 防回接锁目标）
+/// 策略层给出的下一步（档位 → 动作映射的**单点**；防回接锁目标）
 ///
 /// struct 而非 unit enum：档位副作用（读不读 allow 记录、是否必须落
 /// always_allow 审计）是随档位携带的一等字段，消费方无需在注释里记住义务——
@@ -225,7 +225,7 @@ impl AuthRecordSource {
 
 /// 记录效果取值（写入口径单点）
 ///
-/// `deny` 记录优先于一切放行路径（含策略档位与 allow 记录，ADR 0022 spec §6.1）。
+/// `deny` 记录优先于一切放行路径（含策略档位与 allow 记录）。
 pub const AUTH_EFFECT_ALLOW: &str = "allow";
 pub const AUTH_EFFECT_DENY: &str = "deny";
 
@@ -413,7 +413,7 @@ impl EgressPolicy {
         );
     }
 
-    /// 卸载插件：清策略 + 清记录（重装即全新授权，ADR 0022 §8 生命周期）
+    /// 卸载插件：清策略 + 清记录（重装即全新授权）
     pub fn purge_plugin(&self, plugin_id: &str) {
         self.plugin_strategies.write().unwrap().remove(plugin_id);
         self.save_plugin_strategies();
@@ -689,7 +689,7 @@ impl EgressPolicy {
 
     // ---------- 核心判定 ----------
 
-    /// 判定管线（同步；对齐 ADR 0022 2026-09-28 spec §6.1 顺序）：
+    /// 判定管线（同步，固定顺序）：
     ///
     /// ```text
     /// 0. manifest 声明门（权限位）      —— 资源侧（host_impl/http.rs 已先于本函数执行）
@@ -754,7 +754,7 @@ impl EgressPolicy {
             GRANT_PLUGIN_HOST
         };
 
-        // 第 3 步：硬拒绝记录优先于一切放行路径（ADR 0022 spec §6.1 第 1 步）
+        // 第 3 步：硬拒绝记录优先于一切放行路径
         if self.record_hit(&parsed.host, &parsed.path, plugin_id, AUTH_EFFECT_DENY) {
             tracing::info!(
                 plugin_id = %plugin_id,

@@ -1,6 +1,6 @@
-//! Mobile-to-Desktop Request Builders
+//! 认证信封构建器（会话 / 终端 / 配置请求已随 HTTP 化退役）
 //!
-//! 票 04：会话控制 / 终端输入 / 配置查询已迁桌面 HTTP 面；票 13 会话控制进一步
+//! 会话控制 / 终端输入 / 配置查询已迁桌面 HTTP 面；会话控制进一步
 //! 下沉插件 `com.wasmnest.bedcode`（宿主 `SessionHttpClient` /
 //! `SessionManager` 已退役，前端经 `src/plugin/sessionCommands.ts`）。
 //! `SessionRequest` / `TerminalRequest` / `ConfigRequest` /
@@ -22,7 +22,7 @@ fn with_token(message: Message) -> Message {
     }
 }
 
-// ==================== Auth Requests ====================
+// ==================== 认证请求 ====================
 
 /// 认证相关请求构建器
 pub struct AuthRequest;
@@ -51,7 +51,7 @@ impl AuthRequest {
     }
 }
 
-// ==================== Constants ====================
+// ==================== 常量 ====================
 
 /// 默认超时常量
 pub mod timeouts {

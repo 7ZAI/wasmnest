@@ -1,14 +1,12 @@
-//! Shared System Commands
+//! 双端共享的系统命令（设置读写 / ping）
 //!
-//! 桌面端和移动端共享的系统命令
-//!
-//! 本地配对码命令（生成 / 读取 / 校验 / 清除）已于票 14 随
-//! `connection::pairing_service` 一并退役——移动端不再是配对码颁发方，配对码由
-//! 桌面端生成、移动端只做提交（`commands::auth::ws_verify_pairing_code`）。
+//! 本地配对码命令（生成 / 读取 / 校验 / 清除）已随 `connection::pairing_service`
+//! 一并退役：移动端不是配对码颁发方（配对码由桌面端生成），提交与编排在
+//! `com.wasmnest.bedcode` 插件。
 
 use tauri::Manager;
 
-// ==================== Settings Commands ====================
+// ==================== 设置命令 ====================
 
 /// 获取应用设置
 #[tauri::command]
@@ -50,7 +48,7 @@ pub async fn save_app_settings(
     Ok(())
 }
 
-// ==================== Utility Commands ====================
+// ==================== 通用工具 ====================
 
 /// 测试命令
 #[tauri::command]

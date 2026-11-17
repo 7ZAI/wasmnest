@@ -12,7 +12,7 @@
 //! - [`PeerPorts::check_permission`]：权限门（安全闸门不外出）——复用移动唯一
 //!   权限判定 `PluginManager::has_permission`（真源 = 内核 `PermissionManager`，
 //!   与桌面 `host_api::check_permission` 同一份）；manager 未初始化一律拒绝
-//!   （fail-safe）。拒绝时宿主侧落 `warn`（结构化字段，AGENTS §8），能力域不重复落日志。
+//!   （fail-safe）。拒绝时宿主侧落 `warn`（结构化字段），能力域不重复落日志。
 //! - [`PeerPorts::peer_ctx`]：引擎上下文装配（`crate::peer::net::peer_ctx` 是
 //!   唯一认识 `AppHandle` 的引擎装配点）；无头（未持 AppHandle）返回能力域
 //!   定义的 `HEADLESS_UNAVAILABLE` 文案，不做静默降级。
@@ -22,7 +22,7 @@
 //!
 //! 装配点：`PluginManager::init_wasm_runtime_with`（与既有 `HostPorts` 同处
 //! 开机期）。crate 侧是进程级 `OnceLock`、首装胜出；未装配时 wasm-core 侧
-//! 取端口即 panic（fail-visible，见 crate `ports::ports` 文档）。
+//! 取端口即 panic（fail-visible；端口装配是启动期硬依赖）。
 
 use std::any::Any;
 use std::sync::Arc;
@@ -32,7 +32,7 @@ use wasmnest_server_peer_net::PeerCtx;
 
 // 能力模块白名单条目与强制引用行**必须同处**（本文件），两者不漂移——漏引用 ⇒
 // 该 crate 的 inventory 自报静态不进最终二进制（装载期 missing 方向点名）；漏白名单
-// ⇒ unlisted 方向点名。判据与纪律见 `wasmnest_host_kit::assembly` 模块文档。
+// ⇒ unlisted 方向点名。判据：白名单条目与强制引用行必须同处，漏一处即装载期点名。
 wasmnest_host_kit::expect_host_module!(wasmnest_server_peer_net::plugin_binding::MODULE_NAME);
 use wasmnest_server_peer_net as _;
 
@@ -65,7 +65,7 @@ impl PeerPorts for HostPeerPorts {
         };
         // `has_permission` 是 async（plugins 为 tokio RwLock）——经 wasm-core 唯一
         // 那份同步桥驱动；host fn 线程可能是 worker / 已让出 / 纯 std 线程，
-        // 桥内已按 runtime flavor 分流（见 runtime_util 模块文档）
+        // 桥内已按 runtime flavor 分流（有运行时上下文直接 block_on，无则新建 runtime）
         let allowed = wasmnest_wasm_core::runtime_util::block_on_async(pm.has_permission(plugin_id, permission));
         if !allowed {
             tracing::warn!(

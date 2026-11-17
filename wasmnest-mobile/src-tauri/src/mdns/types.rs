@@ -21,6 +21,6 @@ pub struct DiscoveredService {
     pub txt_records: HashMap<String, String>,
     /// 子类型（如 platform=desktop）
     pub platform: String,
-    /// 用户可读的设备名（from device_name TXT record）
+    /// 用户可读的设备名（取自 `device_name` TXT 记录）
     pub device_name: String,
 }

@@ -1,4 +1,4 @@
-//! 桌面 guest 事件派发器（票 03 / ADR 0022）
+//! 桌面 guest 事件派发器
 //!
 //! **机制留内核、契约面上移**：`events` 导出双端词汇不同（桌面 `on-message` /
 //! `on-process-done`；移动是 `on-bus-message` / `on-auth-success` / …），且带
@@ -7,7 +7,7 @@
 //! 签名」由本文件用桌面自有绑定 [`super::bindings`] 实现并注入。
 //!
 //! 生产装配：`PluginHost::new` → `WasmRuntime::set_guest_events`（与 monitor /
-//! peer_ctx_provider 同范式）。**票 04 起这是唯一实现**：内核侧测试替身
+//! peer_ctx_provider 同范式）。本实现是唯一实现：内核侧测试替身
 //! （`TestGuestEvents`）随全 world 绑定一并删除——内核缺省 `UnwiredGuestEvents`
 //! 派发即 fail-visible；宿主集成测试经 `tests/support/mod.rs::setup_wasm_runtime`
 //! 注入本实现（与生产同一份）。

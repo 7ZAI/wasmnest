@@ -1,8 +1,6 @@
-//! Mobile Plugin Commands
+//! 插件操作 Tauri 命令（管理类命令统一带宿主面凭证门）
 //!
-//! 暴露插件操作为 Tauri invoke 命令
-//!
-//! ## 宿主面凭证门（ADR 0058 方案 A，2026-10-24 / issue #21）
+//! ## 宿主面凭证门（2026-10-24）
 //!
 //! 管理类命令（plugin_preauthorize / plugin_activate / plugin_deactivate /
 //! plugin_approve / plugin_peek_app_package / plugin_download_package /
@@ -15,7 +13,7 @@
 //! （与桌面 lib PluginHost 的 channel 同机制；registry 实例由 lib.rs setup 托管，
 //! 命令面独立持有）。
 //!
-//! ## 插件面身份绑定（ADR 0058 方案 A 续，2026-11-02 / issue #28）
+//! ## 插件面身份绑定（2026-11-02）
 //!
 //! 存量缺口收敛：`plugin_invoke` / `plugin_storage_*` 此前**无任何身份绑定**——
 //! 移动运行面与宿主壳同 webview，任一应用前端可裸 invoke 驱动他人命令副作用、
@@ -46,10 +44,10 @@ use std::sync::Arc;
 use tauri::Manager;
 use wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry;
 
-// ==================== Host Surface Credential（ADR 0058 方案 A） ====================
+// ==================== 宿主面凭证 ====================
 
 /// 宿主前端 bootstrap：取得本次页面加载的 loader 会话密钥（域内首个调用者生效）
-/// （ADR 0058 方案 A：移动宿主面凭证签发；桌面同型命令在 wasm-core api_bridge）
+/// （移动宿主面凭证签发；桌面同型命令在 wasm-core api_bridge）
 #[tauri::command]
 pub async fn plugin_frontend_loader_session(
     webview: tauri::Webview,
@@ -63,7 +61,7 @@ pub async fn plugin_frontend_loader_session(
     Ok(session)
 }
 
-/// 插件前端：为指定插件签发通道令牌（issue #28）
+/// 插件前端：为指定插件签发通道令牌
 ///
 /// 与桌面 `api_bridge::plugin_channel_token` 同型：需同窗口 loader 会话密钥 + 插件
 /// 处于**运行态**（`Activated` / `Degraded`）——未激活插件没有 granted 集，令牌无意义。
@@ -103,7 +101,7 @@ pub async fn plugin_channel_token(
     Ok(token)
 }
 
-/// 宿主面命令门（ADR 0058 方案 A）：管理类命令只认宿主前端凭证
+/// 宿主面命令门：管理类命令只认宿主前端凭证
 fn require_host_surface(
     channel: &FrontendChannelRegistry,
     webview_label: &str,
@@ -116,7 +114,7 @@ fn require_host_surface(
         .map_err(|_| crate::AppError::Plugin(denial.to_string()))
 }
 
-/// 插件面命令的统一身份校验（issue #28，与桌面 `api_bridge::authorize_plugin_call` 同源）
+/// 插件面命令的统一身份校验（与桌面 `api_bridge::authorize_plugin_call` 同源）
 ///
 /// 裁决规则在 wasm-core `frontend_channel::authorize`（有单测）：宿主凭证放行任意
 /// 目标、插件令牌只能是目标自己、凭证无效 / 跨窗口一律拒绝（fail-closed，绝不落回
@@ -136,7 +134,7 @@ fn authorize_plugin_call(
 /// `is_running`（`Activated` / `Degraded`）而非桌面的严格 `is_activated`：与本文件
 /// `plugin_invoke` 的下游 `invoke_command` 同一道闸——Degraded 实例是活的、权限集已
 /// 授予，存储面不该比命令面更严（否则降级应用的 KV 会突然全线失败）。
-/// 第三段是 issue #28 复测补记的缺口：移动此前连「目标是否声明 storage 权限」都不查，
+/// 第三段是复测补记的缺口：移动此前连「目标是否声明 storage 权限」都不查，
 /// 未声明 storage 的应用同样可被读写。
 async fn require_storage_access(
     channel: &FrontendChannelRegistry,
@@ -158,13 +156,13 @@ async fn require_storage_access(
     Ok(())
 }
 
-// ==================== Plugin Lifecycle Commands ====================
+// ==================== 插件生命周期命令 ====================
 
 /// 获取所有已加载插件信息（含自启偏好同位）
 ///
 /// 返回值 = 清单 + `autostart`：宿主壳的插件预载与清单页都不必再逐应用查
 /// `plugin_is_autostart`（1+N 次串行 IPC）。偏好缺失时不丢字段——`is_autostart`
-/// 已带角色缺省（L1/L2 true / L3 false），由后端权威给出。
+/// 已带角色缺省（基础服务 / 内部业务 true、业务应用 false），由后端权威给出。
 #[tauri::command]
 pub async fn plugin_list_loaded(app_handle: tauri::AppHandle) -> Result<Vec<MobileShellPluginInfo>> {
     let manager = app_handle.state::<Arc<PluginManager>>();
@@ -242,7 +240,7 @@ pub async fn plugin_deactivate(
     manager.deactivate(&plugin_id).await
 }
 
-// ==================== Plugin State Commands ====================
+// ==================== 插件状态命令 ====================
 
 /// 查询插件启用状态
 #[tauri::command]
@@ -253,7 +251,7 @@ pub async fn plugin_is_enabled(app_handle: tauri::AppHandle, plugin_id: String) 
 
 /// 设置插件启用状态（应用「已启用 / 可用」偏好，不触发激活）
 ///
-/// 属于宿主偏好写面（壳 UI 调用）：issue #28 归宿主门——跨应用篡改他人启用态无正当场景。
+/// 属于宿主偏好写面（壳 UI 调用）：归宿主门——跨应用篡改他人启用态无正当场景。
 #[tauri::command]
 pub async fn plugin_set_enabled(
     app_handle: tauri::AppHandle,
@@ -282,7 +280,7 @@ pub async fn plugin_is_autostart(app_handle: tauri::AppHandle, plugin_id: String
 
 /// 设置插件「启动时自动激活」偏好（只改偏好，下次启动生效）
 ///
-/// 宿主偏好写面（壳 UI 调用）：issue #28 归宿主门——自启动是设备级配置，
+/// 宿主偏好写面（壳 UI 调用）：归宿主门——自启动是设备级配置，
 /// 应用不得自行决定「重启后自动运行」。
 #[tauri::command]
 pub async fn plugin_set_autostart(
@@ -367,11 +365,11 @@ pub async fn plugin_approve(
     manager.approve(&plugin_id).await
 }
 
-// ==================== Plugin Storage Commands ====================
+// ==================== 插件存储命令 ====================
 //
 // 三段校验见 [`require_storage_access`]：身份（令牌决定调用方，`plugin_id` 只作目标）
 // → 目标激活态 → 目标 `storage` 权限。此前三条命令零校验，任一应用前端可读写他人
-// 私库（issue #28）。
+// 私库。
 
 /// 获取插件存储值
 #[tauri::command]
@@ -670,7 +668,7 @@ pub async fn plugin_install_from_file(
     Ok(plugin_id)
 }
 
-/// 卸载应用（L3；系统服务拒绝）。`keepData` 缺省 = 删除应用数据
+/// 卸载应用（业务应用；系统服务拒绝）。`keepData` 缺省 = 删除应用数据
 #[tauri::command]
 pub async fn plugin_uninstall(
     app_handle: tauri::AppHandle,
@@ -717,7 +715,7 @@ pub async fn reload_wasm_plugin(
     manager.activate(&plugin_id).await
 }
 
-// ==================== File System Auth Commands ====================
+// ==================== 文件系统授权命令 ====================
 
 /// 回复文件访问授权请求
 ///
@@ -726,7 +724,7 @@ pub async fn reload_wasm_plugin(
 /// 映射成该实现的四种决策（`allow_once` / `allow_remember` / `deny`）。「拒绝并
 /// 永久记住」（`deny_always`）无前端入口，不在此伪造。
 ///
-/// **宿主门（ADR 0058 F3 的六条授权管理面之一，2026-11-02 补）**：桌面同型命令
+/// **宿主门（六条授权管理面之一，2026-11-02 补）**：桌面同型命令
 /// 早已过 `require_host_surface`，移动侧此前无门——同 webview 内任一应用前端可监听
 /// `plugin:fs-auth-request` 事件拿到 `request_id` 后自行回执，等于替用户批准自己的
 /// 文件访问。询问事件是广播的，回执必须只认宿主前端。
@@ -765,7 +763,7 @@ pub async fn plugin_fs_auth_respond(
 // 已退役」）：统一判定链的授权真源 = 授权记录表 + 弹窗记忆，没有「全局路径 /
 // 插件白名单」这一层；前端无调用点（grep 实证），删除即零回归。
 
-// ==================== Plugin Logging Commands ====================
+// ==================== 插件日志命令 ====================
 
 /// 插件日志输出（TS SDK 调用，统一到宿主 tracing）
 #[tauri::command]
@@ -778,11 +776,11 @@ pub fn plugin_log(plugin_id: String, level: String, message: String) {
     }
 }
 
-// ==================== Plugin Command Invoke ====================
+// ==================== 插件命令调用 ====================
 
 /// 调用 WASM 插件命令（前端 context.commands.execute 的回退桥）
 ///
-/// 身份由 `credential` 绑定（issue #28）：插件令牌只能驱动**自己**的 command，
+/// 身份由 `credential` 绑定：插件令牌只能驱动**自己**的 command，
 /// 宿主凭证（loader 会话）可驱动任意目标。此前该命令零身份、零来源校验，同 webview
 /// 内任一应用前端都能以他人 plugin_id 触发其命令副作用。
 #[tauri::command]
@@ -866,7 +864,7 @@ pub async fn plugin_open_download_dir(plugin_id: String) -> Result<()> {
     crate::plugin::android_plugins::open_download_dir().await
 }
 
-// ==================== 终端输出流窄转发登记（票 12 · 批次 2b 命令薄壳） ====================
+// ==================== 终端输出流窄转发登记（命令薄壳） ====================
 //
 // 表本体就在同仓 `plugin/terminal_stream.rs`（[`TerminalStreamGateway`]，纯机制）；
 // Channel 是 Tauri IPC 机制，WASM 插件无法持有——命令薄壳留宿主，转调 crate

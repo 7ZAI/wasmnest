@@ -1,6 +1,4 @@
-//! Client Route Context - 路由上下文
-//!
-//! 包含事件发送器，供 handler 发送业务事件
+//! 路由上下文：给 handler 提供事件发送器
 
 use std::sync::Arc;
 use tokio::sync::broadcast;

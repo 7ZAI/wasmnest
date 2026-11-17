@@ -1,29 +1,29 @@
-//! 宿主侧 WIT 绑定（全 world `bindgen!`，路径 B 能力域共用一份）
+//! 宿主侧 WIT 绑定（全 world `bindgen!`，宿主直连绑定的能力域共用一份）
 //!
-//! **为什么宿主要自带一份绑定**（孤儿规则，票 02 §4「宿主端组合形态」）：
-//! `impl Trait for WasmPluginState` 要求 trait 或类型之一本地——`WasmPluginState`
-//! 属 host-kit（对任何消费方都是外部类型），故**装配方必须自己生成 trait**。
-//! **票 04 起本文件是桌面 WIT 绑定的唯一落点**：wasm-core 内核不再 bindgen 桌面
-//! world（它只绑 core 交集，见 `../wasmnest-lib/wasmnest-wasm-core/src/manager/runtime/
-//! core_binding.rs`），cap 扩展 interface 的 trait 由本文件生成，各能力 crate
-//! （provider 侧）则 bindgen 各自的 `wit/<domain>.wit` 分片。三方生成的
-//! `wasmnest::<pkg>::host_*::Host` **同名但不同类型**（ADR 0061 拆包后每域一包）。
+//! **为什么宿主要自带一份绑定**（孤儿规则）：`impl Trait for WasmPluginState`
+//! 要求 trait 或类型之一本地——`WasmPluginState` 属 host-kit（对任何消费方都是
+//! 外部类型），故**装配方必须自己生成 trait**。本文件是桌面 WIT 绑定的唯一落点：
+//! wasm-core 内核不再 bindgen 桌面 world（它只绑 core 交集，见
+//! `../wasmnest-lib/wasmnest-wasm-core/src/manager/runtime/core_binding.rs`），
+//! cap 扩展 interface 的 trait 由本文件生成，各能力 crate（provider 侧）则 bindgen
+//! 各自的 `wit/<domain>.wit` 分片。三方生成的 `wasmnest::<pkg>::host_*::Host`
+//! **同名但不同类型**（每域一包）。
 //!
-//! ## 纪律（批次 04/05 的路径 B 域）
+//! ## 纪律（宿主直连绑定域）
 //!
-//! - 宿主侧路径 B 域（批次 04 = crypto / auth；批次 05 = task / process / app /
-//!   timer / api_call / connection）的 `Host` impl 一律引用**本文件**的绑定；
+//! - 宿主直连绑定域（crypto / auth / task / process / app / timer / api_call /
+//!   connection）的 `Host` impl 一律引用**本文件**的绑定；
 //! - **不得**再实现内核或能力 crate 生成的同名 trait——同一个 interface 被两份
 //!   `add_to_linker` 注册 ⇒ 装配期 `defined twice`（`wasmnest-server-http`
 //!   plugin_binding 的同名 trait 警示同源）；
-//! - 绑定配置与内核逐字一致（`exports: { default: async }`——票 02 宿主 async 化
-//!   门禁：wasip3 async store 下同步 call 报错，统一 async 化让 wasip2/unknown
-//!   插件与 wasip3 走同一条调用路径）。
+//! - 绑定配置与内核逐字一致（`exports: { default: async }`——宿主 async 化门禁：
+//!   wasip3 async store 下同步 call 报错，统一 async 化让 wasip2/unknown 插件与
+//!   wasip3 走同一条调用路径）。
 
 use wasmtime::component::bindgen;
 
 bindgen!({
-    // 票 03：端 `wit/` 是生成物目录（同 package 拼装，push_dir 加载）
+    // 端 `wit/` 是生成物目录（同 package 拼装，push_dir 加载）
     path: "../packages/plugin-sdk-desktop/rust/wit",
     world: "plugin",
     exports: { default: async },
@@ -31,26 +31,24 @@ bindgen!({
 
 #[cfg(test)]
 mod tests {
-    //! 票 03 §4.4：端清单（compose.json）↔ 宿主装配面静态对照锁
+    //! 端清单（compose.json）↔ 宿主装配面静态对照锁
     //!
-    //! 单一事实源口径（spec §2）：一份 `<end>-capabilities.json` 同时驱动 ① WIT
-    //! 拼装 ② 宿主白名单 ③ ABI 计数——「组合了什么」只有一个答案。本测试钉住
-    //! 桌面清单的字段完整性与它声明的组合面，漂移（增删组合 / 改 ABI / 改
-    //! world）即红。
+    //! 单一事实源口径：一份 `<end>-capabilities.json` 同时驱动 ① WIT 拼装
+    //! ② 宿主白名单 ③ ABI 计数——「组合了什么」只有一个答案。本测试钉住桌面清单
+    //! 的字段完整性与它声明的组合面，漂移（增删组合 / 改 ABI / 改 world）即红。
     //!
-    //! 对照口径（首步静态版，语义核对留票 04/07 加深）：
-    //! - caps 键 = 组合单元，分两类（ADR 0052 D2/D4）：
+    //! 对照口径（静态版）：
+    //! - caps 键 = 组合单元，分两类：
     //!   ① 能力域 crate 分片（`pty` / `mdns` / `peer` / `http` / `ws`）——对应引擎
     //!      crate 的 MODULE_NAME（pty / discovery / peer-net / http / websocket，
     //!      宿主 Cargo.toml 依赖即编译期证明），cap 真源指向 crate 的 `wit/<domain>.wit`；
-    //!   ② 端扩展 / 宿主路径 B 域（`http-endpoint` / `ws-server` / `desktop`）——
+    //!   ② 端扩展 / 宿主直连绑定域（`http-endpoint` / `ws-server` / `desktop`）——
     //!      真源在宿主 `wit-src/`，MODULE_INTERFACES 在宿主 `src/plugin/`。
-    //! - 各端 cap 分片（ADR 0061 一域一文件的 `world cap-<key>`）import 名集合 == 宿主路径 B 域
-    //!   MODULE_INTERFACES 的 host-* 名并集（11 个）。
-    //! - 版本一致性（票 05 替代原 abi.version 双查）：端清单 package 名 == 能力仓
-    //!   `wasmnest-contract` crate 的 `PACKAGE_NAME`，桌面 WIT 源文件 package 行 ==
-    //!   `package <name>@<version>;`（ADR 0051 D3/D4；`abi.version` 随票 04 退役，
-    //!   本判据不读它）。
+    //! - 各端 cap 分片（一域一文件的 `world cap-<key>`）import 名集合 == 宿主直连
+    //!   绑定域 MODULE_INTERFACES 的 host-* 名并集（11 个）。
+    //! - 版本一致性：端清单 package 名 == 能力仓 `wasmnest-contract` crate 的
+    //!   `PACKAGE_NAME`，桌面 WIT 源文件 package 行 == `package <name>@<version>;`
+    //!   （`abi.version` 已退役，本判据不读它）。
 
     use std::path::PathBuf;
 
@@ -63,10 +61,10 @@ mod tests {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
     }
 
-    /// 能力仓 WIT 包版本真源（ADR 0051 D3；票 05 版本一致性检查的真源）
+    /// 能力仓 WIT 包版本真源（版本一致性检查的唯一出处）
     ///
     /// 真源是零依赖契约 crate 的常量文件 `wasmnest-contract/src/lib.rs`（能力仓经
-    /// sibling `../wasmnest-lib` 入图；票 03 单点化：能力域 `inventory` 静态自报要求
+    /// sibling `../wasmnest-lib` 入图；单点化：能力域 `inventory` 静态自报要求
     /// 编译期常量，JSON 真源结构性冲突）；抽取只认
     /// `pub const <NAME>: &str = "<值>";` 形态，并断言 `PACKAGE` 与前后两者自洽。
     fn package_source() -> (String, String) {
@@ -151,7 +149,7 @@ mod tests {
              wasmnest-contract 注入（ADR 0051 D3 单点化），清单回写版本=第二真源"
         );
 
-        // compose v2（ADR 0061）：caps 值 = { file, package }，package 只写包名。
+        // compose v2：caps 值 = { file, package }，package 只写包名。
         let caps = m["caps"].as_object().expect("caps 是对象");
         let mut keys: Vec<&str> = caps.keys().map(|s| s.as_str()).collect();
         keys.sort();
@@ -233,7 +231,7 @@ mod tests {
         );
     }
 
-    /// 宿主白名单字面量的 `<pkg>@<ver>` 必须与端清单声明的包表逐字一致（ADR 0061）
+    /// 宿主白名单字面量的 `<pkg>@<ver>` 必须与端清单声明的包表逐字一致
     ///
     /// 拆包后宿主 `MODULE_INTERFACES` 跨多个包，接口名相同但版本不同的写法在编译面
     /// 完全合法、运行期探测恒 None。此锁是「宿主字面量 ↔ compose 声明」的对偶面。
@@ -261,7 +259,7 @@ mod tests {
         assert!(checked >= 10, "白名单接口只检查到 {checked} 条，锁可能空转");
     }
 
-    // ==================== 票 07 批次 02：组合面 / 装配面动态锁 ====================
+    // ==================== 组合面 / 装配面动态锁 ====================
 
     /// 收集 WIT 源码里的 interface 定义名（`interface <name> {`）
     fn collect_interface_defs(src: &str, out: &mut Vec<String>) {
@@ -294,17 +292,17 @@ mod tests {
             .collect()
     }
 
-    /// 能力域 crate 自持分片 bindgen 锁（票 05 终态；票 07 批次 02 收口；ADR 0052 D2 更新）
+    /// 能力域 crate 自持分片 bindgen 锁
     ///
     /// 能力域 crate 的 provider 侧 `bindgen!` 不得指回端 SDK 生成物目录：
     /// 共享交集域的绑定源必须是**能力域自己的契约文件**（`<crate>/wit/<domain>.wit`）；
-    /// 特例（ADR 0052 D2/D4 + Q4 裁决）：`wasmnest-server-websocket` 是桌面侧服务端 /
+    /// 特例：`wasmnest-server-websocket` 是桌面侧服务端 /
     /// 客户端引擎 crate，其客户端实现的 provider 绑定直接指共享契约真源
     /// `wasmnest-ws-client-engine/wit/ws.wit`（不再是自家副本，也不回接端 SDK）。
     /// 回接形态 = path 又指回端生成物目录（`plugin-sdk-desktop/rust/wit`）或 world 用
-    /// 整份 `plugin`——那是票 01 POC 实测的第一性问题。
+    /// 整份 `plugin`——那是 POC 实测的第一性问题。
     ///
-    /// 判据按**代码行**比对（跳注释行）：这些文件的模块文档正当地提到迁移史。
+    /// 判据按**代码行**比对（跳注释行）：这些文件的注释正当地提到迁移史。
     #[test]
     fn capability_domains_bind_their_own_wit_slices() {
         // (crate 目录, 绑定源文件, 自持分片（可含 `..` 相对路径）, world)
@@ -377,11 +375,11 @@ mod tests {
         }
     }
 
-    /// 端清单 ↔ 宿主装配面**动态**对照锁（票 07 批次 02：票 03 §4.4 静态版的加深）
+    /// 端清单 ↔ 宿主装配面**动态**对照锁（静态版的加深）
     ///
     /// 静态版（`compose_manifest_fields_are_complete` /
-    /// `cap_desktop_imports_match_host_path_b_modules`）钉住 caps 键集与真源在场；
-    /// 本锁把它推到语义面——用两侧共有的词汇（interface 路径）做双向覆盖，即票面
+    /// `host_module_interface_packages_match_compose_declaration`）钉住 caps 键集与真源在场；
+    /// 本锁把它推到语义面——用两侧共有的词汇（interface 路径）做双向覆盖，即
     /// 「清单域名集 == 白名单能力域模块集」的可执行形态：
     ///
     /// ① 正向（cap world import → 模块）：每个 cap 世界 import 的 interface 都必须有

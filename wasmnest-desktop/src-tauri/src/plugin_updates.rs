@@ -156,7 +156,7 @@ async fn download_zip_verified(
 
 // ==================== Tauri 命令 ====================
 
-/// `plugin_pick_app_zip` 已注销（2026-11-03 审核 P3-2）
+/// `plugin_pick_app_zip` 已注销（2026-11-03 审核）
 ///
 /// 原用途：`SysAppsView` 里「安装应用（本地 zip）」重复卡片的第一步（原生选包 →
 /// 返回路径 → 前端再调 `plugin_install_from_file`）。该卡片在 2026-11-03 的改动中

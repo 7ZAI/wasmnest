@@ -1,6 +1,4 @@
 //! 设备信息插件（DeviceInfoPlugin）
-//!
-//! 从 android_plugins.rs 拆分。
 
 use std::sync::OnceLock;
 use tauri::plugin::{Builder, PluginHandle};

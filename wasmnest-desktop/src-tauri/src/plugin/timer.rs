@@ -1,11 +1,11 @@
-//! host-timer 宿主侧接线（路径 B：WIT 绑定 + `Host` impl + 域函数 + 自报，四件同处）
+//! host-timer 宿主侧接线（WIT 绑定 + `Host` impl + 域函数 + 自报，四件同处）
 //!
-//! wasm-core 纯净性收口票 02 批次 05 自内核迁出（`host_api/timer.rs` 整文件删除，
+//! 自内核迁出（原 `host_api/timer.rs` 已删除，
 //! 内核反向锁 `path_b_domains_must_not_return_to_wasm_core` 防回接）。与 auth /
 //! crypto 同款：**没有独立能力 crate**——装配方就是宿主本 crate（孤儿规则见
-//! [`super::bindings`] 模块文档）。
+//! 要求装配方自生成 trait）。
 //!
-//! 定时器域宿主实现（v6，ADR 0003）：宿主侧只负责"到点调用插件 command"，具体
+//! 定时器域宿主实现：宿主侧只负责"到点调用插件 command"，具体
 //! 到点做什么、幂等与否归插件。
 
 use wasmnest_host_kit::ports::downcast_host;
@@ -18,7 +18,7 @@ use wasmnest_wasm_core::runtime_util::block_on_async;
 use crate::plugin::bindings::wasmnest;
 
 // 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报，见
-// `host_module_whitelist`）。路径 B 域的自报静态住在本 crate（宿主 lib 即最终
+// `host_module_whitelist`）。直连绑定域的自报静态住在本 crate（宿主 lib 即最终
 // 二进制）⇒ 无需能力 crate 那样的 `use <crate> as _;` 强制引用行。
 wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 
@@ -33,7 +33,7 @@ pub const MODULE_PERMISSIONS: &[&str] = &["timer:schedule"];
 
 /// 能力模块描述符（机制面：接口路径 / 权限位 / ABI 下界；**禁带产品名词**）
 ///
-/// `abi_min = 6`：host-timer 在 ABI v6 引入（ADR 0003）。
+/// `abi_min = 6`：host-timer 在 ABI v6 引入。
 const DESC: HostModuleDesc = HostModuleDesc {
     name: MODULE_NAME,
     interfaces: MODULE_INTERFACES,

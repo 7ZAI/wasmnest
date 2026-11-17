@@ -109,7 +109,7 @@ pub fn check_and_resolve_port(app_handle: &AppHandle, preferred_port: u16) -> Re
 mod tests {
     use super::*;
 
-    /// 绑定一个端口并返回 listener（真实占用，票据 13：装饰性测试改造）
+    /// 绑定一个端口并返回 listener（真实占用，不做装饰性模拟）
     fn bind_ephemeral() -> (TcpListener, u16) {
         let listener = TcpListener::bind((BIND_ADDRESS, 0)).expect("bind ephemeral");
         let port = listener.local_addr().expect("local addr").port();
@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn occupied_port_reported_unavailable() {
-        // 真实占用端口后，is_port_available 必须返回 false（票据 13）
+        // 真实占用端口后，is_port_available 必须返回 false
         let (listener, port) = bind_ephemeral();
         assert!(!is_port_available(port), "被占用的端口 {port} 应报告不可用");
         drop(listener);
@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn find_next_available_port_skips_occupied() {
-        // 占用 start+1，find_next 应从 start+2 起返回可用端口（票据 13）
+        // 占用 start+1，find_next 应从 start+2 起返回可用端口
         let (listener, occupied) = bind_ephemeral();
         let start = occupied - 1;
         let result = find_next_available_port(start, 3);

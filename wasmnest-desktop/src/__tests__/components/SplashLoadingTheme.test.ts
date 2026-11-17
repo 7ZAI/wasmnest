@@ -15,13 +15,16 @@
  *        prefers-color-scheme 浅色分支，且镜像的正是 `style.css` 里 warm 浅色 token
  *        的字面值（token 改了没同步镜像 → 转红）
  * - C-06 静态首屏深色分支镜像的是 `SplashLoading.vue` 深色块的品牌 ink 渐变
- *        （2026-10-29 立：此前静态首屏深色还是退役的 slate 配色 #0f172a + 靛蓝环，
- *        与品牌开屏的暖黑断层明显——「启动先看到蓝色转圈」的直接来源）
+ *        （2026-10-29 立：此前静态首屏深色还是退役的 slate 配色 #0f172a，
+ *        与品牌开屏的暖黑断层明显）
  * - C-05 index.html 确实外链了 public/splash.css，且自身不再残留生效的内联 <style>
  *        （样式搬出内联是 CSP 硬约束：Tauri v2 会给内联 <style> 注入 nonce，CSP3 下
  *        style-src 出现 nonce-source 即令 'unsafe-inline' 失效，所有运行时注入的
  *        内联 <style>——四个 wasm 应用的前端样式——在 release 被 style-src-elem 拒掉。
  *        Rust 侧同源锁见 src-tauri/tests/capabilities_lock.rs）
+ * - C-07 静态首屏不出现独立加载指示器（转圈 / keyframes 动画）——它只铺与品牌开屏
+ *        首帧同色的底，禁止退化成「先原生转圈、再设计开屏」的两段式
+ *        （2026-11-13 用户裁决）
  */
 
 import { describe, it, expect } from 'vitest'
@@ -131,9 +134,6 @@ describe('静态首屏浅色锁（public/splash.css）', () => {
     expect(lightBranch).toMatch(
       new RegExp(`\\.splash\\s*\\{[^}]*${lightToken('bg-sidebar')}[^}]*\\}`),
     )
-    expect(lightBranch).toMatch(
-      new RegExp(`\\.spinner\\s*\\{[^}]*border-top-color:\\s*${lightToken('text-primary')}`),
-    )
   })
 
   it('C-05 index.html 外链了 splash.css，且无生效的内联 <style>', () => {
@@ -162,5 +162,18 @@ describe('静态首屏浅色锁（public/splash.css）', () => {
 
     // 反例守卫：退役的 slate 深蓝（旧静态首屏底色）不得回接
     expect((baseBlock as string).toLowerCase()).not.toContain('#0f172a')
+  })
+
+  it('C-07 静态首屏不画独立加载指示器（只铺与品牌开屏首帧同色的底）', () => {
+    const css = staticSplashCss()
+    // 静态帧必须仍在（删掉会先露窗口底色 / 白闪），但只能是纯背景块
+    const indexHtml = stripHtmlComments(readFileSync(INDEX_HTML, 'utf-8'))
+    expect(indexHtml).toMatch(/<div class="splash">\s*<\/div>/)
+
+    // 反例守卫：转圈 / 关键帧动画一旦回接，启动又变成「先转圈再开屏」两段式
+    expect(css).not.toMatch(/\.spinner\b/)
+    expect(css).not.toMatch(/@keyframes\b/)
+    expect(css).not.toMatch(/\banimation\s*:/)
+    expect(indexHtml).not.toMatch(/class="[^"]*\bspinner\b/)
   })
 })

@@ -57,13 +57,14 @@
          （WCAG 2.2 Dragging Movements）。网格内容溢出时纵向上滑让位给原生
          滚动，否则列表滚不动；此时关闭同样走卡片上的 ×。两种状态都保留
          pinch-zoom，不吞掉系统的双指缩放。 -->
-    <template v-if="cards.length > 0">
+    <template v-if="renderCards.length > 0">
       <div
         ref="gridEl"
         class="shell-recents-grid flex-1 min-h-0"
         :class="{
           'shell-recents-grid--dragging': dragAxis !== null,
           'shell-recents-grid--scrollable': scrollable,
+          'shell-recents-grid--clearing': clearingAll,
         }"
         role="list"
         :aria-label="t('shell.switcher.title')"
@@ -77,33 +78,42 @@
              只有 class 的开关走响应式，逐帧移动不再重建整片卡片 vnode -->
         <div class="shell-recents-grid-inner">
           <article
-            v-for="(card, index) in cards"
-            :key="card.app.id"
+            v-for="entry in renderCards"
+            :key="entry.card.app.id"
             class="shell-recents-card"
-            :class="{ active: index === activeIndex, 'is-dragging': card.app.id === dragTargetId }"
-            :style="{ '--i': index }"
-            :data-app-id="card.app.id"
+            :class="{
+              active: entry.card.app.id === activeCardId,
+              'is-closing': entry.closing,
+              'is-dragging': entry.card.app.id === dragTargetId,
+            }"
+            :style="entryStyle(entry)"
+            :inert="entry.closing"
+            :data-app-id="entry.card.app.id"
             role="listitem"
           >
             <!-- 信息条在卡片顶部（与桌面一致）：图标打头 + 名称；
                  非运行 / 异常状态才追加一行状态文字，运行中不重复播报默认事实。 -->
             <div class="shell-recents-meta" aria-hidden="true">
-              <ShellAppIcon :app="card.app" :size="28" />
+              <ShellAppIcon :app="entry.card.app" :size="28" />
               <span class="flex-1 min-w-0">
-                <span class="shell-recents-name">{{ card.app.name }}</span>
-                <span v-if="card.statusText" class="shell-recents-status" :class="card.statusClass">
-                  {{ card.statusText }}
+                <span class="shell-recents-name">{{ entry.card.app.name }}</span>
+                <span
+                  v-if="entry.card.statusText"
+                  class="shell-recents-status"
+                  :class="entry.card.statusClass"
+                >
+                  {{ entry.card.statusText }}
                 </span>
               </span>
             </div>
 
             <div
               class="shell-recents-thumb"
-              :class="{ 'is-running': card.running }"
+              :class="{ 'is-running': entry.card.running }"
               aria-hidden="true"
             >
               <!-- 运行中 = 真实实例的当前页面（实例缺失回退图标 + 元信息）；未运行 = 品牌卡 -->
-              <ShellSurfaceTile :app="card.app" :live="card.running" />
+              <ShellSurfaceTile :app="entry.card.app" :live="entry.card.running" />
             </div>
 
             <!-- 唯一打开动作：覆盖整张卡的空按钮（视觉层 pointer-events:none）。
@@ -112,12 +122,12 @@
               type="button"
               class="shell-recents-open"
               :aria-label="
-                t(card.running ? 'shell.switcher.enterApp' : 'shell.switcher.launchApp', {
-                  name: card.app.name,
+                t(entry.card.running ? 'shell.switcher.enterApp' : 'shell.switcher.launchApp', {
+                  name: entry.card.app.name,
                 })
               "
-              :aria-current="index === activeIndex ? 'true' : undefined"
-              @click.stop="onCardClick(card)"
+              :aria-current="entry.card.app.id === activeCardId ? 'true' : undefined"
+              @click.stop="onCardClick(entry.card)"
             ></button>
 
             <!-- 关闭：每张卡都有（桌面同形），独立按钮压在整卡按钮之上，
@@ -126,8 +136,8 @@
               type="button"
               data-card-ignore-drag
               class="shell-recents-close"
-              :aria-label="t('shell.switcher.closeCard', { name: card.app.name })"
-              @click.stop="dismiss(card.app.id)"
+              :aria-label="t('shell.switcher.closeCard', { name: entry.card.app.name })"
+              @click.stop="dismiss(entry.card.app.id)"
             >
               <svg
                 width="15"
@@ -150,7 +160,7 @@
     <!-- ==================== 空态 ==================== -->
     <div
       v-else
-      class="flex-1 flex flex-col items-center justify-center px-6 text-center"
+      class="shell-recents-empty flex-1 flex flex-col items-center justify-center px-6 text-center"
       data-testid="shell-recents-empty"
     >
       <span
@@ -282,6 +292,9 @@ const activeIndex = computed(() => {
   return index >= 0 ? index : 0
 })
 
+/** 当前卡 id：高亮 / aria-current 的唯一判据（关闭中的幽灵卡永远不是前层） */
+const activeCardId = computed(() => cards.value[activeIndex.value]?.app.id)
+
 /** 卡片集合变化（启动 / 关闭 / 刷新）后修正前层：原前层消失就落到相邻张 */
 watch(cards, (list) => {
   if (list.length === 0) {
@@ -297,6 +310,155 @@ watch(cards, (list) => {
 function step(delta: number): void {
   const target = cards.value[activeIndex.value + delta]
   if (target) activeId.value = target.app.id
+}
+
+// ==================== 关闭渐隐（退出动效） ====================
+/**
+ * 两种关闭语义（2026-11-12 用户裁决「单关 / 全关各有对应的渐隐」）
+ *
+ * - **单关（卡片 × / 上滑关闭）**：只有这一张原地淡出（240ms，强减速曲线），其余卡
+ *   不动；上滑关闭的卡从手指位置继续往上走（不先弹回再淡出）。
+ * - **全部关闭**：同一条渐隐，按卡片顺序逐张 +22ms（封顶 5 步）错峰、每张下沉 / 缩小
+ *   多一点、时长收到 150ms——整组读成「一次清场」。
+ *
+ * 关闭中的卡靠**幽灵占位**留在渲染清单里（数据层已不再有它）：点击那一刻真停用就
+ * 开跑了（不 gate 生命周期，docs/frontend.md §4.3.5），DOM 只按快照多留一个渐隐窗口；
+ * 卡片是固定尺寸（flex-basis + 3/4 比例），幽灵按原序号插回原位，于是渐隐期间布局
+ * 不变，窗口结束后整组一次性落位。
+ */
+const CLOSE_FADE_MS = 240
+const CLOSE_ALL_FADE_MS = 150
+const CLOSE_ALL_STEP_MS = 22
+const CLOSE_ALL_MAX_STEPS = 5
+const GHOST_TAIL_MS = 30
+/** 幽灵兜底释放：数据层迟迟没把卡移走时也不能让卡永远隐身（fail-visible） */
+const GHOST_SAFETY_MS = 1600
+
+interface ClosingCard {
+  /** 关闭前的卡位序号：合并渲染时插回原位 */
+  rank: number
+  /** 交错延迟（全关按序；单关恒 0），同一帧落到元素上供 CSS 过渡取用 */
+  delay: number
+  /** 渐隐结束的绝对时刻（performance.now 口径） */
+  until: number
+  /** 关闭方向（px）：上滑关闭传负值，让卡片顺着手指方向继续走 */
+  closeY?: number
+}
+
+/** 关闭中的卡（数据层已离开或正在离开，DOM 仍在渐隐） */
+const closing = ref(new Map<string, ClosingCard>())
+/** 本次是否为「全部关闭」：只影响整组的下沉幅度与时长（CSS 的 clearing 变体） */
+const clearingAll = ref(false)
+const closingTimers = new Map<string, number>()
+
+interface RenderCard {
+  card: RecentCard
+  /** 视觉序号（入场错峰 / 网格顺序） */
+  index: number
+  closing: boolean
+  delay: number
+  closeY?: number
+}
+
+/** 关闭中的卡不再播报状态行（正在离场，状态文字只会闪一下） */
+function closingCardOf(app: ShellApp): RecentCard {
+  return { app, running: false, statusText: '', statusClass: '' }
+}
+
+/**
+ * 渲染清单 = 当前卡 + 关闭中的幽灵卡
+ *
+ * 幽灵按关闭前的卡位序号插回原位（序号相同时幽灵在前，即它原本的位置）：渐隐期间
+ * 仍是 N 张卡，窗口结束后整组一次性落位，不会出现「卡还在淡出、旁边已经收拢」。
+ */
+const renderCards = computed<RenderCard[]>(() => {
+  const live = cards.value
+  if (closing.value.size === 0) {
+    return live.map((card, index) => ({ card, index, closing: false, delay: 0 }))
+  }
+  const liveIds = new Set(live.map((c) => c.app.id))
+  const entries: Array<RenderCard & { rank: number }> = live.map((card, index) => {
+    // 还在清单里、但已进入关闭流程的卡：自己带 is-closing（渐变从点击那一刻就开始）
+    const ghost = closing.value.get(card.app.id)
+    return {
+      card,
+      index,
+      closing: ghost !== undefined,
+      delay: ghost?.delay ?? 0,
+      closeY: ghost?.closeY,
+      rank: index * 2 + 1,
+    }
+  })
+  for (const [id, ghost] of closing.value) {
+    // 数据层还没把卡移走：活卡自己带 is-closing，不能重复渲染（v-for key 会撞）
+    if (liveIds.has(id)) continue
+    const app = apps.value.find((a) => a.id === id)
+    // 应用整条消失（卸载）：没有可画的卡，直接让位
+    if (!app) continue
+    entries.push({
+      card: closingCardOf(app),
+      index: ghost.rank,
+      closing: true,
+      delay: ghost.delay,
+      closeY: ghost.closeY,
+      rank: ghost.rank * 2,
+    })
+  }
+  return entries
+    .sort((a, b) => a.rank - b.rank || Number(b.closing) - Number(a.closing))
+    .map(({ rank: _rank, ...entry }, index) => ({ ...entry, index }))
+})
+
+/** 卡片内联变量：入场错峰序号 + 关闭交错延迟 / 方向（与 is-closing 同帧落地） */
+function entryStyle(entry: RenderCard): Record<string, string> {
+  const style: Record<string, string> = { '--i': `${entry.index}` }
+  if (entry.closing) {
+    style['--recents-close-delay'] = `${entry.delay}ms`
+    if (entry.closeY !== undefined) style['--recents-close-y'] = `${entry.closeY}px`
+  }
+  return style
+}
+
+function clearClosingTimer(id: string): void {
+  const timer = closingTimers.get(id)
+  if (timer !== undefined) window.clearTimeout(timer)
+  closingTimers.delete(id)
+}
+
+/** 标记关闭中的卡，返回渐隐结束的绝对时刻（调用方据此排释放） */
+function markClosing(
+  id: string,
+  rank: number,
+  delay: number,
+  fadeMs: number,
+  closeY?: number,
+): number {
+  const until = performance.now() + delay + fadeMs + GHOST_TAIL_MS
+  closing.value.set(id, { rank, delay, until, closeY })
+  // 兜底释放：真停用迟迟不结束（或压根没把卡移走）时，卡在安全窗口后淡回来，
+  // 绝不留下「看不见但一直占着卡位」的假象
+  scheduleClosingRelease(id, delay + fadeMs + GHOST_SAFETY_MS)
+  return until
+}
+
+function scheduleClosingRelease(id: string, afterMs: number): void {
+  clearClosingTimer(id)
+  closingTimers.set(
+    id,
+    window.setTimeout(() => releaseClosing(id), Math.max(0, afterMs)),
+  )
+}
+
+function releaseClosing(id: string): void {
+  clearClosingTimer(id)
+  if (closing.value.has(id)) closing.value.delete(id)
+}
+
+/** 卸载时清场：幽灵 / 定时器不能留给下一轮挂载 */
+function releaseAllClosing(): void {
+  for (const id of [...closingTimers.keys()]) clearClosingTimer(id)
+  if (closing.value.size > 0) closing.value.clear()
+  clearingAll.value = false
 }
 
 // ==================== 卡片内容 ====================
@@ -381,6 +543,7 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   resizeObserver = null
   clearDragPaint()
+  releaseAllClosing()
 })
 
 watch(cards, async () => {
@@ -551,7 +714,7 @@ function onPointerUp(event: PointerEvent): void {
   if (axis !== 'y') return
   // 以抬起位置为准（pointermove 可能因快速滑动而稀疏甚至缺失）
   const offset = Math.min(0, event.clientY - origin.y)
-  if (offset <= -DISMISS_THRESHOLD) void dismiss(target)
+  if (offset <= -DISMISS_THRESHOLD) void dismiss(target, -40)
 }
 
 function resetDrag(): void {
@@ -600,17 +763,33 @@ function onSurfaceClick(event: MouseEvent): void {
 
 // ==================== 动作 ====================
 
-/** 关闭一张卡片：运行中先停用，然后（无论是否在跑）移出最近列表 */
-async function dismiss(appId: string): Promise<void> {
+/**
+ * 关闭一张卡片：运行中先停用，然后（无论是否在跑）移出最近列表。
+ *
+ * @param closeY 关闭方向（px）：上滑关闭传负值，让卡片顺着手指的方向继续走出去；
+ *               从卡片 × 关闭不传（按键动作没有方向，默认轻微下沉）。
+ */
+async function dismiss(appId: string, closeY?: number): Promise<void> {
+  if (closing.value.has(appId)) return
   const index = cards.value.findIndex((c) => c.app.id === appId)
   if (index === -1) return
   // 前层移走后落到相邻张（后一张优先，没有则前一张）
   if (activeId.value === appId || index === activeIndex.value) {
     activeId.value = cards.value[index + 1]?.app.id ?? cards.value[index - 1]?.app.id ?? null
   }
-  const app = cards.value[index]
-  if (app?.running) await stop(appId)
+  const card = cards.value[index]
+  // 视觉立刻开始渐隐；真停用同时开跑（不 gate 生命周期）
+  const until = markClosing(appId, index, 0, CLOSE_FADE_MS, closeY)
+  if (card?.running) await stop(appId)
   removeRecent(appId)
+  await nextTick()
+  if (cards.value.some((c) => c.app.id === appId)) {
+    // 没真关掉（停用失败 / 实例仍在）：卡片淡回来，绝不留一张看不见的卡
+    releaseClosing(appId)
+    return
+  }
+  // 数据已离场：幽灵留到渐隐结束，布局在窗口之后一次性落位
+  scheduleClosingRelease(appId, until - performance.now())
   // 只有「关闭最后一张卡」这个动作才回主屏；进入多任务时本就无卡不算，
   // 不能把 cards 变 0 本身当成返回信号。
   if (cards.value.length === 0) nav.goHome()
@@ -618,12 +797,31 @@ async function dismiss(appId: string): Promise<void> {
 
 /** 全部关闭：停止所有运行中实例并清空最近列表（Android「清除全部」的同一语义） */
 async function closeAll(): Promise<void> {
-  const running = apps.value.filter((a) => a.state === 'running')
-  for (const app of running) {
-    await stop(app.id)
+  if (clearingAll.value) return
+  const list = cards.value.slice()
+  if (list.length === 0) return
+  clearingAll.value = true
+  // 两张以上才错峰：只有一张时它就是一次单关，不该多等一步
+  const deadlines: Array<[string, number]> = list.map((card, index) => {
+    const delay = list.length > 1 ? Math.min(index, CLOSE_ALL_MAX_STEPS) * CLOSE_ALL_STEP_MS : 0
+    return [card.app.id, markClosing(card.app.id, index, delay, CLOSE_ALL_FADE_MS)]
+  })
+  try {
+    const running = apps.value.filter((a) => a.state === 'running')
+    for (const app of running) {
+      await stop(app.id)
+    }
+    clearRecent()
+    await nextTick()
+    for (const [id, until] of deadlines) {
+      // 停用失败被保留的卡：立刻撤回幽灵（卡回来）；已关闭的跑到渐隐结束
+      if (cards.value.some((c) => c.app.id === id)) releaseClosing(id)
+      else scheduleClosingRelease(id, until - performance.now())
+    }
+    if (cards.value.length === 0) nav.goHome()
+  } finally {
+    clearingAll.value = false
   }
-  clearRecent()
-  if (cards.value.length === 0) nav.goHome()
 }
 
 /** 进入应用：先回主屏重置栈，再走统一入口（未运行的会先启动，待审批落详情页） */

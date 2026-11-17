@@ -4,9 +4,8 @@
 //!
 //! 引擎控制面（节点装配 / 生命周期 / 连接 / 首连确认 / 可信表 / 共享目录 /
 //! 发送-接收-远端控制面 / 引擎事件翻译）真源在能力仓
-//! `../wasmnest-lib/wasmnest-server-peer-net`（纯引擎形态 `default = []`，双端同引，
-//! spec `.scratch/2026-10-10-peer-capability-consolidation/`）；`src/peer/` 模块
-//! 只保留宿主侧三件事：**(a) 端口实现**（`peer::ports`：`PeerEnginePorts` 五端口
+//! `../wasmnest-lib/wasmnest-server-peer-net`（纯引擎形态 `default = []`，双端同引）；
+//! `src/peer/` 模块只保留宿主侧三件事：**(a) 端口实现**（`peer::ports`：`PeerEnginePorts` 五端口
 //! bus / event_sink / paths / system_info / mdns，trait 词汇复用
 //! `wasmnest-server-base::ports` + 平台资源预热）**与平台缝**（`peer::seam`：
 //! `PeerPlatformSeam` — SAF 共享访问 / 落点提升 / 内置共享条目）；**(b) 装配**
@@ -16,12 +15,12 @@
 //! mDNS 复用：`MdnsPort`（`peer::ports`）直接接 `wasmnest-discovery-engine` 的
 //! 共享守护与类型中枢出口（`shared_daemon` / `register_host_service` /
 //! `stop_host_service` + `subscribe_type` / `request_type_requery`）——宿主零第二份
-//! mDNS 代码；浏览面经中枢（ADR 0054）：全进程同服务类型只允许一条 `daemon.browse`，
+//! mDNS 代码；浏览面经中枢：全进程同服务类型只允许一条 `daemon.browse`，
 //! peer-net 与插件 browse 订阅同一 fan-out。Android 多播锁随共享守护常驻（setup 的
 //! init hook，见 `lib.rs`）。
 //!
-//! 发现刷新订阅（`peer:discovery-refresh`）由能力域自持（
-//! `request_discovery_refresh`）；就绪判据经 `BusPort::is_ready` 下移到
+//! 发现刷新订阅（`peer:discovery-refresh`）由能力域自持
+//! （`request_discovery_refresh`）；就绪判据经 `BusPort::is_ready` 下移到
 //! `peer::ports`（本端 = 插件管理器就绪），能力域不再假设 `ServerPorts`
 //! 全局注册表存在。
 

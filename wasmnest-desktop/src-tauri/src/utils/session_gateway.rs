@@ -1,16 +1,14 @@
-//! 会话窄转发层（会话引擎整体下沉 P1-b，宿主侧单点）——**纯插件互调 api**
-//!
-//! spec：`.scratch/2026-09-23-session-engine-downsink/spec.md`（P1-b 真源切换）。
+//! 会话窄转发层（会话引擎整体下沉后，宿主侧单点）——**纯插件互调 api**
 //!
 //! ## 为什么要有这一层
 //!
 //! 会话操作在宿主侧原本散在三线各自直连 `SessionManager`（桌面 Tauri 命令 /
 //! 移动端 HTTP 控制器 / 移动端 WS 服务），同一条规则被写多遍。本模块是**宿主侧
 //! 调用会话的唯一收口点**：消费面只调这里的函数，不再直接碰 `SessionManager` /
-//! `session_*_bridge`。P1-b 起会话真源已在 `com.wasmnest.bedcode` 插件
+//! `session_*_bridge`。会话真源已在 `com.wasmnest.bedcode` 插件
 //! 登记域，本层全部实现 = 插件互调 api 调用（无内核执行器、无内核裁决副本）。
 //!
-//! ## 今日策略（P1-b 真源切换完成 + 2026-09-25 零业务类型收口）
+//! ## 今日策略（真源切换完成 + 2026-09-25 零业务类型收口）
 //!
 //! | 操作 | 实现 | 插件互调 api |
 //! | --- | --- | --- |
@@ -37,9 +35,9 @@
 //! ## 不属于本层
 //!
 //! 会话**事件的形状与广播**（`events/sync_handler.rs`）与 WS 终端通道的状态订阅
-//! 属事件面：P1-b 起由插件经 `host-events` 广播 `SyncEvent` 会话变体、宿主只做
-//! 转发；票 09 已把处理器的内核回查兜底与状态订阅转接通道（`events/forwarder.rs`）
-//! 一并删除（载荷必须自携带，缺失即 `warn` + 不广播）。
+//! 属事件面：由插件经 `host-events` 广播 `SyncEvent` 会话变体、宿主只做转发；
+//! 处理器的内核回查兜底与状态订阅转接通道（`events/forwarder.rs`）已一并删除
+//!（载荷必须自携带，缺失即 `warn` + 不广播）。
 
 use crate::wasm_core::intercall::call_api;
 use crate::wasm_core::manager::runtime::WasmHostContext;
@@ -64,7 +62,7 @@ fn plugin_required_error(what: &str) -> AppError {
 ///
 /// `call_api` 是同步阻塞调用（宿主桥接等待插件回复；调用方按 async 约定，
 /// 此处保持同步——与旧 `session_create_bridge` 同构）。它是**通用**互调客户端
-/// （`wasm_core::intercall`，ADR 0033 从认证域上提），本层只负责会话 api 名与
+/// （`wasm_core::intercall`，从认证域上提），本层只负责会话 api 名与
 /// 「插件必须激活」这道门。
 fn call_session_api(
     host_ctx: &WasmHostContext,
@@ -195,7 +193,7 @@ pub async fn input(host_ctx: &WasmHostContext, session_id: &str, data: &str) -> 
     Ok(())
 }
 
-/// 写入特殊键（工具栏停止/复制等）：**票 06 下沉**——按键组合 → 转义字节的
+/// 写入特殊键（工具栏停止/复制等）：**已下沉**——按键组合 → 转义字节的
 /// 翻译已移至插件（`com.wasmnest.bedcode` 读 `specialKey` 自译自写，
 /// 统一直写语义，绕过提交行重建）。宿主此处只转发组合串，不再消费
 /// `KeyCombo`/`to_pty_bytes`（pte 输入路径触点清零）。

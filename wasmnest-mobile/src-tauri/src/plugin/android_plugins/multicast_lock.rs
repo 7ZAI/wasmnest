@@ -1,7 +1,7 @@
 //! 多播锁插件（MulticastLockPlugin）Rust 桥接
 //!
 //! Android 默认过滤多播 UDP 包，不持 MulticastLock 时 mDNS 响应收不到（广播
-//! 不受影响）——对等网络发现守护启动前必须先 acquire（issue 03 决策 D6）。
+//! 不受影响）——对等网络发现守护启动前必须先 acquire。
 //! 锁生命周期 = 从守护启动到显式 release，不绑 Activity 生命周期（后台可见性）。
 //!
 //! gen/android 重建恢复清单：MulticastLockPlugin.kt 须恢复。

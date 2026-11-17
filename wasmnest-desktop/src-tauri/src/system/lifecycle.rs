@@ -1,7 +1,7 @@
-//! Application Lifecycle
+//! 应用生命周期钩子注册表：启动 / 关闭 / 窗口关闭三个节点
 //!
-//! 应用生命周期钩子系统 — 核心模块和插件可注册回调到启动/关闭/窗口关闭等生命周期节点
-//! 通过 LifecycleRegistry 全局单例注册，由 Tauri RunEvent 循环驱动执行
+//! 核心模块与插件都可注册回调，经 `LifecycleRegistry` 全局单例登记，由 Tauri
+//! `RunEvent` 循环驱动执行；单钩子有超时保护，避免一个卡死的钩子拖住整个退出流程。
 
 use std::future::Future;
 use std::pin::Pin;
@@ -77,10 +77,8 @@ impl LifecycleRegistry {
 
     /// 注册 Startup 钩子
     ///
-    /// # Arguments
-    /// * `owner` - 注册者标识，用于日志
-    /// * `priority` - 执行优先级，数值越小越先执行
-    /// * `hook` - 异步回调
+    /// `owner` 是注册者标识（只用于日志定位）；`priority` 数值越小越先执行；
+    /// `hook` 在启动流程中被逐个 await。
     pub fn on_startup<F, Fut>(&self, owner: &str, priority: i32, hook: F)
     where
         F: Fn() -> Fut + Send + Sync + 'static,
@@ -97,10 +95,8 @@ impl LifecycleRegistry {
 
     /// 注册 Shutdown 钩子
     ///
-    /// # Arguments
-    /// * `owner` - 注册者标识，用于日志
-    /// * `priority` - 执行优先级，数值越小越先执行
-    /// * `hook` - 异步回调
+    /// `owner` 是注册者标识（只用于日志定位）；`priority` 数值越小越先执行；
+    /// `hook` 在关闭流程中被逐个 await。
     pub fn on_shutdown<F, Fut>(&self, owner: &str, priority: i32, hook: F)
     where
         F: Fn() -> Fut + Send + Sync + 'static,
@@ -117,13 +113,8 @@ impl LifecycleRegistry {
 
     /// 注册 WindowCloseRequested 钩子
     ///
-    /// 返回 false 可阻止窗口关闭。
-    /// 任一钩子返回 false 则整体阻止关闭。
-    ///
-    /// # Arguments
-    /// * `owner` - 注册者标识，用于日志
-    /// * `priority` - 执行优先级，数值越小越先执行
-    /// * `hook` - 异步回调，返回 true 允许关闭，false 阻止关闭
+    /// 任一钩子返回 false 即整体阻止关闭（不是「最后一个说了算」）。`owner` 是
+    /// 注册者标识（只用于日志定位）；`priority` 数值越小越先执行。
     pub fn on_window_close_requested<F, Fut>(&self, owner: &str, priority: i32, hook: F)
     where
         F: Fn() -> Fut + Send + Sync + 'static,
@@ -253,8 +244,8 @@ pub fn register_core_lifecycle_hooks() {
 
     // 引擎层 PTY 回收 — 优先级 10，最先清理（停止所有 PTY 进程）
     //
-    // 票 11 起**只剩引擎一条线**：所有会话（业务 + 插件私有）的 PTY 都住在
-    // `host-pty` 引擎注册表，内核 `SessionManager` 的 PTY 注册表随会话目录删除。
+    // **只剩引擎一条线**：所有会话（业务 + 插件私有）的 PTY 都住在 `host-pty`
+    // 引擎注册表，内核 `SessionManager` 的 PTY 注册表已随会话目录删除。
     //
     // 会话 PTY **不能**依赖插件自己的 `purge_for_plugin`：关机时插件可能已停用 /
     // 超时 / trap，按属主回收依赖停用流程被调到。引擎自持的全量回收保证不留孤儿进程，
@@ -353,14 +344,14 @@ pub fn register_core_lifecycle_hooks() {
 /// 注册窗口关闭请求钩子
 /// 检查是否有存活 PTY，阻止意外关闭。
 ///
-/// 裁决（2026-09-23 用户定案，会话引擎下沉 P1-b）：判据从「`list_sessions()`
-/// 里有 Running 会话」改为**引擎事实「存活 PTY 计数 > 0」**——功能等价（有会话
-/// 在跑 ⇔ 有活 PTY），且不引入会话语义，避免窗口关闭路径被插件异步调用阻塞
+/// 裁决（2026-09-23 用户定案，会话引擎下沉后）：判据从「`list_sessions()` 里
+/// 有 Running 会话」改为**引擎事实「存活 PTY 计数 > 0」**——功能等价（有会话在
+/// 跑 ⇔ 有活 PTY），且不引入会话语义，避免窗口关闭路径被插件异步调用阻塞
 /// （关闭请求是同步钩子，判据必须在无 await 路径内完成）。
 ///
-/// 判据 = 引擎 `host-pty` 注册表（P1-b 起业务会话也走这——插件已停用 / 超时 /
-/// trap 时仍在册句柄仍被计数，不依赖插件侧异步回调）。票 11 起内核注册表那条
-/// 计数腿随 `session/` 目录删除（它此前已被记为「生产为空，仅测试」）。
+/// 判据 = 引擎 `host-pty` 注册表（业务会话也走这——插件已停用 / 超时 / trap 时
+/// 仍在册句柄仍被计数，不依赖插件侧异步回调）。内核注册表那条计数腿已随
+/// `session/` 目录删除（它此前已被记为「生产为空，仅测试」）。
 pub fn register_window_close_hooks() {
     let registry = lifecycle_registry();
 
@@ -471,7 +462,7 @@ mod tests {
 
     #[tokio::test]
     async fn hanging_hook_times_out_and_later_hooks_continue() {
-        // 超时保护：挂起钩子超时后继续执行后续钩子（票据 26）
+        // 超时保护：挂起钩子超时后继续执行后续钩子
         let registry = LifecycleRegistry::new();
         let executed = Arc::new(AtomicUsize::new(0));
         registry.on_shutdown("hang", 10, || {

@@ -1,6 +1,6 @@
-//! SAF 树根解析与中转复制（file_service 三端点 SAF 化，M2）
+//! SAF 树根解析与中转复制（file_service 三端点 SAF 化）
 //!
-//! 挂载根分两类（spec「Implementation Decisions」file_service 三端点）：
+//! 挂载根分两类：
 //! - 真实路径根（`PathBuf`）：app 私有下载目录特殊条目等，走 std::fs（现有逻辑）
 //! - SAF 树根（`content://tree/...`）：经 [`SafIo`]::list_tree（DocumentsContract
 //!   遍历）替代 std::fs::read_dir；下载源经 [`SafIo`]::read_to_cache 中转复制
@@ -17,7 +17,7 @@
 //! - [`arm_relay_cleanup`] / [`sweep_relay_dir`]：副本 TTL 清理（滑动续期）与
 //!   启动扫描清理（服务启动时删除全部副本，重启残留可重新生成）
 //!
-//! 中转副本生命周期（spec）：服务完成/超时后清理（TTL 内续传命中需文件仍在）；
+//! 中转副本生命周期：服务完成/超时后清理（TTL 内续传命中需文件仍在）；
 //! 启动扫描清理兜底进程崩溃残留。本模块不依赖 tauri / actix，可独立单测。
 
 use crate::plugin::saf_io::{SafEntry, SafIo};
@@ -423,7 +423,7 @@ pub fn sweep_relay_dir(relay_dir: &Path) -> usize {
     removed
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 #[cfg(test)]
 mod tests {

@@ -1,6 +1,4 @@
-//! Mobile-to-Frontend Event Forwarding
-//!
-//! 将 MobileEvent 转发为 Tauri 前端事件
+//! 移动端 → 前端事件转发：`MobileEvent` → Tauri 前端事件
 //!
 //! 事件类型：
 //! - ws_connecting: 连接开始
@@ -18,7 +16,7 @@ use tracing;
 use crate::state::get_connection_manager;
 use crate::system::error_boundary::spawn_with_error_boundary;
 
-// ==================== MobileEvent Definition ====================
+// ==================== MobileEvent 定义 ====================
 
 /// 移动端业务事件
 ///
@@ -112,7 +110,7 @@ pub enum MobileEvent {
         status: Option<String>,
     },
 
-    // === 定时自动任务同步事件（v6，ADR 0003） ===
+    // === 定时自动任务同步事件 ===
     /// 定时自动任务变更
     SyncTaskScheduledChanged {
         job_id: String,
@@ -123,7 +121,7 @@ pub enum MobileEvent {
     },
 }
 
-// ==================== Event Forwarding ====================
+// ==================== 事件转发 ====================
 
 /// 输出事件转发标志（只启动一次）
 static OUTPUT_FORWARDING_STARTED: AtomicBool = AtomicBool::new(false);
@@ -389,7 +387,7 @@ async fn forward_event(app: &AppHandle, event: MobileEvent) {
     }
 }
 
-// ==================== Event Helpers ====================
+// ==================== 事件辅助函数 ====================
 
 /// 发射连接开始事件
 pub fn emit_connecting(app: &AppHandle, address: &str, port: u16) {
@@ -437,7 +435,7 @@ pub fn emit_paired(app: &AppHandle) {
     let _ = app.emit("ws_paired", ());
 }
 
-// 票 14 阶段 B：ws_pairing_request / ws_pairing_verified / ws_auth_failed 的
+// ws_pairing_request / ws_pairing_verified / ws_auth_failed 的
 // 发射点已随配对编排迁 `com.wasmnest.bedcode` 插件（经 host-events
 // emit，事件名不变——前端监听零改动）；宿主侧同名 helper 退役，防回接见
 // retired_mobile_auth_orchestration_command_face_lock

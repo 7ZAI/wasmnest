@@ -1,7 +1,6 @@
-//! WebSocket Client - Main Implementation
+//! WebSocket 主客户端：整合心跳 / IO / 生命周期 / 请求响应
 //!
-//! 整合所有子模块的主客户端，提供统一的 API
-//! 使用 RequestResponseManager 实现请求-响应模式
+//! 对上层只暴露统一 API；请求-响应模式由 `RequestResponseManager` 承担。
 
 use crate::connection::MessageHandler;
 use crate::connection::{
@@ -262,7 +261,7 @@ impl WsClient {
                                     //    · Push = 可解析的业务推送帧 → 广播 + 交给 handler
                                     //    · Unroutable = 无法解析为业务 Message 的帧（插件端点事件帧/
                                     //      畸形帧）→ **同样交 handler**——handler 内 PluginEventRouter
-                                    //      正是在此闭环；匹配层吞掉 = 事件帧到不了路由（票 03 必红）
+                                    //      正是在此闭环；匹配层吞掉 = 事件帧到不了路由（必红）
                                     match request_manager.try_match(WsMsg::Text(text.clone())).await {
                                         MatchOutcome::Matched => {
                                             // 已匹配 pending 请求，无需处理
@@ -342,7 +341,7 @@ impl WsClient {
                                     }
                                 }
                                 Some(Ok(WsMsg::Close(reason))) => {
-                                    // M1：保留 close **code**（认证类 4001/4003 致命，
+                                    // 保留 close **code**（认证类 4001/4003 致命，
                                     // 供 ConnMonitor/自愈监督判定「重连无意义」）；
                                     // 未携带 CloseFrame 时按 1005（无状态码）处理
                                     let code = reason
@@ -642,8 +641,8 @@ impl WsClient {
     }
 
     async fn await_tasks(&self, _timeout_secs: u64) {
-        // Note: We cannot directly await JoinHandle wrapped in Arc.
-        // The tasks will be aborted when running flag is set to false above.
+        // 无法直接 await 包在 `Arc` 里的 `JoinHandle`；把 running 置 false 后
+        // 任务会在自己的循环边界退出，这里只做超时等待的空壳。
     }
 
     /// 发送消息（不等待响应）
@@ -720,7 +719,7 @@ impl WsClient {
     }
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 // 用例按功能拆至 `ws_client/tests/`（本内联模块的子模块路径由 rustc
 // 自动解析到该目录；模块树 `connection::ws_client::tests::<文件>` 与内联形态等价，私有项可见性不受影响）。

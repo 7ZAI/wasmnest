@@ -1,4 +1,6 @@
-//! general — crate 内单元测试（自 wasmnest-mobile/src-tauri/src/connection/ws_client.rs 迁出）
+//! WS 发送路径测试：高频保序、对端关闭快速失败、断连后重连重建通道
+//!
+//! 自 `ws_client.rs` 拆出（crate 内单元测试）。
 
 use super::*;
 

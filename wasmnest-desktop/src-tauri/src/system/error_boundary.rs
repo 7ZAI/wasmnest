@@ -1,8 +1,8 @@
-//! Error Boundary
+//! tokio 任务 panic 防护：捕获并记录后台任务的 panic，避免静默崩溃
 //!
-//! **server-lib-split 迁移**：真源已随 `wasmnest-server-base` 拆出（拆分后为
-//! `wasmnest-server-base` crate 的 `error_boundary` 模块）；本文件保留模块路径与
-//! 全部公开名字，宿主其余代码经 `crate::system::error_boundary::*` 引用不受影响。
+//! 真源已拆到 `wasmnest-server-base::error_boundary`；本文件只保留 shim 路径。
+//! 重要后台任务必须用 `spawn_with_error_boundary` 启动（错误必须带操作上下文，
+//! 禁止裸 `?` 透传无上下文错误）。
 
 pub use wasmnest_server_base::error_boundary::{
     spawn_os_thread, spawn_with_error_boundary, spawn_with_error_boundary_on,

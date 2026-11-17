@@ -1,4 +1,4 @@
-//! message 单元测试（自 mod.rs 拆出）
+//! 消息类型单元测试：变体契约、构造器与 request_id 关联（自 `mod.rs` 拆出）
 
 use super::*;
 use std::borrow::Cow;

@@ -145,7 +145,7 @@ WasmNest 由四个平级仓库组成，默认按同场（sibling）布局摆放�
 | --- | --- | --- |
 | **[wasmnest](https://github.com/7ZAI/wasmnest)**（本仓） | 宿主与发布面 | 桌面 / 移动宿主、端内 SDK、WIT 拼装、跨仓版本清单 |
 | **[wasmnest-lib](https://github.com/7ZAI/wasmnest-lib)** | 可复用机制 | wasm 运行时内核、host API 实现、传输面与能力域引擎 |
-| **[wasmnest-apps](https://github.com/7ZAI/wasmnest-apps)** | 业务主场 | BedCode、AI Chatbox、File Transfer、Monitor、Auth Center 等 wasm 应用 |
+| **[wasmnest-apps](https://github.com/7ZAI/wasmnest-apps)** | 业务主场 | 业务应用 BedCode、AI Chatbox、File Transfer、烂笔头等，系统服务 Monitor、Auth Center、网络配置中心等 wasm 应用 |
 | **[wasmnest-test](https://github.com/7ZAI/wasmnest-test)** | 跨端门禁 | 真实移动端客户端 ↔ 真实桌面端服务器互连 |
 
 ## 双端形态
@@ -167,6 +167,7 @@ WasmNest 由四个平级仓库组成，默认按同场（sibling）布局摆放�
 | [**BedCode**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/bedcode) | `com.wasmnest.bedcode` | 桌面 + 移动 | 终端会话中心：配对与信任、会话编排、任务队列与 Agent 集成；移动端为远程终端控制端 |
 | [**AI Chatbox**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/ai-chatbox) | `com.wasmnest.ai-chatbox` | 桌面 + 移动 | 多供应商 AI 对话：流式输出、多会话管理、JSONL 对话日志 |
 | [**File Transfer**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/file-transfer) | `com.wasmnest.file-transfer` | 桌面 + 移动 | 内网对端发现与双向文件传输：队列、暂停 / 恢复、断点续传、共享目录 |
+| [**烂笔头**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/lanbitou) | `com.wasmnest.lanbitou` | 桌面 | 轻量级 Markdown 记事本：纯文本编辑 + 实时预览、自动保存、时间分隔符、系统剪贴板集成 |
 
 **系统服务**不进多任务卡，关闭的唯一入口是应用管理页（桌面）/ 应用详情页（移动）的「停用」。
 
@@ -174,6 +175,7 @@ WasmNest 由四个平级仓库组成，默认按同场（sibling）布局摆放�
 | --- | --- | --- | --- |
 | [**Monitor**](https://github.com/7ZAI/wasmnest-apps/tree/dev/servers/monitor) | `com.wasmnest.monitor` | 桌面 + 移动 | 运行监控：只读查看已加载 wasm 应用的运行时指标 |
 | [**Auth Center**](https://github.com/7ZAI/wasmnest-apps/tree/dev/servers/auth-center) | `com.wasmnest.auth-center` | 桌面 | 认证中心：本机入站连接的唯一裁决者（fail-closed）；配对码 / QR / 信任 / 认证策略 / 生物凭证 |
+| [**网络配置中心**](https://github.com/7ZAI/wasmnest-apps/tree/dev/servers/net-config) | `com.wasmnest.net-config` | 桌面 | 穿透配置的跨应用唯一真源：一处导入中继地址、按插件维护「是否允许外网」注册表、部署文本生成与地址校验；唯一例外是只读连通性探测（tunnel:probe） |
 
 ## 开发一个应用
 
@@ -191,6 +193,10 @@ WasmNest 由四个平级仓库组成，默认按同场（sibling）布局摆放�
 | 架构与宿主薄壳边界 | [`docs/architecture.md`](docs/architecture.md) |
 | WIT / 权限 / SDK 契约 | [`docs/contracts.md`](docs/contracts.md) |
 | 安全与日志红线 | [`docs/security.md`](docs/security.md) |
+| 前端规范（挂载包形态 / i18n） | [`docs/frontend.md`](docs/frontend.md) |
+| 依赖方向 / 跨仓锁 / 禁行清单 | [`docs/boundaries.md`](docs/boundaries.md) |
+| 内网穿透（中继部署与排障） | [`docs/nat-traversal.md`](docs/nat-traversal.md) |
+| 提交回滚与 Git 规则 | [`docs/git.md`](docs/git.md) |
 | 测试与完成定义 | [`docs/testing.md`](docs/testing.md) |
 | 架构决策记录（ADR） | [`docs/adr/`](docs/adr/README.md) |
 

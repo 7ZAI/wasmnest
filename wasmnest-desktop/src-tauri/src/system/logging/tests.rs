@@ -1,3 +1,5 @@
+//! 日志系统单元测试：`build_logging` seam、格式化器与文件层落盘
+
 use super::*;
 use std::sync::{Arc, Mutex};
 use tracing_subscriber::fmt::MakeWriter;
@@ -99,7 +101,7 @@ fn build_logging_dev_semantics_forces_debug_and_frontend_file() {
         runtime.contains("debug line lands in dev"),
         "dev forces debug level: {runtime}"
     );
-    // frontend target 事件既进 frontend 文件也混入 runtime（既有行为，见 docs/security.md §2 日志节）
+    // frontend target 事件既进 frontend 文件也混入 runtime（既有行为）
     assert!(
         runtime.contains("frontend console line lands"),
         "frontend events also land in runtime (existing behavior): {runtime}"

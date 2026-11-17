@@ -1,8 +1,8 @@
-//! core 域 WIT 实现（移动宿主 adapter；票 05 绑定归位收口 → 2026-10-13 单形态收口）
+//! core 域 WIT 实现（移动宿主 adapter；2026-10-13 单形态收口）
 //!
 //! ## 单形态（2026-10-13）后本模块只留**移动独有 / 端差异实现**
 //!
-//! `core.wit` 现有 12 个 interface（8 import + 4 export，ADR 0052 D1）：其中**双端全等
+//! `core.wit` 现有 12 个 interface（8 import + 4 export）：其中**双端全等
 //! 语义的 8 域**（host-log / host-storage / host-plugin-database / host-events /
 //! host-fs / host-config / host-bus / host-platform）由内核
 //! `manager::runtime::core_binding` 单份实现（统一 Linker 装配；权限门收敛统一
@@ -11,7 +11,7 @@
 //! `defined twice`）。
 //!
 //! 本模块保留**实现按端不同**的 2 个能力域（host-http / host-websocket）：契约真源
-//! 已随 ADR 0052 D2 迁各能力域 crate 的 `wit/<domain>.wit`，由移动 compose caps 直接
+//! 已迁各能力域 crate 的 `wit/<domain>.wit`，由移动 compose caps 直接
 //! 消费；端差异经移动宿主自报（`HostModule` + `inventory`）；移动独有 5 域
 //! （`plugin/{notify,fs_mobile,terminal_stream,connection,auth}.rs`）各自自报。
 //!
@@ -65,8 +65,7 @@ pub(crate) fn current_handle() -> tokio::runtime::Handle {
 /// 逐域回收：mDNS 浏览/广播双表 + WS 出站连接表（各域只碰本人句柄，宿主与其它
 /// 插件登记不受影响）+ 终端输出流窄转发表清空（输出流唯一消费者是终端插件，
 /// 停用后无转发目标，残留表位只会让后续转发打到已失效的页面通道）。
-/// 新域接入回收必须在此登记——漏登记 = 停用后连接泄漏（ADR 0022 §5.1.3
-/// 「停用可回收」硬要求）。
+/// 新域接入回收必须在此登记——漏登记 = 停用后连接泄漏（「停用可回收」硬要求）。
 pub fn purge_for_plugin(plugin_id: &str) -> usize {
     let mut purged = mdns::purge_for_plugin(plugin_id);
     purged += ws::purge_for_plugin(plugin_id);
@@ -80,7 +79,7 @@ pub fn purge_for_plugin(plugin_id: &str) -> usize {
 pub const MODULE_NAME: &str = "mobile-host-core";
 
 /// 本模块提供的 WIT 接口（移动独有 / 端差异能力域；契约真源在各能力域 crate 的 wit 分片，
-/// 接口名与包版本按 ADR 0061 逐包独立、与拼装 `deps/` 内定义逐字一致；包版本落后会让
+/// 接口名与包版本逐包独立、与拼装 `deps/` 内定义逐字一致；包版本落后会让
 /// 跨端回退判据失配）
 ///
 /// host-peer / host-mdns 由能力 lib 的 `common-host` 绑定层自报，**不在此列**

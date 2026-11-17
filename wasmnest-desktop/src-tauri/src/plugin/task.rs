@@ -1,15 +1,15 @@
-//! host-task 宿主侧接线（路径 B：WIT 绑定 + `Host` impl + 域函数 + 自报，四件同处）
+//! host-task 宿主侧接线（WIT 绑定 + `Host` impl + 域函数 + 自报，四件同处）
 //!
-//! wasm-core 纯净性收口票 02 批次 05 自内核迁出（`host_api/task.rs` 整文件删除，
+//! 自内核迁出（原 `host_api/task.rs` 已删除，
 //! 内核反向锁 `path_b_domains_must_not_return_to_wasm_core` 防回接）。与 auth /
 //! crypto 同款：**没有独立能力 crate**——装配方就是宿主本 crate（孤儿规则见
-//! [`super::bindings`] 模块文档）。
+//! 要求装配方自生成 trait）。
 //!
-//! 入口职责（spec §6「双门结构」，语义逐字保留）：
+//! 入口职责（「双门结构」，语义逐字保留）：
 //! - `task:run` 权限门：管「占用宿主线程池资源」这件事本身；
 //! - 解析 / 配额仲裁 / 单元执行全部在**留内核的任务引擎**（`manager::task` 的
 //!   `CoreTaskEngine`，经 `TaskEngine` 接口两阶段注入）——本文件只做权限门 +
-//!   引擎转发。**引擎不迁则接口不迁（C4）**：`TaskEngine` trait 与执行器注册表
+//!   引擎转发。**引擎不迁则接口不迁**：`TaskEngine` trait 与执行器注册表
 //!   留内核 `host_api/context.rs` / `unit_executor.rs`，消费方（core-task）在内核。
 //!
 //! 单元 kind 的域权限门在单元执行时由目标域函数内部再校验（fs:read / fs:write /
@@ -26,7 +26,7 @@ use wasmnest_wasm_core::runtime_util::block_on_async;
 use crate::plugin::bindings::wasmnest;
 
 // 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报，见
-// `host_module_whitelist`）。路径 B 域的自报静态住在本 crate（宿主 lib 即最终
+// `host_module_whitelist`）。直连绑定域的自报静态住在本 crate（宿主 lib 即最终
 // 二进制）⇒ 无需能力 crate 那样的 `use <crate> as _;` 强制引用行。
 wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 

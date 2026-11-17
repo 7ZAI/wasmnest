@@ -47,18 +47,23 @@
             ref="bandEl"
             class="ts-cards"
             :class="{
-              'is-empty': !state.cards.value.length,
+              'is-empty': !renderKeys.length,
               'is-scrolling': scrolls,
+              'is-clearing': clearingAll,
             }"
             :style="bandStyle"
             role="list"
           >
             <article
-              v-for="(key, i) in state.cards.value"
+              v-for="(key, i) in renderKeys"
               :key="key"
               class="ts-card"
-              :class="{ active: key === state.activeCard.value }"
+              :class="{
+                active: key === state.activeCard.value,
+                'is-closing': ghosts.has(key),
+              }"
               :style="cardStyle(i)"
+              :inert="ghosts.has(key)"
               role="listitem"
               data-ts-keep
             >
@@ -134,7 +139,7 @@
 
             <!-- 空态：图标 + 一行说明，居中于卡片带——孤零零一句文字落在左上角
                  网格格里，读起来像页面没加载完 -->
-            <div v-if="!state.cards.value.length" class="ts-empty">
+            <div v-if="!renderKeys.length" class="ts-empty">
               <span class="ts-empty-ic">
                 <ShellIcon name="recents" :size="26" :stroke-width="1.4" />
               </span>
@@ -234,6 +239,97 @@ const metrics = computed<RecentsCardMetrics>(() => {
   }
 })
 /**
+ * 关闭渐隐（两种语义，2026-11-12 用户裁决「单关 / 全关各有对应的渐隐」）
+ *
+ * - **单关（卡片 ×）**：只有这一张原地淡出（200ms，强减速曲线），其余卡纹丝不动；
+ *   卡片在渐隐窗口内继续占位，窗口结束后整组一次性落到新尺寸。
+ * - **全部关闭**：沿用同一条渐隐，但按卡片顺序逐张 +22ms（封顶 5 步）错峰，每张多
+ *   下沉 / 多缩一点、时长收到 130ms——读起来是「一次清场」，不是「连按 N 次单关」。
+ *
+ * 为什么用「幽灵占位」而不是等动画走完再卸载：数据层的真停用（`useShellState`）在
+ * 点击那一刻就开跑，DOM 只是按快照多留一个渐隐窗口——动效不 gate 生命周期
+ * （docs/frontend.md §4.3.5）。卡片 key 不变 ⇒ Vue 复用同一个节点，实例停用后缩略区
+ * 自然空成卡片底（= 熄屏），不需要额外的占位 DOM。
+ */
+const CLOSE_FADE_MS = 200
+const CLOSE_ALL_FADE_MS = 130
+const CLOSE_ALL_STEP_MS = 22
+const CLOSE_ALL_MAX_STEPS = 5
+const GHOST_TAIL_MS = 30
+/** 幽灵兜底释放：数据层迟迟没把卡移走时也不能让卡永远隐身（fail-visible） */
+const GHOST_SAFETY_MS = 1600
+
+interface GhostCard {
+  /** 关闭前的卡位序号：合并渲染时插回原位，渐隐期间网格几何不重排 */
+  rank: number
+  /** 交错延迟（全关按序；单关恒 0），同一帧落到元素上供 CSS 过渡取用 */
+  delay: number
+  /** 渐隐结束的绝对时刻（performance.now 口径） */
+  until: number
+}
+
+/** 关闭中的卡（数据层已离开或正在离开，DOM 仍在渐隐） */
+const ghosts = ref(new Map<CardKey, GhostCard>())
+/** 本次是否为「全部关闭」：只影响整组的下沉幅度与时长（CSS 的 is-clearing） */
+const clearingAll = ref(false)
+const ghostTimers = new Map<CardKey, number>()
+
+/**
+ * 渲染清单 = 当前卡 + 关闭中的幽灵卡
+ *
+ * 幽灵按关闭前的卡位序号插回原位（序号相同时幽灵在前，即它原本的位置）：渐隐期间
+ * 网格里仍然是 N 张卡，尺寸 / 末行居中都不变；窗口结束后整组一次性落到 N−1 的
+ * 布局，不会出现「卡还在淡出、旁边已经长大」的半截重排。
+ */
+const renderKeys = computed<CardKey[]>(() => {
+  const live = state.cards.value
+  if (ghosts.value.size === 0) return live
+  const liveSet = new Set(live)
+  const entries = live.map((key, index) => ({ key, rank: index * 2 + 1 }))
+  for (const [key, ghost] of ghosts.value) {
+    // 数据层还没把卡移走：活卡自己带 is-closing，不能重复渲染（v-for key 会撞）
+    if (!liveSet.has(key)) entries.push({ key, rank: ghost.rank * 2 })
+  }
+  return entries.sort((a, b) => a.rank - b.rank).map((entry) => entry.key)
+})
+
+function clearGhostTimer(key: CardKey): void {
+  const timer = ghostTimers.get(key)
+  if (timer !== undefined) window.clearTimeout(timer)
+  ghostTimers.delete(key)
+}
+
+/** 标记关闭中的卡，返回渐隐结束的绝对时刻（调用方据此排释放） */
+function markClosing(key: CardKey, rank: number, delay: number, fadeMs: number): number {
+  const until = performance.now() + delay + fadeMs + GHOST_TAIL_MS
+  ghosts.value.set(key, { rank, delay, until })
+  // 兜底释放：真停用迟迟不结束（或压根没把卡移走）时，卡在安全窗口后淡回来，
+  // 绝不留下「看不见但一直占着卡位」的假象
+  scheduleGhostRelease(key, delay + fadeMs + GHOST_SAFETY_MS)
+  return until
+}
+
+function scheduleGhostRelease(key: CardKey, afterMs: number): void {
+  clearGhostTimer(key)
+  ghostTimers.set(
+    key,
+    window.setTimeout(() => releaseGhost(key), Math.max(0, afterMs)),
+  )
+}
+
+function releaseGhost(key: CardKey): void {
+  clearGhostTimer(key)
+  if (ghosts.value.has(key)) ghosts.value.delete(key)
+}
+
+/** 收起 / 卸载时清场：重开多任务不能再看到上一轮的幽灵卡 */
+function releaseAllGhosts(): void {
+  for (const key of [...ghostTimers.keys()]) clearGhostTimer(key)
+  if (ghosts.value.size > 0) ghosts.value.clear()
+  clearingAll.value = false
+}
+
+/**
  * 单卡尺寸（高 + 宽同源解算）。
  *
  * 2026-11-06 用户裁决「卡片有最大最小高度限制，宽度稍微减少，高度加高」：
@@ -241,9 +337,7 @@ const metrics = computed<RecentsCardMetrics>(() => {
  * 高与宽两个值——高度优先下不存在「宽度 → 高度」的反解（旧的 `recentsCardHeight`
  * 已随该口径退役），分开算必然对不上。
  */
-const cardSize = computed(() =>
-  recentsCardSize(state.cards.value.length, band.value, metrics.value),
-)
+const cardSize = computed(() => recentsCardSize(renderKeys.value.length, band.value, metrics.value))
 /** 单卡宽度；0 = 还没量到带尺寸 → 交给 CSS 兜底（三等分） */
 const cardWidth = computed(() => cardSize.value.width)
 /** 卡高：显式喂给 grid-auto-rows，避免引擎把溢出的行压扁 */
@@ -257,13 +351,13 @@ const cardHeight = computed(() => cardSize.value.height)
  * （`AppSurfaceTile` 的 ResizeObserver 兜底）。
  */
 const thumbSize = computed(() =>
-  recentsThumbSize(state.cards.value.length, band.value, metrics.value),
+  recentsThumbSize(renderKeys.value.length, band.value, metrics.value),
 )
 /** 超过可视 2 行 → 改滚动：必须置顶对齐，否则居中的首行会被滚出可视区 */
 const scrolls = computed(
   () =>
-    state.cards.value.length > 0 &&
-    Math.ceil(state.cards.value.length / RECENTS_MAX_COLS) > RECENTS_MAX_VISIBLE_ROWS,
+    renderKeys.value.length > 0 &&
+    Math.ceil(renderKeys.value.length / RECENTS_MAX_COLS) > RECENTS_MAX_VISIBLE_ROWS,
 )
 /** 注入 `--ts-card-w` / `--ts-card-h` / `--ts-card-ratio` / `--ts-tracks` / `--ts-card-aspect`：CSS 不重复尺寸算术 */
 const bandStyle = computed<Record<string, string>>(() => {
@@ -273,7 +367,7 @@ const bandStyle = computed<Record<string, string>>(() => {
     style['--ts-card-h'] = `${cardHeight.value}px`
     // 卡片自身比例（≠ 缩略区比例）：未测量时的 aspect-ratio 兜底必须与实测尺寸同比例
     style['--ts-card-ratio'] = `${cardWidth.value} / ${cardHeight.value}`
-    style['--ts-tracks'] = String(recentsTrackCount(state.cards.value.length))
+    style['--ts-tracks'] = String(recentsTrackCount(renderKeys.value.length))
   }
   return style
 })
@@ -287,11 +381,14 @@ const bandStyle = computed<Record<string, string>>(() => {
  */
 function cardStyle(index: number): Record<string, string | number> {
   const style: Record<string, string | number> = { '--i': index }
-  const placement = recentsCardPlacement(index, state.cards.value.length)
+  const placement = recentsCardPlacement(index, renderKeys.value.length)
   if (placement) {
     style.gridRow = placement.row
     style.gridColumn = `${placement.columnStart} / span 2`
   }
+  // 关闭中的卡：交错延迟必须与 is-closing 同帧落到元素上，过渡才带 delay
+  const ghost = ghosts.value.get(renderKeys.value[index] ?? '')
+  if (ghost) style.transitionDelay = `${ghost.delay}ms`
   return style
 }
 
@@ -401,6 +498,8 @@ function thumbStyle(): Record<string, string> {
 function syncBandAndFocus(): void {
   if (!open.value) {
     unobserveBand()
+    // 层收起 = 本轮关闭动效的终点：幽灵与交错标志不能留给下一次打开
+    releaseAllGhosts()
     restoreOriginAfterClose()
     return
   }
@@ -464,6 +563,7 @@ onBeforeUnmount(() => {
     measureRaf = null
   }
   unobserveBand()
+  releaseAllGhosts()
 })
 
 // ---- 卡片 key 解析（面 key = 'app:<pluginId>' / 'sys:<pageId>'） ----
@@ -518,11 +618,38 @@ function switchTo(key: CardKey): void {
   switchedTo = key
   state.activateCard(key)
 }
-function closeCard(key: CardKey): void {
-  void state.closeCard(key)
+async function closeCard(key: CardKey): Promise<void> {
+  if (ghosts.value.has(key)) return
+  // 视觉立刻开始渐隐；真停用同时开跑（不 gate 生命周期）
+  const until = markClosing(key, Math.max(0, renderKeys.value.indexOf(key)), 0, CLOSE_FADE_MS)
+  const ok = await state.closeCard(key)
+  if (ok !== true) {
+    // 停用失败：卡片与运行面保留（提示由 useShellState 统一发出），视觉随之淡回
+    releaseGhost(key)
+    return
+  }
+  // 数据已离场：幽灵留到渐隐结束，布局在窗口之后一次性落位
+  scheduleGhostRelease(key, until - performance.now())
 }
+
 function closeAll(): void {
-  void state.stopAllCards()
+  if (clearingAll.value) return
+  const keys = renderKeys.value.slice()
+  if (keys.length === 0) return
+  clearingAll.value = true
+  // 两张以上才错峰：只有一张时它就是一次单关，不该多等一步
+  const deadlines: Array<[CardKey, number]> = keys.map((key, index) => {
+    const delay = keys.length > 1 ? Math.min(index, CLOSE_ALL_MAX_STEPS) * CLOSE_ALL_STEP_MS : 0
+    return [key, markClosing(key, index, delay, CLOSE_ALL_FADE_MS)]
+  })
+  void Promise.resolve(state.stopAllCards()).then(() => {
+    for (const [key, until] of deadlines) {
+      // 停用失败被保留的卡：立刻撤回幽灵（卡回来）；已关闭的跑到渐隐结束
+      if (state.cards.value.includes(key)) releaseGhost(key)
+      else scheduleGhostRelease(key, until - performance.now())
+    }
+    clearingAll.value = false
+  })
 }
 function close(): void {
   state.recentsOpen.value = false
@@ -874,6 +1001,38 @@ function close(): void {
 .ts-fade-leave-to {
   opacity: 0;
 }
+/* ==================== 关闭渐隐（单关 / 全关 两种语义） ==================== */
+/* 单关：只有这一张原地淡出，其余卡不动。强减速曲线让前 1/3 时长就落掉大部分
+   透明度（关闭是「已经决定了」的动作，不留拖尾）；位移只走 transform / opacity。
+   交错延迟由 `cardStyle` 内联给出（全关按序 +22ms，单关恒 0）。
+   渐隐期间卡片仍是网格项（幽灵占位），布局不会在卡还看得见时塌陷。 */
+.ts-card.is-closing {
+  opacity: 0;
+  transform: scale(0.97) translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity var(--motion-duration-base) var(--motion-ease),
+    transform var(--motion-duration-base) var(--motion-ease);
+}
+/* 全关：整组一起退场，每张多下沉 / 多缩一点，时长收到 fast——张数多时逐张 200ms
+   会读成「排队」，而清场是一次动作 */
+.ts-cards.is-clearing .ts-card.is-closing {
+  transform: scale(0.94) translateY(12px);
+  transition-duration: var(--motion-duration-fast);
+}
+/* 空态：清场 / 关掉最后一张后淡入，避免一片空白突然出现 */
+.ts-empty {
+  animation: ts-empty-in var(--motion-duration-base) var(--motion-ease) backwards;
+}
+@keyframes ts-empty-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* 退出：卡片随全屏层一起轻微缩回（反向的 recents 缩放），
    先关掉入场 animation，避免它盖住 leave 过渡的 transform。 */
 .ts-fade-leave-active .ts-card {
@@ -890,6 +1049,16 @@ function close(): void {
 /* 多任务层 Teleport 到 body，壳根的统一 reduced-motion 规则够不到这里 */
 @media (prefers-reduced-motion: reduce) {
   .ts-card {
+    animation: none;
+  }
+  /* 关闭渐隐同样收敛为瞬时：只保留状态变化，不做位移 / 缩放，也不等交错延迟
+     （delay 是内联 style，只有 !important 压得住它） */
+  .ts-card.is-closing {
+    transition-duration: 0.01ms;
+    transition-delay: 0ms !important;
+    transform: none;
+  }
+  .ts-empty {
     animation: none;
   }
   .ts-fade-enter-active,

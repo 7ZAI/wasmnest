@@ -3,9 +3,9 @@
 //! Windows：创建隐藏顶层消息窗口监听 `WM_POWERBROADCAST`（`PBT_APMRESUMEAUTOMATIC` /
 //! `PBT_APMRESUMESUSPEND`），系统从休眠/睡眠恢复后触发 WebView2 强制重绘。
 //!
-//! 背景：显示器长时间熄灭/锁屏期间，WebView2 的 GPU 合成器可能崩溃且不自愈
-//! （MicrosoftEdge/WebView2Feedback#3817、tauri-apps/tauri#2496），唤醒后窗口永久黑屏，
-//! 点击/移动窗口都不会触发重绘。恢复手段：1px 尺寸抖动 + 最小化/还原，强制 DWM 重新
+//! 背景：显示器长时间熄灭/锁屏期间，WebView2 的 GPU 合成器可能崩溃且不自愈，
+//! 唤醒后窗口永久黑屏，点击/移动窗口都不会触发重绘。恢复手段：1px 尺寸抖动 +
+//! 最小化/还原，强制 DWM 重新
 //! 合成并让 WebView2 重建交换链。其他平台暂不监听（macOS NSWorkspace / Linux logind
 //! 留待后续按需补充）。
 

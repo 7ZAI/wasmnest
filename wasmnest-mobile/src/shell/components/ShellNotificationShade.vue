@@ -117,10 +117,13 @@
               <!-- 滑动删除指示层：卡片滑开时露出淡色底 + 红色垃圾桶——手势的删除表达，
                    不给驻留项（它们不响应滑动）。底色与图标色落在 .notify-swipe-reveal
                    （shell.css）：破坏色实心整块太抢眼，改用 token 派生的一层薄信号。
-                   跟随卡片圆角被外层裁切。 -->
+                   跟随卡片圆角被外层裁切。
+                   非滑动态必须不可见：玻璃主题的 .notify-card 是半透明体色，指示层
+                   常驻会从卡背透出垃圾桶，与卡片右侧的 X 叠成「两个删除图标」。 -->
               <div
                 v-if="!item.sticky"
                 class="notify-swipe-reveal absolute inset-0 flex items-center justify-end pr-5"
+                :class="cardSwipeActive(item) ? 'visible' : 'invisible'"
                 aria-hidden="true"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -200,11 +203,14 @@
                   </div>
                 </div>
                 <!-- 驻留项没有单条关闭：它表示「需要处理」而不是「看过就算」。
-                     X 是滑动删除的可达性替代（键盘 / 读屏 / 不支持手势时）。 -->
+                     X 是滑动删除的可达性替代（键盘 / 读屏 / 不支持手势时）。
+                     滑动中先隐藏 X：此刻删除表达交给露出的垃圾桶，两个删除图标
+                     同时在场会重叠且语义重复（2026-11-13 用户反馈）。 -->
                 <button
                   v-if="!item.sticky"
                   type="button"
                   class="flex items-center justify-center flex-shrink-0 rounded-[8px] min-w-[var(--mobile-touch-target-min)] min-h-[var(--mobile-touch-target-min)] -mr-1 transition-colors duration-200 active:bg-[var(--mobile-accent-muted)]"
+                  :class="{ invisible: cardSwipeActive(item) }"
                   :aria-label="t('shell.notify.dismissOne', { title: item.title })"
                   @click.stop="dismiss(item.id)"
                 >
@@ -385,6 +391,21 @@ let suppressTap = false
 /** 拖动中状态（模板据此关过渡） */
 function cardDragState(id: string): { dragging: boolean } {
   return { dragging: dragId.value === id }
+}
+
+/**
+ * 卡片是否处于横向滑动中（拖动位移非 0，或已松手正在滑出）。
+ *
+ * 滑动指示层与卡内 X 是同一删除语义的两条路径，必须互斥出现：
+ * - 非滑动态让指示层不可见——玻璃主题的卡片体色半透明，常驻的指示层会透出
+ *   垃圾桶图案，与右侧 X 重叠成「两个删除图标」；
+ * - 滑动中隐藏 X——露出的垃圾桶已是当前删除表达，再叠一个 X 语义重复。
+ *
+ * 用 visibility（invisible / visible）而不是 opacity：两者随同一个响应式状态
+ * 同帧切换，任何一帧都不会同时出现；X 的布局宽度保留，标题行不会横向跳动。
+ */
+function cardSwipeActive(item: ShellNotification): boolean {
+  return (dragId.value === item.id && dragX.value !== 0) || swipeOut.value?.id === item.id
 }
 
 /** 卡片位移样式：拖动跟手（由 cardDragState 关过渡），滑出动画定格屏外，其余静止 */

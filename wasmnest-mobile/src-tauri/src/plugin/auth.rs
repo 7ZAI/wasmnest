@@ -1,6 +1,6 @@
-//! host-auth-client 宿主 adapter（移动独有认证引擎面；wasm-core-mobile-purity 票 04 自 wasm-core 迁入）
+//! host-auth-client 宿主 adapter（移动独有认证引擎面；自 wasm-core 迁入）
 //!
-//! **编排在消费插件，密码学与凭据在宿主**（C4 红线）：设备身份文件 / JWT 持有 /
+//! **编排在消费插件，密码学与凭据在宿主**：设备身份文件 / JWT 持有 /
 //! AuthHttpClient / 生物凭证绑定与 Keystore 签名全部留在 auth 引擎
 //! （`crate::auth::manager` 经 `HostEnginePorts::auth_engine` 投影），本 adapter
 //! 只把引擎调用投影给插件；**凭据零过境**——任何函数都不向插件返回凭据材料。
@@ -69,7 +69,7 @@ fn denied() -> String {
 
 /// 取认证引擎（宿主端口投影；未装配 = 无头/测试上下文，fail-visible 拒绝）
 ///
-/// C4：密码学与凭据留宿主引擎（`auth_engine()` 投影五方法），本域只透传调用
+/// 密码学与凭据留宿主引擎（`auth_engine()` 投影五方法），本域只透传调用
 /// 结果——凭据零过境。
 fn require_auth_engine(
     state: &WasmPluginState,

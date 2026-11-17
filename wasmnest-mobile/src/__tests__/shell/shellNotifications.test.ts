@@ -19,6 +19,7 @@
  * | C-N10 | 滑动删除 | 水平滑超阈值删除（带滑出动画）；短滑回弹；垂直滚动让位；驻留项豁免 | 超阈值→移除；短/垂直/sticky→保留 |
  * | C-N11 | 滑动指示层 | 卡片滑开露出的删除层不用破坏色实心大块（太抢眼），底色由 token 混色派生 | 层挂 .notify-swipe-reveal；shell.css 里该类用 color-mix + --mobile-error |
  * | C-N12 | 清除全部入口 | 面板右上角扫除图标（无可见文字 / aria-label 可访问）；只剩驻留项不渲染 | 无底部动作栏；图标落在 header；sticky-only 无入口 |
+ * | C-N13 | 删除图标互斥 | 静止只显示 X；横向滑动中只显示露出的垃圾桶；回弹恢复 X | 任何时刻不同时出现两个删除图标 |
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -462,6 +463,40 @@ describe('C-N10 左右滑动删除', () => {
     const rule = block.slice(0, block.indexOf('}'))
     expect(rule, '指示层底色由 color-mix 派生').toContain('color-mix(in srgb, var(--mobile-error)')
     expect(rule, '不得退回破坏色实心底').not.toMatch(/background:\s*var\(--mobile-error\)/)
+
+    wrapper.unmount()
+  })
+
+  it('should_neverShowBothDismissIcons_when_cardIsIdleOrSwiping', async () => {
+    notifications.pushNotification({
+      kind: 'event',
+      icon: 'i',
+      source: 's',
+      title: 'connection-lost',
+    })
+    shadeOpen.value = true
+    const wrapper = mountShade()
+    const card = cardOf(wrapper, 'connection-lost')
+    const reveal = wrapper.find('.notify-swipe-reveal')
+    const closeBtn = wrapper
+      .findAll('button')
+      .find((b) => (b.attributes('aria-label') ?? '').startsWith('shell.notify.dismissOne'))!
+
+    // 静止态：指示层必须整体透明。玻璃主题的卡片体色半透明，常驻的指示层会
+    // 从卡背透出垃圾桶，与右侧 X 重叠成「两个删除图标」（用户反馈的现场）。
+    expect(reveal.classes(), '静止时不透出滑动删除图标').toContain('invisible')
+    expect(closeBtn.classes(), '静止时只有 X 一个删除入口').not.toContain('invisible')
+
+    // 横向拖动：交出删除表达给露出的垃圾桶，X hidden，两者不同时在场
+    await card.trigger('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 })
+    await card.trigger('pointermove', { clientX: 130, clientY: 100, pointerId: 1 })
+    expect(reveal.classes(), '滑动中才显示指示层').toContain('visible')
+    expect(closeBtn.classes(), '滑动中 X 隐藏').toContain('invisible')
+
+    // 未过阈值回弹：回到「只有 X」的静止态
+    await card.trigger('pointerup', { clientX: 130, clientY: 100, pointerId: 1 })
+    expect(reveal.classes(), '回弹后指示层重新隐藏').toContain('invisible')
+    expect(closeBtn.classes(), '回弹后 X 恢复').not.toContain('invisible')
 
     wrapper.unmount()
   })

@@ -1,6 +1,4 @@
-//! Global State Module
-//!
-//! 全局单例管理器和 Token 存储
+//! 全局单例状态与 Token 存储
 
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, OnceLock};
@@ -104,12 +102,12 @@ pub fn try_get_plugin_manager() -> Option<Arc<PluginManager>> {
     PLUGIN_MANAGER.get().cloned()
 }
 
-// ==================== Link Crypto Context（issue 09） ====================
+// ==================== 链路加密上下文 ====================
 
 /// 链路加密运行期上下文（HTTP 信封加密；WS 帧级加密另由
 /// `plugin/host_domains/ws.rs` 的 engine 端口读取同一份主开关/pin/strict 裁决）
 ///
-/// 设置开关与 pin 存于 WebView localStorage（issue 05/06 的 TS 侧），而 HTTP
+/// 设置开关与 pin 存于 WebView localStorage（TS 侧），而 HTTP
 /// 加密裁决在 Rust 侧（http_proxy）——前端经 `set_link_crypto_context` 命令把
 /// 当前态推送到此。缺省全关：未推送前 HTTP 载荷保持明文（与现状一致）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,7 +154,7 @@ pub fn set_link_crypto_context(ctx: LinkCryptoContext) {
     *LINK_CRYPTO_CONTEXT.write().unwrap() = ctx;
 }
 
-/// 更新已 pin 的桌面端身份公钥（认证成功时随 auth 响应落地，issue：修复 pin 断链）
+/// 更新已 pin 的桌面端身份公钥（认证成功时随 auth 响应落地，修复 pin 断链）
 ///
 /// 仅在有值时覆盖：None 不清除既有 pin——防主动降级攻击抹除信任锚
 /// （与前端 notePin 的语义一致：协商失败不清 pin）。

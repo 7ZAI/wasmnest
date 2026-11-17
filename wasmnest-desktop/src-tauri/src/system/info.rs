@@ -1,7 +1,5 @@
-//! System Information
+//! 系统基本信息（OS / 设备名 / IP）：启动时采集一次，挂到全局单例供各域引用
 //!
-//! **server-lib-split 迁移**：真源已随 `wasmnest-server-base` 拆出（拆分后为
-//! `wasmnest-server-base` crate 的 `info` 模块）；本文件保留模块路径与全部公开
-//! 名字，宿主其余代码经 `crate::system::info::*` 引用不受影响。
+//! 真源已拆到 `wasmnest-server-base::info`；本文件只保留 shim 路径。
 
 pub use wasmnest_server_base::info::{local_ipv4_addresses, SystemInfo};

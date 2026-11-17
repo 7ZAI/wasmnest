@@ -1,4 +1,4 @@
-//! 应用前端挂载包目录（ADR 0057 机制 B：壳按路由装载独立构建的 app 整包）
+//! 应用前端挂载包目录（壳按路由装载独立构建的 app 整包）
 //!
 //! **为什么目录口径由宿主给出、前端不自己拼**：
 //! `<resource>/resources/plugins/desktop/<appId>/index.js` 这个落点叠了两层语义——
@@ -7,7 +7,7 @@
 //! `target/debug/resources/plugins/desktop/`（tauri dev 会把 bundle resources 复制进去）。
 //! 前端若用 `join(resourceDir(), 'plugins', 'desktop', …)` 自己拼，就少了 `resources`
 //! 这一层：asset URL 404 → 动态 import 失败 → 所有挂载面报错（2026-10-17 实机验证
-//! P0-1）。路径已由启动装配（lib.rs 的 `plugins_dir`，含 dev 回退到源码目录）解析成
+//! 实机问题）。路径已由启动装配（lib.rs 的 `plugins_dir`，含 dev 回退到源码目录）解析成
 //! 唯一事实，前端只消费结果，同一份路径约定不再在 Rust / TS 各写一遍。
 //!
 //! 落点是否在 asset protocol 允许范围内由**启动装配**保证（`lib.rs` 解析出
@@ -29,7 +29,7 @@ pub struct AppAssetsDir(pub PathBuf);
 
 /// 应用整包根目录（前端按 `<dir>/<appId>/index.js` 组成挂载包入口）
 ///
-/// 目录缺失时**显性报错**（fail-visible，AGENTS §5.1.4）：此时任何挂载都必然 404，
+/// 目录缺失时**显性报错**（fail-visible）：此时任何挂载都必然 404，
 /// 静默返回一个不存在的路径只会把「没构建产物」伪装成「应用本身坏了」。
 #[tauri::command]
 pub fn plugin_get_asset_dir(dir: State<'_, AppAssetsDir>) -> crate::Result<String> {
@@ -41,4 +41,66 @@ pub fn plugin_get_asset_dir(dir: State<'_, AppAssetsDir>) -> crate::Result<Strin
         )));
     }
     Ok(path.to_string_lossy().into_owned())
+}
+
+/// 单个文本资源的大小上限（图标为 KB 量级；防止把整包大文件读进 WebView）。
+const MAX_TEXT_ASSET_BYTES: usize = 256 * 1024;
+
+/// 读取应用整包内的文本资源（当前用途：SVG 图标）
+///
+/// 壳前端按 capabilities 没有 fs 权限；且 WebKitGTK 不把自定义 `asset://` 协议下的
+/// SVG 交给 `<img>` 渲染（2026-11-14 实机：URL 解析成功但图标静默回退通用 glyph）。
+/// 由宿主读出文本，前端转成 `data:image/svg+xml` URL 再交给 `<img>`。
+///
+/// # Errors
+/// 路径片段不合法、文件读不到、超过 [`MAX_TEXT_ASSET_BYTES`]、内容非 UTF-8 时报错。
+#[tauri::command]
+pub fn plugin_get_asset_text(app_id: String, file: String, dir: State<'_, AppAssetsDir>) -> crate::Result<String> {
+    if !is_safe_segment(&app_id) || !is_safe_segment(&file) {
+        return Err(crate::AppError::Plugin(format!(
+            "invalid app asset path: {app_id}/{file}"
+        )));
+    }
+    let path = dir.0.join(&app_id).join(&file);
+    let bytes = std::fs::read(&path)
+        .map_err(|e| crate::AppError::Plugin(format!("app asset unreadable: {} ({e})", path.display())))?;
+    if bytes.len() > MAX_TEXT_ASSET_BYTES {
+        return Err(crate::AppError::Plugin(format!(
+            "app asset too large: {} ({} bytes)",
+            path.display(),
+            bytes.len()
+        )));
+    }
+    String::from_utf8(bytes)
+        .map_err(|e| crate::AppError::Plugin(format!("app asset is not utf-8: {} ({e})", path.display())))
+}
+
+/// 路径片段是否安全（不含分隔符与 `..`，只允许文件名字符集）。
+fn is_safe_segment(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && !value.contains("..")
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_safe_segment;
+
+    #[test]
+    fn asset_segments_reject_traversal_and_separators() {
+        for bad in ["", "..", "../icon.svg", "a/b", r"a\b", "icon..svg"] {
+            assert!(!is_safe_segment(bad), "should reject {bad:?}");
+        }
+        assert!(!is_safe_segment(&"x".repeat(129)), "should reject overlong segment");
+    }
+
+    #[test]
+    fn asset_segments_accept_plugin_ids_and_icon_files() {
+        for good in ["com.wasmnest.bedcode", "icon.svg", "my_icon-1.png", ".hidden"] {
+            assert!(is_safe_segment(good), "should accept {good:?}");
+        }
+    }
 }

@@ -1,7 +1,7 @@
 //! 桌面宿主侧插件生命周期编排层（与移动端 `PluginManager` 同构的宿主侧编排）
 //!
-//! **定位**（AGENTS §5.4 双端差异落宿主；`2026-10-17-desktop-host-lifecycle-sync`）：
-//! wasm-core 单形态运行时持有**机制原语**（activate/deactivate/preauth/approve/
+//! **定位**（双端差异落宿主）：wasm-core 单形态运行时持有**机制原语**
+//! （activate/deactivate/preauth/approve/
 //! uninstall/权限授予与撤销/总线退订/store 回收——`PluginHost` 一整面），本模块
 //! 是**桌面宿主侧的编排收口**：把「壳要驱动的动作」与「wasm-core 原语」一对一
 //! 接起来，并补上移动端同款 key 语义的启用 / 自启偏好持久化。双端各持一份宿主
@@ -18,14 +18,14 @@
 //! - **关闭** = `deactivate` → wasm-core `deactivate_plugin(id, persist=true)`
 //!   ——**真停用**：guest deactivate + 权限 `revoke_all` + 消息总线退订 + 注册表/
 //!   令牌/互调 API 注销 + store 随实例回收（机制已证，见 wasm-core
-//!   `deactivate_plugin_inner` 步骤 ①—统一清理段，D4 只补编排不重复实现）；
+//!   `deactivate_plugin_inner` 步骤 ①—统一清理段，本层只补编排不重复实现）；
 //!   `persist=true` 同时把历史版本留下的「启动复活」快照写成停用；
 //! - **偏好** = `plugin.enabled.{id}`（桌面语义 = **主屏入口可见性**，2026-10-21
 //!   用户裁决「启用赋予真实语义」，缺省无行 = 可见；`false` = 用户停用 → 主屏 /
 //!   搜索隐藏入口——不触发当前进程启停、不停止已运行实例，显式自启偏好独立生效。
 //!   同一 key 移动端仍是「可用性标记」且无行为消费，双端语义分叉已在
-//!   [`ENABLED_KEY_PREFIX`] 文档记录）/ `plugin.autostart.{id}`
-//!   （boot 自启偏好，缺省按角色：L1/L2 系统服务默认开、L3 应用默认关；只改偏好
+//!   [`ENABLED_KEY_PREFIX`] 记录）/ `plugin.autostart.{id}`
+//!   （boot 自启偏好，缺省按角色：基础服务 / 内部业务默认开、业务应用默认关；只改偏好
 //!   不触发当前进程启停，与移动端 `plugin_set_autostart` 语义逐字一致）；
 //! - **审批** = `preauthorize`（预授权/高权限位提示）→ 未授权落 `NeedsApproval`
 //!   → `approve`（人工整单批准 + 目录内容哈希钉扎）→ 重新激活；
@@ -35,7 +35,7 @@
 //! **boot 装配**：wasm-core `PluginHost::new` 内部仍会跑
 //! `auto_activate_from_persisted_state`（能力仓机制，桌面不删）；平台在创建
 //! `PluginHost` **之前**调用 [`clear_persisted_activation_snapshot`] 清空历史会话
-//! 快照，保证 L3 业务应用不会因上次运行被复活。唯一允许 boot 启动应用的是
+//! 快照，保证业务应用不会因上次运行被复活。唯一允许 boot 启动应用的是
 //! `apply_autostart`（按 `plugin.autostart.{id}` 偏好；用户显式开启）——旧
 //! 「前端直连自启常驻」的隐含假设已随壳改造移除：前端加载由壳驱动
 //! （`useShellApps` 动作 → 本模块命令面）。
@@ -64,7 +64,7 @@ pub const SYSTEM_PLUGIN_ID: &str = "__system__";
 /// 「可用性标记」持有该行并保持缺省 false 的 fail-safe 读（该端 legacy 迁移
 /// `auto_approve_legacy` 与错误路径写 false 都依赖缺省为"未启用"，改缺省会把
 /// 全量插件自动补审批，故移动端不动）。跨端锁只钉命令名与 key 字面
-/// （`command_vocabulary_lock.rs`），不钉缺省值语义。
+/// （`wasmnest-test/cross-end-tests` 的命令词汇锁），不钉缺省值语义。
 pub const ENABLED_KEY_PREFIX: &str = "plugin.enabled.";
 
 /// 自启偏好 key 前缀（移动端 `PLUGIN_AUTOSTART_KEY_PREFIX` 同款语义与字面：
@@ -82,7 +82,7 @@ pub const UNINSTALLED_KEY: &str = "plugin.uninstalled";
 /// 清空 wasm-core 的「上次激活快照」（系统分区 `activation_state`）。
 ///
 /// **为什么必须在创建 `PluginHost` 之前调用**：wasm-core `PluginHost::new` 会按
-/// 该快照跑 `auto_activate_from_persisted_state`，把上次运行过的 L3 业务应用直接
+/// 该快照跑 `auto_activate_from_persisted_state`，把上次运行过的业务应用直接
 /// 复活。桌面壳的「打开」是会话级动作（见模块头契约），宿主要在能力仓机制执行前
 /// 清掉快照；否则用户重启后没打开过的应用会后台运行并显示运行中状态点。
 ///
@@ -108,13 +108,13 @@ pub struct HostShellPluginInfo {
     pub plugin: HostPluginInfo,
     /// 主屏入口可见性偏好（缺省 true；`false` = 用户停用 → 主屏 / 搜索隐藏入口）
     pub enabled: bool,
-    /// 启动时自动激活偏好（缺省按装配角色：L1/L2 开、L3 关）
+    /// 启动时自动激活偏好（缺省按装配角色：基础服务 / 内部业务开、业务应用关）
     pub autostart: bool,
 }
 
 /// 桌面宿主侧插件生命周期编排层
 ///
-/// 命令面（`lib.rs` 注册）与壳（`wasm-apps/bedcode/src/shell/useShellApps.ts`）
+/// 命令面（`lib.rs` 注册）与壳（`wasmnest-desktop/src/shell/composables/useShellApps.ts`）
 /// 的单一落点；全部动作委托 wasm-core `PluginHost`，本层不重复机制。
 pub struct PluginLifecycleManager {
     host: Arc<PluginHost>,
@@ -234,8 +234,8 @@ impl PluginLifecycleManager {
 
     /// 应用「启动时自动激活」偏好
     ///
-    /// 缺省值按装配角色：L1 基础服务 / L2 内部业务 = `true`（系统服务默认随宿主
-    /// 启动），L3 业务应用 = `false`。显式写入的 `false` 优先——用户关掉后不会
+    /// 缺省值按装配角色：基础服务 / 内部业务 = `true`（系统服务默认随宿主启动），
+    /// 业务应用 = `false`。显式写入的 `false` 优先——用户关掉后不会
     /// 因缺省值又被拉起；不写偏好行，避免卸载重装回到默认开。
     pub async fn is_autostart(&self, plugin_id: &str) -> bool {
         let kind = self.host.get_plugin(plugin_id).await.map(|info| info.kind);
@@ -251,9 +251,9 @@ impl PluginLifecycleManager {
         write_bool_pref(&self.host.storage(), AUTOSTART_KEY_PREFIX, plugin_id, autostart).await
     }
 
-    // ==================== 卸载（L3 应用；服务拒绝；可选保留应用数据） ====================
+    // ==================== 卸载（业务应用；服务拒绝；可选保留应用数据） ====================
 
-    /// 卸载业务应用（L3）。`keep_data` = 保留应用数据（私有库 + KV），重装后可用。
+    /// 卸载业务应用。`keep_data` = 保留应用数据（私有库 + KV），重装后可用。
     ///
     /// 随包内置应用不删资源目录（只读 / 随宿主更新），改为写 [`UNINSTALLED_KEY`]
     /// 覆盖表并在 boot 重放；用户安装应用真正删安装目录。审批 / 授权记录始终撤销
@@ -434,14 +434,14 @@ impl PluginLifecycleManager {
     /// boot 后按 `plugin.autostart.{id}` 偏好装配：启动标记自启的业务应用，停用
     /// 用户显式关闭自启的系统服务。
     ///
-    /// 业务应用（L3）：autostart=true 且当前未运行 → 激活（persist=false——偏好是
+    /// 业务应用：autostart=true 且当前未运行 → 激活（persist=false——偏好是
     /// 启动真源，运行快照不再参与下次 boot）。历史「上次运行快照」在
     /// `PluginHost::new` 之前已由 [`clear_persisted_activation_snapshot`] 清空。
     ///
-    /// 系统服务（L1/L2）：wasm-core boot 按角色**无条件**激活（ADR 0032：层序保证
+    /// 系统服务（基础服务 / 内部业务）：wasm-core boot 按角色**无条件**激活（层序保证
     /// auth / gateway 先于业务就绪）。用户显式把自启关掉时，偏好行已存在 `false`
     /// （`is_autostart` 对角色驱动缺省 true，走不到这里），本方法在 boot 收口处停用
-    /// 本会话实例，让桌面「自启」开关对服务同样生效（2026-10-22 用户裁决 D4）。
+    /// 本会话实例，让桌面「自启」开关对服务同样生效（2026-10-22 用户裁决）。
     /// 不写启动快照（服务启停仍不持久化），下次 boot 仍按偏好重新判定。
     ///
     /// 幂等：服务已停止 / 应用已运行时零动作。返回本次实际激活数（供 boot 日志 /
@@ -499,7 +499,7 @@ impl PluginLifecycleManager {
 
 // ==================== 偏好读写（纯函数，可单测；存储真源 = 插件存储系统分区） ====================
 
-/// 自启缺省值：L1 基础服务 / L2 内部业务默认开，L3 应用 / 未知默认关。
+/// 自启缺省值：基础服务 / 内部业务默认开，业务应用 / 未知默认关。
 ///
 /// 只决定「偏好行不存在时」的取向；显式写入的 `false` 仍由 `read_bool_pref` 优先。
 fn autostart_fallback(kind: Option<wasmnest_wasm_core::manifest::PluginKind>) -> bool {
@@ -509,7 +509,7 @@ fn autostart_fallback(kind: Option<wasmnest_wasm_core::manifest::PluginKind>) ->
 /// 读布尔偏好（缺省 / 损坏 / 读取失败一律回落到 `fallback`——不静默吞错，warn 留痕
 /// 让两次启动间的持续失败可见；`fallback` 按各 key 的语义取向分别给定：
 /// enabled = `true`（主屏入口可见性缺省成立，坏行不静默藏掉入口），
-/// autostart = `false`（自启只能显式打开，坏行绝不静默启动应用））
+/// autostart = `false`（自启只能显式打开，坏行绝不静默启动应用）。
 async fn read_bool_pref(storage: &PluginStorage, prefix: &str, plugin_id: &str, fallback: bool) -> bool {
     let key = format!("{prefix}{plugin_id}");
     match storage.get(SYSTEM_PLUGIN_ID, &key).await {
@@ -529,7 +529,7 @@ async fn read_bool_pref(storage: &PluginStorage, prefix: &str, plugin_id: &str, 
     }
 }
 
-/// 写布尔偏好（JSON `true` / `false`；错误补操作上下文——§6 禁裸透传）
+/// 写布尔偏好（JSON `true` / `false`；错误补操作上下文，禁裸透传）
 async fn write_bool_pref(storage: &PluginStorage, prefix: &str, plugin_id: &str, value: bool) -> Result<()> {
     let key = format!("{prefix}{plugin_id}");
     storage
@@ -564,9 +564,9 @@ async fn write_uninstalled(storage: &PluginStorage, map: &HashMap<String, bool>)
 
 // ==================== 卸载命令面（覆盖 api_bridge 裸卸载，带数据保留策略） ====================
 
-/// 卸载已安装应用（L3；系统服务拒绝），`keepData` 缺省 = 删除应用数据
+/// 卸载已安装应用（业务应用；系统服务拒绝），`keepData` 缺省 = 删除应用数据
 ///
-/// 宿主面门（ADR 0058）：卸载是宿主 UI 职权，应用前端同 webview 可直接调用
+/// 宿主面门：卸载是宿主 UI 职权，应用前端同 webview 可直接调用
 /// ⇒ 不带凭证时任一应用能删掉其他应用。注册点从 `api_bridge::plugin_uninstall`
 /// 改到本命令（bootstrap），旧裸臂不再注册。
 #[tauri::command]
@@ -603,14 +603,14 @@ pub async fn plugin_clear_uninstalled(
     manager.clear_uninstalled(&plugin_id).await
 }
 
-// ==================== 命令面（D3：桌面补移动端同款缺失臂，语义逐字一致） ====================
+// ==================== 命令面（桌面补移动端同款缺失臂，语义逐字一致） ====================
 //
 // 仅补移动端 `commands.rs` 已有而桌面 api_bridge 缺失的六臂；清单 / 启停 /
 // 审批 / 卸载等既有臂已由 api_bridge 注册（lib.rs 保留）。
 
 /// 标记插件错误（插件自报面 + 宿主代报面）
 ///
-/// 身份绑定（安全审查 #48，与移动端 `plugin/commands.rs::plugin_mark_error` 同判据）：
+/// 身份绑定（与移动端 `plugin/commands.rs::plugin_mark_error` 同判据）：
 /// 插件通道令牌只能标自己，宿主 loader 会话凭证可代报任意目标。桌面原先经
 /// `api_bridge` 的裸命令暴露（无 `webview` / `credential`），任意应用前端可把他人
 /// 标成 Error 并释放其服务租约（`PluginHost::mark_error` → `release_services_for`）；
@@ -651,7 +651,7 @@ pub async fn plugin_is_enabled(plugin_id: String, manager: State<'_, Arc<PluginL
 
 /// 设置插件启用状态并持久化（不触发激活、不停止已运行实例；桌面壳消费为主屏入口可见性）
 ///
-/// 宿主面门（安全审查 #48）：启停偏好是宿主 UI 的职权，应用前端同 webview 可直接
+/// 宿主面门：启停偏好是宿主 UI 的职权，应用前端同 webview 可直接
 /// 调用 ⇒ 不带凭证时任一应用能静默启停他人应用。
 #[tauri::command]
 pub async fn plugin_set_enabled(
@@ -678,7 +678,7 @@ pub async fn plugin_is_autostart(plugin_id: String, manager: State<'_, Arc<Plugi
 
 /// 设置插件「启动时自动激活」偏好（只改偏好，下次 boot 生效）
 ///
-/// 宿主面门（安全审查 #48）：自启偏好可被静默改写 ⇒ 配合重启即形成驻留，
+/// 宿主面门：自启偏好可被静默改写 ⇒ 配合重启即形成驻留，
 /// 与 `plugin_set_enabled` 同判据。
 #[tauri::command]
 pub async fn plugin_set_autostart(
@@ -742,7 +742,7 @@ mod tests {
         assert!(!read_bool_pref(&storage, ENABLED_KEY_PREFIX, "com.wasmnest.test.a", true).await);
     }
 
-    /// 壳清单 wire 形状（F1）：插件字段**平铺** + enabled/autostart 同位
+    /// 壳清单 wire 形状：插件字段**平铺** + enabled/autostart 同位
     ///
     /// 前端 `HostShellPluginInfo` 按这个形状读（`info.enabled` / `info.autostart`），
     /// 包一层 `{ plugin: {...} }` 会让投影静默丢掉全部字段（TS 侧不看错字段）。

@@ -1,6 +1,6 @@
-//! host-notify / host-notify-mobile 宿主 adapter（移动端；wasm-core-mobile-purity 票 04 自 wasm-core 迁入）
+//! host-notify / host-notify-mobile 宿主 adapter（移动端；自 wasm-core 迁入）
 //!
-//! ## 两个 interface 的分工（2026-10-13 功能级统一，ADR 0052 D3）
+//! ## 两个 interface 的分工（2026-10-13 功能级统一）
 //!
 //! - **`host-notify`（共享域契约，真源 `../wasmnest-lib/wasmnest-notify-engine/wit/notify.wit`）**：
 //!   `notify` 本体是双端功能级交集 → 统一签名 `notify(title, body, options-json)`，

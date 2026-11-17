@@ -1,5 +1,3 @@
-//! Summary Types
-//!
 //! 摘要类型定义
 
 use serde::{Deserialize, Serialize};

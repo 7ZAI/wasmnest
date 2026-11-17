@@ -23,7 +23,7 @@
 //! 防回接锁：**本 crate 零 `ServiceDaemon::new()`**——任何新建守护都会打破
 //! 「单守护」红线（双守护同绑 5353 互抢多播包）。
 //!
-//! 浏览面第二层不变量（ADR 0054 / 票 04）：全进程对同一服务类型的
+//! 浏览面第二层不变量：全进程对同一服务类型的
 //! `daemon.browse` / `stop_browse` 只由引擎的**类型中枢**
 //! （`wasmnest_discovery_engine::type_hub`）代持，宿主侧零 `daemon.browse`。
 //! 中枢的泵任务经 `DiscoveryPorts::spawn` 派生，故进程级端口必须在任何
@@ -38,7 +38,7 @@ use wasmnest_wasm_core::permission::PERMISSION_MDNS;
 
 // 能力模块白名单条目与强制引用行**必须同处**（本文件），两者不漂移——漏引用 ⇒
 // 该 crate 的 inventory 自报静态不进最终二进制（装载期 missing 方向点名）；漏白名单
-// ⇒ unlisted 方向点名。判据与纪律见 `wasmnest_host_kit::assembly` 模块文档。
+// ⇒ unlisted 方向点名。判据：白名单条目与强制引用行必须同处，漏一处即装载期点名。
 wasmnest_host_kit::expect_host_module!(wasmnest_discovery_engine::MODULE_NAME);
 use wasmnest_discovery_engine as _;
 
@@ -84,7 +84,7 @@ impl DiscoveryTask for TauriSpawnedTask {
 
 impl DiscoveryPorts for MobileDiscoveryPorts {
     fn check_permission(&self, plugin_id: &str, api: &str) -> bool {
-        // 权限门留宿主（AGENTS §5.1.3 安全闸门不可插拔）：真源 = 内核
+        // 权限门留宿主（安全闸门不可插拔）：真源 = 内核
         // PermissionManager，与移动 peer 端口同一条判定与 warn 路径。
         // 拿不到管理器（无头 / 未初始化）一律 false（fail-safe）。
         let Some(pm) = Self::manager() else {

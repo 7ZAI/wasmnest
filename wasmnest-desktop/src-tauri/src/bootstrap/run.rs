@@ -32,7 +32,7 @@ pub(crate) const PLUGINS_DIR_ENV: &str = "WASMNEST_PLUGINS_DIR";
 /// 把外部插件目录写进宿主启动环境，返回写入的目录。
 ///
 /// 空路径必须显性失败：启动流程把空字符串与「未设置」同等对待（回退内置插件目录），
-/// 静默回退会让调用方误以为自己的目录已生效（AGENTS「不静默降级」口径）。
+/// 静默回退会让调用方误以为自己的目录已生效（「不静默降级」口径）。
 pub(crate) fn apply_plugins_dir_env(plugins_dir: impl Into<std::path::PathBuf>) -> std::path::PathBuf {
     let dir = plugins_dir.into();
     assert!(
@@ -199,7 +199,7 @@ pub fn run() {
             // prefers-color-scheme，读不到 AppConfig.ui.theme。这里趁 webview 还没绘制，
             // 把设置翻译成窗口主题（Linux = GTK prefer-dark-theme）让媒体查询直接对上，
             // 三段开屏（静态首帧 → SplashLoading → 壳）才是同一套深浅色。
-            // 机制与调用时序见 system::appearance 文件头注。
+            // 窗口主题在创建窗口前设定，静态首屏就不会先闪一帧错色。
             if let Some(window) = app.get_webview_window("main") {
                 system::appearance::apply_window_appearance(&window, &app_config.ui.theme);
             }
@@ -208,7 +208,7 @@ pub fn run() {
             crate::system::power::power_manager().set_enabled(app_config.network.prevent_sleep);
 
             // 启动电源唤醒监听：Windows 显示器长时间熄灭/锁屏后，WebView2 可能黑屏且不自愈，
-            // 系统唤醒时强制窗口重绘（详见 system::power_wake 模块文档）
+            // 系统唤醒时强制窗口重绘（1px 抖动 + 最小化/还原，迫使 WebView2 重建交换链）
             crate::system::power_wake::spawn_wake_monitor(app_handle.clone());
 
             // 保存 resource_dir 供 AppContext 与插件资源加载使用
@@ -270,7 +270,7 @@ pub fn run() {
 
             // ==================== 应用整包目录进 asset protocol 作用域 ====================
             //
-            // 壳前端装载应用前端（ADR 0057 机制 B）经 asset 协议取件，两处同源：
+            // 壳前端装载应用前端经 asset 协议取件，两处同源：
             //   - 挂载包：动态 `import(convertFileSrc(<plugins_dir>/<appId>/index.js))`
             //   - 应用图标：`<img src=convertFileSrc(<plugins_dir>/<appId>/icon.svg)>`
             // 路径不在 asset 协议的允许作用域内 → 一律 403，且两种表现都很隐蔽：
@@ -332,17 +332,17 @@ pub fn run() {
                 std::fs::create_dir_all(parent)?;
             }
 
-            // 对等网络节点身份：目录与 DB 同源解析自 app_data_dir（决策 D3 宿主只
+            // 对等网络节点身份：目录与 DB 同源解析自 app_data_dir（宿主只
             // 注入目录），node_identity.json 与 wasmnest.db 并列存放；错误经 ? 上抛
-            // 走既有启动失败路径——静默换身份会让对端可信列表全部失效（D3）
+            // 走既有启动失败路径——静默换身份会让对端可信列表全部失效
             let peer_net_data_dir = app_handle.path().app_data_dir().expect("Failed to get app data dir");
             wasmnest_server_peer_net::init_node_identity(&peer_net_data_dir)?;
 
-            // 对等网络节点状态容器（ticket 03）：节点生命周期由应用作用域服务租约
+            // 对等网络节点状态容器：节点生命周期由应用作用域服务租约
             // 驱动——插件经 host-peer.start-node / stop-node 按插件 id 记账，首个
             // 引用拉起、最后一个引用关停（见 `net.peer-node` 服务）；宿主不再按
             // 产品 id 驱动，也没有无属主的启动命令面。
-            // 状态以 Arc 托管（server-lib-split）：peer-net 引擎派生任务需要
+            // 状态以 Arc 托管：peer-net 引擎派生任务需要
             // 克隆句柄跨 await 存活（drive_gate / session_watch / 入站桥 /
             // 发现刷新订阅）；命令壳与 host_api 经 peer_ctx 一次装配
             app.manage(Arc::new(wasmnest_server_peer_net::PeerNetState::default()));
@@ -357,7 +357,7 @@ pub fn run() {
 
             let db = Arc::new(std::sync::Mutex::new(db));
 
-            // v33（ADR 0033）：宿主**不再持有**入场签发密钥（签发/验签均在认证
+            // 宿主**不再持有**入场签发密钥（签发/验签均在认证
             // 中心），故此处无密钥预生成。旧的 `plugin_secrets` 属主 `host` 行
             // （`('host','jwt.key')`）由 `db::run_migrations` 幂等清理（见
             // migrations 的 v33 条目）——那是不可达的旧密钥材料，留着只是白给的面。
@@ -368,14 +368,14 @@ pub fn run() {
             let system_info = Arc::new(system::info::SystemInfo::collect());
 
             let resource_dir_arc = Arc::new(resource_dir);
-            // 票 11：内核会话管理器 / 配置管理器不再装配——会话真源在
+            // 内核会话管理器 / 配置管理器不再装配——会话真源在
             // `com.wasmnest.bedcode` 登记域，宿主只保留 `session_gateway`
             // 窄转发层（互调 api + `host-pty` 引擎）。
             // app_handle_arc 需在 plugin_host 之前创建，因为 PluginHost::new() 需要它构建 HostContextFns
             let app_handle_arc = Arc::new(app_handle.clone());
 
             // mDNS 广播句柄：**必须早于 `PluginHost::new` 创建并托管**——传输面
-            // 服务可能在 L1/L2 角色组件激活期（new 内部）被 acquire，supervisor
+            // 服务可能在基础服务 / 内部业务组件激活期（new 内部）被 acquire，supervisor
             // start 的广播登记经 Tauri managed state 解析它（早于 AppContext 注册）。
             let mdns_advertiser = Arc::new(tokio::sync::RwLock::new(
                 wasmnest_discovery_engine::advertiser::MdnsAdvertiser::new(),
@@ -393,9 +393,9 @@ pub fn run() {
             tauri::async_runtime::block_on(wasmnest_server_websocket::WebSocketManager::global().init())
                 .expect("Failed to initialize WebSocketManager");
 
-            // server-lib-split：装配服务器端口（宿主壳实现注入；supervisor /
+            // 装配服务器端口（宿主壳实现注入；supervisor /
             // ws / http / peer-net 的「无 AppContext」保守分支依赖本注册表）。
-            // **必须早于 `PluginHost::new`**：L1/L2 角色组件在 new 内激活；激活期
+            // **必须早于 `PluginHost::new`**：基础服务 / 内部业务组件在 new 内激活；激活期
             // 的 peer 节点请求（file-transfer）会 acquire 服务，且界面租约随后
             // 启动传输面——两者都需要本注册表 + 托管状态。
             // 句柄直传：本注册表早于 AppContext 注册，路径面靠它解析（2026-10-07 修）。
@@ -410,7 +410,7 @@ pub fn run() {
             // 服务（acquire），内核生命周期回收也需要同一份注册表。
             // 传输面 boot 不无条件启动：端点注册只预登记；界面租约（普通应用）在
             // 挂载时才 acquire，服务端型应用（manifest `backgroundTransport`）由内核
-            // 在各自启动成功后 acquire（含 `PluginHost::new` 内角色激活的 L1/L2）。
+            // 在各自启动成功后 acquire（含 `PluginHost::new` 内角色激活的基础服务 / 内部业务）。
             let service_registry = Arc::new(wasmnest_server_base::service::ServiceRegistry::new());
             wasmnest_server_core::service::TransportService::register(&service_registry)
                 .expect("register net.transport service (duplicate key = assembly bug)");
@@ -420,7 +420,7 @@ pub fn run() {
             )
             .expect("register net.peer-node service (duplicate key = assembly bug)");
 
-            // 内网穿透 T06：隧道管理器（单一引用计数）+ `net.tunnel` 服务租约。
+            // 内网穿透：隧道管理器（单一引用计数）+ `net.tunnel` 服务租约。
             // 管理器必须在 `PluginHost::new` 之前装好：WIT 绑定层在插件激活期就会
             // 取端口与管理器，取不到是 fail-visible 错误（不静默 lan-only）。
             let tunnel_manager = std::sync::Arc::new(
@@ -449,15 +449,15 @@ pub fn run() {
                 .expect("Failed to get app data dir")
                 .join("plugins");
             // PluginHost::new 返回 Arc<Self>（属主失败回报端口需要宿主弱引用）
-            // 整核抽出 §3.3：对等网络上下文装配端口由 lib 注入（peer_net_cmds::peer_ctx
+            // 对等网络上下文装配端口由 lib 注入（peer_net_cmds::peer_ctx
             // 读 tauri managed state + server 端口装配；无头 harness 不传 → HEADLESS_UNAVAILABLE）
             let peer_ctx_provider: Option<Arc<crate::wasm_core::host_api::context::PeerCtxProvider>> =
                 Some(Arc::new(crate::server::peer_net_cmds::peer_ctx));
-            // 票 08/P0-2：第一方免弹窗归属清单（产品数据）由 lib 装配时注入——
+            // 第一方免弹窗归属清单（产品数据）由 lib 装配时注入——
             // 判定逻辑在 wasm-core（机制），清单真源在本文件即可（first_party_dirs.rs）
             let first_party_dirs = crate::first_party_dirs::first_party_dirs();
             // **必须在 PluginHost::new 之前**：wasm-core 会按系统分区 `activation_state`
-            // 跑 `auto_activate_from_persisted_state`，把上次运行过的 L3 应用复活。
+            // 跑 `auto_activate_from_persisted_state`，把上次运行过的业务应用复活。
             // 桌面「打开」是会话级动作（persist=false），boot 启动唯一来源是
             // `plugin.autostart.{id}`（见 plugin/lifecycle.rs 模块头契约）；清掉历史
             // 快照后，升级前留下的「没打开却运行中」状态也不会再出现。
@@ -486,16 +486,16 @@ pub fn run() {
                 Some(std::sync::Arc::new(crate::plugin::platform_picker::DesktopPlatformPicker::new(
                     (*app_handle_arc).clone(),
                 ))),
-                // 应用作用域服务注册表：new 内 L1/L2 激活期即可 acquire
+                // 应用作用域服务注册表：new 内基础服务 / 内部业务激活期即可 acquire
                 Some(service_registry.clone()),
             ));
             // 注入消息总线 dispatcher（两阶段初始化）
             tauri::async_runtime::block_on(plugin_host.init_message_bus());
 
-            // 终端同步事件通道已随 websocket 业务下沉票 08 删除（插件事件改 bus+emit，
+            // 终端同步事件通道已随 websocket 业务下沉删除（插件事件改 bus+emit，
             // 宿主不再持有 HostSyncEvent / broadcast-sync 广播面）
 
-            // ==================== guest 事件派发器注入（票 03 / ADR 0022） ====================
+            // ==================== guest 事件派发器注入 ====================
             // `events` 导出的调用契约是端专属事实（桌面 on-message / on-process-done），
             // 机制留 wasm-core、契约面由本宿主用自有绑定实现——与 peer_ctx_provider /
             // domain_ports 同范式（`&self` + RwLock，宿主只拿到不可变 Arc）。
@@ -532,16 +532,16 @@ pub fn run() {
             // 注册到 Tauri State（前端 invoke 可用）；db / mdns_advertiser 已在
             // `PluginHost::new` 之前托管（激活期服务启动需要）
             app.manage(plugin_host.clone());
-            // 应用整包目录（ADR 0057 机制 B）：启动装配已解析出唯一的 `plugins_dir`
+            // 应用整包目录：启动装配已解析出唯一的 `plugins_dir`
             // （dev 回退到源码目录的逻辑也在这里），壳前端装载挂载包时只消费这条事实，
             // 不再自己拼 `resources/plugins/desktop`——少写一层 `resources` 就是
-            // 2026-10-17 实机验证 P0-1 的 404 根因。
+            // 2026-10-17 实机验证的 404 根因。
             app.manage(plugin::assets::AppAssetsDir(plugins_dir.clone()));
             // 宿主侧插件生命周期编排层（2026-10-17 lifecycle-sync）：壳动作经它驱动
             // 真实启停/审批/卸载 + enabled/autostart 偏好持久化；boot 装配在其后跑
             // `apply_autostart`（业务应用按 `plugin.autostart.{id}` 补激活；系统服务
             // 被用户显式关闭自启时停用本会话实例）。历史「上次运行快照」已在上方创建
-            // `PluginHost` 之前清空，故这里是 L3 业务应用唯一的 boot 启动源（用户
+            // `PluginHost` 之前清空，故这里是业务应用唯一的 boot 启动源（用户
             // 2026-10-20 裁决）。
             let lifecycle = Arc::new(plugin::lifecycle::PluginLifecycleManager::new(plugin_host.clone()));
             app.manage(lifecycle.clone());
@@ -550,7 +550,7 @@ pub fn run() {
             tauri::async_runtime::block_on(lifecycle.apply_uninstalled_tombstones());
             tauri::async_runtime::block_on(lifecycle.apply_autostart());
             app.manage(plugin_host.wasm_runtime().fs_auth().clone());
-            // 网络出站授权应答通道（票 05）：与 fs 应答同一形态——前端弹窗经
+            // 网络出站授权应答通道：与 fs 应答同一形态——前端弹窗经
             // 宿主面凭证代答，故应答器必须是进程级单例（与事件广播的询问一一对应）
             app.manage(plugin_host.wasm_host_ctx().net_auth().clone());
             // peer-net 节点的启动不再需要 boot 对账：节点由插件在自己的 activate 里
@@ -581,7 +581,7 @@ pub fn run() {
             // 不再在此永久启动 server：应用调 `host-http-endpoint.register-endpoint` /
             // `host-websocket-server.register-endpoint` 时经服务租约 acquire
             // `net.transport`，首个引用拉起（Actix + mDNS 广播 + 防休眠 + 指标采样），
-            // 最后一个引用释放关停。零应用 = 零监听 / 零广播（Q1/Q2）。
+            // 最后一个引用释放关停。零应用 = 零监听 / 零广播。
             //
             // 链路加密装配、WS 管理器 init、端口注册表、服务注册表均已在上方
             // `PluginHost::new` 之前完成（激活期 acquire 需要）。
@@ -608,7 +608,7 @@ pub fn run() {
                 }
             });
 
-            // 票 09：原先在这里启动的「SessionManager 状态事件 → 前端
+            // 原先在这里启动的「SessionManager 状态事件 → 前端
             // `session-status-changed`」转发器已退役（订阅源对插件会话无流量、
             // 前端零消费方），见 `events.rs` 模块头。
 
@@ -694,19 +694,18 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Session / PTY Input：**会话命令面已整体注销**（票 08）——
+            // Session / PTY Input：**会话命令面已整体注销**——
             // 列表 / 单查 / 尺寸 / 写入 / 特殊键五条连壳删除，消费方改指插件
             // 命令面（`session.list` / `session.get` / `session.action.resize` /
             // `session.input`），见 commands.rs 会话命令节头部注释
-            // 终端输出面（票 05 摘除）：旧 Channel 传输命令
+            // 终端输出面（已摘除）：旧 Channel 传输命令
             // （subscribe_terminal_channel / unsubscribe_terminal_channel /
             // terminal_channel_ack，commands/terminal_stream.rs）已随宿主前端
             // 消费方摘除——插件输出改经 host-session.output-ring-fetch 原语
             // （插件命令面 session.output.pull）拉取，宿主不留降级输出传输
             // 配对 / QR / 连接历史命令面已注销：产品面归 com.wasmnest.bedcode 插件的
             // session.pairing.* / session.qr.* / session.devices.* / session.history.*
-            // （凭据签发与 `pairings` 表仍在内核 auth 模块，宿主只留原语与记录面；
-            // 见 .scratch/2026-09-21-host-rust-residue/issues/05）
+            // （凭据签发与 `pairings` 表仍在内核 auth 模块，宿主只留原语与记录面）
             commands::set_log_level,
             commands::save_log_settings,
             commands::open_log_dir,
@@ -728,8 +727,8 @@ pub fn run() {
             // Dev Console Relay（仅 dev：前端 console 日志转发，写 runtime.*.log + frontend.*.log 单独文件，见 commands.rs Dev Console Log Relay 节）
             #[cfg(debug_assertions)]
             commands::report_frontend_log,
-            // 桥接基准 · Channel 传输面（仅 debug：AGENTS §5.1 的 debug-only 测试面，
-            // 零业务语义、不碰既有能力；见 src/bench_channel.rs 头注释与 bench/README.md）
+            // 桥接基准 · Channel 传输面（仅 debug：debug-only 测试面，
+            // 零业务语义、不碰既有能力）
             #[cfg(debug_assertions)]
             bench_channel::bench_channel_stream_bytes,
             #[cfg(debug_assertions)]
@@ -739,12 +738,14 @@ pub fn run() {
             // Plugin
             commands::plugin_list_loaded,
             commands::plugin_get_info,
-            // 应用整包目录（ADR 0057 机制 B：壳装载独立构建的 app 前端，路径真源在宿主）
+            // 应用整包目录（壳装载独立构建的 app 前端，路径真源在宿主）
             plugin::assets::plugin_get_asset_dir,
+            // 应用包内文本资源（SVG 图标内联，绕过 WebKitGTK 自定义协议不渲染 SVG 图片）
+            plugin::assets::plugin_get_asset_text,
             // 外部应用包选取与识别（安装前半程：原生对话框 + peek plugin.json id；
             // 安装本体 = plugin_install_from_file，宿主面凭证门在 api_bridge）
             plugin::install_picker::plugin_pick_app_package,
-            // app 前端 env.invoke 白名单查询（ADR 0058 方案 A；真源 = commands.rs
+            // app 前端 env.invoke 白名单查询（真源 = commands.rs
             // APP_FRONTEND_INVOKE_WHITELIST，前端白名单代理启动时取用）
             commands::plugin_frontend_invoke_whitelist,
             commands::plugin_preauthorize,
@@ -761,7 +762,7 @@ pub fn run() {
             // 安装复用 plugin_install_from_file 升级模式，兼容判断在壳前端）
             plugin_updates::plugin_check_app_update,
             plugin_updates::plugin_download_update,
-            // `plugin_pick_app_zip` 已注销（2026-11-03 审核 P3-2）：SysAppsView 的
+            // `plugin_pick_app_zip` 已注销（2026-11-03 审核）：SysAppsView 的
             // 「安装应用（本地 zip）」重复卡片删除后，本命令在前端再无消费者。
             // 按仓规「退役面收口 / 不留无消费者的 invoke 面」，命令实现与注册一并移除；
             // 选包能力仍由 `state.installApp()` 那条主链路提供（走原生对话框 + 安装命令）。
@@ -769,7 +770,7 @@ pub fn run() {
             // 不用 api_bridge 的无凭证版本（后者仍被 glob 再导出，但不再注册）
             plugin::lifecycle::plugin_mark_error,
             commands::plugin_frontend_load_report,
-            // 生命周期偏好/状态（D3：桌面补移动端同款缺失臂，语义逐字一致；编排层在
+            // 生命周期偏好/状态（桌面补移动端同款缺失臂，语义逐字一致；编排层在
             // plugin/lifecycle.rs，与 api_bridge 的清单/启停/审批/卸载臂并存）
             // 壳主屏清单（注册表投影 + enabled/autostart 同位，一次 IPC 取齐）；
             // 应用前端消费的 plugin_list_loaded 形状不变
@@ -783,7 +784,7 @@ pub fn run() {
             commands::plugin_storage_get,
             commands::plugin_storage_set,
             commands::plugin_storage_delete,
-            // `plugin_terminal_send_input` 随票 08 注销：终端输入改走插件
+            // `plugin_terminal_send_input` 已注销：终端输入改走插件
             // 命令通道 `session.input`（宿主不再替插件导流输入）
             commands::plugin_invoke,
             commands::plugin_fs_auth_respond,
@@ -805,7 +806,7 @@ pub fn run() {
             commands::set_app_link_crypto_policy,
             commands::get_link_crypto_fingerprint,
             commands::reset_server_network_config,
-            // 应用界面租约（service-leases）：外壳挂载 / 卸载应用整包时驱动
+            // 应用界面租约：外壳挂载 / 卸载应用整包时驱动
             // net.transport 的 acquire / release
             commands::plugin_surface_open,
             commands::plugin_surface_close,

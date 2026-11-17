@@ -1,8 +1,8 @@
 //! host-mdns 宿主侧适配器（能力域端口 `DiscoveryPorts` 的宿主实现 + 装配自报）
 //!
 //! 域机制（共享守护 + 浏览 / 广播句柄表 + 事件 + 停用回收）在
-//! `wasmnest-discovery-engine`；本文件是**宿主侧的另一半**——wasm-core 纯净性收口票 02
-//! 批次 03 整文件迁自 `wasmnest-wasm-core/src/host_api/mdns.rs`（内核自此不依赖
+//! `wasmnest-discovery-engine`；本文件是**宿主侧的另一半**——整文件迁自内核
+//! `host_api/mdns.rs`（原文件已删除；内核自此不依赖
 //! `wasmnest-discovery-engine`；`host_context_registry` 一并退役——它唯一消费者就是
 //! 本 adapter 的旧零大小形态）。
 //!
@@ -36,7 +36,7 @@ use wasmnest_wasm_core::permission::PERMISSION_MDNS;
 
 // 能力模块白名单条目与强制引用行**必须同处**（本文件），两者不漂移——漏引用 ⇒
 // 该 crate 的 inventory 自报静态不进最终二进制（装载期 missing 方向点名）；漏白名单
-// ⇒ unlisted 方向点名。判据与纪律见 `wasmnest_host_kit::assembly` 模块文档。
+// ⇒ unlisted 方向点名。判据：白名单条目与强制引用行必须同处，漏一处即装载期点名。
 wasmnest_host_kit::expect_host_module!(wasmnest_discovery_engine::MODULE_NAME);
 use wasmnest_discovery_engine as _;
 
@@ -64,9 +64,9 @@ impl HostDiscoveryPorts {
 
 impl DiscoveryPorts for HostDiscoveryPorts {
     fn check_permission(&self, plugin_id: &str, api: &str) -> bool {
-        // 权限门留宿主（AGENTS §5.1.3「安全闸门」——闸门不应可插拔）。复用
+        // 权限门留宿主（安全闸门——闸门不应可插拔）。复用
         // wasm-core 的 `host_api::check_permission`：同一份 PermissionManager、同一条
-        // 拒绝 warn 路径（AGENTS §8 结构化字段），不另起一套判定。
+        // 拒绝 warn 路径（结构化字段），不另起一套判定。
         check_permission(self.ctx(), plugin_id, PERMISSION_MDNS, api)
     }
 
@@ -97,13 +97,13 @@ impl DiscoveryPorts for HostDiscoveryPorts {
         })
     }
 
-    // ==================== 能力路由（票 09 扩表） ====================
+    // ==================== 能力路由 ====================
     //
     // 五条原语各问一次路由层：命中系统组件提供者就转发（组件侧再经 `host-mdns`
     // 同形导出），没命中返回 `None` 让能力域走本域引擎。
     //
-    // 能力名取自**词汇真源**（`wasmnest_discovery_engine::routing::CAPABILITY`，票 02
-    // 批次 03）：内核的 `forward_mdns_*` 不再是字面量的出处，只吃调用方给的能力名。
+    // 能力名取自**词汇真源**（`wasmnest_discovery_engine::routing::CAPABILITY`）：
+    // 内核的 `forward_mdns_*` 不再是字面量的出处，只吃调用方给的能力名。
 
     fn forward_mdns_browse(&self, plugin_id: &str, service_type: &str) -> Option<Result<String, String>> {
         wasmnest_wasm_core::host_api::forward_mdns_browse(
@@ -225,7 +225,7 @@ mod tests {
         );
     }
 
-    /// 路由词汇必须真的自报进宿主二进制（票 02 批次 03）
+    /// 路由词汇必须真的自报进宿主二进制
     ///
     /// 漏 `submit_routable_capability!` 行 / 漏本文件顶部的强制引用行 ⇒ 内核路由表里
     /// 没有本能力 ⇒ 提供者探测永远不命中，**系统组件静默接管不了 `host-mdns`**。
@@ -244,7 +244,7 @@ mod tests {
 
     /// 反向闭表锁：内核提供者窄端口的方法族 == 域自报的导出表（逐项）
     ///
-    /// 内核侧那条锁只能做「行 → 方法」方向（见 `manager::capability` 的闭表锁文档）；
+    /// 内核侧那条锁只能做「行 → 方法」方向（`manager::capability` 的闭表锁）；
     /// 「方法 → 行」的孤儿判定需要自报行全在场 ⇒ 在宿主二进制里做（本用例）。
     #[test]
     fn mdns_target_method_family_matches_the_self_reported_exports() {
@@ -257,7 +257,7 @@ mod tests {
         let end = block.find("\n}\n").expect("trait 必须以列零 `}` 收尾");
         // marker 对的是**剥掉 `fn ` 之后的**方法名前缀（`mdns_`）——首版写成
         // `fn mdns_` 与 `strip_prefix("fn ")` 叠加后恒不匹配（计数恒 0、锁恒红，
-        // 由本用例首次实跑暴露；宿主测试此前受磁盘限制未跑，参见票面记录）。
+        // 由本用例首次实跑暴露；宿主测试此前受磁盘限制未跑）。
         let marker = format!("{}_", wasmnest_discovery_engine::routing::FORWARD_PREFIX);
         let decls = block[..end]
             .lines()

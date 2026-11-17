@@ -1,6 +1,4 @@
 //! 文件删除插件（FileDeletePlugin）
-//!
-//! 从 android_plugins.rs 拆分。
 
 use std::sync::OnceLock;
 use tauri::plugin::{Builder, PluginHandle};

@@ -1,4 +1,4 @@
-//! Auth Handler - 认证消息处理器
+//! 认证消息处理器：把入站鉴权消息翻译成 `MobileEvent` 并交给事件面
 
 use async_trait::async_trait;
 
@@ -26,7 +26,7 @@ impl ClientRouteHandler for AuthHandler {
                         ctx.emit(MobileEvent::AuthSuccess { session_token });
 
                         // 同步设备级连接状态（WS 回复路径）：HTTP 认证路径经
-                        // manager::apply_auth_success 置位，WS 路径（04 事件 WS /
+                        // manager::apply_auth_success 置位，WS 路径（常驻事件 WS /
                         // 集成测试）由这里补齐，两路最终都落在 Authed
                         crate::state::get_connection_manager().set_authed().await;
 

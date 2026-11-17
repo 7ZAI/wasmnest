@@ -1,6 +1,4 @@
-//! Mobile Plugin Manager
-//!
-//! 插件生命周期管理 — WASM 动态加载、激活、停用、状态持久化
+//! 插件生命周期管理：WASM 动态加载、激活、停用与状态持久化
 
 use wasmnest_wasm_core::db::Database;
 
@@ -44,12 +42,12 @@ pub const PREAUTH_PATHS_STORAGE_KEY: &str = "preauth_paths";
 /// wasmtime 的信号式 trap 在这条链上会被判成「非 wasm 故障」并把信号交回上一个处理器
 /// （WebView/crashpad）⇒ **任何 guest trap（插件 panic / 越界 / 栈溢出 / 燃料耗尽）都
 /// 变成宿主进程 SIGILL 退出**，而不是一条带 wasm backtrace 的插件错误（2026-10-15
-/// ai-chatbox 崩溃即此路径，诊断见 `.scratch/2026-10-15-mobile-ai-chatbox-sigill/`）。
+/// ai-chatbox 崩溃即此路径）。
 /// 关掉后全部 trap 由生成代码经显式 libcall 抛出（内存访问附带显式边界检查），语义
 /// 完全等价，代价是代码略大 / 内存访问略慢。
 ///
 /// 桌面端保持上游默认（信号式 trap 可用且更快，实测 trap 能正常转成插件错误）——
-/// 这是端事实差异，取值归本端宿主（ADR 0052 D4），机制（配置项本身）住 wasm-core。
+/// 这是端事实差异，取值归本端宿主；机制（配置项本身）住 wasm-core。
 pub fn mobile_core_config(app_config_dir: Option<&std::path::Path>) -> wasmnest_wasm_core::config::CoreConfig {
     let mut config = app_config_dir
         .map(|dir| {
@@ -134,14 +132,14 @@ pub struct PluginManager {
     /// 插件数据目录
     plugins_dir: PathBuf,
     /// 插件数据库连接（WASM Host Function 使用；std Mutex，见 lib.rs 创建处注释；
-    /// 批次 2b：底库类型 = fork crate Database wrapper）
+    /// 底库类型 = fork crate Database wrapper）
     plugin_db: Arc<std::sync::Mutex<Database>>,
-    /// Tauri AppHandle
+    /// 前端事件与路径解析入口（测试上下文可为 None）
     ///
     /// Option 化以允许 `#[cfg(test)]` 模块构造无头 PluginManager（不走
     /// `app_handle.path()` / `app_handle.emit()` 的路径）。生产调用方
     /// `lib.rs` 仍传 `Some(...)`；`None` 分支只走状态机与 WASM 生命周期，
-    /// 不依赖任何 Tauri 能力（详见 `init_wasm_runtime` 与 `emit_frontend_event`
+    /// 不依赖任何 Tauri 能力（`init_wasm_runtime` 与 `emit_frontend_event`
     /// 的 None 降级路径）
     app_handle: Option<Arc<tauri::AppHandle>>,
     /// 文件系统访问校验器
@@ -156,7 +154,7 @@ pub struct PluginManager {
     /// 应用作用域共享服务注册表（与桌面同一机制）：boot 注册 `net.peer-node`
     /// 服务并注入 wasm 宿主上下文；插件离开运行态时按 holder 回收。
     service_registry: Arc<wasmnest_server_base::service::ServiceRegistry>,
-    /// 前端通道凭证域（ADR 0058 / issue #28）：与宿主命令面**共用同一实例**
+    /// 前端通道凭证域：与宿主命令面**共用同一实例**
     /// （lib.rs setup 装配后经 [`Self::attach_frontend_channel`] 注入）。
     ///
     /// 为什么放在 manager 而不是只在命令面：令牌是「该插件当前这次激活」的凭证，
@@ -177,7 +175,7 @@ impl PluginManager {
         plugin_db: Arc<std::sync::Mutex<Database>>,
         app_handle: Option<Arc<tauri::AppHandle>>,
     ) -> Self {
-        // 票 05b：插件 KV 真源 = 主库 plugin_storage 表（共享 plugin_db 连接；
+        // 插件 KV 真源 = 主库 plugin_storage 表（共享 plugin_db 连接；
         // 旧文件落盘路径已随 05b 移除，启动迁移见 lib.rs setup）
         let storage = Arc::new(PluginStorage::new(plugin_db.clone()));
         let approvals = Arc::new(PluginApprovalStore::new(storage.clone()));
@@ -300,7 +298,7 @@ impl PluginManager {
     /// 就多出 N 次串行 IPC（装载主链卡在首帧前）。偏好真源在 `PluginManager`，
     /// 进程内合并即可，壳只付一次往返。
     ///
-    /// 缺省取向复用 [`Self::is_autostart`]（L1/L2 缺省 true / L3 false），不另立判据。
+    /// 缺省取向复用 [`Self::is_autostart`]（基础服务 / 内部业务缺省 true、业务应用 false），不另立判据。
     pub async fn list_loaded_with_autostart(&self) -> Vec<MobileShellPluginInfo> {
         // 先取完清单再逐条读偏好：`is_autostart` 内部会再取一次插件表读锁，
         // 不能与 `list_loaded` 的读锁嵌套
@@ -372,8 +370,8 @@ impl PluginManager {
 
     /// 查询插件「启动时自动激活」偏好
     ///
-    /// 缺省值按装配角色：L1 基础服务 / L2 内部业务 = `true`（系统服务默认随宿主
-    /// 启动），L3 业务应用 = `false`。显式写入的 `false` 优先——用户关掉后不会
+    /// 缺省值按装配角色：基础服务 / 内部业务 = `true`（系统服务默认随宿主启动），
+    /// 业务应用 = `false`。显式写入的 `false` 优先——用户关掉后不会
     /// 因缺省值又被拉起；不写偏好行，避免卸载重装回到默认开。
     pub async fn is_autostart(&self, plugin_id: &str) -> bool {
         let key = format!("{}{}", PLUGIN_AUTOSTART_KEY_PREFIX, plugin_id);

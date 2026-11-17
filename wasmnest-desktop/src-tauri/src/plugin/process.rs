@@ -1,9 +1,9 @@
-//! host-process 宿主侧接线（路径 B：WIT 绑定 + `Host` impl + 域函数 + 自报，四件同处）
+//! host-process 宿主侧接线（WIT 绑定 + `Host` impl + 域函数 + 自报，四件同处）
 //!
-//! wasm-core 纯净性收口票 02 批次 05 自内核迁出（`host_api/process.rs` 整文件删除，
+//! 自内核迁出（原 `host_api/process.rs` 已删除，
 //! 内核反向锁 `path_b_domains_must_not_return_to_wasm_core` 防回接）。与 auth /
 //! crypto 同款：**没有独立能力 crate**——装配方就是宿主本 crate（孤儿规则见
-//! [`super::bindings`] 模块文档）。
+//! 要求装配方自生成 trait）。
 //!
 //! 语义（逐字保留）：调度框架类插件（如计划任务）经 `process_run` 在桌面端宿主进程内
 //! spawn 外部命令/脚本：异步执行立即返回 run-id，进程结束后宿主经
@@ -35,7 +35,7 @@ use wasmnest_wasm_core::system::error_boundary::spawn_with_error_boundary;
 use crate::plugin::bindings::wasmnest;
 
 // 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报，见
-// `host_module_whitelist`）。路径 B 域的自报静态住在本 crate（宿主 lib 即最终
+// `host_module_whitelist`）。直连绑定域的自报静态住在本 crate（宿主 lib 即最终
 // 二进制）⇒ 无需能力 crate 那样的 `use <crate> as _;` 强制引用行。
 wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 
@@ -82,9 +82,9 @@ inventory::submit! {
     ModuleEntry { module: &MODULE }
 }
 
-// ==================== 任务单元执行器（C4：core-task 经注册表分发到域实现） ====================
+// ==================== 任务单元执行器（core-task 经注册表分发到域实现） ====================
 
-/// 执行器自报（票 02 批次 05）：内核装配点经 `collected_unit_executors` 遍历注册
+/// 执行器自报：内核装配点经 `collected_unit_executors` 遍历注册
 /// ——内核不再点名本域；内核测试二进制不含本自报（process 单元由宿主 e2e 覆盖）。
 fn make_process_executor() -> Arc<dyn UnitExecutor> {
     Arc::new(ProcessUnitExecutor)
@@ -95,7 +95,7 @@ wasmnest_wasm_core::submit_unit_executor!("process.run-sync", make_process_execu
 /// process 单元执行器（kind `process.run-sync`）
 ///
 /// 直调 `process_run_sync`（域权限门在函数内部再把守；阻塞型单元的超时由
-/// 被调用方自带参数负责——spec §6，与既有同步语义一致）。
+/// 被调用方自带参数负责，与既有同步语义一致）。
 pub(crate) struct ProcessUnitExecutor;
 
 impl UnitExecutor for ProcessUnitExecutor {
@@ -121,7 +121,7 @@ const DEFAULT_TIMEOUT_MS: u64 = 600_000;
 
 /// process_run 请求（对应 SDK `HostProcess::process_run` 的 request JSON）
 ///
-/// 字段语义见 SDK `host/process.rs` 文档；未知字段忽略（serde 默认行为）。
+/// 字段语义以 SDK `host/process.rs` 的 wire 形状为准；未知字段忽略（serde 默认行为）。
 #[derive(Debug, serde::Deserialize)]
 struct ProcessRequest {
     /// 必填：可执行程序（含路径或 PATH 查找）
@@ -299,7 +299,7 @@ struct SyncProcessRequest {
     timeout_ms: u64,
 }
 
-/// 同步执行并捕获输出（v19 追加，票 03/04 工作区 git 域）
+/// 同步执行并捕获输出（工作区 git 域）
 ///
 /// 与 [`process_run`] 同一命令构造语义（进程组 / 超时 kill），差异：
 /// - stdout/stderr 走管道捕获（不进文件），同步阻塞等待进程结束；
@@ -424,7 +424,7 @@ impl wasmnest::process::host_process::Host for WasmPluginState {
         process_kill(ctx_of(self), ctx_of(self), &self.plugin_id, &run_id)
     }
 
-    /// v19 追加（票 03/04 工作区 git 域）：同步执行并捕获输出
+    /// 同步执行并捕获输出（工作区 git 域）
     fn run_sync(&mut self, request_json: String) -> Result<String, String> {
         process_run_sync(ctx_of(self), &self.plugin_id, &request_json)
     }

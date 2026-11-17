@@ -1,6 +1,10 @@
 /**
  * 静态首屏（Vue 挂载前的过渡帧）
  *
+ * 本帧**只铺底，不画任何加载指示器**（2026-11-13 用户裁决）：转圈与品牌开屏
+ * （`SplashLoading.vue`）是两张不同的加载面，先转圈再换开屏会被当成「原生转圈页」。
+ * 这里的背景与品牌开屏首帧（底板淡入前的整屏底色）逐层同源，交接无跳变。
+ *
  * 为什么是独立静态文件、且**不能**搬回 index.html 内联 <style>：
  *
  *   Tauri v2 在 codegen 期给 index.html 里每个 <style> 打上 nonce 占位符
@@ -28,19 +32,19 @@
  * 交接，这是「不显示窗口 vs 先给一帧」的取舍结果，不是遗漏。
  *
  * 两套色值都是手工镜像，改真源需同步这里（C-04 / C-06 锁住）：
- * - 浅色分支 ← style.css 浅色 token（--bg-page / --bg-sidebar / --border / --text-primary）
+ * - 浅色分支 ← style.css 浅色 token（--bg-page / --bg-sidebar）
  * - 深色分支 ← SplashLoading.vue 的 `html.dark .splash-root` 品牌 ink 渐变
  *   （--splash-bg-from #16181c → --splash-bg-to #08090b、ambient #ece8dc）。
- *   2026-10-29 前这里是退役的 slate 配色（#0f172a + 靛蓝环），与品牌开屏的暖黑
+ *   2026-10-29 前这里是退役的 slate 配色（#0f172a），与品牌开屏的暖黑
  *   断层明显 —— 那段是浅色镜像时的遗留，已按品牌真源对齐。
+ *
+ * 禁止回接转圈 / 关键帧动画：本帧一旦重新出现独立加载指示器，启动就会退化成
+ * 「先原生转圈、再品牌开屏」两段式（C-07 锁住）。
  */
 
-/* 系统减弱动态效果时降级为瞬时（与 src/style.css 同款约定） */
+/* 纯背景帧：没有子元素、没有动画，只负责在 Vue 挂载前铺住整屏 */
 .splash {
-  display: flex;
   height: 100vh;
-  align-items: center;
-  justify-content: center;
   /* 三层背景与 SplashLoading.vue 深色块逐层对应：中央高光 + 底部 vignette + 品牌 ink 渐变，
      目的是让「本帧 → 品牌开屏」的交接不跳色（改这里必须同步真源，C-06 会转红） */
   background:
@@ -49,30 +53,9 @@
     linear-gradient(135deg, #16181c, #08090b);
 }
 
-.spinner {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 3px solid rgba(236, 232, 220, 0.12);
-  border-top-color: rgba(236, 232, 220, 0.72);
-  animation: spin 0.8s linear infinite;
-}
-
-/* 浅色系统：镜像 style.css 浅色 token —— 底 #f5f4f0→#efede7（--bg-page→--bg-sidebar），
-   环身 #e4e1d8（--border），前进端 #26231b（--text-primary） */
+/* 浅色系统：镜像 style.css 浅色 token —— 底 #f5f4f0→#efede7（--bg-page→--bg-sidebar） */
 @media (prefers-color-scheme: light) {
   .splash {
     background: linear-gradient(135deg, #f5f4f0, #efede7);
-  }
-
-  .spinner {
-    border-color: #e4e1d8;
-    border-top-color: #26231b;
-  }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
   }
 }

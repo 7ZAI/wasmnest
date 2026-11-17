@@ -1,6 +1,4 @@
-//! Mobile-Only Commands
-//!
-//! 移动端专用命令 - 使用 JSON 文件存储
+//! 移动端专用命令：基于 JSON 文件的设置 / 数据存取
 
 use crate::model::data::Setting;
 use crate::Result;

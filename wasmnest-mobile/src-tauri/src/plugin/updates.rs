@@ -100,7 +100,7 @@ fn update_source_of(plugin: &MobilePluginInfo) -> Result<AppUpdateSource> {
 
 /// 更新链路唯一出站客户端
 ///
-/// 与其它出站面同判据（安全审查：不允许存在不经 egress 的出站路径）：
+/// 与其它出站面同判据（不允许存在不经 egress 的出站路径）：
 /// - 客户端装 `egress::redirect_policy()`——`github.com` 资产会 302 到
 ///   `objects.githubusercontent.com`，首跳放行不代表跳转链放行，必须逐跳复检；
 /// - 每次请求先过 `EgressPolicy::decide`（`source = "host"`）：L2 内置声明覆盖

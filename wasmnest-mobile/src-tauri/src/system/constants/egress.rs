@@ -6,7 +6,7 @@
 
 /// 宿主内置外网白名单（URL 模式，glob：`[scheme://][*.]host[:port][/path-prefix]`）
 ///
-/// 三组条目同属**官方应用更新链路**（`plugin/updates.rs`，安全审查：该链路必须
+/// 三组条目同属**官方应用更新链路**（`plugin/updates.rs`；该链路必须
 /// 与其它出站面一样过 egress 闸门，不允许旁路）：
 ///
 /// - `api.github.com`：releases / latest 取元数据（含 sha256 摘要）；

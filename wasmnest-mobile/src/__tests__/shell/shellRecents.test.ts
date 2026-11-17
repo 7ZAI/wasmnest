@@ -1045,3 +1045,135 @@ describe('C-S25 卡片视觉口径（2026-11-06 用户反馈）', () => {
     )
   })
 })
+
+describe('C-S25 关闭渐隐（单关 / 全关两种语义）', () => {
+  function readCss(): string {
+    return readFileSync(join(process.cwd(), 'src/shell/styles/shell.css'), 'utf8')
+  }
+
+  /** 让停用真正落地：应用置为 stopped（否则卡仍在运行清单里，幽灵按契约撤回） */
+  function stopFor(id: string): void {
+    apps.value = apps.value.map((a) => (a.id === id ? { ...a, state: 'stopped' } : a))
+  }
+
+  it('should_fadeTheCardImmediately_when_closeTapped', async () => {
+    pushRecent('a')
+    apps.value = [app('a', 'running', 'AppA')]
+    let release!: (ok: boolean) => void
+    mockStop.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          release = resolve
+        }),
+    )
+    const wrapper = mount(ShellSwitcherScreen)
+
+    await activeCard(wrapper).find('button[aria-label="shell.switcher.closeCard"]').trigger('click')
+
+    const closing = wrapper.findAll('article.shell-recents-card.is-closing')
+    expect(closing, '点下去就该开始渐隐，不等真停用').toHaveLength(1)
+    expect(closing[0]!.attributes('inert'), '关闭态不可聚焦 / 不可点').toBeDefined()
+
+    stopFor('a')
+    release(true)
+    await flushPromises()
+  })
+
+  it('should_keepTheSlot_untilFadeEnds_when_cardLeftTheList', async () => {
+    apps.value = [app('a', 'running', 'AppA'), app('b', 'running', 'AppB')]
+    mockStop.mockImplementationOnce(async (id: string) => {
+      stopFor(id)
+      return true
+    })
+    const wrapper = mount(ShellSwitcherScreen)
+    expect(wrapper.findAll('article.shell-recents-card')).toHaveLength(2)
+
+    await activeCard(wrapper).find('button[aria-label="shell.switcher.closeCard"]').trigger('click')
+    await flushPromises()
+
+    expect(
+      wrapper.findAll('article.shell-recents-card'),
+      '渐隐期间仍占一个卡位（幽灵）',
+    ).toHaveLength(2)
+    expect(wrapper.findAll('article.shell-recents-card.is-closing')).toHaveLength(1)
+
+    await new Promise((resolve) => setTimeout(resolve, 340))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('article.shell-recents-card'), '渐隐结束才落位').toHaveLength(1)
+    expect(wrapper.findAll('article.shell-recents-card.is-closing')).toHaveLength(0)
+  })
+
+  it('should_staggerEveryCard_when_closeAllTapped', async () => {
+    pushRecent('b')
+    pushRecent('a')
+    apps.value = [app('a', 'running', 'AppA'), app('b', 'stopped', 'AppB')]
+    let release!: (ok: boolean) => void
+    mockStop.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          release = resolve
+        }),
+    )
+    const wrapper = mount(ShellSwitcherScreen)
+
+    const closeAll = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('shell.switcher.closeAll'))!
+    await closeAll.trigger('click')
+
+    const rendered = wrapper.findAll('article.shell-recents-card')
+    expect(rendered, '整组一起进入关闭态').toHaveLength(2)
+    expect(rendered.every((card) => card.classes().includes('is-closing'))).toBe(true)
+    expect(
+      wrapper.find('.shell-recents-grid').classes(),
+      '清场变体（下沉更多 / 时长更短）',
+    ).toContain('shell-recents-grid--clearing')
+    expect(rendered[0]!.attributes('style'), '第一张不延迟').toContain('--recents-close-delay: 0ms')
+    expect(rendered[1]!.attributes('style'), '第二张按序 +22ms').toContain(
+      '--recents-close-delay: 22ms',
+    )
+
+    stopFor('a')
+    release(true)
+    await flushPromises()
+  })
+
+  it('should_continueUpward_when_swipeDismissed', async () => {
+    pushRecent('a')
+    apps.value = [app('a', 'running', 'AppA')]
+    mockStop.mockImplementationOnce(async (id: string) => {
+      stopFor(id)
+      return true
+    })
+    const wrapper = mount(ShellSwitcherScreen)
+
+    await drag(wrapper, { x: 100, y: 300 }, { x: 102, y: 180 })
+    await flushPromises()
+
+    const ghost = wrapper.find('article.shell-recents-card.is-closing')
+    expect(ghost.exists(), '上滑关闭也走同一条渐隐').toBe(true)
+    expect(ghost.attributes('style'), '顺着手指方向继续走出去，不先弹回再淡出').toContain(
+      '--recents-close-y: -40px',
+    )
+  })
+
+  it('should_onlyFadeWithCompositorProps_andShipReducedMotion', () => {
+    const css = readCss()
+    const block = cssBlock(css, '.shell-recents-card.is-closing')
+    expect(block).toContain('opacity: 0')
+    expect(block).toContain('transition:')
+    expect(block, '只动合成层属性').not.toMatch(/\b(width|height|margin|padding|top|left):/)
+
+    // 全关 / 单关必须真有差异：不是同一条规则换个注释
+    expect(cssBlock(css, '.shell-recents-grid--clearing .shell-recents-card.is-closing')).toContain(
+      'scale(0.94)',
+    )
+    expect(block).toContain('scale(0.96)')
+
+    const reduce = css.slice(css.lastIndexOf('@media (prefers-reduced-motion: reduce)'))
+    expect(reduce, '关闭渐隐必须有 reduce 分支').toContain('.shell-recents-card.is-closing')
+    expect(reduce, '减弱动态不等交错延迟').toContain('transition-delay: 0ms !important')
+    expect(reduce).toContain('.shell-recents-empty')
+  })
+})

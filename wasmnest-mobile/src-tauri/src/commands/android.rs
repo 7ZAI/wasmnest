@@ -1,5 +1,3 @@
-//! Mobile Android Commands
-//!
 //! Android 平台专用命令
 
 use crate::Result;

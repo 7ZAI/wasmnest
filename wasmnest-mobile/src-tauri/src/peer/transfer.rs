@@ -16,7 +16,7 @@ use tauri::{AppHandle, Manager};
 /// 任一中转失败即显性报错——静默跳过会少传文件且用户无从察觉；已复制的缓存
 /// 残留可经 `SafIo::cleanup_stale_copies` 清扫。用户取消返回空数组。
 ///
-/// 真入口 = host-platform `pick-files`（票 10 起无前端命令面）
+/// 真入口 = host-platform `pick-files`（无前端命令面）
 pub(crate) async fn peer_pick_files(app_handle: AppHandle) -> crate::Result<Vec<String>> {
     let metas = crate::plugin::android_plugins::pick_files_android_meta().await?;
     let mut paths = Vec::with_capacity(metas.len());

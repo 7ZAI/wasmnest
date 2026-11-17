@@ -1,6 +1,4 @@
-//! mDNS Commands
-//!
-//! Tauri 命令 — 服务发现与广播
+//! mDNS 命令：局域网设备发现与广播
 
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};

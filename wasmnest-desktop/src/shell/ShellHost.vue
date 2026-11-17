@@ -209,19 +209,6 @@ const SPLASH_GUARD_MS = SPLASH_MIN_MS + 1500
 let splashTimer: ReturnType<typeof setTimeout> | null = null
 let splashGuard: ReturnType<typeof setTimeout> | null = null
 
-/** 应用清单就绪后落一条普通通知（运行时就绪；语义自 ShellBootScreen 迁入。
- *  非驻留项：用户可单条 × 清除，也参与「清除全部」——驻留语义只留给有自然
- *  退出路径的派生通知（如审批），避免无退出路径的常驻卡堵死通知中心）。 */
-function emitReadyNotif() {
-  state.pushNotif({
-    kind: 'info',
-    icon: 'check',
-    source: t('shell.notif.hostSource'),
-    title: t('shell.notif.ready.title'),
-    body: t('shell.notif.ready.body', { count: appsStore.plugins.value.length }),
-  })
-}
-
 // ==================== 路由分流 ====================
 
 const path = computed(() => route.path)
@@ -400,7 +387,6 @@ onMounted(async () => {
   // 动画早已画完。
   const bootAt = Date.now()
   await appsStore.load()
-  emitReadyNotif()
   const remain = Math.max(0, SPLASH_MIN_MS - (Date.now() - bootAt))
   splashTimer = setTimeout(() => {
     showSplash.value = false
