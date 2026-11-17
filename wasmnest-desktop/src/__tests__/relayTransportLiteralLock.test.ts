@@ -3,8 +3,8 @@
  *
  * 背景：`/p2p-circuit` 是 libp2p multiaddr 的协议名，也是「这条地址是经中继转发的」
  * 唯一判据。能力仓用类型化组件（`Protocol::P2pCircuit`）表达，应用仓（wasm guest
- * 与前端）只能拿字符串判——于是同一字面被手抄到 14 个应用仓生产文件（BedCode 双端 /
- * file-transfer 双端 + rust core / 网络配置中心）。
+ * 与前端）只能拿字符串判——于是同一字面被手抄到 19 个应用仓生产文件（BedCode 双端 /
+ * file-transfer 双端 + rust core / rust plugin / 网络配置中心）。
  *
  * 漂移形态是静默的：某处写成 `/p2p-circuit/`、`p2p-circuit`（缺前导斜杠）或换一种
  * 分隔符，编译过、测试绿，只是那一路的「走中继」判定永远不命中。故本锁钉三件事：
@@ -38,15 +38,20 @@ const MAX_RELAY_ADDRS = 16
  */
 const PRODUCTION_MARKER_FILES = [
   appPath('bedcode', 'desktop', 'rust/src/tunnel.rs'),
+  appPath('bedcode', 'desktop', 'src/utils/pairingPayload.ts'),
   appPath('bedcode', 'mobile', 'rust/src/tunnel.rs'),
   appPath('file-transfer', 'desktop', 'src/composables/deviceState.ts'),
+  appPath('file-transfer', 'desktop', 'src/composables/usePeerDevices.ts'),
   appPath('file-transfer', 'desktop', 'src/utils/pairingLink.ts'),
   appPath('file-transfer', 'mobile', 'src/composables/deviceState.ts'),
+  appPath('file-transfer', 'mobile', 'src/composables/usePeerDevices.ts'),
   appPath('file-transfer', 'mobile', 'src/utils/pairingLink.ts'),
   appPath('file-transfer', 'rust/core/src/dial.rs'),
   appPath('file-transfer', 'rust/core/src/domain.rs'),
   appPath('file-transfer', 'rust/core/src/sessions.rs'),
+  appPath('file-transfer', 'rust/core/src/settings.rs'),
   appPath('file-transfer', 'rust/plugin/src/peer.rs'),
+  appPath('file-transfer', 'rust/plugin/src/relay_center.rs'),
   projectPath('servers', 'net-config', 'desktop', 'rust/src/model.rs'),
   projectPath('servers', 'net-config', 'desktop', 'src/i18n/en.ts'),
   projectPath('servers', 'net-config', 'desktop', 'src/i18n/zh-CN.ts'),
