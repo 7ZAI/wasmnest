@@ -21,6 +21,7 @@
  * - com.wasmnest.auth-center：/auth（服务型 wasm，应用仓 servers/auth-center）
  * - com.wasmnest.net-config：/network（服务型 wasm，应用仓 servers/net-config；T18）
  * - com.wasmnest.lanbitou：/notes（应用仓 apps/lanbitou）
+ * - com.wasmnest.speech：/speech（服务型 wasm，应用仓 servers/speech）
  */
 import { createRouter, createWebHistory } from 'vue-router'
 
@@ -33,6 +34,7 @@ import {
   AUTH_CENTER_PLUGIN_ID,
   NET_CONFIG_PLUGIN_ID,
   LANBITOU_PLUGIN_ID,
+  SPEECH_PLUGIN_ID,
 } from '@/shell/composables/useShellApps'
 
 const router = createRouter({
@@ -177,6 +179,13 @@ const router = createRouter({
       name: 'app-lanbitou',
       component: AppMountSlot,
       props: { appId: LANBITOU_PLUGIN_ID, route: '/notes' },
+    },
+    {
+      // 语音识别服务（服务型 wasm，应用仓 `servers/speech`）：设置 / 记录 / 诊断面
+      path: '/speech',
+      name: 'app-speech',
+      component: AppMountSlot,
+      props: { appId: SPEECH_PLUGIN_ID, route: '/speech' },
     },
 
     // ==================== 兜底 ====================

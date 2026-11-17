@@ -52,6 +52,11 @@ const PLUGINS = {
     group: 'servers',
     slug: 'monitor',
   },
+  // 服务型 wasm（L2 内部业务）：语音识别服务。工程住应用仓 `servers/` 分组。
+  'com.wasmnest.speech': {
+    group: 'servers',
+    slug: 'speech',
+  },
   'com.wasmnest.bedcode': {
     group: 'apps',
     slug: 'bedcode',

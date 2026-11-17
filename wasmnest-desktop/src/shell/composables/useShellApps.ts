@@ -123,9 +123,9 @@ export interface ShellAppEntry {
 /**
  * 宿主挂载运行面路由表（桌面 UI 宿主修正 2026-10-17）：应用前端由壳经挂载槽承载
  * 其独立构建的前端整包（机制 B，非贡献面）。每个有前端界面的挂载包都在此登记
- * （现状 6 个：bedcode / ai-chatbox / file-transfer / monitor /
- * auth-center / net-config；agent-hub 已并入 bedcode 的 Agent 管理域）；`auth-center` 与
- * `net-config` 住应用仓 `servers/` 分组（服务型 wasm）；
+ * （现状 8 个：bedcode / ai-chatbox / file-transfer / monitor / auth-center /
+ * net-config / lanbitou / speech；agent-hub 已并入 bedcode 的 Agent 管理域）；
+ * `auth-center` / `net-config` / `monitor` / `speech` 住应用仓 `servers/` 分组（服务型 wasm）；
  * 无前端界面的应用无挂载路由。registerSurface 契约为多应用扩展预留（防回接锁保持）。
  *
  * 插件 id 家族随 ADR 0056 全改 `com.wasmnest`（bedcode 应用豁免仅显示名 / rust
@@ -142,6 +142,8 @@ export const AUTH_CENTER_PLUGIN_ID = 'com.wasmnest.auth-center'
 export const NET_CONFIG_PLUGIN_ID = 'com.wasmnest.net-config'
 /** 烂笔头（Markdown 记事本；应用仓 `apps/lanbitou`） */
 export const LANBITOU_PLUGIN_ID = 'com.wasmnest.lanbitou'
+/** 语音识别服务（服务型 wasm：L2 内部业务；应用仓 `servers/speech`，本地 host-stt 与远端供应商调度） */
+export const SPEECH_PLUGIN_ID = 'com.wasmnest.speech'
 
 /**
  * 宿主挂载运行面路由表（桌面 UI 宿主修正 2026-10-17）：每个有前端界面的 wasm
@@ -163,6 +165,7 @@ export const SURFACE_ROUTES: Readonly<Record<string, string>> = {
   [AUTH_CENTER_PLUGIN_ID]: '/auth',
   [NET_CONFIG_PLUGIN_ID]: '/network',
   [LANBITOU_PLUGIN_ID]: '/notes',
+  [SPEECH_PLUGIN_ID]: '/speech',
 }
 
 /** 每 app 的路由前缀集（pluginIdOfAppRoute 反向映射用） */
@@ -185,6 +188,7 @@ const APP_ROUTE_PREFIXES: Readonly<Record<string, string[]>> = {
   [AUTH_CENTER_PLUGIN_ID]: ['/auth'],
   [NET_CONFIG_PLUGIN_ID]: ['/network'],
   [LANBITOU_PLUGIN_ID]: ['/notes'],
+  [SPEECH_PLUGIN_ID]: ['/speech'],
 }
 
 /** 应用 id（= pluginId）→ 挂载路由（landing）；无运行面的应用返回 undefined */

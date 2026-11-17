@@ -12,11 +12,13 @@
   "contract": {
     "package": "wasmnest:plugin",
     "version": "0.1.0",
-    "witSha256": "a1212abe217f9a3b5878ef517cdb83df280184316c9c0bdd86c9ec9673c3befc",
+    "witSha256": "f4e1a4ceae32a67b77fa9aede99427283f8d1a3d6143c9368b18bb6d0b9d01ea",
     "packages": {
       "wasmnest:plugin": "0.1.0",
       "wasmnest:pty": "0.0.1",
       "wasmnest:mdns": "0.0.1",
+      "wasmnest:audio": "0.0.1",
+      "wasmnest:stt": "0.0.1",
       "wasmnest:peer": "0.0.1",
       "wasmnest:tunnel": "0.0.1",
       "wasmnest:http": "0.0.1",
@@ -113,6 +115,17 @@
         },
         "mobile": {
           "artifact": "wasmnest_plugin_monitor.wasm"
+        }
+      }
+    },
+    "com.wasmnest.speech": {
+      "path": "servers/speech",
+      "version": "0.0.1",
+      "ends": {
+        "desktop": {
+          "artifact": "wasmnest_plugin_speech.wasm",
+          "package": "speech-desktop-v0.0.1.zip",
+          "sha256": "ab5fe07bcab81a24bb22161dbe9e462c8983b3a66cd9837c531a32a619738e0c"
         }
       }
     },

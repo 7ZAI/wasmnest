@@ -101,6 +101,15 @@ export const PLUGIN_WATCH_CMDS = [
     wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_monitor.wasm',
   },
   {
+    // Speech（服务型 wasm，L2）：工程住应用仓 `servers/` 分组。设置 / 记录 / 诊断页
+    // 与其它应用同一条 watch 闭环；本地推理在宿主 host-stt，不走前端构建。
+    group: 'servers',
+    slug: 'speech',
+    id: 'com.wasmnest.speech',
+    args: ['scripts/build.js', '--watch'],
+    wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_speech.wasm',
+  },
+  {
     // Auth Center（服务型 wasm，L2）：工程住应用仓 `servers/` 分组。页面轻
     // （就位三态 + 声明面），与其它应用同一条 watch 闭环。
     group: 'servers',
