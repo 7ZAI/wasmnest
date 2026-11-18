@@ -175,6 +175,7 @@ find wasmnest/wasmnest-desktop/src-tauri/target wasmnest/wasmnest-mobile/src-tau
 | 时间 | 落点 | 前 | 后 | 回收 | 做的 Tier | 未做/理由 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-04 09:20 | 四仓全部 target | 85.5 GiB | 36 GiB | 49.5 GiB | 1+2+3 | 未动 deps/build/fixtures/wasm 产物 |
+| 2026-11-18 | 四仓 7 个主桶 + `target-shared`（另清能力仓自建 crate 的 incremental ≈0.2 GiB） | 67.2 GiB | 54.2 GiB | 13.0 GiB | 1+3 | 未动 deps/build/release 侧/fixtures/插件 wasm；Tier 2 未做（无需删宿主 bin）；磁盘 98% → 93% |
 ```
 
 ## 6. 完成验证（清理后必跑，贴结果）

@@ -255,45 +255,17 @@ name = "wasmnest-plugin-api-macros"
 version = "0.0.2"
 
 [[patch.unused]]
-name = "wasmnest-crypto-engine"
-version = "0.0.1"
-
-[[patch.unused]]
-name = "wasmnest-discovery-engine"
-version = "0.0.1"
-
-[[patch.unused]]
-name = "wasmnest-host-kit"
-version = "0.0.1"
-
-[[patch.unused]]
-name = "wasmnest-link-crypto"
-version = "0.0.1"
-
-[[patch.unused]]
-name = "wasmnest-pty-engine"
-version = "0.0.1"
-
-[[patch.unused]]
 name = "wasmnest-server-base"
-version = "0.0.1"
+version = "0.1.0"
 
 [[patch.unused]]
 name = "wasmnest-server-core"
-version = "0.0.1"
+version = "0.1.0"
 
 [[patch.unused]]
 name = "wasmnest-server-http"
-version = "0.0.1"
-
-[[patch.unused]]
-name = "wasmnest-server-peer-net"
-version = "0.0.1"
+version = "0.1.0"
 
 [[patch.unused]]
 name = "wasmnest-server-websocket"
-version = "0.0.1"
-
-[[patch.unused]]
-name = "wasmnest-wasm-core"
-version = "0.0.1"
+version = "0.1.0"
