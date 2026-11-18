@@ -1,7 +1,7 @@
-//! 任务/连接通知桥接（TaskNotificationPlugin）
+//! 任务 / 连接通知桥接（TaskNotificationPlugin）
 //!
-//! 从 android_plugins.rs 拆分；task_notification_plugin / notification_plugin_handle
-//! 为工作区未提交代码重建（原内容被误覆盖）。
+//! `task_notification_plugin` / `notification_plugin_handle` 为工作区未提交代码
+//! 重建（原内容被误覆盖）；改动前先核对 Kotlin 侧桥接契约。
 
 use std::sync::OnceLock;
 use tauri::plugin::{Builder, PluginHandle};

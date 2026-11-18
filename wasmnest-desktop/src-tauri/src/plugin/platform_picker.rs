@@ -1,6 +1,6 @@
 //! 桌面平台选择器（`host-platform.pick-files` / `pick-folders` 的桌面实现）——端差异落宿主
 //!
-//! 来源：ADR 0052 D1「差异应该在各自的宿主侧」+ 单形态收口（2026-10-13）的后果修正。
+//! 端差异必须落在各自宿主侧：选择器实现不能留在内核，否则交叉编译直接失败。
 //! 内核 `host_api/platform.rs` 只持**共享机制**（`fs:pick` 准入门 + 选择结果
 //! `authorize_picked` 授权校验 + JSON 形状），选择器本体是端差异：
 //!
@@ -72,7 +72,8 @@ impl PlatformPickerPort for DesktopPlatformPicker {
 }
 
 /// Dialog FilePath → UTF-8 绝对路径串（非 UTF-8 路径显式报错而非静默丢弃）
-fn path_to_string(file_path: tauri_plugin_dialog::FilePath) -> wasmnest_wasm_core::Result<String> {
+/// （crate 内共用：install_picker 的应用包选取走同一转换）
+pub(crate) fn path_to_string(file_path: tauri_plugin_dialog::FilePath) -> wasmnest_wasm_core::Result<String> {
     let path = file_path.into_path().map_err(|e| {
         wasmnest_wasm_core::AppError::InvalidInput(format!("platform pick: failed to convert selected path: {e}"))
     })?;

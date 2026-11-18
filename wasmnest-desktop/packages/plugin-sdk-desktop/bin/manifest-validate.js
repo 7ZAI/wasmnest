@@ -18,7 +18,13 @@ import { WASM_HASH_PATTERN } from './wasm-hash.js'
 const SDK_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const VOCABULARY_PATH = join(SDK_ROOT, 'bin', 'permission-vocabulary.json')
 
-const VALID_PLUGIN_TYPES = new Set(['ts-only', 'rust-ts', 'rust'])
+const VALID_PLUGIN_TYPES = new Set(['frontend', 'backend', 'full'])
+/** 退役 pluginType → 迁移出路（fail-visible：点名旧值并给出新值，不静默拒绝） */
+const RETIRED_PLUGIN_TYPES = new Map([
+  ['ts-only', 'frontend'],
+  ['rust', 'backend'],
+  ['rust-ts', 'full'],
+])
 
 /**
  * 适配平台取值域（manifest `platform`，必填，与 id/name/version 同档）
@@ -112,16 +118,24 @@ export function validateManifest(dir) {
   }
 
   // pluginType / sandbox / rustLibrary
+  // pluginType 是语言无关的形态三档（frontend / backend / full，2026-10-26 语义
+  // 重定义，wasmnest-apps#21）；旧值（rust / rust-ts / ts-only）退役——点名拒绝
+  // 并给出迁移出路（与宿主 serde 反序列化的错误口径一致，两侧都判死不留兼容期）
   if (manifest.pluginType && !VALID_PLUGIN_TYPES.has(manifest.pluginType)) {
+    const retired = RETIRED_PLUGIN_TYPES.get(manifest.pluginType)
     errors.push(
-      `pluginType 非法: "${manifest.pluginType}"（允许: ${[...VALID_PLUGIN_TYPES].join(' / ')}）`,
+      retired
+        ? `pluginType "${manifest.pluginType}" 已退役（形态三档重定义，2026-10-26，wasmnest-apps#21）：改用 "${retired}"——词汇只表达形态，不表达后端语言`
+        : `pluginType 非法: "${manifest.pluginType}"（允许: ${[...VALID_PLUGIN_TYPES].join(' / ')}）`,
     )
   }
   if (manifest.sandbox && !['inline', 'isolated'].includes(manifest.sandbox)) {
     errors.push(`sandbox 非法: "${manifest.sandbox}"（允许: inline / isolated）`)
   }
-  if (manifest.pluginType === 'rust-ts' && !manifest.rustLibrary) {
-    errors.push('pluginType=rust-ts 时必须提供 rustLibrary（与 Cargo.toml 包名一致）')
+  // rustLibrary（wasm 模块名）：前后端形态（full）必填——纯后端（backend）多为
+  // 构建链/内置注册形态，产物命名另有真源，不在此强制
+  if (manifest.pluginType === 'full' && !manifest.rustLibrary) {
+    errors.push('pluginType=full 时必须提供 rustLibrary（与 Cargo.toml 包名一致；键名暂保留历史拼写，见 wasmnest-apps#21 键位子决策）')
   }
 
   // type（装配角色，ADR 0032）：L1 基础服务 / L2 内部统一业务 / L3 业务应用
@@ -149,9 +163,9 @@ export function validateManifest(dir) {
         `lifecycle 非法: "${manifest.lifecycle}"（允许: ${[...VALID_LIFECYCLES].join(' / ')}，缺省即 persistent）`,
       )
     } else if (manifest.lifecycle === 'ephemeral') {
-      if (manifest.pluginType !== 'rust') {
+      if (manifest.pluginType !== 'backend') {
         errors.push(
-          `lifecycle="ephemeral" 只能配 pluginType="rust"（即用即弃 worker 无页面产物）: ${JSON.stringify(manifest.pluginType)}`,
+          `lifecycle="ephemeral" 只能配 pluginType="backend"（即用即弃 worker 无页面产物）: ${JSON.stringify(manifest.pluginType)}`,
         )
       } else {
         errors.push(
@@ -424,6 +438,54 @@ export function validateManifest(dir) {
             `wasiPreopenDirs 条目 readonly 必须是布尔（缺省即可写；写错不会静默降级）: ${JSON.stringify(entry)}`,
           )
         }
+      }
+    }
+  }
+
+  // update（应用更新源声明，2026-11-02 应用版本更新全链路）：缺省 = 不参与
+  // 更新检查；声明后 repo / slug / tagPrefix 会成为宿主拼 URL 与资产名的输入，
+  // 形态非法在构建期拦下（与内核 `app_update::resolve_update_source` 同判据）。
+  if (manifest.update !== undefined && manifest.update !== null) {
+    const update = manifest.update
+    if (typeof update !== 'object' || Array.isArray(update)) {
+      errors.push(`update 必须是对象: ${JSON.stringify(update)}`)
+    } else {
+      if (update.provider !== undefined && update.provider !== 'github-release') {
+        errors.push(`update.provider 非法: "${update.provider}"（当前只支持 github-release）`)
+      }
+      if (update.repo !== undefined) {
+        const repo = update.repo
+        if (
+          typeof repo !== 'string' ||
+          !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo) ||
+          repo.split('/').some((part) => part === '.' || part === '..')
+        ) {
+          errors.push(`update.repo 非法: ${JSON.stringify(repo)}（须为 GitHub 的 owner/name）`)
+        }
+      }
+      if (update.slug !== undefined) {
+        const slug = update.slug
+        if (typeof slug !== 'string' || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(slug)) {
+          errors.push(`update.slug 非法: ${JSON.stringify(slug)}（小写字母数字与 '-'，不能以 '-' 开头/结尾）`)
+        }
+      }
+      if (update.tagPrefix !== undefined) {
+        const prefix = update.tagPrefix
+        if (
+          typeof prefix !== 'string' ||
+          prefix.trim() === '' ||
+          prefix.includes('/') ||
+          prefix.includes('..') ||
+          /\s/.test(prefix)
+        ) {
+          errors.push(`update.tagPrefix 非法: ${JSON.stringify(prefix)}（非空，不含 '/'、'..' 或空白）`)
+        }
+      }
+      const extraKeys = Object.keys(update).filter(
+        (k) => !['provider', 'repo', 'tagPrefix', 'slug'].includes(k),
+      )
+      if (extraKeys.length) {
+        errors.push(`update 含未知字段: ${extraKeys.join(', ')}（只允许 provider / repo / tagPrefix / slug）`)
       }
     }
   }

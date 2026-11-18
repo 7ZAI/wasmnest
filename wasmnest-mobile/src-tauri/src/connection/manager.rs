@@ -1,9 +1,8 @@
-//! Connection Manager
+//! 业务层连接管理：设备级状态、HTTP 认证与 WS 建连路径
 //!
-//! 业务层连接管理。认证已 HTTP 化（spec §4.5）后，ConnectionManager 持有
-//! 自己的连接状态（`status` 字段），不再委托 `WsClient.lifecycle`——
-//! WS 层在 04（常驻事件 WS）之前不存在，「已认证」语义（Authed）由设备级
-//! status 承载。WS 建连路径（`establish_ws_client`）保留给集成测试与 04 复用。
+//! 认证 HTTP 化后，ConnectionManager 持有自己的连接状态（`status` 字段），
+//! 不再委托 `WsClient.lifecycle`——「已认证」语义（Authed）由设备级 status
+//! 承载。`establish_ws_client` 保留给集成测试与常驻事件 WS 复用。
 
 use anyhow::Context;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -29,7 +28,7 @@ use crate::system::constants::connection::{
 };
 use crate::system::constants::reconnect::DEFAULT_MAX_RETRIES;
 
-// Re-export ConnectionStatus for public API
+// 公开再导出：调用方经 `crate::connection::ConnectionStatus` 取用
 pub use crate::connection::ConnectionStatus;
 
 /// 判断错误是否表示连接已断开（需要通知前端）
@@ -53,7 +52,7 @@ fn is_disconnect_error(error: &crate::AppError) -> bool {
     }
 }
 
-/// 插件端点认证首帧 `type`（票 03：极简认证 `{"type":"auth","token":"<jwt>"}`，
+/// 插件端点认证首帧 `type`（极简认证 `{"type":"auth","token":"<jwt>"}`，
 /// **不是** `Message::Auth` 信封——插件端点只认这一个形状）
 pub const EVENT_CHANNEL_AUTH_TYPE: &str = "auth";
 
@@ -83,8 +82,8 @@ fn build_router(event_tx: broadcast::Sender<MobileEvent>) -> Result<ClientBusine
     ClientBusinessRouter::builder()
         .context(ctx)
         .route("Auth", Arc::new(AuthHandler))
-        // 票 03/04：`SyncData` 路由随 `handler/sync.rs` 退役（事件改走插件事件帧，
-        // 见 `handler::PluginEventRouter`）；信封面退役（票 04）后保留的变体仅服务
+        // `SyncData` 路由随 `handler/sync.rs` 退役（事件改走插件事件帧，见
+        // `handler::PluginEventRouter`）；信封面退役后保留的变体仅服务
         // `ws_protocol_integration` 的 legacy 场景（WS 首消息 JWT 认证 / 请求-响应）
         .route("ServerClosed", Arc::new(SystemHandler))
         .route("Error", Arc::new(SystemHandler))
@@ -103,14 +102,14 @@ pub struct TargetDevice {
 /// 连接管理器
 ///
 /// 职责：作为业务层代理，持有设备级连接状态（HTTP 认证语义），
-/// WS 客户端（04 事件 WS）与目标信息按需维护
+/// WS 客户端（常驻事件 WS）与目标信息按需维护
 pub struct ConnectionManager {
     /// 目标设备
     target: Arc<RwLock<Option<TargetDevice>>>,
-    /// WebSocket 客户端（03 过渡期无；04 事件 WS 恢复）
+    /// WebSocket 客户端（常驻事件 WS；未建连时为 None）
     client: Arc<RwLock<Option<Arc<WsClient>>>>,
     /// 设备级连接状态（认证 HTTP 化后不能委托 WsClient.lifecycle——
-    /// 「WS 层不再持有连接状态语义」，spec §4.5）
+    /// 「WS 层不再持有连接状态语义」）
     status: Arc<RwLock<ConnectionStatus>>,
     /// 事件发送器（用于内部业务逻辑监听）
     event_tx: broadcast::Sender<MobileEvent>,
@@ -182,7 +181,7 @@ impl ConnectionManager {
     ///
     /// 新目标视为新的连接意图：意外断开应走断连通知/自愈，而不是被旧的
     /// `manual_disconnect` 标记静默吞掉。connect / connect_without_emit /
-    /// 监督任务建立事件 WS 前共用（04）。
+    /// 监督任务建立事件 WS 前共用。
     pub async fn set_target(&self, address: String, port: u16, name: Option<String>) {
         self.manual_disconnect.store(false, Ordering::SeqCst);
         *self.target.write().await = Some(TargetDevice { address, port, name });
@@ -196,17 +195,16 @@ impl ConnectionManager {
 
     /// 事件发送器
     ///
-    /// HTTP 认证成功契口经此广播 `MobileEvent::AuthSuccess`（04 事件 WS
-    /// 订阅触发建连）；事件转发层（event.rs）也订阅同一通道。
+    /// HTTP 认证成功契口经此广播 `MobileEvent::AuthSuccess`（常驻事件 WS
+    /// 订阅后触发建连）；事件转发层（event.rs）也订阅同一通道。
     pub fn event_tx(&self) -> broadcast::Sender<MobileEvent> {
         self.event_tx.clone()
     }
 
     /// 连接到目标设备
     ///
-    /// 03 过渡语义：认证走 HTTP，WS 尚不存在（04）——connect 只做
-    /// 「保存目标 + 状态 Connecting→Connected + 发射事件」，真正的 WS 建连
-    /// 由 04 的事件 WS 复用 `establish_ws_client`。
+    /// 认证走 HTTP：connect 只做「保存目标 + 状态 Connecting→Connected + 发射
+    /// 事件」，真正的 WS 建连由常驻事件 WS 复用 `establish_ws_client`。
     pub async fn connect(&self, app_handle: AppHandle, address: String, port: u16, name: Option<String>) -> Result<()> {
         // 检查当前状态（自有 status）
         {
@@ -245,15 +243,15 @@ impl ConnectionManager {
         );
         tracing::info!("Connecting to {}:{} (HTTP auth)", address, port);
 
-        // 清除上一次连接的客户端（如果有）
-        // 03 过渡期 connect 不建 WS，此块恒为空；保留以防 04 复用此函数
+        // 清除上一次连接的客户端（如果有）：事件 WS 自愈 / 重连时可能已在册，
+        // 先断开旧的，避免同一条链路上残留两套收发任务
         if let Some(old_client) = self.client.write().await.take() {
             tracing::debug!("Disconnecting previous client before creating new one");
             let _ = old_client.disconnect().await;
         }
 
         // 状态推进：Connecting → Connected（HTTP 认证成功后由
-        // set_authed() 转 Authed；04 事件 WS 落地后此状态语义恢复完整）
+        // set_authed() 转 Authed；常驻事件 WS 建立后该语义不变）
         *self.status.write().await = ConnectionStatus::Connecting;
         *self.status.write().await = ConnectionStatus::Connected;
 
@@ -361,7 +359,7 @@ impl ConnectionManager {
             )
             .await?;
 
-        // 极简认证首帧（票 03）：`{"type":"auth","token":"<jwt>"}`——
+        // 极简认证首帧：`{"type":"auth","token":"<jwt>"}`——
         // 不再发 `Message::Auth` 信封、不携带链路加密提案、**不等待回执**
         // （插件端点无认证回包；认证失败由宿主 close 4001 显性表达）。
         let token = event_channel_token().await;
@@ -379,7 +377,7 @@ impl ConnectionManager {
         plugin_event.mark_authenticated();
 
         // 通道就绪 → 前端对账：事件**不重放**，重连期间的变化只能靠这一次
-        // HTTP 全量拉取补齐（spec §6.2 强制）
+        // HTTP 全量拉取补齐（强制，不依赖事件追平）
         if let Some(ah) = &app_handle {
             let _ = ah.emit(
                 EVENT_CHANNEL_READY_EVENT,
@@ -412,7 +410,7 @@ impl ConnectionManager {
                 match event {
                     WsClientEvent::Disconnected | WsClientEvent::Error { .. } | WsClientEvent::ServerClosed { .. } => {
                         if !manual_flag.load(Ordering::SeqCst) {
-                            // M1/ADR 0031：认证类 close code（4001/4003）是**致命**
+                            // 认证类 close code（4001/4003）是**致命**
                             // 关闭——自愈重连前需重新配对/认证，重连无意义。前端据此
                             // 只弹一次「需重新配对」提示，不走自动重连；后端自愈监督
                             // 同样跳过（见 event_ws.rs）。非致命断开走既有自愈路径。
@@ -500,7 +498,7 @@ impl ConnectionManager {
         self.is_reconnecting.store(false, Ordering::SeqCst);
         tracing::info!("Disconnecting...");
 
-        // 断开 WebSocket（04 前恒为空）
+        // 断开事件 WS / 测试建连的客户端（未建连时为空）
         if let Some(client) = self.client.read().await.as_ref() {
             let _ = client.disconnect().await;
         }
@@ -523,7 +521,7 @@ impl ConnectionManager {
     /// `app_handle` 可为 `None`：04 监督任务自愈重连在无窗口上下文中可测
     /// （仅跳过前端事件发射，HTTP 语义不变），command 层传 `Some`。
     ///
-    /// **永久性凭证拒绝不走退避**（ADR 0033）：见循环体内注释与
+    /// **永久性凭证拒绝不走退避**：见循环体内注释与
     /// [`is_credential_rejection`]。这种失败发 `ws_reauth_rejected` 而**不是**
     /// `ws_reconnect_failed`——两者在 UI 上必须是**不同文案**（前者「需重新
     /// 配对」，后者「网络/重连失败」），合并成一个终态正是本次要修的缺陷。
@@ -582,7 +580,7 @@ impl ConnectionManager {
                 break;
             }
 
-            // 取已持有 JWT：Rust 凭据优先（D3），前端传入 token 兜底
+            // 取已持有 JWT：Rust 凭据优先，前端传入 token 兜底
             let auth_mgr = crate::state::get_auth_manager();
             let creds_token = auth_mgr
                 .get_credentials()
@@ -601,7 +599,7 @@ impl ConnectionManager {
 
             // HTTP reauth：成功（含 AuthSuccess 契口广播）即恢复。
             //
-            // **永久性拒绝立即停止重试**（ADR 0033 迁移后的关键区分）：入场签发
+            // **永久性拒绝立即停止重试**（签发下沉后的关键区分）：入场签发
             // 密钥换手后，存量已配对设备的旧 token 会被**永久**拒绝（业务码信封
             // → `AppError::Auth`）。继续退避重试到上限只会：① 制造与网络故障
             // 无法区分的假象；② 让用户以为是网络问题反复等待，而正确动作是
@@ -818,8 +816,8 @@ impl ConnectionManager {
 
     /// 设置为已认证（设备级 HTTP 认证成功）
     ///
-    /// 04 事件 WS 认证成功后同样维持 Authed——在线语义由桌面端
-    /// WsSessionRegistry 判定（D8），本状态只表达设备级认证结论。
+    /// 常驻事件 WS 认证成功后同样维持 Authed——在线语义由桌面端
+    /// WsSessionRegistry 判定，本状态只表达设备级认证结论。
     pub async fn set_authed(&self) {
         *self.status.write().await = ConnectionStatus::Authed;
     }
@@ -834,7 +832,7 @@ impl ConnectionManager {
 ///
 /// **为什么不用错误文本判**：文本会随桌面端文案调整而漂移，判据必须落在结构上。
 ///
-/// 典型触发（ADR 0033 D3 迁移）：入场签发密钥换手后，存量已配对设备的旧 token
+/// 典型触发（签发下沉后）：入场签发密钥换手后，存量已配对设备的旧 token
 /// 被永久拒绝——**任何**重试策略都无法让它通过，只有重新配对。
 fn is_credential_rejection(e: &crate::AppError) -> bool {
     matches!(e, crate::AppError::Auth(_))
@@ -879,7 +877,7 @@ mod tests {
     use super::{is_credential_rejection, ConnectionManager};
     use crate::AppError;
 
-    /// 行为契约（ADR 0033 §8.2 / F3）：只有 `Auth`（桌面端业务信封 `code != 0`）
+    /// 行为契约：只有 `Auth`（桌面端业务信封 `code != 0`）
     /// 算**永久性凭证拒绝**——它是「桌面端答复了，而且答复是凭据不认」。
     ///
     /// 正例锁住：迁移后存量设备的旧 token 走这条路径（业务码信封 → `Auth`）。
@@ -922,7 +920,7 @@ mod tests {
         )));
     }
 
-    /// 行为契约（2026-10-04 审计 P0-2）：自动重连开关是「是否允许自愈」的
+    /// 行为契约（2026-10-04 实测）：自动重连开关是「是否允许自愈」的
     /// 唯一入口，由连接层持有。前端不再持有任何重连循环，只把用户意图同步过来。
     #[test]
     fn auto_reconnect_defaults_to_enabled() {

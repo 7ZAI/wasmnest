@@ -50,6 +50,9 @@ export default {
       fsAuthRemember: 'Remember this path for future access',
       fsAuthAllow: 'Allow',
       fsAuthDeny: 'Deny',
+      // `desc` currently has no rendering surface (removed from app detail on
+      // 2026-11-05 by the layout-self-explaining rule); kept for future
+      // permission approval / overview surfaces, never used for decisions.
       perm: {
         unknown: 'Unknown permission',
         storage: {
@@ -90,6 +93,9 @@ export default {
         cancel: 'Cancel',
       },
     },
+    // Fallback copy for globally uncaught exceptions (renderer errorHandler /
+    // unhandledrejection)
+    runtimeUnexpected: 'An unexpected error occurred. See logs for details',
     splash: {
       status: 'Starting…',
       tagline: 'LAN Remote Terminal',
@@ -100,6 +106,7 @@ export default {
       linePlugins: 'Assembling plugin panels',
       lineConnection: 'Calling LAN · Seeking host',
       lineUi: 'Calibrating display & safe area',
+      lineApps: 'Indexing wasm apps',
     },
   },
 }

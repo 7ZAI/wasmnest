@@ -13,5 +13,5 @@
 
 ## 2. 注释、命名与 i18n（后端面）
 
-- **注释规则（解释为什么 / 中文 / 禁票号引用 / 同步修正）与命名规则的通用部分真源 = `docs/public/commenting.md`**——本端只补充平台特有增量：Vue 组件 / 目录结构跟随既有双端的同构惯例（前端面细则见 docs/frontend.md §5）。
+- **注释规则（解释为什么 / 中文 / 同步修正）与命名规则的通用部分真源 = `docs/public/commenting.md`**。**注释禁止引用内部文档章节**（commenting.md §1，硬约束）：`§x.y` / `票 NN` / `ADR ####` / `issue NN` / `T0X` / `spec v2` 等内部标签一律禁止，注释必须自解释；唯一豁免为外部标准 RFC 引用与代码路径坐标。引用被禁时改写为直接描述代码逻辑 / 动机。
 - 结构化日志字段（`session_id` / `device_id` / `plugin_id` / `request_id` / `batch_id` / `node_id` 等）一律 `key = %value`，**禁止拼进消息字符串**；错误信息必须带操作上下文（docs/security.md §2）。

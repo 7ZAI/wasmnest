@@ -45,6 +45,18 @@ const mockStop = vi.fn(async () => true)
 const mockOpenShellApp = vi.fn(async () => true)
 const mockGoHome = vi.fn()
 const mockBack = vi.fn()
+/** 卡片实例搬运桩：默认「无实例」→ 品牌卡 fallback（真实实例行为由 shellSurfaceTile 测试锁住） */
+const surfaceApi = vi.hoisted(() => ({
+  present: vi.fn((_appId: string, _box: HTMLElement) => false),
+  fit: vi.fn((_appId: string) => false),
+  leave: vi.fn((_appId: string) => false),
+}))
+
+vi.mock('@/shell/surfaceRuntime', () => ({
+  presentSurfaceInPreview: surfaceApi.present,
+  fitSurfacePreview: surfaceApi.fit,
+  leaveSurfacePreview: surfaceApi.leave,
+}))
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -105,10 +117,18 @@ async function drag(
   withMove = true,
 ) {
   const grid = wrapper.find('.shell-recents-grid')
-  await grid.trigger('pointerdown', { clientX: from.x, clientY: from.y, pointerType: 'touch', button: 0 })
+  await grid.trigger('pointerdown', {
+    clientX: from.x,
+    clientY: from.y,
+    pointerType: 'touch',
+    button: 0,
+  })
   if (withMove) {
     // 先越过轴锁阈值，再落到目标位移（首次 move 只用来锁轴）
-    await grid.trigger('pointermove', { clientX: (from.x + to.x) / 2, clientY: (from.y + to.y) / 2 })
+    await grid.trigger('pointermove', {
+      clientX: (from.x + to.x) / 2,
+      clientY: (from.y + to.y) / 2,
+    })
     await grid.trigger('pointermove', { clientX: to.x, clientY: to.y })
   }
   await grid.trigger('pointerup', { clientX: to.x, clientY: to.y })
@@ -128,7 +148,11 @@ function installPointerCapture(): void {
     ['setPointerCapture', pointerCapture.set],
     ['releasePointerCapture', pointerCapture.release],
   ] as const) {
-    Object.defineProperty(Element.prototype, name, { configurable: true, writable: true, value: impl })
+    Object.defineProperty(Element.prototype, name, {
+      configurable: true,
+      writable: true,
+      value: impl,
+    })
   }
 }
 
@@ -158,6 +182,9 @@ beforeEach(() => {
   mockOpenShellApp.mockClear()
   mockGoHome.mockClear()
   mockBack.mockClear()
+  surfaceApi.present.mockClear()
+  surfaceApi.fit.mockClear()
+  surfaceApi.leave.mockClear()
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: VIEWPORT_WIDTH })
 })
 
@@ -209,7 +236,10 @@ describe('C-S24 服务型应用不进多任务（keepalive spec §3.3）', () =>
   it('should_filterRunningServiceApp_when_serviceKind', () => {
     pushRecent('svc')
     pushRecent('a')
-    apps.value = [app('svc', 'running', 'Monitor', 'internal-business'), app('a', 'running', 'AppA')]
+    apps.value = [
+      app('svc', 'running', 'Monitor', 'internal-business'),
+      app('a', 'running', 'AppA'),
+    ]
 
     const wrapper = mount(ShellSwitcherScreen)
 
@@ -244,7 +274,9 @@ describe('C-S2/C-S15 进入应用（整卡点击）', () => {
     const card = activeCard(mount(ShellSwitcherScreen))
 
     expect(card.findAll('button'), '每张卡只有「整卡进入」与「× 关闭」两个控件').toHaveLength(2)
-    expect(card.text(), '不再渲染独立的「进入 / 启动」按钮文案').not.toContain('shell.switcher.enter')
+    expect(card.text(), '不再渲染独立的「进入 / 启动」按钮文案').not.toContain(
+      'shell.switcher.enter',
+    )
     expect(card.text()).not.toContain('shell.switcher.launch')
   })
 
@@ -273,9 +305,7 @@ describe('C-S16 拖拽后不误触进入', () => {
 
     await drag(wrapper, { x: 200, y: 300 }, { x: 200, y: 150 })
     // 抬手后浏览器补的那次 click 落在整卡按钮上：必须被吞掉，否则上滑关闭顺手打开了应用
-    await activeCard(wrapper)
-      .find('button[aria-label="shell.switcher.enterApp"]')
-      .trigger('click')
+    await activeCard(wrapper).find('button[aria-label="shell.switcher.enterApp"]').trigger('click')
 
     expect(mockStop, '上滑超阈值应关闭').toHaveBeenCalledWith('a')
     expect(mockOpenShellApp, '拖拽余波 click 不得进入').not.toHaveBeenCalled()
@@ -288,9 +318,7 @@ describe('C-S16 拖拽后不误触进入', () => {
     const wrapper = mount(ShellSwitcherScreen)
 
     await drag(wrapper, { x: 200, y: 300 }, { x: 120, y: 300 })
-    await activeCard(wrapper)
-      .find('button[aria-label="shell.switcher.enterApp"]')
-      .trigger('click')
+    await activeCard(wrapper).find('button[aria-label="shell.switcher.enterApp"]').trigger('click')
 
     expect(activeId(wrapper), '横滑只切当前卡').toBe('b')
     expect(mockOpenShellApp, '拖拽余波 click 不得进入').not.toHaveBeenCalled()
@@ -304,9 +332,14 @@ describe('C-S17 关闭按钮独占手势', () => {
     const card = activeCard(mount(ShellSwitcherScreen))
 
     // 整卡覆盖按钮仍要能起手横滑 / 上滑；只有 × 排除在拖拽之外
-    expect(card.find('button[aria-label="shell.switcher.closeCard"]').attributes('data-card-ignore-drag'))
-      .toBe('')
-    expect(card.find('button.shell-recents-open').attributes('data-card-ignore-drag')).toBeUndefined()
+    expect(
+      card
+        .find('button[aria-label="shell.switcher.closeCard"]')
+        .attributes('data-card-ignore-drag'),
+    ).toBe('')
+    expect(
+      card.find('button.shell-recents-open').attributes('data-card-ignore-drag'),
+    ).toBeUndefined()
   })
 })
 
@@ -319,7 +352,10 @@ describe('C-S3/C-S4 关闭单张卡片', () => {
     await activeCard(wrapper).find('button[aria-label="shell.switcher.closeCard"]').trigger('click')
 
     expect(mockStop, '关闭运行中卡片 = 停用实例').toHaveBeenCalledWith('a')
-    expect(localStorage.getItem('wasmnest.shell.recentApps') ?? '[]', '关闭后不得以未运行身份复活').toBe('[]')
+    expect(
+      localStorage.getItem('wasmnest.shell.recentApps') ?? '[]',
+      '关闭后不得以未运行身份复活',
+    ).toBe('[]')
   })
 
   it('should_onlyDropFromRecents_when_dormantCardClosed', async () => {
@@ -364,10 +400,16 @@ describe('C-S3/C-S4 关闭单张卡片', () => {
 describe('C-S5 全部关闭', () => {
   it('should_stopEveryRunningAndClearRecents_when_closeAllTapped', async () => {
     pushRecent('b')
-    apps.value = [app('a', 'running', 'AppA'), app('b', 'stopped', 'AppB'), app('c', 'running', 'AppC')]
+    apps.value = [
+      app('a', 'running', 'AppA'),
+      app('b', 'stopped', 'AppB'),
+      app('c', 'running', 'AppC'),
+    ]
     const wrapper = mount(ShellSwitcherScreen)
 
-    const closeAll = wrapper.findAll('button').find((b) => b.text().includes('shell.switcher.closeAll'))!
+    const closeAll = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('shell.switcher.closeAll'))!
     await closeAll.trigger('click')
 
     expect(mockStop.mock.calls.map((c) => c[0]).sort()).toEqual(['a', 'c'])
@@ -382,7 +424,9 @@ describe('C-S5 全部关闭', () => {
     })
     const wrapper = mount(ShellSwitcherScreen)
 
-    const closeAll = wrapper.findAll('button').find((b) => b.text().includes('shell.switcher.closeAll'))!
+    const closeAll = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('shell.switcher.closeAll'))!
     await closeAll.trigger('click')
     await flushPromises()
 
@@ -397,13 +441,21 @@ describe('C-S6 上滑关闭手势', () => {
     const wrapper = mount(ShellSwitcherScreen)
 
     const grid = wrapper.find('.shell-recents-grid')
-    await grid.trigger('pointerdown', { clientX: 100, clientY: 200, pointerType: 'touch', button: 0 })
+    await grid.trigger('pointerdown', {
+      clientX: 100,
+      clientY: 200,
+      pointerType: 'touch',
+      button: 0,
+    })
     await grid.trigger('pointermove', { clientX: 102, clientY: 190 })
     await grid.trigger('pointermove', { clientX: 104, clientY: 160 })
     await wrapper.vm.$nextTick()
 
-    // 拖拽中卡片跟随位移（反馈是手势可发现性的前提，不能「松手才知道生效」）
-    expect(activeCard(wrapper).attributes('style')).toContain('-40px')
+    // 拖拽中卡片跟随位移（反馈是手势可发现性的前提，不能「松手才知道生效」）。
+    // 位移经 CSS 变量直写被拖节点（F6：不重建 vnode，只改 style）
+    const dragged = activeCard(wrapper)
+    expect(dragged.classes(), '只有被拖的卡带 is-dragging').toContain('is-dragging')
+    expect(dragged.attributes('style')).toContain('--drag-y: -40px')
     expect(mockStop).not.toHaveBeenCalled()
   })
 
@@ -434,7 +486,12 @@ describe('C-S6 上滑关闭手势', () => {
 
     // 上滑超过阈值后又下拖回起点以下：以下滑方向为「取消」，不得关闭
     const grid = wrapper.find('.shell-recents-grid')
-    await grid.trigger('pointerdown', { clientX: 100, clientY: 300, pointerType: 'touch', button: 0 })
+    await grid.trigger('pointerdown', {
+      clientX: 100,
+      clientY: 300,
+      pointerType: 'touch',
+      button: 0,
+    })
     await grid.trigger('pointermove', { clientX: 101, clientY: 200 })
     await grid.trigger('pointermove', { clientX: 102, clientY: 360 })
     await grid.trigger('pointerup', { clientX: 102, clientY: 360 })
@@ -448,7 +505,12 @@ describe('C-S6 上滑关闭手势', () => {
     const wrapper = mount(ShellSwitcherScreen)
 
     const grid = wrapper.find('.shell-recents-grid')
-    await grid.trigger('pointerdown', { clientX: 100, clientY: 300, pointerType: 'touch', button: 0 })
+    await grid.trigger('pointerdown', {
+      clientX: 100,
+      clientY: 300,
+      pointerType: 'touch',
+      button: 0,
+    })
     await grid.trigger('pointercancel')
     await grid.trigger('pointerup', { clientX: 100, clientY: 100 })
 
@@ -730,12 +792,20 @@ describe('C-S8 卡片布局（与桌面同形）', () => {
     const wrapper = twoCards()
 
     const grid = wrapper.find('.shell-recents-grid')
-    await grid.trigger('pointerdown', { clientX: 200, clientY: 300, pointerType: 'touch', button: 0 })
+    await grid.trigger('pointerdown', {
+      clientX: 200,
+      clientY: 300,
+      pointerType: 'touch',
+      button: 0,
+    })
     await grid.trigger('pointermove', { clientX: 175, clientY: 300 })
     await grid.trigger('pointermove', { clientX: 150, clientY: 300 })
 
-    // 横向手势是「切当前卡」：网格整体轻微跟手（-50 × 0.14 = -7px），抬手吸附
-    expect(wrapper.find('.shell-recents-grid-inner').attributes('style')).toContain('-7px')
+    // 横向手势是「切当前卡」：网格整体轻微跟手（-50 × 0.14 = -7px），抬手吸附。
+    // 合帧位移走网格上的 CSS 变量（F6），不再写 .shell-recents-grid-inner 的 inline style
+    expect(wrapper.find('.shell-recents-grid').attributes('style')).toContain(
+      '--grid-nudge: -7px',
+    )
   })
 
   it('should_keepCurrentCardMarked_when_cardsRendered', () => {
@@ -743,7 +813,9 @@ describe('C-S8 卡片布局（与桌面同形）', () => {
 
     const cards = wrapper.findAll('article.shell-recents-card')
     expect(cards).toHaveLength(2)
-    expect(cards[0].find('button[aria-current="true"]').exists(), '当前卡片有 aria-current').toBe(true)
+    expect(cards[0].find('button[aria-current="true"]').exists(), '当前卡片有 aria-current').toBe(
+      true,
+    )
     expect(cards[1].find('button[aria-current="true"]').exists()).toBe(false)
   })
 })
@@ -827,7 +899,11 @@ describe('C-S20 底部切换条退役', () => {
       join(process.cwd(), 'src/shell/components/screens/ShellSwitcherScreen.vue'),
       'utf8',
     )
-    for (const retired of ['shell.switcher.prev', 'shell.switcher.next', 'shell.switcher.position']) {
+    for (const retired of [
+      'shell.switcher.prev',
+      'shell.switcher.next',
+      'shell.switcher.position',
+    ]) {
       expect(source, `${retired} 不应再被引用`).not.toContain(retired)
     }
 
@@ -846,11 +922,11 @@ describe('C-S22 多任务缩放过渡（安卓 recents 观感）', () => {
     expect(cssBlock(sheet, '.shell-screen-recents-enter-from')).toContain('scale(')
     expect(cssBlock(sheet, '.shell-screen-recents-leave-to')).toContain('scale(')
     // enter/leave 共用一条规则（逗号分组），cssBlock 单选择器匹配不到，按组匹配
-    expect(sheet).toMatch(
-      /\.shell-screen-recents-enter-active,[\s\S]*?\{[^}]*transform:[^}]*\}/,
-    )
+    expect(sheet).toMatch(/\.shell-screen-recents-enter-active,[\s\S]*?\{[^}]*transform:[^}]*\}/)
     // reduced-motion 下这些过渡也必须收敛
-    expect(sheet).toContain('.shell-screen-recents-enter-active,\n  .shell-screen-recents-leave-active')
+    expect(sheet).toContain(
+      '.shell-screen-recents-enter-active,\n  .shell-screen-recents-leave-active',
+    )
   })
 
   it('卡片从略小 / 略低处缩放入场，逐张错峰', () => {
@@ -864,11 +940,45 @@ describe('C-S22 多任务缩放过渡（安卓 recents 观感）', () => {
   })
 
   it('ShellHost 把导航过渡名接到屏幕栈 Transition', () => {
-    const host = readFileSync(
-      join(process.cwd(), 'src/shell/components/ShellHost.vue'),
-      'utf8',
-    )
+    const host = readFileSync(join(process.cwd(), 'src/shell/components/ShellHost.vue'), 'utf8')
     expect(host).toContain(':name="transitionName"')
+  })
+})
+
+describe('C-S25 缩略区 = 真实实例（运行中卡片，2026-10-30）', () => {
+  it('should_presentLiveSurfaceForRunningCard_when_switcherMounted', async () => {
+    pushRecent('a')
+    pushRecent('b')
+    apps.value = [app('a', 'running', 'AppA'), app('b', 'stopped', 'AppB')]
+
+    mount(ShellSwitcherScreen)
+    await flushPromises()
+
+    // 只有运行中的卡片有实例可搬；未运行的最近使用卡不尝试（品牌卡）。
+    // 用集合断言而非次数：本文件前序用例的包装器未卸载，共享 apps ref 会一并重渲染。
+    const attempted = new Set(surfaceApi.present.mock.calls.map((call) => call[0]))
+    expect(attempted.has('a')).toBe(true)
+    expect(attempted.has('b')).toBe(false)
+  })
+
+  it('should_renderBrandFallback_when_instanceMissing', async () => {
+    apps.value = [app('a', 'running', 'AppA')]
+    const wrapper = mount(ShellSwitcherScreen)
+    await flushPromises()
+
+    const card = activeCard(wrapper)
+    expect(card.find('.shell-live').attributes('data-live-state')).toBe('fallback')
+    expect(card.text(), '实例缺失仍保留真实元信息').toContain('v1.0.0')
+  })
+
+  it('should_leavePreview_when_switcherUnmounted', async () => {
+    apps.value = [app('a', 'running', 'AppA')]
+    const wrapper = mount(ShellSwitcherScreen)
+    await flushPromises()
+
+    wrapper.unmount()
+
+    expect(surfaceApi.leave, '离开多任务 = 实例摘回后台（保留，不销毁）').toHaveBeenCalledWith('a')
   })
 })
 
@@ -889,5 +999,181 @@ describe('C-S21 页头计数', () => {
     const wrapper = mount(ShellSwitcherScreen)
 
     expect(wrapper.text()).not.toContain('shell.switcher.countUnit')
+  })
+})
+
+describe('C-S25 卡片视觉口径（2026-11-06 用户反馈）', () => {
+  function readCss(): string {
+    return readFileSync(join(process.cwd(), 'src/shell/styles/shell.css'), 'utf8')
+  }
+
+  it('should_useTighterRadius_when_cardRendered', () => {
+    // 用户原话「卡片圆角太圆了」：18px 的 --shell-radius-lg 在大卡上像药丸，
+    // 卡片改用更紧的一档（与桌面 .ts-card 的 10px 同一收紧口径）
+    const css = readCss()
+    const card = cssBlock(css, '.shell-recents-card')
+    expect(card, '卡片必须用专用圆角 token（不复用 --shell-radius-lg）').toContain(
+      'border-radius: var(--shell-radius-recents)',
+    )
+    expect(card).not.toContain('border-radius: var(--shell-radius-lg)')
+    const token = css.match(/--shell-radius-recents:\s*(\d+)px/)
+    expect(token, '密级 token 必须存在').not.toBeNull()
+    const radius = Number(token?.[1])
+    expect(radius, '圆角必须明显小于旧值 18px').toBeLessThanOrEqual(12)
+    expect(radius, '但不能小到失去卡片形态').toBeGreaterThanOrEqual(8)
+  })
+
+  it('should_letInstanceFillThumb_when_cardRendered', () => {
+    // 用户原话「卡片里面的内容应该跟着卡片宽高铺满显示区域」：缩略区整块交给实例，
+    // 不给它加内边距（内边距会在画面四周顶出一圈纸边）
+    const css = readCss()
+    const live = cssBlock(css, '.shell-live')
+    expect(live, '实例层必须铺满缩略区').toContain('inset: 0')
+    expect(live, '实例层不能自带内边距').not.toContain('padding:')
+    expect(live, '实例层不能自带外边距').not.toContain('margin:')
+  })
+
+  it('should_keepContainScaling_when_instanceInCard', () => {
+    // 铺满由「缩略区比例 = 应用区比例」保证，不能靠改 cover 裁切换铺满：
+    // 裁掉应用右侧内容比留边更糟（桌面同为 Math.min 口径）
+    const src = readFileSync(
+      join(process.cwd(), 'src/shell/surfaceAppRegistry.ts'),
+      'utf8',
+    )
+    expect(src, '等比缩放必须取 Math.min（contain，整页可见）').toContain(
+      'Math.min(box.width / size.width, box.height / size.height)',
+    )
+  })
+})
+
+describe('C-S25 关闭渐隐（单关 / 全关两种语义）', () => {
+  function readCss(): string {
+    return readFileSync(join(process.cwd(), 'src/shell/styles/shell.css'), 'utf8')
+  }
+
+  /** 让停用真正落地：应用置为 stopped（否则卡仍在运行清单里，幽灵按契约撤回） */
+  function stopFor(id: string): void {
+    apps.value = apps.value.map((a) => (a.id === id ? { ...a, state: 'stopped' } : a))
+  }
+
+  it('should_fadeTheCardImmediately_when_closeTapped', async () => {
+    pushRecent('a')
+    apps.value = [app('a', 'running', 'AppA')]
+    let release!: (ok: boolean) => void
+    mockStop.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          release = resolve
+        }),
+    )
+    const wrapper = mount(ShellSwitcherScreen)
+
+    await activeCard(wrapper).find('button[aria-label="shell.switcher.closeCard"]').trigger('click')
+
+    const closing = wrapper.findAll('article.shell-recents-card.is-closing')
+    expect(closing, '点下去就该开始渐隐，不等真停用').toHaveLength(1)
+    expect(closing[0]!.attributes('inert'), '关闭态不可聚焦 / 不可点').toBeDefined()
+
+    stopFor('a')
+    release(true)
+    await flushPromises()
+  })
+
+  it('should_keepTheSlot_untilFadeEnds_when_cardLeftTheList', async () => {
+    apps.value = [app('a', 'running', 'AppA'), app('b', 'running', 'AppB')]
+    mockStop.mockImplementationOnce(async (id: string) => {
+      stopFor(id)
+      return true
+    })
+    const wrapper = mount(ShellSwitcherScreen)
+    expect(wrapper.findAll('article.shell-recents-card')).toHaveLength(2)
+
+    await activeCard(wrapper).find('button[aria-label="shell.switcher.closeCard"]').trigger('click')
+    await flushPromises()
+
+    expect(
+      wrapper.findAll('article.shell-recents-card'),
+      '渐隐期间仍占一个卡位（幽灵）',
+    ).toHaveLength(2)
+    expect(wrapper.findAll('article.shell-recents-card.is-closing')).toHaveLength(1)
+
+    await new Promise((resolve) => setTimeout(resolve, 340))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('article.shell-recents-card'), '渐隐结束才落位').toHaveLength(1)
+    expect(wrapper.findAll('article.shell-recents-card.is-closing')).toHaveLength(0)
+  })
+
+  it('should_staggerEveryCard_when_closeAllTapped', async () => {
+    pushRecent('b')
+    pushRecent('a')
+    apps.value = [app('a', 'running', 'AppA'), app('b', 'stopped', 'AppB')]
+    let release!: (ok: boolean) => void
+    mockStop.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          release = resolve
+        }),
+    )
+    const wrapper = mount(ShellSwitcherScreen)
+
+    const closeAll = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('shell.switcher.closeAll'))!
+    await closeAll.trigger('click')
+
+    const rendered = wrapper.findAll('article.shell-recents-card')
+    expect(rendered, '整组一起进入关闭态').toHaveLength(2)
+    expect(rendered.every((card) => card.classes().includes('is-closing'))).toBe(true)
+    expect(
+      wrapper.find('.shell-recents-grid').classes(),
+      '清场变体（下沉更多 / 时长更短）',
+    ).toContain('shell-recents-grid--clearing')
+    expect(rendered[0]!.attributes('style'), '第一张不延迟').toContain('--recents-close-delay: 0ms')
+    expect(rendered[1]!.attributes('style'), '第二张按序 +22ms').toContain(
+      '--recents-close-delay: 22ms',
+    )
+
+    stopFor('a')
+    release(true)
+    await flushPromises()
+  })
+
+  it('should_continueUpward_when_swipeDismissed', async () => {
+    pushRecent('a')
+    apps.value = [app('a', 'running', 'AppA')]
+    mockStop.mockImplementationOnce(async (id: string) => {
+      stopFor(id)
+      return true
+    })
+    const wrapper = mount(ShellSwitcherScreen)
+
+    await drag(wrapper, { x: 100, y: 300 }, { x: 102, y: 180 })
+    await flushPromises()
+
+    const ghost = wrapper.find('article.shell-recents-card.is-closing')
+    expect(ghost.exists(), '上滑关闭也走同一条渐隐').toBe(true)
+    expect(ghost.attributes('style'), '顺着手指方向继续走出去，不先弹回再淡出').toContain(
+      '--recents-close-y: -40px',
+    )
+  })
+
+  it('should_onlyFadeWithCompositorProps_andShipReducedMotion', () => {
+    const css = readCss()
+    const block = cssBlock(css, '.shell-recents-card.is-closing')
+    expect(block).toContain('opacity: 0')
+    expect(block).toContain('transition:')
+    expect(block, '只动合成层属性').not.toMatch(/\b(width|height|margin|padding|top|left):/)
+
+    // 全关 / 单关必须真有差异：不是同一条规则换个注释
+    expect(cssBlock(css, '.shell-recents-grid--clearing .shell-recents-card.is-closing')).toContain(
+      'scale(0.94)',
+    )
+    expect(block).toContain('scale(0.96)')
+
+    const reduce = css.slice(css.lastIndexOf('@media (prefers-reduced-motion: reduce)'))
+    expect(reduce, '关闭渐隐必须有 reduce 分支').toContain('.shell-recents-card.is-closing')
+    expect(reduce, '减弱动态不等交错延迟').toContain('transition-delay: 0ms !important')
+    expect(reduce).toContain('.shell-recents-empty')
   })
 })

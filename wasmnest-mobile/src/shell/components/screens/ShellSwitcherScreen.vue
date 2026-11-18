@@ -8,7 +8,17 @@
         :aria-label="t('shell.switcher.back')"
         @click="nav.back()"
       >
-        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg
+          width="21"
+          height="21"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
           <path d="M15 6l-6 6 6 6" />
         </svg>
       </button>
@@ -33,25 +43,28 @@
     </header>
 
     <!-- ==================== 卡片区（与桌面同形的多行卡片布局） ====================
-         桌面多任务是「信息条在上 + 缩略区在下」的 3/4 竖版卡片，按行居中排布；
-         移动端沿用同一形态与同一信息层级，只把卡片缩到移动端尺寸：每行 2 张
-         （宽屏 3 张），整组上下左右居中，超出时可纵向滚动。
+         桌面多任务是「信息条在上 + 缩略区在下」的卡片，按行居中排布；移动端沿用
+         同一形态与同一信息层级，只把卡片缩到移动端尺寸：每行 2 张（宽屏 3 张），
+         整组上下左右居中，超出时可纵向滚动。
 
-         缩略区仍不伪造应用截图——平台拿不到应用画面，放大应用图标 + 版本 /
-         权限数就是平台掌握的全部事实（AGENTS §5.1 B4）。
+         缩略区（2026-10-30 用户裁决，与桌面同口径）：**运行中的卡片展示真实实例的
+         当前页面**——ShellSurfaceTile 把保活实例搬进卡片、按整幅尺寸等比缩放；
+         未运行的最近使用卡（没有实例）保持图标 + 版本 / 权限数（平台掌握的真实
+         元信息），不伪造应用画面（AGENTS §5.1 B4）。
 
          手势保留：横向拖动切换当前卡（网格轻微跟手后吸附），上滑关闭单张；
          拖拽不是唯一路径——每张卡都可直接点按进入，右上角另有独立关闭键
          （WCAG 2.2 Dragging Movements）。网格内容溢出时纵向上滑让位给原生
          滚动，否则列表滚不动；此时关闭同样走卡片上的 ×。两种状态都保留
          pinch-zoom，不吞掉系统的双指缩放。 -->
-    <template v-if="cards.length > 0">
+    <template v-if="renderCards.length > 0">
       <div
         ref="gridEl"
         class="shell-recents-grid flex-1 min-h-0"
         :class="{
           'shell-recents-grid--dragging': dragAxis !== null,
           'shell-recents-grid--scrollable': scrollable,
+          'shell-recents-grid--clearing': clearingAll,
         }"
         role="list"
         :aria-label="t('shell.switcher.title')"
@@ -61,41 +74,46 @@
         @pointerup="onPointerUp"
         @pointercancel="resetDrag"
       >
-        <div class="shell-recents-grid-inner" :style="gridStyle()">
+        <!-- 拖拽位移写 CSS 变量（pointermove 直写被拖节点 / 网格，F6）：
+             只有 class 的开关走响应式，逐帧移动不再重建整片卡片 vnode -->
+        <div class="shell-recents-grid-inner">
           <article
-            v-for="(card, index) in cards"
-            :key="card.app.id"
+            v-for="entry in renderCards"
+            :key="entry.card.app.id"
             class="shell-recents-card"
-            :class="{ active: index === activeIndex }"
-            :style="cardStyle(index)"
-            :data-app-id="card.app.id"
+            :class="{
+              active: entry.card.app.id === activeCardId,
+              'is-closing': entry.closing,
+              'is-dragging': entry.card.app.id === dragTargetId,
+            }"
+            :style="entryStyle(entry)"
+            :inert="entry.closing"
+            :data-app-id="entry.card.app.id"
             role="listitem"
           >
             <!-- 信息条在卡片顶部（与桌面一致）：图标打头 + 名称；
                  非运行 / 异常状态才追加一行状态文字，运行中不重复播报默认事实。 -->
             <div class="shell-recents-meta" aria-hidden="true">
-              <ShellAppIcon :app="card.app" :size="28" />
+              <ShellAppIcon :app="entry.card.app" :size="28" />
               <span class="flex-1 min-w-0">
-                <span class="shell-recents-name">{{ card.app.name }}</span>
+                <span class="shell-recents-name">{{ entry.card.app.name }}</span>
                 <span
-                  v-if="stateText(card)"
+                  v-if="entry.card.statusText"
                   class="shell-recents-status"
-                  :class="stateClass(card)"
+                  :class="entry.card.statusClass"
                 >
-                  {{ stateText(card) }}
+                  {{ entry.card.statusText }}
                 </span>
               </span>
             </div>
 
             <div
               class="shell-recents-thumb"
-              :class="{ 'is-running': card.running }"
+              :class="{ 'is-running': entry.card.running }"
               aria-hidden="true"
             >
-              <ShellAppIcon :app="card.app" :size="64" />
-              <span v-if="thumbMeta(card)" class="shell-recents-thumb-meta">
-                {{ thumbMeta(card) }}
-              </span>
+              <!-- 运行中 = 真实实例的当前页面（实例缺失回退图标 + 元信息）；未运行 = 品牌卡 -->
+              <ShellSurfaceTile :app="entry.card.app" :live="entry.card.running" />
             </div>
 
             <!-- 唯一打开动作：覆盖整张卡的空按钮（视觉层 pointer-events:none）。
@@ -103,9 +121,13 @@
             <button
               type="button"
               class="shell-recents-open"
-              :aria-label="t(card.running ? 'shell.switcher.enterApp' : 'shell.switcher.launchApp', { name: card.app.name })"
-              :aria-current="index === activeIndex ? 'true' : undefined"
-              @click.stop="onCardClick(card)"
+              :aria-label="
+                t(entry.card.running ? 'shell.switcher.enterApp' : 'shell.switcher.launchApp', {
+                  name: entry.card.app.name,
+                })
+              "
+              :aria-current="entry.card.app.id === activeCardId ? 'true' : undefined"
+              @click.stop="onCardClick(entry.card)"
             ></button>
 
             <!-- 关闭：每张卡都有（桌面同形），独立按钮压在整卡按钮之上，
@@ -114,10 +136,19 @@
               type="button"
               data-card-ignore-drag
               class="shell-recents-close"
-              :aria-label="t('shell.switcher.closeCard', { name: card.app.name })"
-              @click.stop="dismiss(card.app.id)"
+              :aria-label="t('shell.switcher.closeCard', { name: entry.card.app.name })"
+              @click.stop="dismiss(entry.card.app.id)"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
             </button>
@@ -129,7 +160,7 @@
     <!-- ==================== 空态 ==================== -->
     <div
       v-else
-      class="flex-1 flex flex-col items-center justify-center px-6 text-center"
+      class="shell-recents-empty flex-1 flex flex-col items-center justify-center px-6 text-center"
       data-testid="shell-recents-empty"
     >
       <span
@@ -137,7 +168,16 @@
         :style="{ background: 'var(--mobile-bg-elevated)', color: 'var(--mobile-text-secondary)' }"
         aria-hidden="true"
       >
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="26"
+          height="26"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <rect x="3" y="4" width="18" height="16" rx="3" />
           <path d="M3 9h18" />
         </svg>
@@ -158,8 +198,9 @@
  * `styles/shell.css`（.shell-recents-*），组件只给手势位移与序号。
  *
  * 四条硬约束：
- *   ① 预览位不伪造内容——平台不持有应用内部快照，放大应用图标 + 真实元信息即
- *      平台掌握的全部事实（伪造截图属于 B4 业务投影越线）；
+ *   ① 运行中的卡片展示真实实例（2026-10-30）：宿主把保活容器搬进缩略区、按整幅
+ *      尺寸等比缩放；未运行的最近使用卡只有图标 + 真实元信息——平台不伪造应用画面
+ *      （伪造截图属于 B4 业务投影越线）；
  *   ② 拖拽**不是唯一路径**（WCAG 2.2 Dragging Movements）：每张卡都可直接点按
  *      进入，关闭键常驻卡片右上角，页头返回 / 点非卡片区域负责退出；
  *   ③ 手势不互相抢：pointermove 首次越过轴锁阈值即锁定本次手势方向——横向
@@ -187,6 +228,7 @@ import { isServiceKind } from '../../utils'
 import type { ShellApp } from '../../types'
 import ShellAppIcon from '../ShellAppIcon.vue'
 import ShellChip from '../ShellChip.vue'
+import ShellSurfaceTile from '../ShellSurfaceTile.vue'
 
 const { t } = useI18n()
 const nav = useShellNavigation()
@@ -197,6 +239,15 @@ const { open } = useShellOpen()
 interface RecentCard {
   app: ShellApp
   running: boolean
+  /**
+   * 状态行（运行中为空串：不重复播报默认事实）
+   *
+   * 随 `cards` 一次算好而不是在模板里调函数：原先 v-if 与插值各调一次 `stateText`，
+   * 拖动每帧重建 N 张卡时就是 N×2 次 i18n 查表（F6）。
+   */
+  statusText: string
+  /** 状态行语义色（异常态才偏离次级文字色） */
+  statusClass: string
 }
 
 /** 最近使用排序：recentIds 有记录的按记录顺序，其余运行中应用按名称兜底 */
@@ -222,10 +273,13 @@ const cards = computed<RecentCard[]>(() => {
       (app): app is ShellApp =>
         app !== undefined && !runningIds.has(app.id) && !isServiceKind(app.kind),
     )
-  return [
-    ...running.map((app) => ({ app, running: true })),
-    ...dormant.map((app) => ({ app, running: false })),
-  ]
+  const toCard = (app: ShellApp, running: boolean): RecentCard => ({
+    app,
+    running,
+    statusText: running ? '' : statusTextOf(app),
+    statusClass: statusClassOf(app),
+  })
+  return [...running.map((app) => toCard(app, true)), ...dormant.map((app) => toCard(app, false))]
 })
 
 // ==================== 前层选择 ====================
@@ -237,6 +291,9 @@ const activeIndex = computed(() => {
   const index = cards.value.findIndex((c) => c.app.id === activeId.value)
   return index >= 0 ? index : 0
 })
+
+/** 当前卡 id：高亮 / aria-current 的唯一判据（关闭中的幽灵卡永远不是前层） */
+const activeCardId = computed(() => cards.value[activeIndex.value]?.app.id)
 
 /** 卡片集合变化（启动 / 关闭 / 刷新）后修正前层：原前层消失就落到相邻张 */
 watch(cards, (list) => {
@@ -255,11 +312,160 @@ function step(delta: number): void {
   if (target) activeId.value = target.app.id
 }
 
+// ==================== 关闭渐隐（退出动效） ====================
+/**
+ * 两种关闭语义（2026-11-12 用户裁决「单关 / 全关各有对应的渐隐」）
+ *
+ * - **单关（卡片 × / 上滑关闭）**：只有这一张原地淡出（240ms，强减速曲线），其余卡
+ *   不动；上滑关闭的卡从手指位置继续往上走（不先弹回再淡出）。
+ * - **全部关闭**：同一条渐隐，按卡片顺序逐张 +22ms（封顶 5 步）错峰、每张下沉 / 缩小
+ *   多一点、时长收到 150ms——整组读成「一次清场」。
+ *
+ * 关闭中的卡靠**幽灵占位**留在渲染清单里（数据层已不再有它）：点击那一刻真停用就
+ * 开跑了（不 gate 生命周期，docs/frontend.md §4.3.5），DOM 只按快照多留一个渐隐窗口；
+ * 卡片是固定尺寸（flex-basis + 3/4 比例），幽灵按原序号插回原位，于是渐隐期间布局
+ * 不变，窗口结束后整组一次性落位。
+ */
+const CLOSE_FADE_MS = 240
+const CLOSE_ALL_FADE_MS = 150
+const CLOSE_ALL_STEP_MS = 22
+const CLOSE_ALL_MAX_STEPS = 5
+const GHOST_TAIL_MS = 30
+/** 幽灵兜底释放：数据层迟迟没把卡移走时也不能让卡永远隐身（fail-visible） */
+const GHOST_SAFETY_MS = 1600
+
+interface ClosingCard {
+  /** 关闭前的卡位序号：合并渲染时插回原位 */
+  rank: number
+  /** 交错延迟（全关按序；单关恒 0），同一帧落到元素上供 CSS 过渡取用 */
+  delay: number
+  /** 渐隐结束的绝对时刻（performance.now 口径） */
+  until: number
+  /** 关闭方向（px）：上滑关闭传负值，让卡片顺着手指方向继续走 */
+  closeY?: number
+}
+
+/** 关闭中的卡（数据层已离开或正在离开，DOM 仍在渐隐） */
+const closing = ref(new Map<string, ClosingCard>())
+/** 本次是否为「全部关闭」：只影响整组的下沉幅度与时长（CSS 的 clearing 变体） */
+const clearingAll = ref(false)
+const closingTimers = new Map<string, number>()
+
+interface RenderCard {
+  card: RecentCard
+  /** 视觉序号（入场错峰 / 网格顺序） */
+  index: number
+  closing: boolean
+  delay: number
+  closeY?: number
+}
+
+/** 关闭中的卡不再播报状态行（正在离场，状态文字只会闪一下） */
+function closingCardOf(app: ShellApp): RecentCard {
+  return { app, running: false, statusText: '', statusClass: '' }
+}
+
+/**
+ * 渲染清单 = 当前卡 + 关闭中的幽灵卡
+ *
+ * 幽灵按关闭前的卡位序号插回原位（序号相同时幽灵在前，即它原本的位置）：渐隐期间
+ * 仍是 N 张卡，窗口结束后整组一次性落位，不会出现「卡还在淡出、旁边已经收拢」。
+ */
+const renderCards = computed<RenderCard[]>(() => {
+  const live = cards.value
+  if (closing.value.size === 0) {
+    return live.map((card, index) => ({ card, index, closing: false, delay: 0 }))
+  }
+  const liveIds = new Set(live.map((c) => c.app.id))
+  const entries: Array<RenderCard & { rank: number }> = live.map((card, index) => {
+    // 还在清单里、但已进入关闭流程的卡：自己带 is-closing（渐变从点击那一刻就开始）
+    const ghost = closing.value.get(card.app.id)
+    return {
+      card,
+      index,
+      closing: ghost !== undefined,
+      delay: ghost?.delay ?? 0,
+      closeY: ghost?.closeY,
+      rank: index * 2 + 1,
+    }
+  })
+  for (const [id, ghost] of closing.value) {
+    // 数据层还没把卡移走：活卡自己带 is-closing，不能重复渲染（v-for key 会撞）
+    if (liveIds.has(id)) continue
+    const app = apps.value.find((a) => a.id === id)
+    // 应用整条消失（卸载）：没有可画的卡，直接让位
+    if (!app) continue
+    entries.push({
+      card: closingCardOf(app),
+      index: ghost.rank,
+      closing: true,
+      delay: ghost.delay,
+      closeY: ghost.closeY,
+      rank: ghost.rank * 2,
+    })
+  }
+  return entries
+    .sort((a, b) => a.rank - b.rank || Number(b.closing) - Number(a.closing))
+    .map(({ rank: _rank, ...entry }, index) => ({ ...entry, index }))
+})
+
+/** 卡片内联变量：入场错峰序号 + 关闭交错延迟 / 方向（与 is-closing 同帧落地） */
+function entryStyle(entry: RenderCard): Record<string, string> {
+  const style: Record<string, string> = { '--i': `${entry.index}` }
+  if (entry.closing) {
+    style['--recents-close-delay'] = `${entry.delay}ms`
+    if (entry.closeY !== undefined) style['--recents-close-y'] = `${entry.closeY}px`
+  }
+  return style
+}
+
+function clearClosingTimer(id: string): void {
+  const timer = closingTimers.get(id)
+  if (timer !== undefined) window.clearTimeout(timer)
+  closingTimers.delete(id)
+}
+
+/** 标记关闭中的卡，返回渐隐结束的绝对时刻（调用方据此排释放） */
+function markClosing(
+  id: string,
+  rank: number,
+  delay: number,
+  fadeMs: number,
+  closeY?: number,
+): number {
+  const until = performance.now() + delay + fadeMs + GHOST_TAIL_MS
+  closing.value.set(id, { rank, delay, until, closeY })
+  // 兜底释放：真停用迟迟不结束（或压根没把卡移走）时，卡在安全窗口后淡回来，
+  // 绝不留下「看不见但一直占着卡位」的假象
+  scheduleClosingRelease(id, delay + fadeMs + GHOST_SAFETY_MS)
+  return until
+}
+
+function scheduleClosingRelease(id: string, afterMs: number): void {
+  clearClosingTimer(id)
+  closingTimers.set(
+    id,
+    window.setTimeout(() => releaseClosing(id), Math.max(0, afterMs)),
+  )
+}
+
+function releaseClosing(id: string): void {
+  clearClosingTimer(id)
+  if (closing.value.has(id)) closing.value.delete(id)
+}
+
+/** 卸载时清场：幽灵 / 定时器不能留给下一轮挂载 */
+function releaseAllClosing(): void {
+  for (const id of [...closingTimers.keys()]) clearClosingTimer(id)
+  if (closing.value.size > 0) closing.value.clear()
+  clearingAll.value = false
+}
+
 // ==================== 卡片内容 ====================
 
-/** 状态行：运行中不重复播报默认事实，只给未运行 / 待审批 / 停用 / 失败 */
-function stateText(card: RecentCard): string {
-  switch (card.app.state) {
+/** 状态行：运行中不重复播报默认事实，只给待审批 / 停用 / 失败 / 未运行 */
+function statusTextOf(app: ShellApp): string {
+  switch (app.state) {
     case 'running':
       return ''
     case 'approval':
@@ -274,20 +480,10 @@ function stateText(card: RecentCard): string {
 }
 
 /** 状态行的语义色：异常态才偏离次级文字色（颜色之外另有文字，非纯色传达） */
-function stateClass(card: RecentCard): string {
-  if (card.app.state === 'approval') return 'is-warn'
-  if (card.app.state === 'error') return 'is-danger'
+function statusClassOf(app: ShellApp): string {
+  if (app.state === 'approval') return 'is-warn'
+  if (app.state === 'error') return 'is-danger'
   return ''
-}
-
-/** 缩略区元信息：版本 + 权限数，取不到就不留空行 */
-function thumbMeta(card: RecentCard): string {
-  const parts: string[] = []
-  if (card.app.version) parts.push(`v${card.app.version}`)
-  if (card.app.permissions.length > 0) {
-    parts.push(t('shell.apps.permissionCount', { count: card.app.permissions.length }))
-  }
-  return parts.join(' · ')
 }
 
 // ==================== 手势几何 ====================
@@ -346,6 +542,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onViewportResize)
   resizeObserver?.disconnect()
   resizeObserver = null
+  clearDragPaint()
+  releaseAllClosing()
 })
 
 watch(cards, async () => {
@@ -353,37 +551,52 @@ watch(cards, async () => {
   syncScrollable()
 })
 
-/** 网格整体位移：只在横向拖动时轻微跟手，抬手后吸附回原位 */
-function gridStyle(): Record<string, string> {
-  if (dragAxis.value !== 'x') return {}
-  const raw = Math.max(
-    -GRID_NUDGE_LIMIT,
-    Math.min(GRID_NUDGE_LIMIT, dragDx.value * GRID_NUDGE_RATIO),
-  )
-  // 取整到 0.1px：避免浮点误差写出一长串小数（CSS 里也没有亚像素收益）
-  const nudge = Math.round(raw * 10) / 10
-  return { transform: `translate3d(${nudge}px, 0, 0)` }
+/**
+ * 拖拽位移直写 DOM——**不碰响应式状态**
+ *
+ * 此前 `dragDx` / `dragDy` 是 ref，pointermove 每次写都会重建整片卡片 vnode
+ * （N 张卡 + N×2 次状态文案 + aria-label 的 t() 查表），而实际只有一张卡在动
+ * （F6）。现在位移经 CSS 变量只改被拖节点 / 网格的 style，响应式只在手势开始
+ * （锁轴）与结束（复位）各变一次；样式写入由浏览器按帧合并，无需自己再排队。
+ */
+function paintDrag(): void {
+  if (dragAxis.value === 'x') {
+    const raw = Math.max(
+      -GRID_NUDGE_LIMIT,
+      Math.min(GRID_NUDGE_LIMIT, dragDx * GRID_NUDGE_RATIO),
+    )
+    // 取整到 0.1px：避免浮点误差写出一长串小数（CSS 里也没有亚像素收益）
+    gridEl.value?.style.setProperty('--grid-nudge', `${Math.round(raw * 10) / 10}px`)
+    return
+  }
+  if (dragAxis.value === 'y' && dragTargetEl) {
+    dragTargetEl.style.setProperty('--drag-y', `${dragDy}px`)
+    dragTargetEl.style.setProperty('--drag-opacity', String(Math.max(0.4, 1 + dragDy / 360)))
+  }
 }
 
-/** 卡片自身样式：上滑关闭时跟手位移 + 淡出；其余卡片保持原位 */
-function cardStyle(index: number): Record<string, string> {
-  const style: Record<string, string> = { '--i': String(index) }
-  const dragging = dragAxis.value === 'y' && cards.value[index]?.app.id === dragTargetId
-  if (!dragging) return style
-  style.opacity = String(Math.max(0.4, 1 + dragDy.value / 360))
-  style.transform = `translate3d(0, ${dragDy.value}px, 0)`
-  return style
+/** 清掉拖拽内联变量（抬手 / 取消 / 卸载）：交回 CSS 过渡与默认态 */
+function clearDragPaint(): void {
+  gridEl.value?.style.removeProperty('--grid-nudge')
+  if (dragTargetEl) {
+    dragTargetEl.style.removeProperty('--drag-y')
+    dragTargetEl.style.removeProperty('--drag-opacity')
+    dragTargetEl = null
+  }
 }
 
 // ==================== 手势（横向切卡 / 纵向上滑关闭） ====================
 
 const dragAxis = ref<'x' | 'y' | null>(null)
-const dragDx = ref(0)
-const dragDy = ref(0)
+/** 手势位移（普通变量：逐帧写 ref 会重建整片卡片 vnode，见 paintDrag） */
+let dragDx = 0
+let dragDy = 0
 /** 本次手势是否已越过阈值（越过则抬手后的 click 不再触发卡片动作） */
 let dragMoved = false
-/** 本次手势作用的卡片（纵向关闭按手指下那张卡判定） */
-let dragTargetId: string | null = null
+/** 本次手势作用的卡片 id（ref：卡片 class 的 is-dragging 只用它，一次手势变一次） */
+const dragTargetId = ref<string | null>(null)
+/** 同一张卡的元素句柄（起手时缓存一次；pointermove 里不再查 DOM） */
+let dragTargetEl: HTMLElement | null = null
 /** 手势起点 */
 let dragOrigin: { x: number; y: number } | null = null
 /** 起手时网格是否可纵向滚动（可滚动则纵向手势让给原生滚动） */
@@ -443,13 +656,20 @@ function onPointerDown(event: PointerEvent): void {
     (event.target as HTMLElement | null)?.closest('[data-app-id]')?.getAttribute('data-app-id') ??
     cards.value[activeIndex.value]?.app.id
   if (!hitId || !cards.value.some((c) => c.app.id === hitId)) return
-  dragTargetId = hitId
+  dragTargetId.value = hitId
+  // 元素句柄缓存在起手时：卡片间空档起手按 hitId 回查，pointermove 不再查 DOM
+  dragTargetEl =
+    (event.target as HTMLElement | null)?.closest('[data-app-id]') ??
+    Array.from(el?.querySelectorAll<HTMLElement>('[data-app-id]') ?? []).find(
+      (node) => node.dataset.appId === hitId,
+    ) ??
+    null
   dragOrigin = { x: event.clientX, y: event.clientY }
   lastPointerId = event.pointerId
   dragMoved = false
   dragAxis.value = null
-  dragDx.value = 0
-  dragDy.value = 0
+  dragDx = 0
+  dragDy = 0
 }
 
 function onPointerMove(event: PointerEvent): void {
@@ -471,18 +691,19 @@ function onPointerMove(event: PointerEvent): void {
     capturePointer()
   }
   if (dragAxis.value === 'x') {
-    dragDx.value = dx
+    dragDx = dx
   } else {
     // 只允许上滑（offset ≤ 0）：下滑是「取消」，不应该把卡片往下推
-    dragDy.value = Math.min(0, dy)
+    dragDy = Math.min(0, dy)
   }
+  paintDrag()
 }
 
 function onPointerUp(event: PointerEvent): void {
   const origin = dragOrigin
-  const target = dragTargetId
+  const target = dragTargetId.value
   const axis = dragAxis.value
-  const dx = dragDx.value
+  const dx = dragDx
   resetDrag()
   if (!origin || !target) return
   if (axis === 'x') {
@@ -493,17 +714,18 @@ function onPointerUp(event: PointerEvent): void {
   if (axis !== 'y') return
   // 以抬起位置为准（pointermove 可能因快速滑动而稀疏甚至缺失）
   const offset = Math.min(0, event.clientY - origin.y)
-  if (offset <= -DISMISS_THRESHOLD) void dismiss(target)
+  if (offset <= -DISMISS_THRESHOLD) void dismiss(target, -40)
 }
 
 function resetDrag(): void {
   releasePointer()
+  clearDragPaint()
   dragOrigin = null
-  dragTargetId = null
+  dragTargetId.value = null
   scrollAtStart = false
   dragAxis.value = null
-  dragDx.value = 0
-  dragDy.value = 0
+  dragDx = 0
+  dragDy = 0
 }
 
 /**
@@ -541,18 +763,33 @@ function onSurfaceClick(event: MouseEvent): void {
 
 // ==================== 动作 ====================
 
-/** 关闭一张卡片：运行中先停用，然后（无论是否在跑）移出最近列表 */
-async function dismiss(appId: string): Promise<void> {
+/**
+ * 关闭一张卡片：运行中先停用，然后（无论是否在跑）移出最近列表。
+ *
+ * @param closeY 关闭方向（px）：上滑关闭传负值，让卡片顺着手指的方向继续走出去；
+ *               从卡片 × 关闭不传（按键动作没有方向，默认轻微下沉）。
+ */
+async function dismiss(appId: string, closeY?: number): Promise<void> {
+  if (closing.value.has(appId)) return
   const index = cards.value.findIndex((c) => c.app.id === appId)
   if (index === -1) return
   // 前层移走后落到相邻张（后一张优先，没有则前一张）
   if (activeId.value === appId || index === activeIndex.value) {
-    activeId.value =
-      cards.value[index + 1]?.app.id ?? cards.value[index - 1]?.app.id ?? null
+    activeId.value = cards.value[index + 1]?.app.id ?? cards.value[index - 1]?.app.id ?? null
   }
-  const app = cards.value[index]
-  if (app?.running) await stop(appId)
+  const card = cards.value[index]
+  // 视觉立刻开始渐隐；真停用同时开跑（不 gate 生命周期）
+  const until = markClosing(appId, index, 0, CLOSE_FADE_MS, closeY)
+  if (card?.running) await stop(appId)
   removeRecent(appId)
+  await nextTick()
+  if (cards.value.some((c) => c.app.id === appId)) {
+    // 没真关掉（停用失败 / 实例仍在）：卡片淡回来，绝不留一张看不见的卡
+    releaseClosing(appId)
+    return
+  }
+  // 数据已离场：幽灵留到渐隐结束，布局在窗口之后一次性落位
+  scheduleClosingRelease(appId, until - performance.now())
   // 只有「关闭最后一张卡」这个动作才回主屏；进入多任务时本就无卡不算，
   // 不能把 cards 变 0 本身当成返回信号。
   if (cards.value.length === 0) nav.goHome()
@@ -560,12 +797,31 @@ async function dismiss(appId: string): Promise<void> {
 
 /** 全部关闭：停止所有运行中实例并清空最近列表（Android「清除全部」的同一语义） */
 async function closeAll(): Promise<void> {
-  const running = apps.value.filter((a) => a.state === 'running')
-  for (const app of running) {
-    await stop(app.id)
+  if (clearingAll.value) return
+  const list = cards.value.slice()
+  if (list.length === 0) return
+  clearingAll.value = true
+  // 两张以上才错峰：只有一张时它就是一次单关，不该多等一步
+  const deadlines: Array<[string, number]> = list.map((card, index) => {
+    const delay = list.length > 1 ? Math.min(index, CLOSE_ALL_MAX_STEPS) * CLOSE_ALL_STEP_MS : 0
+    return [card.app.id, markClosing(card.app.id, index, delay, CLOSE_ALL_FADE_MS)]
+  })
+  try {
+    const running = apps.value.filter((a) => a.state === 'running')
+    for (const app of running) {
+      await stop(app.id)
+    }
+    clearRecent()
+    await nextTick()
+    for (const [id, until] of deadlines) {
+      // 停用失败被保留的卡：立刻撤回幽灵（卡回来）；已关闭的跑到渐隐结束
+      if (cards.value.some((c) => c.app.id === id)) releaseClosing(id)
+      else scheduleClosingRelease(id, until - performance.now())
+    }
+    if (cards.value.length === 0) nav.goHome()
+  } finally {
+    clearingAll.value = false
   }
-  clearRecent()
-  if (cards.value.length === 0) nav.goHome()
 }
 
 /** 进入应用：先回主屏重置栈，再走统一入口（未运行的会先启动，待审批落详情页） */

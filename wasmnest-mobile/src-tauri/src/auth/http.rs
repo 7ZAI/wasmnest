@@ -1,7 +1,7 @@
 //! HTTP 认证客户端（移动端 → 桌面端）
 //!
-//! 认证已从 WS 握手迁移到 HTTP（spec §4.5：配对 / 验码 / QR / reauth / 生物
-//! 六端点），JWT 由 Rust 持有（D3）。本模块封装：
+//! 认证已从 WS 握手迁移到 HTTP（配对 / 验码 / QR / reauth / 生物
+//! 六端点），JWT 由 Rust 持有。本模块封装：
 //! - 桌面端 `ApiResponse` 统一信封解析（与 `common_dto.rs` 逐字段对称）
 //! - 六端点的不可变请求体与响应 data DTO（camelCase）
 //! - 目标设备 base URL 解析（复用 `ConnectionManager.target`）

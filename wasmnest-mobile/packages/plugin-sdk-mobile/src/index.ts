@@ -9,6 +9,7 @@ export type {
   PluginType,
   PluginState,
   PluginManifest,
+  PluginUpdateDecl,
   PluginConfiguration,
   ConfigProperty,
   MobilePluginContributes,
@@ -25,6 +26,7 @@ export type {
   PluginRouteDescriptor,
   ShellSurfaceContribution,
   ShellSlotContribution,
+  ShellSurfaceIntent,
   ShellCapsuleItem,
   PluginDialogAction,
   PluginDialogOptions,
@@ -46,6 +48,9 @@ export type {
   PluginDevMock,
   PluginContext,
   PluginModule,
+  AppUpdateReason,
+  AppUpdateCheckResult,
+  AppUpdateAPI,
   MobileHttpResult,
   MobileHttpRequestOptions,
   MobileHostApi,
@@ -85,3 +90,7 @@ export type {
   OpenGlobalDialogInput,
   GlobalDialogHandleOutput,
 } from './global-dialog'
+
+// 应用更新检查（SDK 默认实现；宿主统一 GitHub Release 判定）
+export { useAppUpdate } from './update'
+export type { AppUpdateStatus, UseAppUpdate, UseAppUpdateOptions } from './update'

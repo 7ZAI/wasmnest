@@ -3,8 +3,8 @@
  *
  * 2026-10-17 lifecycle-sync 改造后：
  * - 路由是唯一事实源：'/' = 主屏；'/sys/*' = 系统页全屏；app 路由 = 应用界面全屏；
- * - cards = 打开过的面清单（MRU，路由驱动；主屏不展示，工具栏多任务面板消费；
- *   服务型应用 L1/L2 不产卡，见 isServiceFace）；
+ * - cards = 打开过的面清单 ∪ 运行中的应用（MRU；打开/切面驱动 + 清单 watcher 补自启动卡；
+ *   主屏不展示，工具栏多任务面板消费；服务型应用 L1/L2 不产卡，见 isServiceFace）；
  * - **打开 / 关闭走真实生命周期**：openApp = preauthorize → activate（真激活，
  *   仅当前会话，不写启动复活快照）+ 挂载运行面；closeCard / stopApp = deactivate
  *   （**真停用**）成功后才摘面
@@ -14,6 +14,8 @@
  */
 import { computed, ref } from 'vue'
 import { useToast } from '@/composables/useToast'
+import { invoke } from '@/utils/invoke'
+import { showUserError } from '@/utils/userError'
 import i18n from '@/i18n'
 import router from '@/router'
 import { forgetAppRoute, lastRouteOf } from '../mount/appSession'
@@ -27,7 +29,7 @@ const t = i18n.global.t
 // ==================== 主屏 + 面 ====================
 
 const screen = ref<ShellScreen>('home')
-/** 打开过的面清单（MRU 最新在前；工具栏多任务面板与「全部关闭」消费） */
+/** 面清单（MRU 最新在前；打开过 ∪ 运行中（自启动补卡）；工具栏多任务面板与「全部关闭」消费） */
 const cards = ref<CardKey[]>([])
 /** 当前全屏面（screen === 'card' 时非空；由路由同步） */
 const activeCard = ref<CardKey | null>(null)
@@ -43,10 +45,18 @@ const ctxMenu = ref<ShellCtxMenu | null>(null)
 const dialog = ref<ShellDialogKind | null>(null)
 /** 弹窗关联的应用 id（审批 / 卸载弹窗的目标） */
 const dialogAppId = ref<string | null>(null)
+/** 退出已确认：宿主正在有界优雅关闭；确认面是进度面，Esc / 返回不得收起 */
+const quitInProgress = ref(false)
 /** 策略二次确认的资源（授权策略切换弹窗预留） */
 const dialogResource = ref<string | null>(null)
 /** 主屏 type-to-search 查询串 */
 const homeQ = ref('')
+/** 待升级 / 待数据恢复确认的外部应用包（选包识别结果；确认 / 取消即清） */
+const installTarget = ref<{
+  path: string
+  pluginId: string
+  hasRetainedData: boolean
+} | null>(null)
 
 // ==================== 通知（机制面） ====================
 
@@ -147,6 +157,33 @@ function hasAppSession(appId: string): boolean {
   return cards.value.some((key) => cardKind(key) === 'app' && cardId(key) === appId)
 }
 
+/**
+ * 运行中应用补齐多任务卡（2026-11-01 用户裁决）
+ *
+ * 自启动应用（宿主启动即 activated）在本次前端会话里从未「打开过」，`cards` 里没有它
+ * → 多任务切换器看不到。卡片的语义从「打开过的面」扩为「打开过的面 ∪ 运行中的应用」
+ * （服务型应用仍不产卡，§3.3；系统页卡不受影响）。
+ *
+ * - **只增不删**：停用由 closeCard / stopAllCards / 应用管理页自己的刷新路径负责；
+ * - 追加到 MRU 末尾（不打断用户最近打开的面顺序）；幂等（已有卡不重复）；
+ * - 由 `ShellHost` 的清单 watcher 调用：自启动应用在清单首拉后才出现，与路由无关。
+ */
+function syncRunningCards(): void {
+  const apps = useShellApps()
+  const carded = new Set(
+    cards.value.filter((key) => cardKind(key) === 'app').map((key) => cardId(key)),
+  )
+  const additions = apps.plugins.value
+    .filter(
+      (app) =>
+        !carded.has(app.id) &&
+        (app.state === 'running' || app.state === 'degraded') &&
+        !isServiceKind(app.kind),
+    )
+    .map((app) => appCardKey(app.id))
+  if (additions.length > 0) cards.value = [...cards.value, ...additions]
+}
+
 /** 进入一个面（MRU 置顶 + 切 card 屏；幂等：重复进入只重排不重复产卡） */
 function enterFace(key: CardKey | null): void {
   if (!key) {
@@ -230,12 +267,12 @@ async function openApp(appId: string): Promise<void> {
   void router.push(lastRouteOf(appId) ?? app.route)
 }
 
-/** 开系统页卡 */
-function openSys(pageId: string): void {
+/** 开系统页卡（sub = 二级页段：同一张系统页卡内切子路由，不另产卡，如外观） */
+function openSys(pageId: string, sub?: string): void {
   const sys = sysPageOf(pageId)
   if (!sys) return
   enterFace(sysCardKey(pageId))
-  void router.push(`/sys/${pageId}`)
+  void router.push(sub ? `/sys/${pageId}/${sub}` : `/sys/${pageId}`)
 }
 
 /**
@@ -319,6 +356,9 @@ function goHome(): void {
 /** 返回：覆层按 z 序先收，耗尽后全屏 → 主屏 */
 function goBack(): void {
   if (dialog.value) {
+    // 退出已确认：宿主正在优雅关闭，Esc / 返回不得收起进度面
+    // （与 ShellDialogLayer.close 的 quitting 守卫同一口径）。
+    if (quitInProgress.value && dialog.value === 'exit') return
     dialog.value = null
     return
   }
@@ -342,14 +382,38 @@ function goBack(): void {
 }
 
 /**
+ * 是否有可返回的目标（工具栏返回键 / 悬浮导航返回的可用判据）
+ *
+ * 与 `goBack` 的消费序同源：覆层按 z 序 → 全屏面 → 主屏。放在这里而不是各组件
+ * 各写一份，免得两处判据漂移成「按钮亮着却说没东西可退」。
+ */
+const canGoBack = computed(() => {
+  // 退出已确认（宿主正在优雅关闭）：`goBack` 对该确认面是 no-op（见其守卫），
+  // 判据必须同步为 false，否则返回键亮着却点不动。
+  if (quitInProgress.value && dialog.value === 'exit') return false
+  return (
+    dialog.value !== null ||
+    ctxMenu.value !== null ||
+    panelOpen.value ||
+    quickSettingsOpen.value ||
+    recentsOpen.value ||
+    screen.value !== 'home'
+  )
+})
+
+/**
  * 全部关闭：一键清场——每个应用卡真停用（失败保留该卡并 toast），系统页卡直关；
  * 全部成功后回主屏 + 落一条事件通知。
+ *
+ * 逐张停用用 `refresh: false`，循环后统一刷一次清单：否则 N 张卡各触发一轮全量
+ * 清单拉取（O(N²) 往返，且每轮都重建整张卡列表）。
  */
 async function stopAllCards(): Promise<void> {
   const keys = [...cards.value]
   if (!keys.length) return
   const apps = useShellApps()
   let closedCount = 0
+  let stoppedAny = false
   const remaining: CardKey[] = []
   for (const key of keys) {
     if (cardKind(key) === 'sys') {
@@ -357,13 +421,15 @@ async function stopAllCards(): Promise<void> {
       continue
     }
     const appId = cardId(key)
-    const ok = await apps.deactivate(appId)
+    const ok = await apps.deactivate(appId, { refresh: false })
+    stoppedAny = true
     if (ok) {
       closedCount += 1
       // 实例停用 = 应用被关掉：页面记忆随之作废
       forgetAppRoute(appId)
     } else remaining.push(key)
   }
+  if (stoppedAny) await apps.refresh()
   cards.value = remaining
   if (closedCount > 0) {
     pushNotif({
@@ -428,10 +494,10 @@ async function stopApp(appId: string): Promise<boolean> {
   return ok
 }
 
-/** 卸载应用（含数据清理确认由 ShellDialogLayer uninstall 分支呈现） */
-async function uninstallApp(appId: string): Promise<void> {
+/** 卸载应用（`keepData` = 保留应用数据；确认面由 ShellDialogLayer uninstall 分支呈现） */
+async function uninstallApp(appId: string, keepData = false): Promise<void> {
   const apps = useShellApps()
-  const ok = await apps.uninstall(appId)
+  const ok = await apps.uninstall(appId, keepData)
   dialog.value = null
   dialogAppId.value = null
   if (ok) {
@@ -448,11 +514,113 @@ async function uninstallApp(appId: string): Promise<void> {
   // 失败提示由 showUserError 统一发出（ADR 0030）；此处只负责关闭弹窗与摘卡
 }
 
+// ==================== 外部应用包安装（宿主装配面） ====================
+
+/**
+ * 安装外部 wasm 应用：选包（原生对话框，Rust 侧顺带 peek 应用 id）→ 按注册表
+ * 现状裁决——新 id 直接安装；同 id 已装且可升级（user-installed、未运行）进
+ * 就地升级确认（升级保数据，安装清数据，两条语义不混用）；内置应用 / 运行中
+ * fail-visible 先行拦截（后端同判据兜底，前端拦截只为给出准确文案）。
+ *
+ * 新 id 若留有 keep-data 卸载的旧数据，先弹「是否恢复旧应用数据」（默认不恢复）——
+ * 两态都走正式安装；恢复把私有库 + KV 带进新装，不恢复则丢弃。
+ * 用户取消选包 = 无事发生；安装/识别失败由 showUserError 统一提示。
+ */
+async function installApp(): Promise<void> {
+  const apps = useShellApps()
+  let picked: { path: string; pluginId: string; hasRetainedData: boolean } | null
+  try {
+    picked = (await invoke('plugin_pick_app_package')) as {
+      path: string
+      pluginId: string
+      hasRetainedData: boolean
+    } | null
+  } catch (e) {
+    showUserError(e)
+    return
+  }
+  if (!picked) return
+  const existing = apps.appOf(picked.pluginId)
+  if (!existing) {
+    if (picked.hasRetainedData) {
+      installTarget.value = picked
+      dialogAppId.value = picked.pluginId
+      dialog.value = 'install-restore-data'
+      return
+    }
+    const ok = await apps.installFromZip(picked.path, false)
+    if (ok) {
+      toast.success(
+        t('shell.dialog.install.success', {
+          name: apps.appOf(picked.pluginId)?.name ?? picked.pluginId,
+        }),
+      )
+    }
+    return
+  }
+  if (existing.source !== 'user-installed') {
+    toast.error(t('errors.shell.install.builtinConflict', { name: existing.name }))
+    return
+  }
+  if (existing.state === 'running' || existing.state === 'degraded') {
+    toast.error(t('errors.shell.install.runningConflict', { name: existing.name }))
+    return
+  }
+  installTarget.value = picked
+  dialog.value = 'install-upgrade'
+  dialogAppId.value = picked.pluginId
+}
+
+/**
+ * 就地升级确认（ShellDialogLayer install-upgrade 分支）：升级保数据（插件存储 /
+ * 授权记录保留，仅换代码）。失败保留确认面供重试（同 stop-service 口径），
+ * 错误提示由 showUserError 统一发出。
+ */
+async function confirmInstallUpgrade(): Promise<void> {
+  const target = installTarget.value
+  if (!target) return
+  const apps = useShellApps()
+  const ok = await apps.installFromZip(target.path, true)
+  if (ok) {
+    dialog.value = null
+    dialogAppId.value = null
+    installTarget.value = null
+    toast.success(
+      t('shell.dialog.install.upgradeSuccess', {
+        name: apps.appOf(target.pluginId)?.name ?? target.pluginId,
+      }),
+    )
+  }
+}
+
+/**
+ * 旧数据恢复确认（ShellDialogLayer install-restore-data 分支）：两者都是 fresh
+ * install，唯一差异是 `restore`——false（默认）丢弃旧私有库 + KV，true 保留。
+ * 失败保留确认面供重试，错误提示由 showUserError 统一发出。
+ */
+async function confirmInstallRestoreData(restore: boolean): Promise<void> {
+  const target = installTarget.value
+  if (!target) return
+  const apps = useShellApps()
+  const ok = await apps.installFromZip(target.path, false, restore)
+  if (ok) {
+    dialog.value = null
+    dialogAppId.value = null
+    installTarget.value = null
+    toast.success(
+      t('shell.dialog.install.success', {
+        name: apps.appOf(target.pluginId)?.name ?? target.pluginId,
+      }),
+    )
+  }
+}
+
 export function useShellState() {
   return {
     screen,
     cards,
     activeCard,
+    syncRunningCards,
     hasAppSession,
     panelOpen,
     quickSettingsOpen,
@@ -463,6 +631,7 @@ export function useShellState() {
     dialog,
     dialogAppId,
     dialogResource,
+    quitInProgress,
     homeQ,
     notifs,
     notifPulse,
@@ -477,10 +646,15 @@ export function useShellState() {
     closeCard,
     goHome,
     goBack,
+    canGoBack,
     stopAllCards,
     approveAndStart,
     stopApp,
     uninstallApp,
+    installTarget,
+    installApp,
+    confirmInstallUpgrade,
+    confirmInstallRestoreData,
     cardTitleOf,
     syncFromRoute,
     routeOf,

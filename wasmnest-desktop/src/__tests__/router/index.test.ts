@@ -26,9 +26,12 @@ describe('Router Configuration（静态表）', () => {
       expect(root?.redirect).toBeUndefined()
     })
 
-    it('壳系统页路由：/sys/:pageId（设置 / 应用管理 / 权限）', () => {
+    it('壳系统页路由：/sys/:pageId（设置 / 应用管理 / 权限）+ 二级页子路由', () => {
       const sys = router.getRoutes().find((r) => r.path === '/sys/:pageId')
       expect(sys?.name).toBe('shell-sys')
+      // 二级页（如 /sys/settings/appearance 外观）：同一张系统页卡内切子路由，不另产卡
+      const sub = router.getRoutes().find((r) => r.path === '/sys/:pageId/:sub')
+      expect(sub?.name).toBe('shell-sys-sub')
     })
 
     it('菜单四项：配对 / 会话 / 任务 / 设置', () => {
@@ -52,23 +55,32 @@ describe('Router Configuration（静态表）', () => {
       expect(routeByName('tasks').path).toBe('/tasks')
       expect(routeByName('settings').path).toBe('/settings')
       expect(routeByName('history').path).toBe('/history')
+      // bedcode 新增内部路由的宿主镜像（Agent 管理域，原 agent-hub 并入）
+      expect(routeByName('app-agents').path).toBe('/agents')
+      // bedcode 新增内部路由的宿主镜像（Agent 编排：列表 + /:id 详情）
+      expect(routeByName('app-orchestrations').path).toBe('/orchestrations/:sub(.*)?')
+      // bedcode 新增内部路由的宿主镜像（项目容器，issue #23 M2；:id 深链走子段）
+      expect(routeByName('app-projects').path).toBe('/projects/:sub(.*)?')
       // 其余 app：独立界面单面路由（含 servers/ 下的认证中心）
-      expect(routeByName('app-agent-hub').path).toBe('/hub')
       expect(routeByName('app-ai-chatbox').path).toBe('/chat')
       expect(routeByName('app-file-transfer').path).toBe('/transfer')
       expect(routeByName('app-monitor').path).toBe('/monitor')
       expect(routeByName('app-auth-center').path).toBe('/auth')
+      expect(routeByName('app-net-config').path).toBe('/network')
       // 全部指向 AppMountSlot（机制 B 挂载槽）
       for (const name of [
         'pairing',
         'sessions',
         'tasks',
         'history',
-        'app-agent-hub',
+        'app-agents',
+        'app-orchestrations',
+        'app-projects',
         'app-ai-chatbox',
         'app-file-transfer',
         'app-monitor',
         'app-auth-center',
+        'app-net-config',
       ]) {
         const comp = routeByName(name).components?.default
         expect(comp?.__name ?? comp?.name, `路由 ${name} 必须挂载 AppMountSlot`).toMatch(

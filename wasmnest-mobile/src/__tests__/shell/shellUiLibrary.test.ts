@@ -24,8 +24,8 @@
  * | C-UI-12 | PromptDialog `watch` | 打开时回填 initialValue | input.value = 初值 |
  * | C-UI-13 | CollapseSection | defaultOpen 决定初始态，点标题切换 collapsed | 类名切换 |
  * | C-UI-14 | LoadingDialog | visible 控制渲染 | 隐藏时不渲染提示文案 |
- * | C-UI-15 | LetterAvatar | 同 seed 同档、不同 seed 落到不同档（哈希稳定） | 类名相等 / 12 个 seed ≥2 档 |
- * | C-UI-16 | QuickActionButton | 点击 emit；光晕走 token（不硬编码颜色） | emit click + 类名含 `--shell-action-glow` |
+ * | C-UI-15 | LetterAvatar | 首字母大写、统一中性 tint（不再按 seed 分色相） | 文本 / `shell-avatar-tint` |
+ * | C-UI-16 | QuickActionButton | 点击 emit；无彩色光晕，底色/描边由 color 派生 | emit click + `color-mix`，不含 `--shell-action-glow` |
  * | C-UI-17 | 组件库出口 | 九个组件全部导出（防迁移面悄悄缩水） | 逐个在场 |
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
@@ -303,25 +303,22 @@ describe('LoadingDialog', () => {
 })
 
 describe('LetterAvatar', () => {
-  it('should_renderUppercasedFirstCharAndStableGradient_when_seeded', () => {
+  it('should_renderUppercasedFirstCharOnNeutralTint', () => {
     const first = mountUi(uiLibrary.LetterAvatar, { name: 'beta', seed: 'com.wasmnest.x' })
     expect(first.text()).toBe('B')
-    const gradientClass = first.classes().find((c) => /^shell-avatar-g\d$/.test(c))
-    expect(gradientClass).toBeTruthy()
-
-    const same = mountUi(uiLibrary.LetterAvatar, { name: 'beta', seed: 'com.wasmnest.x' })
-    expect(same.classes().find((c) => /^shell-avatar-g\d$/.test(c))).toBe(gradientClass)
+    // 2026-11-05 unslop：六组彩虹渐变退役，统一中性 tint；seed 只保留身份参数
+    expect(first.classes()).toContain('shell-avatar-tint')
+    expect(first.classes().some((c) => /^shell-avatar-g\d$/.test(c))).toBe(false)
   })
 
-  it('should_distributeSeedsAcrossGradientSlots_when_manySeeds', () => {
-    const seen = new Set<string>()
+  it('should_useTheSameNeutralTint_forEverySeed', () => {
+    const classes = new Set<string>()
     for (let i = 0; i < 12; i++) {
       const wrapper = mountUi(uiLibrary.LetterAvatar, { name: 'app', seed: `plugin-${i}` })
-      const gradient = wrapper.classes().find((c) => /^shell-avatar-g\d$/.test(c))
-      if (gradient) seen.add(gradient)
+      const tint = wrapper.classes().filter((c) => c.startsWith('shell-avatar-'))
+      classes.add(tint.join(' '))
     }
-    // 哈希若退化成常量（如误写成固定档），这里会只剩 1 档
-    expect(seen.size).toBeGreaterThan(1)
+    expect(classes.size, '不再按 seed 分配色相').toBe(1)
   })
 
   it('should_fallBackToQuestionMark_when_nameBlank', () => {
@@ -345,7 +342,7 @@ describe('QuickActionButton', () => {
     expect(wrapper.emitted('click')).toHaveLength(1)
   })
 
-  it('should_useTokenGlowAndColorDerivedFill_when_colorGiven', async () => {
+  it('should_useColorDerivedFillWithoutGlow_when_colorGiven', async () => {
     // 颜色派生值（color-mix）会被 happy-dom 的 CSS 解析丢弃，因此这里断言 SSR 渲染
     // 结果字符串：它反映组件真实的绑定输出，而不是宿主 DOM 的容错结果。
     const html = await renderToString(
@@ -355,8 +352,9 @@ describe('QuickActionButton', () => {
         color: 'var(--mobile-accent)',
       }),
     )
-    // 光晕走 token（曾为硬编码 rgba）
-    expect(html).toContain('var(--shell-action-glow)')
+    // 2026-11-05 unslop：彩色 hover 光晕退役
+    expect(html).not.toContain('--shell-action-glow')
+    expect(html).not.toContain('hover:shadow')
     // 底色 / 描边由 color prop 派生，且不是写死色值
     expect(html).toContain('color-mix')
     expect(html).toContain('var(--mobile-accent)')

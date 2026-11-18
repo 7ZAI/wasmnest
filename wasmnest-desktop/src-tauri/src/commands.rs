@@ -1,6 +1,4 @@
-//! Tauri Commands
-//!
-//! 前端 invoke 命令层 - 系统命令、会话命令、PTY 命令等。
+//! 桌面宿主 Tauri 命令层：系统 / 设置 / 终端背景 / 窗口 / 插件 / 服务租约等域
 //!
 //! 2026-09-22 由 `commands/` 目录多文件合并为单一文件（session / pty_input /
 //! system / opener / settings / devices / dev_logs / plugin / server 九域）。
@@ -17,24 +15,25 @@ use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tracing_subscriber::filter::EnvFilter;
-use wasmnest_server_core::link_crypto::{self, LinkCryptoConfig};
+use wasmnest_server_core::link_crypto;
 use wasmnest_server_core::metrics::ServerMetrics;
 use wasmnest_server_core::supervisor::{ServerStatusInfo, ServerSupervisor};
+use wasmnest_wasm_core::manager::host::PluginHost;
 
-// ==================== 会话命令面（票 08 已整体注销） ====================
+use crate::plugin::require_host_frontend;
 
-// 宿主**不再有「会话」命令面**（票 08）。注销的五个命令：`list_sessions` /
+// ==================== 会话命令面（已整体注销） ====================
+
+// 宿主**不再有「会话」命令面**。注销的五个命令：`list_sessions` /
 // `get_session` / `resize_session` / `write_to_session` / `send_special_key`
 // （连同插件前端的终端输入通道 `plugin_terminal_send_input`）。
 //
-// 为什么能整族删：会话真源自 P1-b 起在 `com.wasmnest.bedcode` 插件，
+// 为什么能整族删：会话真源在 `com.wasmnest.bedcode` 插件，
 // 这五条当时就已经只是「宿主命令名 → 窄转发层 → 插件互调 api」的薄壳；插件前端
-// 改走自家命令通道后壳里再无消费者（宿主前端 `stores/session.ts` 与
-// `composables/commands/sessionCommands.ts` 均无生产调用方，同批退役）。
+// 改走自家命令通道后壳里再无消费者（原壳前端会话 store 与命令封装已删除）。
 //
-// 现在「谁还能问内核要会话」在宿主侧只剩两处，都在后续票里收口：
-// - 事件面（`events/sync_handler.rs` 的宿主回查兜底）→ 票 09
-// - 待删的内核实现目录 `src/session/` → 票 11
+// 宿主侧后续仅剩的两处会话入口也已收口：事件面的宿主回查兜底已删除（载荷必须
+// 自携带），内核 `src/session/` 实现目录已整体移除——宿主不再持有任何会话实现。
 //
 // 消费方改指（迁移不放宽门禁）：
 // - 列表 / 单查：插件命令 `session.list` / `session.get`（登记域视图）
@@ -46,9 +45,9 @@ use wasmnest_server_core::supervisor::{ServerStatusInfo, ServerSupervisor};
 // 关窗守卫的 `RunningSessionInfo`（弹窗 payload）2026-09-25 迁至 `lib.rs` 守卫域
 // （它不是命令，命令面不再持有任何会话类型）。
 
-// ==================== Shared System Commands ====================
+// ==================== 共享系统命令 ====================
 
-// ==================== Settings Commands ====================
+// ==================== 设置命令 ====================
 
 /// 获取应用设置
 #[tauri::command]
@@ -65,9 +64,18 @@ pub async fn get_app_settings(app_handle: tauri::AppHandle) -> crate::Result<cra
 /// 保存应用设置
 #[tauri::command]
 pub async fn save_app_settings(
+    webview: tauri::Webview,
     app_handle: tauri::AppHandle,
     settings: crate::system::config::AppConfig,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
 ) -> crate::Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "save_app_settings",
+    )?;
     let config_path = app_handle
         .path()
         .app_data_dir()
@@ -79,6 +87,13 @@ pub async fn save_app_settings(
 
     settings.save(&config_path)?;
 
+    // 深浅色改完立刻生效：窗口主题既驱动开屏首帧的 prefers-color-scheme，也决定
+    // 下次启动的第一帧。切回 system 时必须在这一步把窗口主题复位（None），否则
+    // matchMedia 仍报被强制的主题，前端 isSystemDark 会跟着错——见 system::appearance 头注。
+    if let Some(window) = app_handle.get_webview_window("main") {
+        crate::system::appearance::apply_window_appearance(&window, &settings.ui.theme);
+    }
+
     tracing::info!("App settings saved to {:?}", config_path);
     Ok(())
 }
@@ -88,7 +103,19 @@ pub async fn save_app_settings(
 /// 只替换现有配置的 log 段并持久化（避免前端整表保存时丢 log 字段）；
 /// 除 file_level 热调外的项（format/rotation/max_files/capacity_bytes）重启后生效。
 #[tauri::command]
-pub async fn save_log_settings(app_handle: tauri::AppHandle, log: crate::system::config::LogConfig) -> Result<()> {
+pub async fn save_log_settings(
+    webview: tauri::Webview,
+    app_handle: tauri::AppHandle,
+    log: crate::system::config::LogConfig,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "save_log_settings",
+    )?;
     let config_path = app_handle
         .path()
         .app_data_dir()
@@ -106,7 +133,18 @@ pub async fn save_log_settings(app_handle: tauri::AppHandle, log: crate::system:
 ///
 /// 仅允许标准五级之一；非法值返回配置错误。
 #[tauri::command]
-pub fn set_log_level(level: String) -> Result<()> {
+pub fn set_log_level(
+    webview: tauri::Webview,
+    level: String,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "set_log_level",
+    )?;
     match level.as_str() {
         "trace" | "debug" | "info" | "warn" | "error" => {}
         other => {
@@ -125,7 +163,7 @@ pub fn set_log_level(level: String) -> Result<()> {
     Ok(())
 }
 
-// ==================== Terminal Background Image ====================
+// ==================== 终端背景图 ====================
 
 /// 设置终端背景图片
 ///
@@ -160,7 +198,7 @@ pub fn set_terminal_bg_image(app_handle: tauri::AppHandle, source_path: Option<S
         return Ok(None);
     };
 
-    // 校验源路径：绝对路径 + 扩展名（§8 输入校验在 Rust 端；相对路径可越界复制）
+    // 校验源路径：绝对路径 + 扩展名（输入校验在 Rust 端；相对路径可越界复制）
     let (src, ext) = validate_terminal_bg_source(&source)?;
     let file_name = format!("{TERMINAL_BG_FILE_PREFIX}.{ext}");
     let dest = data_dir.join(&file_name);
@@ -208,7 +246,7 @@ fn validate_terminal_bg_source(source: &str) -> Result<(std::path::PathBuf, Stri
     Ok((src.to_path_buf(), ext))
 }
 
-// ==================== Shell Wallpaper (custom image) ====================
+// ==================== 壳壁纸（自定义图片） ====================
 
 /// 自定义壁纸在应用数据目录下的子目录（asset 协议 scope 已含 `$APPDATA/**/*`）
 const WALLPAPER_DIR: &str = "wallpapers";
@@ -388,7 +426,7 @@ fn is_custom_wallpaper_file(name: &str) -> bool {
         && WALLPAPER_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str())
 }
 
-// ==================== Utility Commands ====================
+// ==================== 工具命令 ====================
 
 /// 测试命令
 #[tauri::command]
@@ -402,28 +440,50 @@ pub fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-// ==================== Window Close Commands ====================
+// ==================== 关窗命令 ====================
 
-/// 用户确认关闭窗口（前端确认弹窗后调用）
+/// 用户确认退出（前端退出确认弹窗后调用）
 ///
-/// 使用 destroy() 直接销毁窗口，不再次触发 CloseRequested
+/// **不能**再走 `window.close()`，也不能只销毁 main 窗口：
+/// - 会话守卫在存活 PTY 存在时 `prevent_close()`（见
+///   `system::lifecycle::register_window_close_hooks`），前端再次 close 只会重新
+///   弹确认面——2026-11-05 用户缺陷「点仍然退出没效果 / 无法关闭应用」的根因；
+/// - 只 `destroy()` main 时，独立终端窗口仍存活，进程不会退出。
+///
+/// 用户已明确确认，先启动**有界优雅关闭**（shutdown hooks）；hooks 完成后再
+/// `app.exit(0)`，超时/主线程卡死由 shutdown 协调器 watchdog 强制结束进程
+/// （先优雅、实在不行再强制，2026-11-05 用户裁决）。
+///
+/// 保留主窗口：前端退出确认面会展示「正在优雅关闭」进度，直到窗口随进程退出。
 #[tauri::command]
-pub fn confirm_window_close(app_handle: tauri::AppHandle) -> Result<()> {
-    if let Some(window) = app_handle.get_webview_window("main") {
-        window.destroy().map_err(|e| crate::AppError::Internal(e.to_string()))?;
-    }
+pub fn confirm_window_close(
+    webview: tauri::Webview,
+    app_handle: tauri::AppHandle,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "confirm_window_close",
+    )?;
+    tracing::info!("User confirmed exit; starting graceful shutdown");
+    crate::system::shutdown::begin_graceful_shutdown(
+        &app_handle,
+        crate::system::shutdown::ShutdownFeedback::KeepWindow,
+    );
     Ok(())
 }
 
-// ==================== Opener Commands ====================
+// ==================== 打开 / 定位命令 ====================
 
 // 宿主设置页的「打开日志目录」入口（外壳命令，不经插件权限链）。
 //
 // 平台定位实现本体在引擎模块 [`crate::system::opener`]——同一份实现也被插件
 // 原语 `host-platform.reveal-in-dir` 使用（ABI v22）。原
 // `plugin_reveal_in_dir` 命令 + `system:open` 权限 + 前端 `context.system`
-// 插件 API 桥已随该原语化一并退役（见
-// `.scratch/2026-09-21-host-rust-residue/issues/04`）。
+// 插件 API 桥已随该原语化一并退役；宿主只保留这条设置页自用的薄命令。
 
 /// 打开日志目录（设置页「打开日志目录」按钮；独立命令，无需插件权限）
 ///
@@ -466,15 +526,15 @@ pub fn open_external_url(app_handle: tauri::AppHandle, url: String) -> Result<()
         .map_err(|e| crate::AppError::Internal(format!("open external url '{url}' failed: {e}")))
 }
 
-// ==================== Updater Commands（外壳命令，能力发起权收归 Rust） ====================
+// ==================== 更新命令（外壳命令，能力发起权收归 Rust） ====================
 
 // 前端零资源访问红线：`updater:default` 权限（check / download / install /
 // download-and-install）已从 capabilities 撤除，升级检查与安装的**发起权**收归 Rust。
 // 前端只拿已验签的版本元数据与下载进度事件，拿不到 updater 句柄。
 //
-// 归属判断（docs/architecture.md §1.2 三问）：插件无法自建「替换宿主二进制」的能力（离宿主不能实现）
+// 归属判断（宿主薄壳三问）：插件无法自建「替换宿主二进制」的能力（离宿主不能实现）
 // → 归宿主；命令只做「检查 / 安装」两件事，不含版本比较策略、提示文案、更新时机等产品语义
-// （B1/B2/B5 零命中），业务呈现全在前端。
+// （产品语义零命中），业务呈现全在前端。
 
 use tauri_plugin_updater::UpdaterExt;
 
@@ -521,7 +581,18 @@ pub async fn check_for_update(app_handle: tauri::AppHandle) -> Result<UpdateChec
 ///
 /// 事件载荷：`{"downloaded": u64, "content_length": u64, "finished": bool}`
 #[tauri::command]
-pub async fn install_update(app_handle: tauri::AppHandle) -> Result<bool> {
+pub async fn install_update(
+    webview: tauri::Webview,
+    app_handle: tauri::AppHandle,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<bool> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "install_update",
+    )?;
     let updater = app_handle
         .updater()
         .map_err(|e| crate::AppError::Internal(format!("install_update: updater unavailable: {e}")))?;
@@ -578,7 +649,7 @@ pub struct UpdateProgressPayload {
     pub finished: bool,
 }
 
-// ==================== Dev Console Log Relay ====================
+// ==================== 开发者控制台日志转发 ====================
 
 // 开发者前端控制台日志转发（仅 `tauri dev` 注册，release 不包含）。
 //
@@ -646,22 +717,26 @@ pub fn report_frontend_log(logs: Vec<FrontendLogEntry>) {
     }
 }
 
-// ==================== Plugin Commands ====================
+// ==================== 插件命令 ====================
 
 // 插件系统 Tauri 命令 — 重新导出 api_bridge 中的所有命令
 
 pub use crate::wasm_core::api_bridge::*;
 
-/// app 前端 env.invoke 白名单（ADR 0058 方案 A：审计/DX 面，非安全边界）
+/// app 前端 env.invoke 白名单（审计/DX 面，非安全边界）
 ///
 /// 真源语义：app 挂载环境的 `env.invoke` 只放行本表命令；安全边界仍在 Rust 命令门禁
 /// （管理类命令的宿主面凭证门，见 wasm-core api_bridge）。来源 = 2026-10-24 全仓盘点
-///（issue #21）：auth-center / monitor 调 plugin_list_loaded，bedcode 调设置三命令。
+///（2026-10-24 全仓盘点）：auth-center / monitor 调 plugin_list_loaded，bedcode 调设置三命令；
+/// 2026-11-03 增链路加密**只读**能力查询；2026-11-04 应用策略写入口改为 app 通道
+/// 令牌门（`set_app_link_crypto_policy`），不在本白名单——白名单是无身份代理，
+/// 写策略必须经 `AppMountEnv.appLinkCryptoSet` 的 own-token 通道。
 pub const APP_FRONTEND_INVOKE_WHITELIST: &[&str] = &[
     "plugin_list_loaded",
     "get_app_settings",
     "update_server_port",
     "get_server_network_config",
+    "get_link_crypto_capabilities",
 ];
 
 /// app 前端查询 env.invoke 白名单（前端代理启动时取用；公开只读面）
@@ -670,12 +745,12 @@ pub fn plugin_frontend_invoke_whitelist() -> Vec<String> {
     APP_FRONTEND_INVOKE_WHITELIST.iter().map(|s| s.to_string()).collect()
 }
 
-// ==================== Server Control Commands ====================
+// ==================== 服务器控制命令 ====================
 
-// ==================== App Surface Service Leases ====================
+// ==================== 应用界面服务租约 ====================
 
-// 启停 / 重启 / 自启动命令已退役（service-leases §7.2）：它们能在没有任何应用
-// 持有服务时把传输面拉起来，绕过引用记账（违反 Q1/Q4）。
+// 启停 / 重启 / 自启动命令已退役：它们能在没有任何应用
+// 持有服务时把传输面拉起来，绕过引用记账（会让引用计数与监听态脱节）。
 //
 // 端点注册只写路由表，不启动监听器；传输面由**应用运行期**驱动：
 // - 服务端型应用（manifest `backgroundTransport: true`）的内核在启动成功后建
@@ -701,12 +776,31 @@ async fn declares_background_transport(app_id: &str) -> bool {
 ///
 /// 声明了 `backgroundTransport` 的应用租约跟运行期走，界面打开不再参与。
 #[tauri::command]
-pub async fn plugin_surface_open(app_id: String) -> Result<()> {
-    if declares_background_transport(&app_id).await {
+pub async fn plugin_surface_open(
+    webview: tauri::Webview,
+    app_id: String,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "plugin_surface_open",
+    )?;
+    surface_open_lease(&app_id).await
+}
+
+/// 界面打开的租约内核（命令门之后的部分）
+///
+/// 抽出来是为了让「界面不决定传输面生死」这条语义可被集成测试直接验证：
+/// `#[tauri::command]` 需要 `Webview` / `State`，进程外构造不出来。
+pub async fn surface_open_lease(app_id: &str) -> Result<()> {
+    if declares_background_transport(app_id).await {
         return Ok(());
     }
     let ctx = crate::system::app_context::AppContext::global();
-    crate::plugin::services::acquire_for_surface(ctx.service_registry(), &app_id, "plugin_surface_open")
+    crate::plugin::services::acquire_for_surface(ctx.service_registry(), app_id, "plugin_surface_open")
         .await
         .map_err(crate::AppError::Internal)
 }
@@ -716,8 +810,24 @@ pub async fn plugin_surface_open(app_id: String) -> Result<()> {
 /// 声明了 `backgroundTransport` 的应用在界面卸载时仍处于运行期：**不得释放**
 /// （否则又回到「挂载决定传输面生死」的旧病）；停用时的回收由 `release_all_for` 兜底。
 #[tauri::command]
-pub async fn plugin_surface_close(app_id: String) -> Result<()> {
-    if declares_background_transport(&app_id).await {
+pub async fn plugin_surface_close(
+    webview: tauri::Webview,
+    app_id: String,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<()> {
+    require_host_frontend(
+        plugin_host.inner().as_ref(),
+        webview.label(),
+        &credential,
+        "plugin_surface_close",
+    )?;
+    surface_close_lease(&app_id).await
+}
+
+/// 界面关闭的租约内核（命令门之后的部分；同 [`surface_open_lease`] 的可测理由）
+pub async fn surface_close_lease(app_id: &str) -> Result<()> {
+    if declares_background_transport(app_id).await {
         tracing::debug!(
             plugin_id = %app_id,
             "surface close ignored: backgroundTransport lease follows app runtime"
@@ -725,7 +835,7 @@ pub async fn plugin_surface_close(app_id: String) -> Result<()> {
         return Ok(());
     }
     let ctx = crate::system::app_context::AppContext::global();
-    crate::plugin::services::release_for_surface(ctx.service_registry(), &app_id, "plugin_surface_close")
+    crate::plugin::services::release_for_surface(ctx.service_registry(), app_id, "plugin_surface_close")
         .await
         .map_err(crate::AppError::Internal)
 }
@@ -737,27 +847,128 @@ pub async fn get_server_status() -> Result<ServerStatusInfo> {
     Ok(supervisor.get_status_info().await)
 }
 
-// ==================== 链路加密配置（issue 01） ====================
+// ==================== 链路加密（按应用策略；宿主只执行与只读审计） ====================
 
-/// 读取链路加密配置（运行期快照，spec §6）
+/// 链路加密能力查询（宿主 → 应用前端，只读）
+///
+/// 应用在设置 `required` 前必须能确认本端支持按应用策略与对应密钥模型；
+/// 旧宿主不返回本命令 / 缺字段 = 无此能力，应用必须显性提示，
+/// 不得假定已加密（fail-visible，不静默降级）。
 #[tauri::command]
-pub fn get_traffic_encryption_config() -> LinkCryptoConfig {
-    link_crypto::current_config()
+pub fn get_link_crypto_capabilities() -> link_crypto::LinkCryptoCapabilities {
+    link_crypto::capabilities()
 }
 
-/// 更新链路加密配置：先持久化成功再热更新快照并同步过滤器注册；
-/// 落库失败不影响运行态（快照保持原值）
+/// 一条应用链路加密审计记录（宿主设置页只读）
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppLinkCryptoAudit {
+    /// 属主插件 id
+    pub owner: String,
+    /// 应用当前策略（未设置 = `off`；有端点的未设置应用同样会出现在审计里）
+    pub policy: link_crypto::EncryptionPolicy,
+    /// 该应用当前注册中的端点数（HTTP + WS）
+    pub endpoint_count: usize,
+}
+
+/// 应用链路加密状态（只读审计面：明文暴露面必须可见）
+///
+/// 策略真源在 `link_crypto::app_policy()`（由应用经 own-token 命令写入）；
+/// 清单来自 HTTP / WS 注册表（只列**当前有端点**的应用——没有端点就没有暴露面，
+/// 也不产生已卸载应用的幽灵行）。本命令**没有写入口**：宿主不决定应用的
+/// 链路加密策略，只展示当前执行事实。
 #[tauri::command]
-pub async fn set_traffic_encryption_config(
-    db: State<'_, Arc<std::sync::Mutex<Database>>>,
-    config: LinkCryptoConfig,
-) -> Result<()> {
-    {
-        let guard = db.lock().expect("main db lock poisoned");
-        link_crypto::persist_config_to_db(guard.conn(), &config)?;
+pub fn get_link_crypto_app_policies() -> Vec<AppLinkCryptoAudit> {
+    use std::collections::BTreeMap;
+
+    // 端点注册面：**未设置策略但有端点的应用也要出现**（它们不要求加密，
+    // 属于必须可见的暴露面）。只列已声明应用会让大多数明文应用从审计里消失。
+    let mut owners: BTreeMap<String, usize> = BTreeMap::new();
+    for entry in wasmnest_server_http::registry::list_all() {
+        *owners.entry(entry.owner).or_default() += 1;
     }
-    link_crypto::update_config(config);
-    link_crypto::sync_registration();
+    for entry in wasmnest_server_websocket::endpoint::list_all() {
+        *owners.entry(entry.owner).or_default() += 1;
+    }
+
+    owners
+        .into_iter()
+        .map(|(owner, endpoint_count)| AppLinkCryptoAudit {
+            policy: link_crypto::app_policy(&owner),
+            owner,
+            endpoint_count,
+        })
+        .collect()
+}
+
+/// 读取**本应用**的链路加密策略（app 通道令牌门：只能读自己）
+///
+/// 前端经挂载环境 `appLinkCryptoGet()` 调用（`plugin_channel_token` 铸造的
+/// 本 app 令牌），不接受前端自报他人 plugin id。
+#[tauri::command]
+pub async fn get_app_link_crypto_policy(
+    webview: tauri::Webview,
+    plugin_id: String,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+) -> Result<link_crypto::EncryptionPolicy> {
+    wasmnest_wasm_core::manager::host::api_bridge::authorize_plugin_call(
+        plugin_host.inner(),
+        webview.label(),
+        &plugin_id,
+        &credential,
+    )?;
+    Ok(link_crypto::app_policy(&plugin_id))
+}
+
+/// 写入**本应用**的链路加密策略（app 通道令牌门：只能改自己）
+///
+/// 归属（2026-11-04 用户裁决）：策略属于应用，应用在自己的设置页决定；宿主不设
+/// 整机下限、不提供写入口。宿主只保存该值并交给过滤链执行（后台服务型应用未
+/// 打开界面时也要生效），持久化失败则回滚运行态，不制造「界面已改、执行没变」。
+///
+/// `required` 在链路身份不可用时由核心拒绝（fail-visible，不静默当明文）。
+#[tauri::command]
+pub async fn set_app_link_crypto_policy(
+    webview: tauri::Webview,
+    plugin_id: String,
+    policy: link_crypto::EncryptionPolicy,
+    credential: String,
+    plugin_host: State<'_, Arc<PluginHost>>,
+    db: State<'_, Arc<std::sync::Mutex<Database>>>,
+) -> Result<()> {
+    wasmnest_wasm_core::manager::host::api_bridge::authorize_plugin_call(
+        plugin_host.inner(),
+        webview.label(),
+        &plugin_id,
+        &credential,
+    )?;
+    if !plugin_host.is_activated(&plugin_id).await {
+        return Err(crate::AppError::Plugin(format!("Plugin {plugin_id} is not activated")));
+    }
+
+    let previous = link_crypto::app_policy(&plugin_id);
+    link_crypto::set_app_policy(&plugin_id, policy).map_err(crate::AppError::InvalidInput)?;
+    let snapshot = link_crypto::app_policy_snapshot();
+    // SQLite 同步写入不能跑在 Tokio worker 上（大策略表会拖慢同一运行时的
+    // 连接/事件任务）；clone Arc 进 spawn_blocking，锁中毒不 panic（与内核
+    // ProcessRegistry 同口径）。
+    let db = db.inner().clone();
+    let persisted = tokio::task::spawn_blocking(move || {
+        let guard = db.lock().unwrap_or_else(|e| {
+            tracing::error!("main db lock poisoned; recovering inner guard for link crypto persist");
+            e.into_inner()
+        });
+        link_crypto::persist_app_policies_to_db(guard.conn(), &snapshot)
+    })
+    .await
+    .map_err(|e| crate::AppError::Internal(format!("link crypto persist task failed: {e}")))?;
+    if let Err(e) = persisted {
+        // 落库失败 → 回滚运行态（界面不能显示「已生效」而重启后又变回去）
+        let _ = link_crypto::set_app_policy(&plugin_id, previous);
+        return Err(e);
+    }
+    tracing::info!(plugin_id = %plugin_id, policy = policy.as_str(), "app link encryption policy updated");
     Ok(())
 }
 
@@ -861,7 +1072,7 @@ pub async fn reset_server_network_config(app_handle: tauri::AppHandle) -> Result
     Ok(default_config)
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 #[cfg(test)]
 mod tests {

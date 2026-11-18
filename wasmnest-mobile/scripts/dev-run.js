@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 /**
- * Dev Runner（移动端）— 并行启动插件前端 watch 构建与宿主 dev 命令
+ * Dev Runner（移动端）— 先更新插件产物，再启动宿主 dev 命令
  *
- * `npm run tauri:android:dev` 一条命令即完成：
- *   - 各插件前端 watch：wasmnest-plugin build --watch，改源码自动重建 + 复制产物
- *     （复制到 src-tauri/resources/plugins/mobile/<id>/，Android 侧需手动重新激活插件生效）
+ * `pnpm run tauri:android:dev` 一条命令完成：
+ *   - **插件产物全量重建（默认开启）**：删 `src-tauri/resources/plugins/mobile/*` 与
+ *     gen/android 生成资源里的插件目录，再跑 `plugin-build.js --fresh`（当前 apps 源码）。
+ *     `--reuse` 退回旧的「WASM 缺失 / 陈旧才补建」快路径。
+ *   - **插件前端热加载默认关闭**：不再起 `wasmnest-plugin build --watch`（改了 app 源码
+ *     重启 dev 即生效）；需要会话内热重建时显式加 `--watch`。
  *   - 宿主 dev 进程（tauri android dev）
  * 任一子进程退出（Ctrl+C / 宿主崩溃）时统一回收全部。
  *
  * 用法：
- *   node scripts/dev-run.js              # 默认：四个插件 watch + tauri android dev
+ *   node scripts/dev-run.js              # 默认：删旧产物 + 全量重建 → tauri android dev
+ *   node scripts/dev-run.js --watch      # 额外开启插件前端 watch（热重载）
+ *   node scripts/dev-run.js --reuse      # 跳过全量重建，只补缺失/陈旧 WASM
  *   node scripts/dev-run.js --host-cmd "<命令>"   # 覆盖宿主命令（按空格拆分）
  */
 
@@ -404,12 +409,17 @@ function latestSourceMtime(root) {
 const children = []
 let shuttingDown = false
 
-function start(cmd, args, cwd) {
+function start(cmd, args, cwd, env) {
   // POSIX：detached 让子进程自成进程组长（pgid = 自己的 pid），shutdown 时可用
   // 负 pgid 一次杀整棵子树（已实测：孙进程自动继承该 pgid，无需各自 detached）。
   // Windows 必须排除：detached 会传 CREATE_NEW_CONSOLE 弹出额外控制台窗口，
   // Windows 侧走下方 taskkill /T /F 分支
-  const child = spawn(cmd, args, { cwd, stdio: 'inherit', detached: !IS_WIN })
+  const child = spawn(cmd, args, {
+    cwd,
+    stdio: 'inherit',
+    detached: !IS_WIN,
+    env: env ? { ...process.env, ...env } : process.env,
+  })
   children.push(child)
   return child
 }
@@ -501,24 +511,48 @@ await precheckAdbReverse()
 // APK 打包，宿主按两个 id 装载同名应用。每次 dev 启动前按源目录对齐一次。
 pruneStaleAndroidPluginAssets(ROOT)
 
-// 1. 插件 WASM 新鲜度预检 + 自动补建（串行同步，完成后才启动 watch / 宿主，
-//    防止「新前端 + 旧 WASM」静默错配）
-ensurePluginWasm()
-
-// 2. 插件前端 watch（先行启动，产物在宿主 resources 同步前就绪）
-for (const { group, slug, args } of PLUGIN_WATCH_CMDS) {
-  const child = start(process.execPath, args, appDir(slug, 'mobile', { group }))
-  // 插件 watch 异常退出 → 整组回收（fail fast，避免宿主运行在过期产物上）
-  child.on('exit', (code) => {
-    if (!shuttingDown) {
-      console.error(`[dev-run] 插件 watch 退出（${slug}, code=${code}），回收全部进程`)
-      shutdown(code ?? 0)
-    }
+// 1. 插件产物更新（默认 fresh：删旧产物 → 全量重建；--reuse 时只补缺失/陈旧 WASM）
+const freshPlugins = !process.argv.includes('--reuse')
+const watchPlugins = process.argv.includes('--watch')
+if (freshPlugins) {
+  console.log('[dev-run] 插件产物：删旧 → 全量重建（plugin-build --fresh）')
+  const res = spawnSync(process.execPath, [resolve(ROOT, 'scripts/plugin-build.js'), '--fresh'], {
+    cwd: ROOT,
+    stdio: 'inherit',
   })
+  if (res.status !== 0) {
+    console.error('[dev-run] ✗ 插件全量重建失败，不启动宿主（避免跑在旧产物上）')
+    process.exit(res.status ?? 1)
+  }
+} else {
+  // --reuse：只补缺失 / 陈旧的 WASM（前端不重建，静默保持现状）
+  ensurePluginWasm()
+}
+
+// 2. 插件前端 watch（默认关闭；--watch 显式开启）：先行启动，产物在宿主 resources 同步前就绪
+if (watchPlugins) {
+  for (const { group, slug, args } of PLUGIN_WATCH_CMDS) {
+    const child = start(process.execPath, args, appDir(slug, 'mobile', { group }))
+    // 插件 watch 异常退出 → 整组回收（fail fast，避免宿主运行在过期产物上）
+    child.on('exit', (code) => {
+      if (!shuttingDown) {
+        console.error(`[dev-run] 插件 watch 退出（${slug}, code=${code}），回收全部进程`)
+        shutdown(code ?? 0)
+      }
+    })
+  }
+} else {
+  console.log('[dev-run] 插件前端热加载（watch）已关闭（默认）：产物已在本轮启动前全量重建。')
+  console.log('[dev-run]   改 app 源码后重启 dev 即生效；需要会话内热重建加 --watch。')
 }
 
 // 3. 宿主 dev 进程
-const host = start(hostCmd[0], hostCmd[1], ROOT)
+//    PRECHECK_DONE_ENV / PRECHECK_REUSE_ENV：告诉 beforeDevCommand 里的 plugin-precheck
+//    本次阶段已处理过插件产物，不再重复全量构建
+const hostEnv = freshPlugins
+  ? { WASMNEST_PLUGIN_PRECHECK_DONE: '1' }
+  : { WASMNEST_PLUGIN_PRECHECK_REUSE: '1' }
+const host = start(hostCmd[0], hostCmd[1], ROOT, hostEnv)
 host.on('exit', (code) => {
   if (!shuttingDown) {
     console.log(`[dev-run] 宿主 dev 退出（code=${code}），回收插件 watch`)

@@ -3,7 +3,7 @@
  *
  * 与 en/shell.ts 一一对应（i18n 双语纪律：新增/修改 key 必须两侧同步）。
  * 分组口径：home=主屏、switcher=多任务、notify=通知栏、run=应用运行页、
- * settings=设置、permissions=权限管理。
+ * floatingNav=悬浮导航、settings=设置、permissions=权限管理。
  *
  * 文案纪律（2026-10-14 修订）：只写用户能感知的事实与后果，不写平台实现说明
  * 或原型/方案期解释（如「平台叠加的控制项」「运行面预留位」）。
@@ -24,6 +24,9 @@ export default {
     },
     home: {
       slotsTitle: '快捷卡片',
+      slotOpen: '打开 {name}',
+      slotPause: '暂停轮播',
+      slotPlay: '开始轮播',
       appsTitle: '应用',
       appAria: '{name}，{state}',
       emptyApps: '尚未安装 WASM 应用',
@@ -48,17 +51,38 @@ export default {
       systemServices: '系统服务',
       businessApps: '应用',
       autostart: '自启',
-      autostartHint: '启动时自动激活（只改偏好，下次启动生效）',
-      systemServiceHint: '系统服务随包分发，不可卸载；自启可在下方关闭',
       addTitle: '添加应用',
       installLocal: '安装本地包（.wasm）',
       empty: '暂无应用',
       permissionCount: '{count} 项权限',
       installSuccess: '安装完成，可在列表中批准并启动',
       installFailed: '安装失败：{error}',
-      uninstallConfirm: '确定卸载「{name}」并删除其数据吗？此操作不可恢复。',
+      installRestoreTitle: '恢复旧应用数据？',
+      installRestoreBody: '该应用上次卸载时保留了数据（私有库与存储）。勾选可恢复；不恢复（默认）会删除旧数据，且不可撤销。',
+      installRestoreKeep: '恢复旧应用数据（重装后继续使用）',
+      installRestoreDiscardHint: '未勾选恢复：旧应用数据将被删除，不可恢复。',
+      installRestoreConfirm: '安装',
+      uninstallConfirm: '确定卸载「{name}」吗？默认删除应用数据，可勾选保留。审批与授权记录将撤销，重装后需重新批准。',
       uninstallSuccess: '已卸载 {name}',
       uninstallFailed: '卸载失败：{error}',
+      update: {
+        title: '版本更新',
+        check: '检查更新',
+        checking: '正在检查…',
+        upToDate: '已是最新（v{version}）',
+        available: '可更新到 v{version}',
+        incompatible: '发现新版本 v{version}，但与当前平台不兼容',
+        updating: '正在下载并更新…',
+        failed: '更新失败，请稍后重试',
+        installed: '更新完成，需重新审批后启动',
+        apply: '更新到 v{version}',
+        stopFirst: '请先停用应用后再更新',
+        reason: {
+          noCompat: '该发布物缺少兼容声明（旧版发布格式），无法确认与当前平台兼容',
+          hostRuntime: '要求宿主运行时 {required}，当前为 {current}；请先升级平台',
+          hostRuntimeInvalid: '兼容声明版本形态异常（{required}），已拒绝',
+        },
+      },
     },
     detail: {
       title: '应用详情',
@@ -70,23 +94,18 @@ export default {
       /** 运行态（应用自持连接，平台只投影运行态） */
       state: '运行状态',
       permissions: '权限',
-      permissionsNote: '{granted} 项已授予 · {locked} 项默认',
-      /** 系统服务（L1/L2）不提供逐项开关：权限随包固定，只做只读呈现（2026-10-23 用户裁决） */
-      permissionServiceFixed: '系统服务的权限随包固定，不可逐项变更。',
-      permissionLocked: '默认授予 · 不可关闭',
+      permissionLocked: '默认授予 · 不可变更',
       permissionUnsupported: '当前后端不支持逐项开关权限',
-      permissionToggleFailed: '权限变更未生效：{reason}',
       storage: '存储',
       appData: '应用数据',
-      grants: '授权记录',
-      grantsNote: '近 7 天',
-      grantsEmpty: '暂无授权记录',
       disable: '停用应用',
       /** 停止动作按装配角色分词语：服务说「停止服务」（同一裁决） */
       stopService: '停止服务',
       /** 服务停止二次确认（服务是常驻能力，误停影响面广） */
       stopServiceConfirm: '确定停止服务「{name}」吗？服务将停止对外提供能力，可在应用管理中重新启动。',
-      uninstall: '卸载并删除数据',
+      uninstall: '卸载应用',
+      keepData: '保留应用数据（重装后继续使用）',
+      deleteDataHint: '未勾选「保留应用数据」：将同时删除应用私有数据库与存储，不可恢复。',
       version: 'v{version}',
     },
     run: {
@@ -97,6 +116,13 @@ export default {
       noSurface: '应用暂无可用界面',
       noSurfaceHint: '该应用尚未提供运行界面',
       notFound: '应用不存在或已卸载',
+    },
+    /** 悬浮导航（开关开启后常驻在任意页面之上） */
+    floatingNav: {
+      back: '返回',
+      home: '回主屏',
+      recents: '切换应用',
+      move: '悬浮导航，可拖动；聚焦后可用方向键移动',
     },
     switcher: {
       title: '切换应用',
@@ -171,7 +197,7 @@ export default {
         },
         uninstalled: {
           title: '{name} 已卸载',
-          body: '应用与其数据已删除',
+          body: '已从本机移除',
         },
         failed: {
           title: '{name} 启动失败',
@@ -181,6 +207,9 @@ export default {
     },
     settings: {
       title: '设置',
+      navigation: '导航',
+      floatingNavLabel: '悬浮导航',
+      floatingNavHint: '返回、回主屏与切换应用，可拖动',
       platform: '平台',
       appearance: '外观',
       appearanceHint: '主题与色板',

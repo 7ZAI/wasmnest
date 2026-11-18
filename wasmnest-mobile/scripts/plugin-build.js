@@ -14,11 +14,16 @@
  * 再以 --frontend-only 走 CLI（前端 + 清单 + 图标），wasm 由本脚本复制——
  * 双端同一份 crate 源、同一编码路径，产物随各自构建产出。
  *
- * 用法：node scripts/plugin-build.js [--plugin <plugin-id>] [--rust-only]
+ * 用法：node scripts/plugin-build.js [--plugin <plugin-id>] [--rust-only] [--fresh]
  *
  * `--rust-only`（dev-run 过期补建快速路径）：只（重）建 wasm——共享 rust 插件
  * 走共享 crate 构建 + wasm 复制；自有 rust/ 插件委派给 SDK CLI 的 --rust-only。
  * 前端 / 清单 / 图标不动（目录全新时调用方应先走全量构建）。
+ *
+ * `--fresh`（dev 启动默认路径，2026-11-11 用户裁决）：先删旧产物再全量构建——
+ * `src-tauri/resources/plugins/mobile/*` 与 gen/android 生成资源里的插件目录全部清掉
+ * （含同 id 目录里的陈旧文件），然后逐插件走完整构建。「每次都更新 wasmnest apps」
+ * 就靠这条；编译缓存（target/、.build/）不受影响。
  */
 
 import { execSync } from 'child_process'
@@ -45,9 +50,11 @@ const COMPONENTIZE_MANIFEST = resolve(
 const args = process.argv.slice(2)
 let targetPlugin = null
 let rustOnly = false
+let fresh = false
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--plugin' && args[i + 1]) { targetPlugin = args[i + 1]; i++ }
   else if (args[i] === '--rust-only') rustOnly = true
+  else if (args[i] === '--fresh') fresh = true
 }
 
 // 应用仓布局：<appsRoot>/<group>/<slug>/mobile（group = apps 产品应用 / servers 服务型 wasm）
@@ -83,6 +90,8 @@ if (selected.length === 0) {
 }
 
 const builtIds = []
+// fresh：删旧产物后再建（构建前清场，确保产物目录里不存在任何旧文件）
+if (fresh) cleanPluginArtifacts()
 for (const { group, name } of selected) {
   const manifest = readManifest({ group, name })
   builtIds.push(manifest.id)
@@ -112,6 +121,37 @@ for (const { group, name } of selected) {
   }
 
   console.log(`\n=== Plugin build complete (Mobile): ${manifest.id} ===\n`)
+}
+
+/**
+ * fresh 清场：删掉宿主资源目录与 Android 生成资源里的全部插件目录
+ *
+ * 两处都必须清：
+ *   - `src-tauri/resources/plugins/mobile/*`：构建产物真源，不清就会残留旧版本里
+ *     已删除的文件（同 id 目录只被增量覆盖），且 `ensurePluginWasm` 的 mtime 判据
+ *     会被旧产物误导；
+ *   - `gen/android/app/src/main/assets/...` + Gradle 中间产物：Tauri CLI 是增量复制，
+ *     源目录删掉的文件不会从生成资源里消失，不清会跟着 APK 进去。
+ * 删除失败不阻断（可能被正在运行的 Gradle 占用），仅告警——随后全量构建会覆盖同 id。
+ */
+function cleanPluginArtifacts() {
+  if (existsSync(resourcesDir)) {
+    let removed = 0
+    for (const entry of readdirSync(resourcesDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+      const target = join(resourcesDir, entry.name)
+      try {
+        rmSync(target, { recursive: true, force: true })
+        removed++
+        console.log(`[plugin-build] fresh：已删除旧产物 ${target}`)
+      } catch (e) {
+        console.warn(`[plugin-build] fresh：删除旧产物失败（可能被占用）: ${target} — ${e.message}`)
+      }
+    }
+    console.log(`[plugin-build] fresh：已清空宿主资源目录（${removed} 个旧插件产物）`)
+  }
+  // 传空 active 集 = 生成资源里的插件目录全删（含 Gradle 中间产物）
+  pruneStaleAndroidPluginAssets(ROOT, { active: new Set() })
 }
 
 /**

@@ -5,7 +5,7 @@
  *
  * | 契约 | 来源 | 规则 | 预期 |
  * |---|---|---|---|
- * | C-P1 | load 缺省分支 | 无存储时用默认档（aurora / 30） | 默认值 |
+ * | C-P1 | load 缺省分支 | 无存储时用默认档（none / 16） | 默认值 |
  * | C-P2 | load 正常分支 | 合法存储被读取 | 读回存储值 |
  * | C-P3 | load 逐项校验 | 非法 wallpaper / 越界 dim 各自回落默认 | 单项回落，不整表重置 |
  * | C-P4 | load 异常分支 | 损坏 JSON | 回落默认且不抛（warn 可见） |
@@ -15,6 +15,9 @@
  * | C-P8 | setWallpaperImage(路径) | 记路径并切到 custom 档 | 档位=custom + 路径持久化 |
  * | C-P9 | setWallpaperImage(null) | 移除图片；正停在 custom 档时回落默认 | 档位回落 + 路径清空 |
  * | C-P10 | load 一致性 | custom 档但没有图 = 没选过 | 回落默认档，不渲染空背景 |
+ * | C-P11 | floatingNav 默认 | 无存储 / 非法值 | 默认关闭 |
+ * | C-P12 | floatingNavPos 校验 | 越界 / 非数值逐轴回落 | 各轴独立收敛到 [0,1] |
+ * | C-P13 | 悬浮导航写入 | 开关与位置 | 持久化到同一份壳 UI 偏好 |
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
@@ -38,12 +41,19 @@ afterEach(() => {
 
 describe('C-P1..C-P4 偏好加载', () => {
   it('should_useDefaults_when_noStoredPrefs', async () => {
-    const { useShellPreferences, WALLPAPER_DEFAULT, WALL_DIM_DEFAULT } = await loadPrefsWith()
+    const {
+      useShellPreferences,
+      WALLPAPER_DEFAULT,
+      WALL_DIM_DEFAULT,
+      FLOATING_NAV_POS_DEFAULT,
+    } = await loadPrefsWith()
     const prefs = useShellPreferences()
 
     expect(prefs.wallpaper.value).toBe(WALLPAPER_DEFAULT)
     expect(prefs.wallDim.value).toBe(WALL_DIM_DEFAULT)
     expect(prefs.wallpaperImage.value, '未选过自定义图时为 null').toBeNull()
+    expect(prefs.floatingNav.value, '悬浮导航默认关闭').toBe(false)
+    expect(prefs.floatingNavPos.value).toEqual(FLOATING_NAV_POS_DEFAULT)
   })
 
   it('should_readStoredPrefs_when_valid', async () => {
@@ -80,11 +90,11 @@ describe('C-P1..C-P4 偏好加载', () => {
 
   it('should_fallBackToDefaults_when_storageCorrupted', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { useShellPreferences, WALL_DIM_DEFAULT } = await loadPrefsWith('{not json')
+    const { useShellPreferences, WALLPAPER_DEFAULT, WALL_DIM_DEFAULT } = await loadPrefsWith('{not json')
 
     const prefs = useShellPreferences()
 
-    expect(prefs.wallpaper.value).toBe('aurora')
+    expect(prefs.wallpaper.value).toBe(WALLPAPER_DEFAULT)
     expect(prefs.wallDim.value).toBe(WALL_DIM_DEFAULT)
     expect(warn, '损坏数据要可观测，不能静默').toHaveBeenCalled()
   })
@@ -117,6 +127,10 @@ describe('C-P5..C-P7 偏好写入', () => {
       wallpaper: 'dune',
       wallpaperImage: null,
       wallDim: 42,
+      floatingNav: false,
+      floatingNavPos: { x: 0.5, y: 1 },
+      // 主题偏好（ADR 0059）：与深浅色（settings.ui.theme）不是同一个轴
+      theme: 'default',
     })
   })
 
@@ -193,5 +207,69 @@ describe('C-P8..C-P10 自定义壁纸', () => {
 
     expect(prefs.wallpaper.value).toBe(WALLPAPER_DEFAULT)
     expect(prefs.wallpaperImage.value).toBeNull()
+  })
+})
+
+describe('C-P11..C-P13 悬浮导航偏好', () => {
+  it('should_keepFloatingNavOff_when_storedValueIsNotBoolean', async () => {
+    const { useShellPreferences } = await loadPrefsWith(JSON.stringify({ floatingNav: 'yes' }))
+    const prefs = useShellPreferences()
+
+    expect(prefs.floatingNav.value, '非布尔脏值回落为关闭').toBe(false)
+  })
+
+  it('should_clampEachAxis_when_positionOutOfRangeOrNotNumber', async () => {
+    const { useShellPreferences, FLOATING_NAV_POS_DEFAULT } = await loadPrefsWith(
+      JSON.stringify({ floatingNavPos: { x: 2, y: 'bottom' } }),
+    )
+    const prefs = useShellPreferences()
+
+    // 逐轴判定：x 越界收敛到 1，y 非数值回落默认，不整表重置
+    expect(prefs.floatingNavPos.value).toEqual({ x: 1, y: FLOATING_NAV_POS_DEFAULT.y })
+  })
+
+  it('should_persistToggleAndPosition_when_floatingNavChanges', async () => {
+    const { useShellPreferences, FLOATING_NAV_POS_DEFAULT } = await loadPrefsWith()
+    const prefs = useShellPreferences()
+
+    expect(prefs.floatingNav.value).toBe(false)
+    prefs.setFloatingNav(true)
+    prefs.setFloatingNavPos({ x: 0.25, y: 0.75 })
+    await Promise.resolve()
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    expect(stored.floatingNav).toBe(true)
+    expect(stored.floatingNavPos).toEqual({ x: 0.25, y: 0.75 })
+    expect(prefs.floatingNavPos.value).not.toEqual(FLOATING_NAV_POS_DEFAULT)
+  })
+
+  it('should_clampPosition_when_setterGetsOutOfRange', async () => {
+    const { useShellPreferences } = await loadPrefsWith()
+    const prefs = useShellPreferences()
+
+    prefs.setFloatingNavPos({ x: -0.4, y: 9 })
+    expect(prefs.floatingNavPos.value).toEqual({ x: 0, y: 1 })
+
+    // 部分字段缺失 / 非数值：只对坏轴回落，不把整个位置置零
+    prefs.setFloatingNavPos({ x: 0.3, y: Number.NaN })
+    expect(prefs.floatingNavPos.value).toEqual({ x: 0.3, y: 1 })
+  })
+})
+
+describe('C-T1..C-T3 主题读档归一', () => {
+  it.each(['diffuse', 'liquid'])('should_migrateRetiredTheme_%s', async (retired) => {
+    const { useShellPreferences } = await loadPrefsWith(
+      JSON.stringify({ wallpaper: 'aurora', wallDim: 16, theme: retired }),
+    )
+
+    expect(useShellPreferences().theme.value).toBe('glass')
+  })
+
+  it('should_keepUnknownThemeId_forLateExtensionRegistration', async () => {
+    const { useShellPreferences } = await loadPrefsWith(
+      JSON.stringify({ wallpaper: 'aurora', wallDim: 16, theme: 'dusk' }),
+    )
+
+    expect(useShellPreferences().theme.value).toBe('dusk')
   })
 })

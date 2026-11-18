@@ -1,8 +1,8 @@
 //! host-websocket 宿主侧适配器（能力域端口 `WsPorts` 的宿主实现 + 装配自报）
 //!
 //! 域机制（15 条 `host-websocket` 原语 + 出站连接 / 服务端端点 / 在线客户端三面）在
-//! `wasmnest-server-websocket`；本文件是**宿主侧的另一半**——wasm-core 纯净性收口票 02
-//! 批次 03 整文件迁自 `wasmnest-wasm-core/src/host_api/ws.rs`。
+//! `wasmnest-server-websocket`；本文件是**宿主侧的另一半**——整文件迁自内核
+//! `host_api/ws.rs`（原文件已删除）。
 //!
 //! 四件同处（与 pty / mdns / peer 样板一致）：端口实现 / `install` 装配自报 / 白名单声明 +
 //! 强制引用行 / 装配器静态。
@@ -15,7 +15,7 @@
 //!   恒拒，fail-safe）——供「只拿到总线」的调用点使用（`bus::HostBusPort` 的帧回灌路径
 //!   与端点登记）。这条构造是**总线侧 plumbing**，随本 adapter 一并住宿主。
 //!
-//! ## 哪些机制**刻意留在宿主**（AGENTS §5.1.3 允许的薄壳）
+//! ## 哪些机制**刻意留在宿主**（允许保留的薄壳）
 //!
 //! - **权限门**：复用 wasm-core 的 `host_api::check_permission`（同一份 PermissionManager、
 //!   同一条拒绝 warn 路径）；
@@ -45,7 +45,7 @@ use crate::plugin::bindings::wasmnest;
 
 // 能力模块白名单条目与强制引用行**必须同处**（本文件），两者不漂移——漏引用 ⇒
 // 该 crate 的 inventory 自报静态不进最终二进制（装载期 missing 方向点名）；漏白名单
-// ⇒ unlisted 方向点名。判据与纪律见 `wasmnest_host_kit::assembly` 模块文档。
+// ⇒ unlisted 方向点名。判据：白名单条目与强制引用行必须同处，漏一处即装载期点名。
 wasmnest_host_kit::expect_host_module!(wasmnest_server_websocket::plugin_binding::MODULE_NAME);
 use wasmnest_server_websocket as _;
 
@@ -83,7 +83,7 @@ impl HostWsPorts {
 
 impl WsPorts for HostWsPorts {
     fn check_permission(&self, plugin_id: &str, permission: &str, api: &str) -> bool {
-        // 权限门留宿主（AGENTS §5.1.3「安全闸门」——闸门不应可插拔）。复用 wasm-core 的
+        // 权限门留宿主（安全闸门——闸门不应可插拔）。复用 wasm-core 的
         // `host_api::check_permission`：同一份 PermissionManager、同一条拒绝 warn 路径。
         let Some(host) = self.ctx.as_ref() else {
             // 无权限管理器上下文（帧投递专用窄端口）⇒ 拒绝。拿不到权限管理器就不放行
@@ -145,7 +145,7 @@ impl WsPorts for HostWsPorts {
     }
 
     fn block_on_any(&self, fut: BoxedBlocked) -> Box<dyn Any + Send> {
-        // 复用宿主那份唯一的同步↔异步桥（见模块文档第三条）
+        // 复用宿主唯一的同步↔异步桥（`block_on_async`，重入安全，避免嵌套 block_on 死锁）
         wasmnest_wasm_core::runtime_util::block_on_async(fut)
     }
 }
@@ -193,7 +193,7 @@ wasmnest_host_kit::submit_domain_ports_installer!(WS_PORTS_INSTALLER);
 ///
 /// 转发到能力域（出站连接 + 入站端点 + 在线客户端，一次调用两侧一并回收）。
 /// **停用回收的常规路径已走自报钩子**（`wasmnest-server-websocket::plugin_binding::HOOKS`
-/// 的 `on_plugin_purge`，票 02 批次 03）。
+/// 的 `on_plugin_purge`）。
 pub fn purge_for_plugin(plugin_id: &str) -> usize {
     wasmnest_server_websocket::plugin_binding::purge_for_plugin(
         plugin_id,
@@ -203,11 +203,11 @@ pub fn purge_for_plugin(plugin_id: &str) -> usize {
 
 // ==================== host-websocket-server（桌面扩展：WIT 绑定 + 模块自报） ====================
 //
-// ADR 0052 D4（票 03）：`host-websocket-server`（桌面服务端域，入站端点 10 函数）的
+// `host-websocket-server`（桌面服务端域，入站端点 10 函数）的
 // WIT 声明归桌面 `wit-src/cap-ws.wit`（world `cap-ws-server`，T-02 落位），`impl Host`
-// 与模块自报落本文件（路径 B）。域引擎 API（端点表 / 连接通道 / 属主仲裁 / 回收）
+// 与模块自报落本文件。域引擎 API（端点表 / 连接通道 / 属主仲裁 / 回收）
 // 仍住 `wasmnest-server-websocket`——被服务器自身（`conn` / `websocket_manager` /
-// 路由）与 `ws_e2e` 消费，是服务器引擎基础设施（逐项盘点见票 03 Comments）。
+// 路由）与 `ws_e2e` 消费，是服务器引擎基础设施。
 
 wasmnest_host_kit::expect_host_module!(WS_SERVER_MODULE_NAME);
 
@@ -215,12 +215,12 @@ wasmnest_host_kit::expect_host_module!(WS_SERVER_MODULE_NAME);
 pub const WS_SERVER_MODULE_NAME: &str = "ws-server";
 
 /// 本域提供的 WIT 接口（必须与桌面 wit-src 契约逐字一致；改错即 guest import 失配）
-pub const WS_SERVER_MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-websocket-server"];
+pub const WS_SERVER_MODULE_INTERFACES: &[&str] = &["wasmnest:ws-server@0.0.1/host-websocket-server"];
 
 /// 本域的权限位（服务端域需 `ws:server`）
 pub const WS_SERVER_MODULE_PERMISSIONS: &[&str] = &["ws:server"];
 
-/// 能力模块描述符（只描述机制，禁带产品名词——AGENTS §5.1 B1/B5）
+/// 能力模块描述符（只描述机制，禁带产品名词）
 const WS_SERVER_DESC: HostModuleDesc = HostModuleDesc {
     name: WS_SERVER_MODULE_NAME,
     interfaces: WS_SERVER_MODULE_INTERFACES,
@@ -238,7 +238,7 @@ impl HostModule for WsServerModule {
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
         type HasSelf = wasmtime::component::HasSelf<WasmPluginState>;
-        wasmnest::plugin::host_websocket_server::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::ws_server::host_websocket_server::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -250,7 +250,7 @@ inventory::submit! {
 }
 
 // WIT 层：服务端域 10 条原语 → 服务器引擎 API（薄转发，与迁移前 impl 逐字同源）
-impl wasmnest::plugin::host_websocket_server::Host for WasmPluginState {
+impl wasmnest::ws_server::host_websocket_server::Host for WasmPluginState {
     fn register_endpoint(&mut self, config_json: String) -> Result<String, String> {
         // 只登记端点，不启动监听器：传输面由应用界面挂载触发
         // （`plugin_surface_open`，与 HTTP 端点同一 key / 同一 holder）。
@@ -362,7 +362,7 @@ mod tests {
         assert_eq!(module_name, "websocket", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             wasmnest_server_websocket::plugin_binding::MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-websocket"],
+            &["wasmnest:ws@0.0.1/host-websocket"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配；ADR 0052 D4 后服务端域归宿主路径 B 模块）"
         );
         assert_eq!(
@@ -372,7 +372,7 @@ mod tests {
         );
     }
 
-    /// 桌面路径 B 模块声明：接口路径 / 权限位 / 白名单三件与 WIT 契约逐字一致
+    /// 桌面直连绑定模块声明：接口路径 / 权限位 / 白名单三件与 WIT 契约逐字一致
     #[test]
     fn ws_server_host_module_declaration_matches_contract() {
         assert!(
@@ -382,7 +382,7 @@ mod tests {
         assert_eq!(WS_SERVER_MODULE_NAME, "ws-server");
         assert_eq!(
             WS_SERVER_MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-websocket-server"]
+            &["wasmnest:ws-server@0.0.1/host-websocket-server"]
         );
         assert_eq!(WS_SERVER_MODULE_PERMISSIONS, &["ws:server"]);
         assert_eq!(WS_SERVER_DESC.name, WS_SERVER_MODULE_NAME);

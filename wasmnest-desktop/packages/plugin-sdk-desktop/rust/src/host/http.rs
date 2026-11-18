@@ -38,6 +38,9 @@ pub trait HostHttp {
     /// - `methods`：host 别名的允许方法（缺省 `["GET"]`）；
     /// - `auth` = `"jwt"`（缺省，最严：要求宿主已验签）| `"none"`（免凭证转发）。
     ///
+    /// 链路加密策略按**应用**决定（应用设置页 → 宿主 `link_crypto::set_app_policy`），
+    /// 覆盖该应用全部端点，不在端点注册配置里声明；未知字段 → `Err`（严格解析）。
+    ///
     /// 成功 → 返回端点句柄 `http-<uuid>`；`host+method` 被其他插件占用 / 本插件
     /// 内部 path 重复 → `Err`（fail-visible，不覆盖在位者）。
     /// 需要 `network:http` 权限。

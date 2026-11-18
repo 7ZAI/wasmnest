@@ -1,4 +1,4 @@
-//! 应用作用域服务租约薄壳（service-leases）
+//! 应用作用域服务租约薄壳
 //!
 //! 端点注册（`host-http-endpoint.register-endpoint` /
 //! `host-websocket-server.register-endpoint`）只写宿主内存路由表，**不启动监听器**：

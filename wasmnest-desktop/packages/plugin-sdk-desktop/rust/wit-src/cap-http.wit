@@ -1,4 +1,4 @@
-package wasmnest:plugin@0.0.1;
+package wasmnest:http-endpoint@0.0.1;
 // ======================================================================
 // HTTP 服务端域（桌面扩展分片，自 `host-http` 拆出）
 //
@@ -27,6 +27,10 @@ interface host-http-endpoint {
     ///   传给插件，宿主不拿捕获值构造路径）；
     /// - `methods`：host 别名的允许方法（缺省 `["GET"]`）；
     /// - `auth` = "jwt"（缺省，最严：要求宿主已验签）| "none"（免凭证转发）。
+    ///
+    /// 链路加密策略**按应用**决定（应用设置页 → `link_crypto::set_app_policy`），
+    /// 覆盖该应用全部 HTTP / WS 端点；本注册配置不携带 `encryption` 字段
+    /// （未知字段 → `Err`，严格解析，绝不静默忽略）。
     ///
     /// 冲突仲裁（fail-visible）：同一 `host+method` 已被其他插件注册 → `Err`（不覆盖
     /// 在位者）；本插件内部 path 重复注册 → `Err`。成功 → 返回端点句柄 `http-<uuid>`。

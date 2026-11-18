@@ -17,6 +17,7 @@
  * | C-H12 | 系统宫格图标 | 与桌面 ShellIcon 同口径：.shell-sys-tile + data-tile=entry.id，SVG 为 24 画框 stroke 线稿（fill=none / 1.55），路径逐字对齐桌面 | 类名 / data-tile / stroke 属性；双端路径一致性锁 |
  * | C-H13 | 运行带退役 | 主屏不再渲染运行卡片与停止按钮 | 无 article / 无 stopInstance / 无 runningTitle |
  * | C-H14 | 壁纸上的浮空文字 | 壁纸上的标题挂 .shell-text-over-wall（底色描边护对比度）；shell.css 里该类的描边色由 token 派生 | 头部标题与应用分组头均带类；CSS 含 text-shadow + color-mix |
+ * | C-H16 | 快捷卡片入口意图 | 卡片 onPress 在**点击时**现算，宿主只原样转交（不解释内容）；onPress 抛错不阻断打开应用 | open 收到 (appId, intent)；异常路径仍 open(appId, undefined) |
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -296,12 +297,12 @@ describe('宿主系统级服务（L1/L2 = 服务宫格，不进应用 / 系统�
     apps.value = [
       service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
       service('com.wasmnest.monitor', 'internal-business', 'MonitoringService'),
-      app('com.wasmnest.agent-hub', 'running', 'Agent Hub'),
+      app('com.wasmnest.ai-chatbox', 'running', 'AI Chatbox'),
     ]
     const wrapper = mount(ShellHomeScreen)
 
     // 业务应用在应用宫格；两个系统服务不在（也不以插件名出现）
-    expect(wrapper.text()).toContain('Agent Hub')
+    expect(wrapper.text()).toContain('AI Chatbox')
     expect(wrapper.text()).not.toContain('Auth Center')
     expect(wrapper.text()).not.toContain('MonitoringService')
 
@@ -318,7 +319,7 @@ describe('宿主系统级服务（L1/L2 = 服务宫格，不进应用 / 系统�
   it('分区顺序固定为 应用 → 服务 → 系统', () => {
     apps.value = [
       service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
-      app('com.wasmnest.agent-hub', 'running', 'Agent Hub'),
+      app('com.wasmnest.ai-chatbox', 'running', 'AI Chatbox'),
     ]
     const wrapper = mount(ShellHomeScreen)
 
@@ -398,18 +399,68 @@ describe('C-H6 空态', () => {
   })
 })
 
+describe('C-H16 快捷卡片入口意图（点击直达应用内位置）', () => {
+  const SlotCard = { template: '<div class="slot-card">slot</div>' }
+
+  function withIntent(onPress?: () => unknown): ShellApp {
+    return {
+      ...app('a', 'running', 'AppA'),
+      contributions: { slots: [{ id: 's0', component: SlotCard, onPress: onPress as never }] },
+    }
+  }
+
+  it('should_passIntentToOpen_when_cardOnPressReturnsOne', async () => {
+    const intent = { key: 'open-session', payload: { sessionId: 's1' } }
+    const onPress = vi.fn(() => intent)
+    apps.value = [withIntent(onPress)]
+
+    const wrapper = mount(ShellHomeScreen)
+    // 登记时不求值：入口按点击时刻现算（会话集合随时在变）
+    expect(onPress).not.toHaveBeenCalled()
+    await wrapper.find('.shell-slot-card').trigger('click')
+
+    expect(onPress).toHaveBeenCalledTimes(1)
+    expect(mockOpen).toHaveBeenCalledWith('a', intent)
+  })
+
+  it('should_stillOpenApp_when_cardOnPressThrows', async () => {
+    const onPress = vi.fn(() => {
+      throw new Error('boom')
+    })
+    apps.value = [withIntent(onPress)]
+
+    await mount(ShellHomeScreen).find('.shell-slot-card').trigger('click')
+
+    expect(onPress).toHaveBeenCalledTimes(1)
+    expect(mockOpen).toHaveBeenCalledWith('a', undefined)
+  })
+
+  it('should_openWithoutIntent_when_cardHasNoOnPress', async () => {
+    apps.value = [withIntent(undefined)]
+
+    await mount(ShellHomeScreen).find('.shell-slot-card').trigger('click')
+
+    expect(mockOpen).toHaveBeenCalledWith('a', undefined)
+  })
+})
+
 describe('C-H7 快捷卡片轨道（横向轮播）', () => {
   const SlotCard = { template: '<div class="slot-card">slot</div>' }
 
-  function withSlot(): ShellApp {
+  function withSlots(count = 1): ShellApp {
     return {
       ...app('a', 'running', 'AppA'),
-      contributions: { slots: [{ id: 's1', component: SlotCard }] },
+      contributions: {
+        slots: Array.from({ length: count }, (_, index) => ({
+          id: `s${index}`,
+          component: SlotCard,
+        })),
+      },
     }
   }
 
   it('should_renderCardsInHorizontalSnapTrack_when_slotsRegistered', () => {
-    apps.value = [withSlot()]
+    apps.value = [withSlots()]
 
     const wrapper = mount(ShellHomeScreen)
     const track = wrapper.find('.shell-slot-track')
@@ -424,6 +475,50 @@ describe('C-H7 快捷卡片轨道（横向轮播）', () => {
     apps.value = [app('a', 'running', 'AppA')]
 
     expect(mount(ShellHomeScreen).find('.shell-slot-track').exists()).toBe(false)
+  })
+
+  it('should_capDisplayedCards_when_slotsExceedHostLimit', () => {
+    apps.value = [withSlots(8)]
+    const wrapper = mount(ShellHomeScreen)
+
+    expect(wrapper.findAll('.shell-slot-item')).toHaveLength(5)
+    wrapper.unmount()
+  })
+
+  it('should_openOwningApp_when_cardTapped', async () => {
+    apps.value = [withSlots(1)]
+    const wrapper = mount(ShellHomeScreen)
+
+    await wrapper.find('.shell-slot-card').trigger('click')
+
+    // 无 onPress 的卡片：入口意图为空，行为与旧版一致（只打开应用）
+    expect(mockOpen).toHaveBeenCalledWith('a', undefined)
+  })
+
+  it('should_keepAppActionAndCardContent_when_accessibleNameComposed', () => {
+    apps.value = [withSlots(1)]
+    const wrapper = mount(ShellHomeScreen)
+    const card = wrapper.find('.shell-slot-card')
+
+    // 动作前缀走 sr-only：读屏拿到「打开 <应用>」，但不覆盖应用自持的卡片读数
+    expect(card.find('.sr-only').text()).toContain('shell.home.slotOpen')
+    expect(card.text()).toContain('slot')
+  })
+
+  it('should_exposePauseControl_when_multipleCards', () => {
+    apps.value = [withSlots(2)]
+    const wrapper = mount(ShellHomeScreen)
+
+    expect(wrapper.find('button[aria-label="shell.home.slotPause"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('should_hidePauseControl_when_singleCard', () => {
+    apps.value = [withSlots(1)]
+
+    expect(mount(ShellHomeScreen).find('button[aria-label="shell.home.slotPause"]').exists()).toBe(
+      false,
+    )
   })
 })
 

@@ -73,12 +73,16 @@ let listRetryTimer: ReturnType<typeof setTimeout> | null = null
  * 冷启动清单轮询：后端插件扫描是异步的，壳首次 refresh 可能撞上「还没扫完」而拿到空清单，
  * 表现为首页「0 个应用 / 尚未安装 WASM 应用」且不再自愈（实测冷启动复现）。
  * 这里只补「首次为空」这一种情形，拿到非空清单立即停：不把轮询做成常驻心跳。
- * 参数与 PluginLoader 的启动扫描轮询同口径（250ms × 20s）。
+ *
+ * 退避（2026-11-08 F16）：PluginLoader 同窗口也在轮询同一件「扫描是否就绪」事实，
+ * 两条 250ms 链叠加 = 每秒 4 次全量清单拉取。这里改成 250ms 起、逐轮翻倍、封顶 2s
+ * （20s 窗口内总次数从 80 降到 ~15）；彻底合并成单一就绪信号留待后端提供扫描完成事件。
  */
 const LIST_RETRY_POLL_MS = 250
+const LIST_RETRY_MAX_INTERVAL_MS = 2_000
 const LIST_RETRY_TIMEOUT_MS = 20_000
 
-function scheduleListRetry(startedAt: number): void {
+function scheduleListRetry(startedAt: number, intervalMs = LIST_RETRY_POLL_MS): void {
   if (Date.now() - startedAt > LIST_RETRY_TIMEOUT_MS) {
     logger.warn('[ShellView] app list still empty after startup timeout')
     return
@@ -89,8 +93,10 @@ function scheduleListRetry(startedAt: number): void {
     } catch (e) {
       logger.error('[ShellView] app list retry failed', e)
     }
-    if (apps.value.length === 0) scheduleListRetry(startedAt)
-  }, LIST_RETRY_POLL_MS)
+    if (apps.value.length === 0) {
+      scheduleListRetry(startedAt, Math.min(intervalMs * 2, LIST_RETRY_MAX_INTERVAL_MS))
+    }
+  }, intervalMs)
 }
 
 onMounted(async () => {

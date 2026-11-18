@@ -65,7 +65,7 @@ wasmnest-plugin dev --host           # 监听局域网，手机浏览器访问 h
   "author": "you",
   "icon": "🧩",
   "main": "index.js",
-  "pluginType": "ts-only",
+  "pluginType": "frontend",
   "permissions": ["storage", "ui:input"],
   "contributes": {
     "commands": [{ "id": "my-plugin.hello", "title": "Hello" }],
@@ -106,7 +106,7 @@ export async function deactivate(): Promise<void> {
 |-----|------|----------|
 | `context.commands` | 注册 / 执行命令（`register` / `execute`）——含本应用的自持业务命令（如 `file-transfer.list-remote`） | 默认授予 |
 | `context.session` | 会话列表、单会话查询、状态变更订阅 | `session:read` / `session:write` |
-| `context.ui` | 宿主壳运行面 / 首页卡片 / 胶囊菜单 / 平台设置入口 / 动态路由（`registerSurface` / `registerSlot` / `registerCapsuleItem` / `registerSettingsEntry` / `registerRoute`）、跳转与返回（`openPage` / `goBack`）、系统返回键接管（`onBackPressed`）、全局弹窗（`showDialog`） | `ui:route` / `ui:back` / `ui:dialog` / `ui:settings` |
+| `context.ui` | 宿主壳运行面 / 首页卡片 / 胶囊菜单 / 平台设置入口 / 动态路由（`registerSurface` / `registerSlot` / `registerCapsuleItem` / `registerSettingsEntry` / `registerRoute`）、跳转与返回（`openPage` / `goBack`）、系统返回键接管（`onBackPressed`）、入口意图（`onSurfaceIntent`）、全局弹窗（`showDialog`） | `ui:route` / `ui:back` / `ui:dialog` / `ui:settings` |
 | `context.events` | 宿主事件订阅与发布（`on` / `emit`） | 默认授予 |
 | `context.storage` | 键值存储（`get` / `set` / `delete`） | `storage`（**移动端恒授予**，见下方说明） |
 | `context.lifecycle` | 应用生命周期钩子（`onAppStartup` / `onAppShutdown` / `onAuthSuccess` / `onDisconnect` / `onSessionCreated` / `onSessionStopped`） | 默认授予 |
@@ -115,6 +115,7 @@ export async function deactivate(): Promise<void> {
 | `context.status` | 生命周期状态上报（`reportReady` / `reportError`） | 默认授予 |
 | `context.logger` | 分级日志（`info` / `debug` / `warn` / `error`） | 默认授予 |
 | `context.i18n` | 注册应用翻译、`t()` 快捷翻译 | 默认授予 |
+| `context.appUpdate` | 应用更新检查（宿主统一 GitHub Release 判定；失败归一化为 `status: 'error'`） | 默认授予 |
 | `context.system` | 系统级操作（`openFile` / `revealInDir` / `revealReceivedFileLocation` / `requestAllFilesAccess` / `openDownloadDir`） | `system:open` |
 | `context._disposables` | 宿主在注销时统一回收的 Disposable 列表（内部使用） | — |
 
@@ -335,11 +336,84 @@ const options = [
 </template>
 ```
 
+### 应用更新检查（AppUpdateSection）
+
+manifest 声明 `update`（缺省 = 不参与检查）后，应用设置页直接嵌入 SDK 默认卡片：
+
+```vue
+<script setup lang="ts">
+import AppUpdateSection from '@binblink/wasmnest-plugin-sdk-mobile/ui/app-update'
+</script>
+
+<template>
+  <AppUpdateSection />
+</template>
+```
+
+- 数据面 = `context.appUpdate.check`（宿主注入；令牌只能查自己）；应用可给 `check` 传自实现，或只用 `useAppUpdate()` 自己画 UI。
+- 更新安装统一在宿主应用管理页执行（需先停用、替换目录并重新审批）。
+
+### 首页快捷卡片（QuickCard）
+
+宿主壳首页的快捷卡片 = **SDK 公共外观 + 应用内容 + 宿主跳转**：应用只实现卡片内容，
+activate 期用 `context.ui.registerSlot` 注册；宿主壳负责展示、自动轮播（最多 5 张）与
+点击打开本应用，应用不需要也不应该在卡片里处理导航。
+
+卡片可以**直达应用内某个位置**（如「活跃会话」卡点进最近一个会话）：`registerSlot`
+的可选 `onPress()` 在点击时刻现算一个入口意图（`{ key, payload }`，内容全归应用），
+宿主启动并打开应用后原样投递给运行面——运行面在 `onMounted` 里用
+`context.ui.onSurfaceIntent(handler)` 订阅即可。订阅前到达的意图由宿主排队补投，
+运行面晚于点击创建也不会丢；应用停用 / 卸载后队列清空。
+
+```vue
+<script setup lang="ts">
+import QuickCard from '@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card'
+
+defineProps<{ activeCount: number }>()
+</script>
+
+<template>
+  <QuickCard
+    label="活跃会话"
+    :value="activeCount"
+    hint="正在运行"
+    tone="success"
+    :icon-path="['M4 5h16v14H4z', 'M8 10l3 2.5-3 2.5']"
+  />
+</template>
+```
+
+```ts
+context.ui.registerSlot({
+  id: 'sessions',
+  component: SessionCard,
+  order: 10,
+  // 点击直达应用内位置；省略 = 只打开应用（旧行为）
+  onPress: () => ({ key: 'open-session', payload: { sessionId: latestLiveSessionId() } }),
+})
+```
+
+```ts
+// 运行面（应用根组件）：宿主投递入口意图
+const sub = context.ui.onSurfaceIntent((intent) => {
+  if (intent.key !== 'open-session') return
+  openSession((intent.payload as { sessionId: string }).sessionId)
+})
+// 卸载时 sub.dispose()
+```
+
+- 宿主把整张卡渲染成按钮（点击 = 启动并打开贡献方应用，再投递 `onPress()` 的返回值），
+  卡片内不得再放按钮 / 链接；
+- 宿主按注册顺序截断展示（当前 5 张），多张时自动轮播——触摸 / 键盘聚焦 / 切后台 /
+  系统「减少动效」时停走，标题行提供暂停 / 播放控件；
+- `label` / `value` / `hint` / `tone` / `iconPath` 覆盖常见读数卡，复杂内容用默认插槽。
+
 当前提供（每个子路径 = 一个独立导出）：
 
 | 子路径 | 内容 | 用途 |
 |--------|------|------|
 | `./ui` | `Select` 组件 | 下拉选择（`update:modelValue` / `open` 事件，`md` / `sm` 尺寸） |
+| `./ui/quick-card` | `QuickCard` 组件 | 宿主壳首页快捷卡片公共外观（宿主 token / 明暗 / 字号自适应；点击归宿主） |
 | `./ui/plugin-global-dialog` | `PluginGlobalDialog` 组件 | 移动端宿主全局弹窗（应用根挂载一次；渲染由全局弹窗控制器驱动，与桌面端同构） |
 | `./ui/swipe-tabs` | `useSwipeTabs` composable | 弹窗/页签内容区横向滑动切换（内容区水平主导滑动超阈值触发 `onSwitch`；垂直主导不记录位移；`shouldSkip` 排除输入控件等不应作切页手势的起点） |
 | `./global-dialog` | 全局弹窗控制器 | 发布-订阅式弹窗队列（FIFO，同时至多一个；`update()` 生成新条目对象再广播），宿主与 dev-shell 共用 |
@@ -352,6 +426,8 @@ const options = [
 | `@binblink/wasmnest-plugin-sdk-mobile/vite` | `wasmnestPlugin()` Vite 构建插件 |
 | `@binblink/wasmnest-plugin-sdk-mobile/types` | 纯类型导出（仅类型，无运行时） |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui` | 共享 Vue 组件：`Select` |
+| `@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card` | `QuickCard` 首页快捷卡片 |
+| `@binblink/wasmnest-plugin-sdk-mobile/ui/app-update` | `AppUpdateSection`（应用更新检查） |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui/plugin-global-dialog` | `PluginGlobalDialog` |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui/swipe-tabs` | `useSwipeTabs` |
 | `@binblink/wasmnest-plugin-sdk-mobile/global-dialog` | 全局弹窗控制器 |

@@ -5,6 +5,7 @@
  */
 
 import { logger as frontendLogger } from '@/utils/frontendLogger'
+import { parseInvokeError, userErrorText } from '@/utils/userError'
 import type {
   PluginContext,
   PluginInfo,
@@ -26,11 +27,15 @@ import type {
   PluginDialogHandle,
   ShellSurfaceContribution,
   ShellSlotContribution,
+  ShellSurfaceIntent,
   ShellCapsuleItem,
   MonitorPanelHandle,
+  AppUpdateAPI,
+  AppUpdateCheckResult,
 } from './types'
 import { hasPermissionForApi } from './permission'
 import * as pluginCmds from './commands'
+import { ensureChannelToken } from './credentials'
 import * as pluginEvents from './events'
 import { defineComponent, h } from 'vue'
 import { getPluginRegistry } from './registry'
@@ -38,6 +43,7 @@ import PluginViewHost from './components/PluginViewHost.vue'
 import { registerPluginRoute, openPluginRoute } from './routes'
 import { getSharedModule } from './shared-runtime'
 import { getShellRegistry } from '@/shell/registry'
+import { subscribeSurfaceIntent } from '@/shell/surfaceIntent'
 import { invoke } from '@tauri-apps/api/core'
 // 全局弹窗控制器：必须经包说明符解析（与 App.vue 挂载的 PluginGlobalDialog.vue 同源）。
 // 移动端 file: 依赖是快照拷贝，若直连源码相对路径会与组件产生两个模块实例，
@@ -51,30 +57,34 @@ import { subscribeAppBackPressed } from './back-button'
 // 这里只做「插件 API → 分发层」的接线。
 
 /**
- * 提取 Tauri invoke 拒绝值的可读信息
+ * 插件命令失败 → 用户可见 Error（ADR 0030 错误信封消费侧）
  *
- * 拒绝值形态三类：
+ * Tauri invoke 的 reject 值形态：
  * 1. 宿主 Rust 命令 Err(AppError)：经 ADR 0030 信封序列化，reject 值 = `{ code, request_id, params? }`
- *    （真源 `wasmnest-server-base::error::AppError::Serialize`，移动宿主经 wasm-core re-export 共用；
- *    信封**永不携带**错误原文 / 堆栈，技术详情只进宿主日志）；
+ *    （真源 `wasmnest-server-base::error::AppError::Serialize`；信封**永不携带**错误原文 / 堆栈）；
  * 2. dev-shell / 单测环境：Error 实例；
  * 3. 兼容纯字符串形态（整核前移动端本地 error.rs `serialize_str` 行为，已退役）。
  *
- * 信封没有 message 字段，取 `code, request_id=<id>` 作可读标识——request_id 是宿主日志
- * 关联键（同条 tracing 的 `request_id` / `error` 字段），带上它才能从客户端侧 grep 到那一次失败。
+ * 用户面文案走 `errors.<code>` 友好文案（未注册 → `errors.host.internal`），
+ * 并把信封字段挂到 Error 上供插件侧错误消费层（`parsePluginError` 同构）继续映射。
+ *
+ * 2026-11-12 真机缺陷：此前把信封拼成 `Command not found: <cmd> (host.internal,
+ * request_id=…)` 抛出，插件侧的 `t(err.message)` 再把整串当前缀化 key 查表 →
+ * toast 直接显示 `com.wasmnest.<plugin>.Command not found: …`。技术详情只进日志，
+ * 插件拿到的 message 必须是可直接展示的友好文案。
  */
-function extractInvokeErrorMessage(e: unknown): string {
-  if (e instanceof Error) return e.message
-  if (typeof e === 'string') return e
-  if (e && typeof e === 'object') {
-    const obj = e as Record<string, unknown>
-    if (typeof obj.message === 'string') return obj.message
-    if (typeof obj.code === 'string') {
-      const rid = typeof obj.request_id === 'string' ? `, request_id=${obj.request_id}` : ''
-      return `${obj.code}${rid}`
-    }
+function pluginCommandError(e: unknown): Error {
+  const ue = parseInvokeError(e)
+  const error = new Error(userErrorText(ue)) as Error & {
+    code?: string
+    request_id?: string
+    params?: Record<string, unknown>
   }
-  return ''
+  error.name = 'PluginCommandError'
+  error.code = ue.code
+  if (ue.requestId) error.request_id = ue.requestId
+  if (ue.params) error.params = ue.params
+  return error
 }
 
 /** 宿主注入的能力钩子（loader 装配；测试可省略） */
@@ -91,15 +101,51 @@ export function createPluginContext(
   info: PluginInfo,
   hooks: PluginContextHooks = {},
 ): PluginContext {
+  /**
+   * 本插件运行期创建的可回收资源（停用时由 loader 统一 dispose）
+   *
+   * 条目在 `dispose()` 时**自摘**：早先只 push 不删，按组件生命周期订阅 / 解绑的
+   * 常见写法会在数组里留下已 dispose 的包装闭包（间接钉住组件状态），长会话里只增
+   * 不减。保持数组形态（不改 Set）是为了不动 SDK 对外暴露的 `_disposables: Disposable[]`
+   * 形状——应用与 dev-shell 都按它编译；自摘才是本缺陷的判据。
+   */
   const disposables: Disposable[] = []
   const permissions = info.permissions
   let context: PluginContext | null = null
+
+  /**
+   * 登记资源并让 `dispose()` 自摘（幂等：重复 dispose 只影响底层资源，不再改数组）
+   *
+   * 返回包装句柄而不是原句柄：插件把返回值存起来手动 dispose 时，数组同步收缩。
+   */
+  function track(disposable: Disposable): Disposable {
+    const tracked: Disposable = {
+      dispose() {
+        const index = disposables.indexOf(tracked)
+        if (index >= 0) disposables.splice(index, 1)
+        disposable.dispose()
+      },
+    }
+    disposables.push(tracked)
+    return tracked
+  }
 
   /** 快速失败：检查权限 */
   function requirePermission(apiMethod: string): void {
     if (!hasPermissionForApi(permissions, apiMethod)) {
       throw new Error(`Plugin ${info.id} lacks permission for ${apiMethod}`)
     }
+  }
+
+  /**
+   * 本插件的通道令牌（ADR 0058 / issue #28）
+   *
+   * 插件面命令（命令派发 / 存储 / 自报面）的身份来源：令牌决定调用方身份，
+   * 宿主拒签（插件未运行）时显性抛错——绝不落回「无凭证」调用。
+   * 懒签发：插件代码首次走到这些 API 时取，装载路径不依赖凭证。
+   */
+  function channelToken(): Promise<string> {
+    return ensureChannelToken(info.id)
   }
 
   // ==================== CommandRegistry ====================
@@ -111,23 +157,26 @@ export function createPluginContext(
       const disposable = {
         dispose() { commandHandlers.delete(id) },
       }
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     async execute(id: string, ...args: any[]): Promise<any> {
       const handler = commandHandlers.get(id)
       if (handler) return handler(...args)
-      // 本地 handler 查不到时回退到 WASM 命令桥（宿主 PluginManager.invoke_command）；
-      // 保留底层错误信息，避免把真实失败原因（如 WASM trap、插件未激活、无活跃对端）
-      // 统一掩盖成 Command not found。信封形态经 extractInvokeErrorMessage 取 code + request_id。
+      // 本地 handler 查不到时回退到 WASM 命令桥（宿主 PluginManager.invoke_command）。
+      // 失败按 ADR 0030 落到 pluginCommandError：message = 友好文案（技术详情只进日志），
+      // 并保留信封 code / request_id / params 供插件侧错误消费层继续映射。
       try {
-        return await pluginCmds.pluginInvoke(info.id, id, args.length === 1 ? args[0] : args)
+        return await pluginCmds.pluginInvoke(
+          info.id,
+          id,
+          args.length === 1 ? args[0] : args,
+          await channelToken(),
+        )
       } catch (e) {
         // 原始拒绝值全量落盘（dev 控制台 + 攒批转发，release 也转发 error 级）：
         // 信封只有 code/request_id，细节在宿主日志，此处留形状供关联排查
         frontendLogger.error(`[PluginContext] command "${id}" failed:`, e)
-        const detail = extractInvokeErrorMessage(e)
-        throw new Error(detail ? `Command not found: ${id} (${detail})` : `Command not found: ${id}`)
+        throw pluginCommandError(e)
       }
     },
   }
@@ -152,8 +201,7 @@ export function createPluginContext(
     onStatusChange(handler: (event: any) => void): Disposable {
       requirePermission('session.onStatusChange')
       const disposable = pluginEvents.on(info.id, 'session:statusChange', handler)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
   }
 
@@ -194,24 +242,25 @@ export function createPluginContext(
         ...surface,
         component: wrapped,
       })
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     registerSlot(slot: ShellSlotContribution): Disposable {
       const disposable = getShellRegistry().registerSlot(info.id, slot)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
+    },
+    onSurfaceIntent(handler: (intent: ShellSurfaceIntent) => void): Disposable {
+      // 宿主 → 本应用运行面的入口意图通道（快捷卡片点击等）。载荷由应用自持，
+      // 宿主只按 appId 排队 / 投递；订阅前到达的意图由通道补投（不丢）。
+      return track(subscribeSurfaceIntent(info.id, handler))
     },
     registerCapsuleItem(item: ShellCapsuleItem): Disposable {
       const disposable = getShellRegistry().registerCapsuleItem(info.id, item)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     registerRoute(route: PluginRouteDescriptor): Disposable {
       requirePermission('ui.registerRoute')
       const disposable = registerPluginRoute(info.id, route)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     openPage(routeId: string): void {
       requirePermission('ui.openPage')
@@ -225,8 +274,7 @@ export function createPluginContext(
       requirePermission('ui.onBackPressed')
       const unsubscribe = subscribeAppBackPressed(handler)
       const disposable = { dispose: unsubscribe }
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     showDialog(options: PluginDialogOptions): PluginDialogHandle {
       requirePermission('ui.showDialog')
@@ -257,8 +305,7 @@ export function createPluginContext(
   const events: EventAPI = {
     on(event: string, handler: (...args: any[]) => void): Disposable {
       const disposable = pluginEvents.on(info.id, event, handler)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     emit(event: string, ...args: any[]): void {
       pluginEvents.emit(event, ...args)
@@ -266,16 +313,17 @@ export function createPluginContext(
   }
 
   // ==================== StorageAPI ====================
+  // 宿主侧三段校验：身份（本插件令牌）→ 目标激活态 → 目标 storage 权限（issue #28）
   const storage: StorageAPI = {
     async get<T = any>(key: string): Promise<T | undefined> {
-      const val = await pluginCmds.pluginStorageGet(info.id, key)
+      const val = await pluginCmds.pluginStorageGet(info.id, key, await channelToken())
       return val as T | undefined
     },
     async set(key: string, value: any): Promise<void> {
-      return pluginCmds.pluginStorageSet(info.id, key, value)
+      return pluginCmds.pluginStorageSet(info.id, key, value, await channelToken())
     },
     async delete(key: string): Promise<void> {
-      return pluginCmds.pluginStorageDelete(info.id, key)
+      return pluginCmds.pluginStorageDelete(info.id, key, await channelToken())
     },
   }
 
@@ -347,12 +395,49 @@ export function createPluginContext(
     }
   }
 
+  /**
+   * 检测「未经预编译的字符串消息」并**一次性告警**（fail-visible，2026-11-03）
+   *
+   * 背景：双端 `vite.config.ts` 已切到 `vue-i18n` 的 **runtime-only 构建**
+   * （`__INTLIFY_DROP_MESSAGE_COMPILER__: true` + alias 到 `vue-i18n.runtime.esm-bundler.js`）
+   * 以撤掉 CSP 的 `'unsafe-eval'`。该构建**不含消息编译器**，运行期喂进去的字符串
+   * 消息会走 `compileMessageFormat` 的 `messageCompiler == null` 分支，直接原样返回：
+   *
+   * - 默认 locale 的扁平字符串：`t()` 能拿到原串（看着没问题）
+   * - **非默认 locale**（如 `en`）：`t()` 返回 **key 字面量**
+   * - **插值全部失效**：`'失败：{reason}'` 原样输出 `{reason}` 不替换
+   *
+   * 宿主自己的文案已由 `scripts/i18n-precompile.mjs` 在构建期转成消息函数，不受影响；
+   * 但该插件**管不到插件运行期注册的消息**——插件文案需要在各自应用仓的构建期预编译
+   * （复用同一个 `i18nPrecompile` 插件，产物里直接是 `() => ...` 函数）。
+   *
+   * 这里不做运行期编译兜底（那会把编译器拖回产物、与撤 `'unsafe-eval'` 的目标冲突），
+   * 只保证**退化可见**：每插件每会话告警一次，点名是哪个插件、哪些 key 受影响。
+   */
+  const warnedUncompiled = new Set<string>()
+  function warnIfUncompiled(prefixed: Record<string, unknown>): void {
+    if (warnedUncompiled.has(info.id)) return
+    const samples: string[] = []
+    for (const [key, value] of Object.entries(prefixed)) {
+      if (typeof value === 'string') samples.push(key)
+      if (samples.length >= 3) break
+    }
+    if (samples.length === 0) return
+    warnedUncompiled.add(info.id)
+    frontendLogger.warn(
+      `[PluginContext] 插件 "${info.id}" 注册了未经预编译的字符串文案（如 ${samples.join(', ')}）——` +
+        `vue-i18n 运行在 runtime-only 构建下，非默认 locale 会返回 key 字面量、插值不会替换。` +
+        `请在应用仓构建期用 i18nPrecompile 预编译文案。`,
+    )
+  }
+
   const i18n: I18nAPI = {
     registerMessages(locale: string, messages: Record<string, unknown>): void {
       const hostI18n = (window as any).__WASMNEST_SHARED__?.i18n
       if (!hostI18n) return
       const prefixed: Record<string, unknown> = {}
       flattenMessages(messages, info.id, prefixed)
+      warnIfUncompiled(prefixed)
       // 直接合并新消息，vue-i18n 会自动与现有消息深度合并
       hostI18n.global.mergeLocaleMessage(locale, prefixed)
     },
@@ -360,7 +445,14 @@ export function createPluginContext(
       const hostI18n = (window as any).__WASMNEST_SHARED__?.i18n
       if (!hostI18n) return key
       const fullKey = `${info.id}.${key}`
-      return hostI18n.global.t(fullKey, params)
+      const text = hostI18n.global.t(fullKey, params)
+      // 未注册（vue-i18n 回显 key 原文）时**返回调用方原文**，不再回显前缀化 key：
+      // 插件常把错误正文 / 已完整 key 交给 t()，前缀化会产出
+      // `com.wasmnest.<plugin>.Command not found: …` 这类垃圾 key 直接进 toast
+      // （2026-11-12 真机实测）；也顺带兼容已带命名空间的 key。
+      if (text !== fullKey) return text
+      const raw = hostI18n.global.t(key, params)
+      return raw !== key ? raw : key
     },
   }
 
@@ -368,33 +460,27 @@ export function createPluginContext(
   const lifecycle: LifecycleAPI = {
     onAppStartup(handler: () => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:appStartup', handler)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     onAppShutdown(handler: () => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:appShutdown', handler)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     onAuthSuccess(handler: () => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:authSuccess', handler)
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     onDisconnect(handler: (reason: string) => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:disconnect', (payload: any) => handler(payload.reason))
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     onSessionCreated(handler: (sessionId: string) => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:sessionCreated', (payload: any) => handler(payload.sessionId))
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
     onSessionStopped(handler: (sessionId: string) => void): Disposable {
       const disposable = pluginEvents.on(info.id, 'plugin:lifecycle:sessionStopped', (payload: any) => handler(payload.sessionId))
-      disposables.push(disposable)
-      return disposable
+      return track(disposable)
     },
   }
 
@@ -442,12 +528,29 @@ export function createPluginContext(
   }
 
   // ==================== StatusAPI ====================
+  // 自报面（issue #28）：令牌只能自报自己，宿主可代报任意目标
   const status: StatusAPI = {
     async reportReady() {
-      return pluginCmds.pluginReportReady(info.id)
+      return pluginCmds.pluginReportReady(info.id, await channelToken())
     },
     async reportError(error) {
-      return pluginCmds.pluginMarkError(info.id, error)
+      return pluginCmds.pluginMarkError(info.id, error, await channelToken())
+    },
+  }
+
+  // ==================== AppUpdateAPI ====================
+  // 宿主统一更新检查（GitHub Release 判定）：令牌只能查自己；失败归一化为
+  // status='error'（检查是被动动作，不把技术错误抛给设置页）。
+  const appUpdate: AppUpdateAPI = {
+    async check(): Promise<AppUpdateCheckResult> {
+      try {
+        return await invoke<AppUpdateCheckResult>('plugin_check_self_update', {
+          credential: await channelToken(),
+        })
+      } catch (e) {
+        frontendLogger.warn('[PluginContext] app update check failed:', e)
+        return { status: 'error' }
+      }
     },
   }
 
@@ -465,6 +568,7 @@ export function createPluginContext(
     notifications,
     system,
     status,
+    appUpdate,
     _disposables: disposables,
   }
   return context!

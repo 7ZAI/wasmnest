@@ -3,9 +3,9 @@
 //! Windows：创建隐藏顶层消息窗口监听 `WM_POWERBROADCAST`（`PBT_APMRESUMEAUTOMATIC` /
 //! `PBT_APMRESUMESUSPEND`），系统从休眠/睡眠恢复后触发 WebView2 强制重绘。
 //!
-//! 背景：显示器长时间熄灭/锁屏期间，WebView2 的 GPU 合成器可能崩溃且不自愈
-//! （MicrosoftEdge/WebView2Feedback#3817、tauri-apps/tauri#2496），唤醒后窗口永久黑屏，
-//! 点击/移动窗口都不会触发重绘。恢复手段：1px 尺寸抖动 + 最小化/还原，强制 DWM 重新
+//! 背景：显示器长时间熄灭/锁屏期间，WebView2 的 GPU 合成器可能崩溃且不自愈，
+//! 唤醒后窗口永久黑屏，点击/移动窗口都不会触发重绘。恢复手段：1px 尺寸抖动 +
+//! 最小化/还原，强制 DWM 重新
 //! 合成并让 WebView2 重建交换链。其他平台暂不监听（macOS NSWorkspace / Linux logind
 //! 留待后续按需补充）。
 
@@ -60,11 +60,22 @@ pub(crate) fn should_skip_recovery(visible: bool, minimized: bool) -> bool {
 pub fn spawn_wake_monitor(app: tauri::AppHandle) {
     #[cfg(target_os = "windows")]
     {
-        std::thread::Builder::new()
+        // 后台监视器失败不应拖垮整个应用（线程名冲突 / 资源耗尽）：
+        // 降级为告警，唤醒自愈能力缺失但宿主继续运行。
+        match std::thread::Builder::new()
             .name("power-wake-monitor".to_string())
-            .spawn(move || unsafe { imp::run_message_loop(app) })
-            .expect("failed to spawn power wake monitor thread");
-        tracing::info!("[power_wake] wake monitor started");
+            .spawn(move || {
+                // SAFETY: 消息循环必须在独立线程运行：它在当前线程阻塞到进程退出，
+                // 且独占该线程的消息队列；`app` 的所有权随闭包移入，生命周期覆盖
+                // 整个循环。
+                unsafe { imp::run_message_loop(app) }
+            }) {
+            Ok(_) => tracing::info!("[power_wake] wake monitor started"),
+            Err(e) => tracing::warn!(
+                error = %e,
+                "[power_wake] failed to spawn wake monitor thread; resume recovery disabled"
+            ),
+        }
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -180,6 +191,12 @@ mod imp {
     ///
     /// WM_POWERBROADCAST 广播给所有顶层窗口，因此创建隐藏的顶层窗口即可收到
     /// 系统休眠/唤醒事件，无需任何可见 UI（不设置 WS_VISIBLE）。
+    ///
+    /// # Safety
+    ///
+    /// 必须在**独立线程**调用：函数阻塞在该线程的消息循环直到进程退出，且消息
+    /// 队列是线程绑定的。`app` 由调用方按值传入，生命周期覆盖整个循环。
+    /// 不得在 Tauri 主线程 / async worker 上调用。
     pub(crate) unsafe fn run_message_loop(app: tauri::AppHandle) {
         let hinstance = GetModuleHandleW(ptr::null());
         let class = WNDCLASSW {

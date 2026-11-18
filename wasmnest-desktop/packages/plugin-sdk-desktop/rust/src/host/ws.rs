@@ -79,6 +79,9 @@ pub trait HostWebsocket {
     /// `{ path, auth?, max-message-bytes?, max-clients? }`
     /// `auth = "none"`（默认，插件自管认证）| `"jwt"`（宿主校验首消息
     /// `{"type":"auth","token":"<jwt>"}`）
+    ///
+    /// 链路加密策略按**应用**决定（应用设置页 → 宿主 `link_crypto::set_app_policy`），
+    /// 覆盖该应用全部端点，不在端点注册配置里声明；未知字段 → `Err`（严格解析）。
     fn ws_register_endpoint(&self, config_json: &str) -> Result<String, HostError>;
     /// 向端点指定客户端发文本帧
     fn ws_send_text_to_client(

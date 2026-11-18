@@ -11,7 +11,7 @@
  * | C-A3 | approveApp 异常 | 后端拒绝 | 返回 false + lastError 暴露原因 |
  * | C-A4 | launch 通知 | 启动成功 | 不落通知（启动是静默动作） |
  * | C-A5 | launch 通知去噪 | 已运行再启动（重挂前端模块） | 不落通知 |
- * | C-A6 | launch 失败 | 后端拒绝 | 状态置 error + 推「启动失败」并带后端原因 |
+ * | C-A6 | launch 失败 | 后端拒绝 | 状态置 error + 推「启动失败」；正文只出友好文案（技术详情进日志） |
  * | C-A7 | stop 通知 | 停止成功 | 不落通知（停止是静默动作） |
  * | C-A8 | install 通知 | 返回安装 id / 用户取消（null） | 有 id 才推「已安装」 |
  * | C-A9 | remove 通知 | 卸载成功 | 推「已卸载」（应用名取自卸载前快照） |
@@ -20,6 +20,8 @@
  * | C-A12 | remove 摘运行屏 | 卸载成功且该应用运行屏在栈里 | 回落到该屏下面一屏 |
  * | C-O1 | openShellApp 分支 | 待审批应用 | 进详情页，不调 launch |
  * | C-O2 | openShellApp 正路 | 可启动应用 | launch + 进运行面 |
+| C-O3 | 入口意图投递 | 卡片带 onPress 返回的意图 | 启动成功后按 appId 入队，运行面订阅即收 |
+| C-O4 | 意图不入残留 | 启动失败 / 待审批 | 不入队（下一次打开不被旧意图劫持） |
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { defineComponent, h, onUnmounted, type Component } from 'vue'
@@ -29,6 +31,11 @@ import { useShellApps } from '@/shell/composables/useShellApps'
 import { openShellApp, resetShellNavigation, useShellNavigation } from '@/shell/index'
 import { getSurfaceAppRegistry, reconcileSurfaceApps } from '@/shell/surfaceRuntime'
 import { markSurfaceOpened, useAppSurfaces } from '@/shell/composables/useAppSurfaces'
+import {
+  pendingSurfaceIntentCount,
+  resetSurfaceIntents,
+  subscribeSurfaceIntent,
+} from '@/shell/surfaceIntent'
 import type { ShellApp, ShellAppSource } from '@/shell/types'
 
 const SOURCE_ID = 'app-actions-source'
@@ -78,8 +85,8 @@ function registeredSource(): ShellAppSource {
     launch: (...args: unknown[]) => source.launch(...(args as [string])) as Promise<void>,
     stop: (...args: unknown[]) => source.stop(...(args as [string])) as Promise<void>,
     approve: (...args: unknown[]) => source.approve(...(args as [string])) as Promise<void>,
-    installFromLocalPackage: () =>
-      source.install() as unknown as Promise<string | null>,
+    installFromLocalPackage: (decideRestore) =>
+      source.install(decideRestore) as unknown as Promise<string | null>,
     remove: (...args: unknown[]) => source.remove(...(args as [string])) as Promise<boolean>,
   }
 }
@@ -139,7 +146,9 @@ describe('C-A1..C-A3 审批动作', () => {
     const ok = await appsApi.approveApp('com.test.p')
 
     expect(ok).toBe(false)
-    expect(appsApi.lastError.value).toContain('hash mismatch')
+    // 错误消费层只暴露友好文案（code 原文 / 后端详情只进日志）
+    expect(appsApi.lastError.value).toBe('errors.host.internal')
+    expect(appsApi.lastError.value).not.toContain('hash mismatch')
   })
 })
 
@@ -176,7 +185,10 @@ describe('C-A4..C-A7 启动 / 停止通知', () => {
       n.title.includes('shell.notify.app.failed.title'),
     )
     expect(failed, '启动失败必须可见（通知栏 + 列表状态）').toBeTruthy()
-    expect(failed!.body, '失败原因来自后端，原样呈现').toContain('approval required')
+    // ADR 0030：用户面只出 errors.<code> 友好文案，后端原文 / 信封标识不进通知体。
+    // 本测试的 i18n 替身直接把 key 原样返回，故断言兜底 key（真机解析为中文文案）。
+    expect(failed!.body, '失败原因走错误消费层，不泄露技术详情').toBe('errors.host.internal')
+    expect(failed!.body).not.toContain('approval required')
   })
 
   it('should_notNotify_when_stopSucceeds', async () => {
@@ -190,6 +202,15 @@ describe('C-A4..C-A7 启动 / 停止通知', () => {
 })
 
 describe('C-A8/C-A9 安装 / 卸载通知', () => {
+  it('should_forwardRestoreDecider_when_installing', async () => {
+    // 询问 UI 在屏内、决策回调经壳转交数据源：壳不得吞掉或替换该回调
+    const decide = vi.fn(async () => false)
+
+    await useShellApps().installFromLocalPackage(decide)
+
+    expect(source.install).toHaveBeenCalledWith(decide)
+  })
+
   it('should_notifyInstalledWithAppName_when_installReturnsId', async () => {
     // 安装成功后清单里才有它：通知名要取刷新后的注册表事实
     shell.registerSource({
@@ -328,6 +349,45 @@ describe('C-O1/C-O2 打开应用路由', () => {
 
     expect(ok).toBe(false)
     expect(nav.current.value.id, '启动失败不进运行面（错误留在列表上可见）').toBe('home')
+  })
+})
+
+describe('C-O3/C-O4 入口意图（快捷卡片直达应用内位置）', () => {
+  beforeEach(() => {
+    resetSurfaceIntents()
+  })
+
+  it('should_queueIntent_when_launchSucceeds', async () => {
+    shell.upsertApps(SOURCE_ID, [app('com.test.i', 'stopped', 'IntentApp')])
+    const intent = { key: 'open-session', payload: { sessionId: 's1' } }
+
+    const ok = await openShellApp('com.test.i', intent)
+
+    expect(ok).toBe(true)
+    const handler = vi.fn()
+    subscribeSurfaceIntent('com.test.i', handler)
+    expect(handler).toHaveBeenCalledWith(intent)
+    expect(pendingSurfaceIntentCount('com.test.i')).toBe(0)
+  })
+
+  it('should_notQueueIntent_when_launchFails', async () => {
+    shell.upsertApps(SOURCE_ID, [app('com.test.i2', 'stopped', 'IntentApp')])
+    source.launch.mockRejectedValueOnce(new Error('boom'))
+
+    const ok = await openShellApp('com.test.i2', { key: 'open-session' })
+
+    expect(ok).toBe(false)
+    expect(pendingSurfaceIntentCount('com.test.i2'), '失败不留残留意图').toBe(0)
+  })
+
+  it('should_notQueueIntent_when_appPendingApproval', async () => {
+    shell.upsertApps(SOURCE_ID, [app('com.test.i3', 'approval', 'PendingApp')])
+
+    const ok = await openShellApp('com.test.i3', { key: 'open-session' })
+
+    expect(ok).toBe(true)
+    // 待审批走详情页，应用没被打开；意图不得留在队列里等下一次打开
+    expect(pendingSurfaceIntentCount('com.test.i3')).toBe(0)
   })
 })
 

@@ -12,6 +12,7 @@ use base64::Engine as _;
 use serde_json::{json, Value};
 use tokio::sync::OnceCell;
 
+use wasmnest_mobile_lib::commands::host_gate::CallerIdentity;
 use wasmnest_mobile_lib::commands::http_proxy::{execute_proxy, http_cancel, HttpProxyRequest};
 
 /// 全局串行闸：代理的全局 state（desktop_targets / link crypto context /
@@ -81,6 +82,12 @@ struct MockDesktop {
 
 impl MockDesktop {
     async fn start() -> Self {
+        Self::start_bound("127.0.0.1").await
+    }
+
+    /// 绑定指定地址（链路加密用例必须用非环回地址：环回是桌面端本地豁免面，
+    /// 过滤器不介入，加信封只会把密文直投插件）
+    async fn start_bound(bind_ip: &str) -> Self {
         let state = Arc::new(MockState::default());
         let state_clone = state.clone();
         let server = actix_web::HttpServer::new(move || {
@@ -91,9 +98,10 @@ impl MockDesktop {
                 .route("/api/auth/pairing", actix_web::web::post().to(mock_pairing))
                 .route("/echo", actix_web::web::post().to(mock_echo))
                 .route("/crypto", actix_web::web::post().to(mock_crypto))
+                .route("/reject-plaintext", actix_web::web::post().to(mock_reject_plaintext))
                 .route("/slow", actix_web::web::get().to(mock_slow))
         })
-        .bind(("127.0.0.1", 0))
+        .bind((bind_ip, 0))
         .expect("bind mock proxy server");
         let addr = server.addrs()[0];
         let server = server.run();
@@ -140,6 +148,25 @@ impl Drop for MockDesktop {
             let _ = handle.stop(false).await;
         });
     }
+}
+
+/// 等待 mock 服务器真正开始监听（`start_bound` 只保证 bind，run 在独立线程轮询）
+async fn wait_mock_ready(addr: std::net::SocketAddr) {
+    for _ in 0..100 {
+        if tokio::net::TcpStream::connect(addr).await.is_ok() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("mock server {addr} did not start listening");
+}
+
+/// 取本机非环回地址（UDP connect 只做路由选择，不发包）
+fn primary_non_loopback_ip() -> Option<std::net::IpAddr> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let ip = socket.local_addr().ok()?.ip();
+    (!ip.is_loopback()).then_some(ip)
 }
 
 // ==================== Mock handlers ====================
@@ -224,6 +251,16 @@ async fn mock_crypto(
     crypto_response("/crypto", &keys, "{\"code\":0,\"message\":\"decrypted ok\"}")
 }
 
+/// 模拟桌面端 `required` 端点对明文请求的拒绝（T07 稳定码 + 400 正文）
+async fn mock_reject_plaintext() -> actix_web::HttpResponse {
+    actix_web::HttpResponse::BadRequest()
+        .insert_header((
+            wasmnest_link_crypto::ERROR_HEADER,
+            wasmnest_link_crypto::CODE_ENCRYPTION_UNSUPPORTED,
+        ))
+        .json(json!({ "code": 1003, "message": "plaintext is not accepted" }))
+}
+
 async fn mock_slow() -> actix_web::HttpResponse {
     tokio::time::sleep(Duration::from_secs(8)).await;
     envelope(0, "slow done", None)
@@ -273,6 +310,7 @@ async fn jwt_injection_and_auth_whitelist() {
     let resp = execute_proxy(
         proxy_req("jwt-1", "GET", &format!("{}/api/sessions", mock.base_url()), "desktop"),
         None,
+        &CallerIdentity::Host,
     )
     .await
     .expect("desktop session request should pass");
@@ -287,7 +325,9 @@ async fn jwt_injection_and_auth_whitelist() {
         "desktop",
     );
     auth_req.body = Some(json!({ "deviceId": "dev-1", "deviceName": "mi-pad", "fingerprint": "fp" }).to_string());
-    let resp = execute_proxy(auth_req, None).await.expect("auth request should pass");
+    let resp = execute_proxy(auth_req, None, &CallerIdentity::Host)
+        .await
+        .expect("auth request should pass");
     assert_eq!(resp.status, 200);
     let cap = mock.capture("/api/auth/pairing");
     assert!(cap.authorization.is_none(), "auth 路径不得注入 JWT");
@@ -308,6 +348,7 @@ async fn desktop_requires_declared_target() {
     let err = execute_proxy(
         proxy_req("d-1", "GET", &format!("{}/api/health", mock.base_url()), "desktop"),
         None,
+        &CallerIdentity::Host,
     )
     .await
     .expect_err("未声明目标应拒绝");
@@ -318,6 +359,7 @@ async fn desktop_requires_declared_target() {
     let err = execute_proxy(
         proxy_req("d-2", "GET", "https://api.github.com/repos/x", "desktop"),
         None,
+        &CallerIdentity::Host,
     )
     .await
     .expect_err("desktop 类 https 应拒绝");
@@ -328,6 +370,7 @@ async fn desktop_requires_declared_target() {
     let resp = execute_proxy(
         proxy_req("d-3", "GET", &format!("{}/api/health", mock.base_url()), "desktop"),
         None,
+        &CallerIdentity::Host,
     )
     .await
     .expect("声明后应放行");
@@ -345,7 +388,9 @@ async fn wire_alignment() {
     let mut req = proxy_req("w-1", "POST", &format!("{}/echo", mock.base_url()), "desktop");
     req.headers.insert("Host".to_string(), "evil.example.com".to_string());
     req.headers.insert("Range".to_string(), "bytes=0-1023".to_string());
-    let _ = execute_proxy(req, None).await.expect("echo should pass");
+    let _ = execute_proxy(req, None, &CallerIdentity::Host)
+        .await
+        .expect("echo should pass");
 
     let cap = mock.capture("/echo");
     assert_eq!(
@@ -366,7 +411,12 @@ async fn wire_alignment() {
 async fn crypto_envelope_roundtrip() {
     let _serial = SERIAL.lock().unwrap();
     reset_egress();
-    let mock = mock_once().await;
+    let Some(bind_ip) = primary_non_loopback_ip() else {
+        eprintln!("skipping: no non-loopback interface available");
+        return;
+    };
+    let mock = MockDesktop::start_bound(&bind_ip.to_string()).await;
+    wait_mock_ready(mock.addr).await;
     wasmnest_mobile_lib::egress::policy().add_desktop_target(&mock.addr.ip().to_string(), mock.addr.port());
 
     // 开加密：主开关 + HTTP 子开关 + pin（对应前端推送 set_link_crypto_context）
@@ -379,7 +429,9 @@ async fn crypto_envelope_roundtrip() {
 
     let mut req = proxy_req("c-1", "POST", &format!("{}/crypto", mock.base_url()), "desktop");
     req.body = Some("hello sealed".to_string());
-    let resp = execute_proxy(req, None).await.expect("crypto request should pass");
+    let resp = execute_proxy(req, None, &CallerIdentity::Host)
+        .await
+        .expect("crypto request should pass");
     assert_eq!(resp.status, 200);
     assert!(
         resp.body_text.contains("decrypted ok"),
@@ -388,6 +440,197 @@ async fn crypto_envelope_roundtrip() {
     );
     // mock 侧已断言请求信封解密得 "hello sealed"（panic 即失败）
 
+    reset_egress();
+}
+
+/// 应用发起（Plugin 身份）的加密跟随**该应用**策略：required → 加信封并成对解密
+#[tokio::test]
+async fn app_request_envelope_follows_per_app_policy() {
+    let _serial = SERIAL.lock().unwrap();
+    reset_egress();
+    let Some(bind_ip) = primary_non_loopback_ip() else {
+        eprintln!("skipping: no non-loopback interface available");
+        return;
+    };
+    let mock = MockDesktop::start_bound(&bind_ip.to_string()).await;
+    wait_mock_ready(mock.addr).await;
+    wasmnest_mobile_lib::egress::policy().add_desktop_target(&mock.addr.ip().to_string(), mock.addr.port());
+    wasmnest_mobile_lib::state::set_link_crypto_context(wasmnest_mobile_lib::state::LinkCryptoContext {
+        enabled: true,
+        strict_mode: true,
+        encrypt_http: true,
+        kd_public_b64: Some(base64::engine::general_purpose::STANDARD.encode(kd_pub())),
+    });
+    let plugin = "com.example.crypto-app";
+    wasmnest_mobile_lib::state::set_link_crypto_server(
+        &bind_ip.to_string(),
+        mock.addr.port(),
+        true,
+        [(plugin.to_string(), "required".to_string())].into_iter().collect(),
+    );
+
+    assert_eq!(
+        wasmnest_mobile_lib::state::link_crypto_app_policy(&bind_ip.to_string(), mock.addr.port(), plugin).as_deref(),
+        Some("required"),
+        "policy cache must be visible"
+    );
+    assert!(wasmnest_mobile_lib::state::is_http_encryption_active());
+
+    let mut req = proxy_req("app-1", "POST", &format!("{}/crypto", mock.base_url()), "desktop");
+    req.body = Some("hello sealed".to_string());
+    let resp = execute_proxy(req, None, &CallerIdentity::Plugin(plugin.to_string()))
+        .await
+        .expect("app request with required policy should pass");
+    assert_eq!(resp.status, 200);
+    assert!(
+        resp.body_text.contains("decrypted ok"),
+        "响应应被解密为明文: {}",
+        resp.body_text
+    );
+
+    // 同一应用切到 off：该客户端不应再加信封（明文 /echo 也能通）
+    wasmnest_mobile_lib::state::set_link_crypto_server(
+        &bind_ip.to_string(),
+        mock.addr.port(),
+        true,
+        [(plugin.to_string(), "off".to_string())].into_iter().collect(),
+    );
+    let mut plain = proxy_req("app-2", "POST", &format!("{}/echo", mock.base_url()), "desktop");
+    plain.body = Some("plain".to_string());
+    let resp = execute_proxy(plain, None, &CallerIdentity::Plugin(plugin.to_string()))
+        .await
+        .expect("off app request should pass");
+    assert_eq!(resp.status, 200);
+    let cap = mock.capture("/echo");
+    assert!(
+        cap.crypto_negotiation.is_none(),
+        "off 应用不得携带协商头: {:?}",
+        cap.crypto_negotiation
+    );
+
+    wasmnest_mobile_lib::state::clear_link_crypto_servers();
+    wasmnest_mobile_lib::state::set_link_crypto_context(wasmnest_mobile_lib::state::LinkCryptoContext::default());
+    reset_egress();
+}
+
+/// 真机回归：宿主桥（`useHttpApi.httpRequest` = Host 身份）代 bedcode 发请求，
+/// 本端「自愿加密」主开关默认关，但桌面端 bedcode 固定 `required` —— 服务端
+/// 安全下限不受本端开关降级，必须加封；无 pin 时显性失败，绝不退回明文。
+#[tokio::test]
+async fn host_bridge_required_ignores_local_switch() {
+    let _serial = SERIAL.lock().unwrap();
+    reset_egress();
+    let Some(bind_ip) = primary_non_loopback_ip() else {
+        eprintln!("skipping: no non-loopback interface available");
+        return;
+    };
+    let mock = MockDesktop::start_bound(&bind_ip.to_string()).await;
+    wait_mock_ready(mock.addr).await;
+    let host = mock.addr.ip().to_string();
+    let port = mock.addr.port();
+    wasmnest_mobile_lib::egress::policy().add_desktop_target(&host, port);
+
+    // 对端能力快照（连接流程 /api/health）：过滤器在链上 + bedcode 固定 required
+    wasmnest_mobile_lib::state::set_link_crypto_server(
+        &host,
+        port,
+        true,
+        [("com.wasmnest.bedcode".to_string(), "required".to_string())]
+            .into_iter()
+            .collect(),
+    );
+    // 本端：主开关 / HTTP 子开关全关，只有配对后落地的 pin
+    wasmnest_mobile_lib::state::set_link_crypto_context(wasmnest_mobile_lib::state::LinkCryptoContext {
+        enabled: false,
+        strict_mode: false,
+        encrypt_http: false,
+        kd_public_b64: Some(base64::engine::general_purpose::STANDARD.encode(kd_pub())),
+    });
+    assert!(
+        !wasmnest_mobile_lib::state::is_http_encryption_active(),
+        "本端自愿开关必须确实是关的"
+    );
+
+    let mut req = proxy_req("hb-1", "POST", &format!("{}/crypto", mock.base_url()), "desktop");
+    req.body = Some("hello sealed".to_string());
+    let resp = execute_proxy(req, None, &CallerIdentity::Host)
+        .await
+        .expect("required 对端即使本端开关全关也必须加封并解密响应");
+    assert_eq!(resp.status, 200);
+    assert!(
+        resp.body_text.contains("decrypted ok"),
+        "响应应被解密: {}",
+        resp.body_text
+    );
+    let cap = mock.capture("/crypto");
+    assert!(
+        cap.crypto_negotiation.as_deref().unwrap_or("").starts_with("v1 "),
+        "真机回归：明文请求必须改带协商头, got {:?}",
+        cap.crypto_negotiation
+    );
+
+    // required + 无 pin：本地显性失败，不发明文把 400 丢给应用猜
+    wasmnest_mobile_lib::state::set_link_crypto_context(wasmnest_mobile_lib::state::LinkCryptoContext {
+        enabled: false,
+        strict_mode: false,
+        encrypt_http: false,
+        kd_public_b64: None,
+    });
+    let mut no_pin = proxy_req("hb-2", "POST", &format!("{}/crypto", mock.base_url()), "desktop");
+    no_pin.body = Some("hello sealed".to_string());
+    let err = execute_proxy(no_pin, None, &CallerIdentity::Host)
+        .await
+        .expect_err("required 且无 pin 必须 fail-visible");
+    assert!(err.to_string().contains("LINK_ENCRYPTION_NO_PIN"), "got: {err}");
+
+    // 对端策略回到 off（过滤器仍在链上）：回到本端自愿语义，开关关 → 明文
+    wasmnest_mobile_lib::state::set_link_crypto_server(
+        &host,
+        port,
+        true,
+        [("com.wasmnest.bedcode".to_string(), "off".to_string())]
+            .into_iter()
+            .collect(),
+    );
+    let mut plain = proxy_req("hb-3", "POST", &format!("{}/echo", mock.base_url()), "desktop");
+    plain.body = Some("plain".to_string());
+    let resp = execute_proxy(plain, None, &CallerIdentity::Host)
+        .await
+        .expect("off 对端请求应放行");
+    assert_eq!(resp.status, 200);
+    assert!(
+        mock.capture("/echo").crypto_negotiation.is_none(),
+        "对端不要求加密时不得盲加信封（旧宿主会 400）"
+    );
+
+    wasmnest_mobile_lib::state::clear_link_crypto_servers();
+    reset_egress();
+}
+
+/// 明文路径收到对端稳定拒绝码也按码显性失败（不包装成普通 HTTP 400）
+///
+/// 覆盖健康探测缓存尚未建立、或对端策略刚升级到 required 的首批请求。
+#[tokio::test]
+async fn plaintext_request_surfaces_peer_refusal_code() {
+    let _serial = SERIAL.lock().unwrap();
+    reset_egress();
+    let mock = mock_once().await;
+    wasmnest_mobile_lib::egress::policy().add_desktop_target(&mock.addr.ip().to_string(), mock.addr.port());
+
+    let req = proxy_req(
+        "pr-1",
+        "POST",
+        &format!("{}/reject-plaintext", mock.base_url()),
+        "desktop",
+    );
+    let err = execute_proxy(req, None, &CallerIdentity::Host)
+        .await
+        .expect_err("对端显式拒绝必须按码失败");
+    assert!(
+        err.to_string()
+            .contains(wasmnest_link_crypto::CODE_ENCRYPTION_UNSUPPORTED),
+        "got: {err}"
+    );
     reset_egress();
 }
 
@@ -404,7 +647,7 @@ async fn concurrent_request_ids() {
         let url = format!("{}/api/sessions", mock.base_url());
         handles.push(tokio::spawn(async move {
             let req = proxy_req(&format!("conc-{i}"), "GET", &url, "desktop");
-            execute_proxy(req, None).await
+            execute_proxy(req, None, &CallerIdentity::Host).await
         }));
     }
     for (i, h) in handles.into_iter().enumerate() {
@@ -423,10 +666,13 @@ async fn cancel_inflight_request() {
 
     let url = format!("{}/slow", mock.base_url());
     let req = proxy_req("cancel-1", "GET", &url, "desktop");
-    let handle = tokio::spawn(async move { execute_proxy(req, None).await });
+    let handle = tokio::spawn(async move { execute_proxy(req, None, &CallerIdentity::Host).await });
 
     tokio::time::sleep(Duration::from_millis(200)).await;
-    http_cancel("cancel-1".to_string()).await.expect("cancel");
+    // 命令面的通信取消需要凭证；冷路径直调内部函数（命令只是凭证门 + 这一行）
+    wasmnest_mobile_lib::commands::http_proxy::cancel_pending("cancel-1")
+        .await
+        .expect("cancel");
 
     let result = handle.await.expect("join");
     let err = result.expect_err("取消后应报错");
@@ -443,6 +689,7 @@ async fn external_undeclared_denied() {
     let err = execute_proxy(
         proxy_req("e-1", "GET", &format!("{}/api/health", mock.base_url()), "external"),
         None,
+        &CallerIdentity::Host,
     )
     .await
     .expect_err("未声明外网应拒绝");

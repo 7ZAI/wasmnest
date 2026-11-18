@@ -3,7 +3,9 @@
  *
  * **传输方式**：升级检查与安装的**发起权在 Rust 端**——前端只 invoke 宿主命令
  * `check_for_update` / `install_update`，拿已验签的版本元数据（Rust 侧拉取 + minisign
- * 公钥验签），下载进度经 `app://update-progress` 事件回流。
+ * 公钥验签），下载进度经 `app://update-progress` 事件回流。检查源 = 平台仓
+ * GitHub Release 的 `latest.json` 资产（`releases/latest/download/latest.json`，
+ * 见 `src-tauri/tauri.conf.json` 的 `plugins.updater.endpoints`）。
  *
  * 迁移原因（前端零资源访问红线，docs/frontend.md §1）：原先直接调 `@tauri-apps/plugin-updater`
  * 的 `check()`，等于让**前端发起网络请求**。该能力已随 `updater:default` 权限一并从
@@ -20,6 +22,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { relaunch } from '@tauri-apps/plugin-process'
 import i18n from '@/i18n'
+import { ensureHostCredential } from '@/utils/appCommands'
 import { logger } from '@/utils/frontendLogger'
 
 /** 更新状态 */
@@ -52,6 +55,8 @@ interface UpdateProgressPayload {
 
 const status = ref<UpdateStatus>('idle')
 const downloadProgress = ref({ downloaded: 0, contentLength: 0 })
+/** 可更新版本号（status='available' 时由宿主返回，其余状态为 null） */
+const availableVersion = ref<string | null>(null)
 
 /**
  * 检查更新
@@ -68,14 +73,18 @@ async function checkForUpdate(): Promise<UpdateCheckResult | null> {
 
     if (!result.available) {
       status.value = 'latest'
+      availableVersion.value = null
       return null
     }
     status.value = 'available'
+    availableVersion.value = result.version
     return result
   } catch (e) {
     // 票 04（ADR 0030）：详情只进日志，UI 走 status='failed' + 通用文案
     logger.error('[update-checker] checkForUpdate failed:', e)
     status.value = 'failed'
+    // 失败不保留上一轮的版本号：失败态渲染的是通用文案，留着只会成为陈旧信息
+    availableVersion.value = null
     return null
   }
 }
@@ -102,7 +111,9 @@ async function downloadAndInstall(onProgress?: (downloaded: number, total: numbe
     })
 
     // false = 当前无可用更新：**不是失败**，保持既有状态直接返回
-    const started = await invoke<boolean>('install_update')
+    const started = await invoke<boolean>('install_update', {
+      credential: await ensureHostCredential(),
+    })
     if (!started) {
       status.value = 'available'
       return
@@ -147,6 +158,7 @@ export function useUpdateChecker() {
   return {
     status,
     downloadProgress,
+    availableVersion,
     checkForUpdate,
     downloadAndInstall,
     getUpdateStatusText,

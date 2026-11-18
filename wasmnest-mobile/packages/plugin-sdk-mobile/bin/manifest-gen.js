@@ -39,6 +39,9 @@ const RUST_PERMISSION_RULES = [
   { re: /\bhttp_fetch\b/, perm: 'network:http' },
   { re: /\b(fs_read|fs_copy)\b/, perm: 'fs:read' },
   { re: /\bfs_write\b/, perm: 'fs:write' },
+  // 内网穿透（T06）：服务端 / 客户端分域；configure / status 是共用面，不推导。
+  { re: /\btunnel_(expose|unexpose|issue_pairing_ticket)\b/, perm: 'tunnel:serve' },
+  { re: /\btunnel_(connect|close)\b/, perm: 'tunnel:connect' },
 ]
 
 /**

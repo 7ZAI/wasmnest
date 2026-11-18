@@ -15,13 +15,14 @@ export type {
   ShellSettingsEntry,
   ShellStatusBarAlign,
   ShellStatusBarItem,
-  ShellThemeSkin,
+  ShellTheme,
+  ShellThemeGlyphStyle,
 } from './types'
 
 export {
   clearShellExtensions,
   registerSettingsEntry,
   registerStatusBarItem,
-  registerThemeSkin,
+  registerTheme,
   useShellExtensions,
 } from './registry'

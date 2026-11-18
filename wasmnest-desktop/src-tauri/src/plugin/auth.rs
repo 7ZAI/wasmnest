@@ -1,11 +1,11 @@
-//! host-auth-center 宿主侧接线（路径 B：WIT 绑定 + `Host` impl + 域函数 + 自报，四件同处）
+//! host-auth-center 宿主侧接线（WIT 绑定 + `Host` impl + 域函数 + 自报，四件同处）
 //!
-//! wasm-core 纯净性收口票 02 批次 04 自内核迁出（`host_api/auth.rs` 整文件删除，
-//! 内核反向锁 `auth_domain_must_not_return_to_wasm_core` 防回接）。与 pty / mdns /
-//! ws / http 等「窄端口」域不同，host-auth-center **没有独立能力 crate**——装配方就是宿主
-//! 本 crate（孤儿规则见 [`super::bindings`] 模块文档），域函数与 WIT impl 同处。
+//! 自内核迁出（原 `host_api/auth.rs` 已删除，内核反向锁
+//! `auth_domain_must_not_return_to_wasm_core` 防回接）。与 pty / mdns / ws / http
+//! 等「窄端口」域不同，host-auth-center **没有独立能力 crate**——装配方就是宿主本
+//! crate（孤儿规则见 [`super::bindings`]），域函数与 WIT impl 同处。
 //!
-//! ## 域面形状（v15 起逐步收敛后的现状）
+//! ## 域面形状
 //!
 //! - **密钥托管**（v15 secret-store）：主库 `plugin_secrets` 表 + read-through 缓存，
 //!   属主 = 调用方插件实例的 plugin_id（guest 无法伪造；越权在 SQL 层即无命中——
@@ -14,26 +14,26 @@
 //!   表是宿主真源（TTL 由宿主命令面读取后传给插件）；
 //! - **链路身份 Kd 公钥材料读取**（v19 保留面；生物凭证面已随 v34 / B-downsink 退役，
 //!   公钥托管与验签执行在认证中心插件私有库）；
-//! - **认证中心显式注册 + 组合式认证原语**（v32 / ADR 0031 K1/K6）：单中心唯一性
-//!   仲裁在 [`wasmnest_wasm_core::host_api::auth_center`] 注册表（**真源仍在内核**——
-//!   内核 `boot.rs` 的 L2 启动门与 `activation.rs` 停用回收同表消费，见下文），
-//!   本域只做权限门 + 薄分派；`auth-method-invoke` 是**零解析窄转发**（ADR 0032
-//!   L2 红线③：不拆 params、不解释 method 语义）。
+//! - **认证中心显式注册 + 组合式认证原语**：单中心唯一性仲裁在
+//!   [`wasmnest_wasm_core::host_api::auth_center`] 注册表（**真源仍在内核**——
+//!   内核 `boot.rs` 的启动门与 `activation.rs` 停用回收同表消费，见下文），本域
+//!   只做权限门 + 薄分派；`auth-method-invoke` 是**零解析窄转发**：不拆 params、
+//!   不解释 method 语义。
 //!
-//! ## 哪些机制**刻意留在宿主**（AGENTS §5.1.3 允许的薄壳）
+//! ## 哪些机制**刻意留在宿主**（允许保留的薄壳）
 //!
 //! - **权限门**（`auth` 位，全部 10 条原语同一门）：复用 wasm-core 的
 //!   `host_api::check_permission`（同一份 PermissionManager、同一条拒绝 warn 路径）；
-//! - **明文不落日志红线**（AGENTS §8）：secret 写入只记 `value.len()`，错误消息
+//! - **明文不落日志红线**：secret 写入只记 `value.len()`，错误消息
 //!   不含值内容；
 //! - **认证域设置白名单**：`settings` 表是宿主真源，插件只能写本域两个 TTL 键。
 //!
-//! ## 注册表为什么留在内核（票 02 批次 04 显式裁决）
+//! ## 注册表为什么留在内核
 //!
-//! `auth_center` 注册表被四方消费：内核 `boot.rs` 的 L2 启动门（按在册中心做对账）、
+//! `auth_center` 注册表被四方消费：内核 `boot.rs` 的启动门（按在册中心做对账）、
 //! 内核 `activation.rs` 的停用回收、宿主 lib 的裁决面/桥接门
-//! （`utils/auth/auth_center.rs`）、`test_support` 测试闸门。它是 ADR 0031 显式裁决的
-//! 「通用注册表」薄壳；迁出会迫使内核启动门重建（内核无法点名宿主类型）。本域经
+//! （`utils/auth/auth_center.rs`）、`test_support` 测试闸门。它是显式裁决的「通用
+//! 注册表」薄壳；迁出会迫使内核启动门重建（内核无法点名宿主类型）。本域经
 //! `wasmnest_wasm_core::host_api::auth_center` 公开面取用，不得复制仲裁判据。
 
 use chrono::Utc;
@@ -48,7 +48,19 @@ use wasmnest_wasm_core::runtime_util::block_on_async;
 
 use crate::plugin::bindings::wasmnest;
 
-// 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报）。路径 B 域
+/// 取插件主库锁：中毒时恢复内层 guard 而不是 panic
+///
+/// 一次 DB 操作 panic 不应把后续所有认证命令放大成永久 panic（rusqlite 的
+/// `Transaction` 在 drop 时回滚，`into_inner` 通常安全）。保留 error 日志让
+/// 中毒可见，与内核 `ProcessRegistry` 同口径。
+fn lock_plugin_db(db: &std::sync::Mutex<crate::db::Database>) -> std::sync::MutexGuard<'_, crate::db::Database> {
+    db.lock().unwrap_or_else(|e| {
+        tracing::error!("plugin secrets db lock poisoned; recovering inner guard");
+        e.into_inner()
+    })
+}
+
+// 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报）。直连绑定域
 // 的自报静态住在本 crate（宿主 lib 即最终二进制）⇒ 无需强制引用行。
 wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 
@@ -56,7 +68,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "auth";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-auth-center"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:auth-center@0.0.1/host-auth-center"];
 
 /// 本域的权限位（必须与 `wasmnest.wit` / SDK 权限表逐字一致；全域单权限位 `auth`）
 pub const MODULE_PERMISSIONS: &[&str] = &["auth"];
@@ -80,7 +92,7 @@ impl HostModule for AuthModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_auth_center::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::auth_center::host_auth_center::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -99,7 +111,7 @@ inventory::submit! {
 
 /// 属主 = 调用方插件实例的 plugin_id（本 impl 自 store state 派生，guest 无法伪造）；
 /// 权限门 + 主库持久化 + 明文不落日志 + 记录面白名单全部在下方域函数内实现。
-impl wasmnest::plugin::host_auth_center::Host for WasmPluginState {
+impl wasmnest::auth_center::host_auth_center::Host for WasmPluginState {
     fn secret_get(&mut self, key: String) -> Result<Option<String>, String> {
         auth_secret_get(ctx_of(self), ctx_of(self), ctx_of(self), &self.plugin_id, &key)
     }
@@ -126,14 +138,14 @@ impl wasmnest::plugin::host_auth_center::Host for WasmPluginState {
         auth_link_identity_parts(ctx_of(self), &self.plugin_id)
     }
 
-    // ==================== v33 / v34：认证中心自持凭据面接线退役（ADR 0033 + B-downsink） ====================
+    // ==================== 认证中心自持凭据面接线退役 ====================
     // 原 `device_token_issue` / `device_token_verify` 接线随 WIT `host-auth-center` 两函数
     // 删除：入场密钥的生成 / 签发 / 验签归认证中心自持，宿主不持有任何设备 JWT 密码
     // 学。中心只经 `auth_secret_get/set` 存取密钥材料（属主隔离照旧）。旧产物（v32
     // SDK 构建）仍 import 这两个函数 → 实例化期被拒（`stale_artifact_rebuild_hint`
     // 点名 v33 重建），不是 trap 也不是静默降级。
 
-    // ==================== v32：认证中心显式注册 + 组合式认证原语（ADR 0031） ====================
+    // ==================== 认证中心显式注册 + 组合式认证原语 ====================
 
     fn auth_center_register(&mut self, methods: Vec<String>) -> Result<String, String> {
         auth_center_register(ctx_of(self), &self.plugin_id, methods)
@@ -164,10 +176,10 @@ fn ctx_of(state: &WasmPluginState) -> &WasmHostContext {
 ///
 /// 只为 `utils::auth::test_tokens::seed_keyring` 服务——那里需要把认证中心的
 /// 入场密钥环种成已知密钥，才能在**不自造 JWT 密码学**的前提下签出中心认的
-/// token（ADR 0033 后宿主没有签发面）。走真实的 `auth_secret_set` 实现
+/// token（宿主没有签发面）。走真实的 `auth_secret_set` 实现
 /// （含权限门与明文不落日志），而不是直接写库——夹具走的是真路径。
 ///
-/// **常编译 pub（票 02 批次 04 随域迁宿主）**：`test_tokens` 同批迁到本 crate
+/// **常编译 pub（随域迁宿主）**：`test_tokens` 同批迁到本 crate
 /// `utils::auth::test_tokens`（原依赖的 wasm-core 内部函数不复存在）。
 pub fn test_seed_plugin_secret(
     db: &dyn DbScope,
@@ -210,7 +222,7 @@ pub(crate) fn auth_secret_get(
     let pid = plugin_id.to_string();
     let k = key.to_string();
     let value: Option<String> = block_on_async(async move {
-        let db = db.lock().expect("plugin secrets db lock poisoned");
+        let db = lock_plugin_db(&db);
         db.conn()
             .query_row(
                 "SELECT value FROM plugin_secrets WHERE plugin_id = ?1 AND key = ?2",
@@ -253,7 +265,7 @@ pub(crate) fn auth_secret_set(
     let v = value.to_string();
     let now = Utc::now().to_rfc3339();
     block_on_async(async move {
-        let db = db.lock().expect("plugin secrets db lock poisoned");
+        let db = lock_plugin_db(&db);
         db.conn()
             .execute(
                 "INSERT INTO plugin_secrets (plugin_id, key, value, updated_at) \
@@ -288,7 +300,7 @@ pub(crate) fn auth_secret_delete(
     let pid = plugin_id.to_string();
     let k = key.to_string();
     block_on_async(async move {
-        let db = db.lock().expect("plugin secrets db lock poisoned");
+        let db = lock_plugin_db(&db);
         db.conn()
             .execute(
                 "DELETE FROM plugin_secrets WHERE plugin_id = ?1 AND key = ?2",
@@ -317,7 +329,7 @@ pub(crate) fn auth_secret_keys(
     let db = db.database().clone();
     let pid = plugin_id.to_string();
     block_on_async(async move {
-        let db = db.lock().expect("plugin secrets db lock poisoned");
+        let db = lock_plugin_db(&db);
         let mut stmt = db
             .conn()
             .prepare("SELECT key FROM plugin_secrets WHERE plugin_id = ?1 ORDER BY key")
@@ -366,7 +378,7 @@ pub(crate) fn auth_setting_set(
     let k = key.to_string();
     let v = value.to_string();
     block_on_async(async move {
-        let db = db.lock().expect("plugin secrets db lock poisoned");
+        let db = lock_plugin_db(&db);
         db.set_setting(&k, &v).map_err(|e| format!("database error: {}", e))
     })?;
     tracing::info!(
@@ -396,13 +408,13 @@ pub(crate) fn auth_link_identity_parts(perm: &dyn PermissionScope, plugin_id: &s
     }
 }
 
-// ==================== v32：认证中心显式注册 + 组合式认证原语（ADR 0031） ====================
+// ==================== 认证中心显式注册 + 组合式认证原语 ====================
 //
 // 单中心注册表本体 + 唯一性仲裁 + 停用回收在内核 `host_api/auth_center.rs`
-//（真源留内核的裁决见模块文档）；本面只做权限门（全部复用既有 `auth` 权限位，K8）
-// + 对注册表的薄分派。`auth-method-invoke` 是**零解析窄转发**（ADR 0032 L2 红线③）。
+//（注册表真源留内核）；本面只做权限门（全部复用既有 `auth` 权限位）
+// + 对注册表的薄分派。`auth-method-invoke` 是**零解析窄转发**。
 
-/// 注册本插件为认证中心（K1；单中心仲裁 K4 在注册表内，重复注册标点名在册属主）
+/// 注册本插件为认证中心（单中心仲裁在注册表内，重复注册点名在册属主）
 pub(crate) fn auth_center_register(
     perm: &dyn PermissionScope,
     plugin_id: &str,
@@ -422,7 +434,7 @@ pub(crate) fn auth_center_unregister(perm: &dyn PermissionScope, plugin_id: &str
     auth_center::unregister(plugin_id)
 }
 
-/// 列取当前认证中心登记的认证方式（组合式认证的发现端，K6；无中心 fail-closed）
+/// 列取当前认证中心登记的认证方式（组合式认证的发现端；无中心 fail-closed）
 pub(crate) fn auth_methods_list(perm: &dyn PermissionScope, plugin_id: &str) -> Result<Vec<String>, String> {
     if !check_permission(perm, plugin_id, PERMISSION_AUTH, "host_auth_methods_list") {
         return Err("permission denied".to_string());
@@ -434,9 +446,9 @@ pub(crate) fn auth_methods_list(perm: &dyn PermissionScope, plugin_id: &str) -> 
     Ok(entry.methods)
 }
 
-/// 经认证中心执行一次认证方式调用（K6 零解析窄转发）。
+/// 经认证中心执行一次认证方式调用（零解析窄转发）。
 ///
-/// 边界（spec §4.3.1）：无中心 → `no auth center registered`（fail-closed）；
+/// 边界：无中心 → `no auth center registered`（fail-closed）；
 /// method 不在注册表 → 点名 method 与在册列表（安全闸门）；调用传输失败 →
 /// `auth center unavailable: <原因>`；中心返回错误信封 → **原样透传**（业务拒绝，
 /// 不吞成宿主错误）。
@@ -851,7 +863,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "auth", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-auth-center"],
+            &["wasmnest:auth-center@0.0.1/host-auth-center"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

@@ -8,9 +8,8 @@
  * 两处与宿主不同，都是浏览器环境的必然结果，不是偷懒：
  *   1. 启动 = `loader.activatePlugin`（重新跑插件 activate），停止 = `deactivatePlugin`；
  *      没有 WASM 后端，也就没有宿主那套 runtime 生命周期。
- *   2. 权限授予是纯展示：dev-shell 全程跳过权限检查（README「Mock 边界」已声明），
- *      因此 setPermissionGrant 明确返回 false，壳据此把开关置灰并说明原因——
- *      不做「本地写一下就假装生效」的降级。
+ *   2. 权限是纯展示：dev-shell 全程跳过权限检查（README「Mock 边界」已声明），
+ *      没有逐项授权写面；适配器不实现 setPermissionGrant，详情页只读呈现。
  */
 
 import { plugins, type DevPluginRecord } from '../../registry'
@@ -127,16 +126,6 @@ export function createDevAppSource(deps: DevAppSourceDeps): ShellAppSource {
 
     async stop(appId: string): Promise<void> {
       await deps.deactivate(appId)
-    },
-
-    /**
-     * 逐项权限开关：dev-shell 全程跳过权限检查，没有可写的真源
-     *
-     * 明确返回 false，让壳把开关置灰并说明——「点了就通过」的假成功会让插件开发者
-     * 误以为权限逻辑已验证。
-     */
-    async setPermissionGrant(): Promise<boolean> {
-      return false
     },
 
     /**

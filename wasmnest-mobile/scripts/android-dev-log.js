@@ -11,7 +11,10 @@
  *
  * 非业务日志过滤（控制台实时输出与落盘文件同一套过滤，保留行双写）：
  *   - 设备侧 wasmtime/cranelift JIT 编译内部 debug（cranelift_codegen::* 等，
- *     插件加载瞬间洪水刷屏，实测单日 ~12 万行日志里占 ~9 成）、mdns_sd:: 库内部 debug
+ *     插件加载瞬间洪水刷屏，实测单日 ~12 万行日志里占 ~9 成）、mdns_sd:: 库内部 debug、
+ *     libp2p-swarm poll 心跳 span（`libp2p_swarm…: Swarm::poll;` / `Connection::poll;` /
+ *     `Pool::poll;`，tracing→log 桥接，频率 = 事件循环频率 × 连接数）与 yamux RTT
+ *     探活（`yamux::connection::rtt: received pong …`，keep-alive 周期触发）
  *   - 设备侧 Android/MIUI 框架噪音 tag：按「本方 tag 白名单」判定——WasmNest* 前缀、
  *     Tauri/Console、System.out、RustStdoutStderr、PluginAssetExtractor、
  *     ForegroundService，以及各崩溃关键 tag（AndroidRuntime / libc / DEBUG）；

@@ -1,12 +1,12 @@
-//! WebSocket Client - Main Implementation
+//! WebSocket 主客户端：整合心跳 / IO / 生命周期 / 请求响应
 //!
-//! 整合所有子模块的主客户端，提供统一的 API
-//! 使用 RequestResponseManager 实现请求-响应模式
+//! 对上层只暴露统一 API；请求-响应模式由 `RequestResponseManager` 承担。
 
 use crate::connection::MessageHandler;
 use crate::connection::{
-    heartbeat::HeartbeatManager, io::IoManager, lifecycle::LifecycleManager, ws_connection::WsConnectionManager,
-    ConnectionStatus, IoEvent, MatchOutcome, RequestResponseManager, WsClientConfig, WsClientEvent,
+    heartbeat::HeartbeatManager, io::IoManager, lifecycle::LifecycleManager, ws_connection::SharedWsCrypto,
+    ws_connection::WsConnectionManager, ConnectionStatus, IoEvent, MatchOutcome, RequestResponseManager,
+    WsClientConfig, WsClientEvent,
 };
 use crate::model::message::Message;
 use crate::Result;
@@ -15,6 +15,55 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 use tokio_tungstenite::tungstenite::protocol::Message as WsMsg;
 use tracing::{debug, error, info, warn};
+use wasmnest_link_crypto::WS_PLUGIN_CHANNEL;
+
+/// 入站文本帧解密（无会话密码 = 明文直通）
+fn open_ws_text(crypto: &Option<SharedWsCrypto>, text: &str) -> std::result::Result<String, String> {
+    match crypto {
+        Some(crypto) => crypto
+            .lock()
+            .map_err(|_| "event ws link crypto state poisoned".to_string())?
+            .open_text(WS_PLUGIN_CHANNEL, text)
+            .map_err(|e| format!("event ws decrypt failed: {e}")),
+        None => Ok(text.to_string()),
+    }
+}
+
+/// 入站二进制帧解密（无会话密码 = 明文直通）
+fn open_ws_binary(crypto: &Option<SharedWsCrypto>, data: &[u8]) -> std::result::Result<Vec<u8>, String> {
+    match crypto {
+        Some(crypto) => crypto
+            .lock()
+            .map_err(|_| "event ws link crypto state poisoned".to_string())?
+            .open_binary(WS_PLUGIN_CHANNEL, data)
+            .map_err(|e| format!("event ws decrypt failed: {e}")),
+        None => Ok(data.to_vec()),
+    }
+}
+
+/// 出站文本帧加封（无会话密码 = 明文直通）
+fn seal_ws_text(crypto: &Option<SharedWsCrypto>, text: &str) -> std::result::Result<String, String> {
+    match crypto {
+        Some(crypto) => crypto
+            .lock()
+            .map_err(|_| "event ws link crypto state poisoned".to_string())?
+            .seal_text(WS_PLUGIN_CHANNEL, text)
+            .map_err(|e| format!("event ws encrypt failed: {e}")),
+        None => Ok(text.to_string()),
+    }
+}
+
+/// 出站二进制帧加封（无会话密码 = 明文直通）
+fn seal_ws_binary(crypto: &Option<SharedWsCrypto>, data: &[u8]) -> std::result::Result<Vec<u8>, String> {
+    match crypto {
+        Some(crypto) => crypto
+            .lock()
+            .map_err(|_| "event ws link crypto state poisoned".to_string())?
+            .seal_binary(WS_PLUGIN_CHANNEL, data)
+            .map_err(|e| format!("event ws encrypt failed: {e}")),
+        None => Ok(data.to_vec()),
+    }
+}
 
 use crate::system::constants::connection::{
     BROADCAST_CHANNEL_CAPACITY, DISCONNECT_TASK_TIMEOUT_SECS, EVENT_FORWARDER_POLL_INTERVAL_MS, LOG_PREVIEW_MAX_LEN,
@@ -126,12 +175,12 @@ impl WsClient {
     pub async fn connect(self: &Arc<Self>) -> Result<()> {
         info!("[WsClient] Starting connection to {}", self.config.url());
 
-        let (stream, sender) = self.connection.connect().await?;
+        let (stream, sender, crypto) = self.connection.connect().await?;
 
         *self.ws_sender.write().await = Some(sender.clone());
         self.running.store(true, std::sync::atomic::Ordering::SeqCst);
 
-        self.spawn_io_tasks(stream, sender).await;
+        self.spawn_io_tasks(stream, sender, crypto).await;
         self.start_event_forwarder().await;
         self.start_heartbeat_task().await;
 
@@ -145,6 +194,7 @@ impl WsClient {
         &self,
         stream: tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
         _sender: mpsc::Sender<WsMsg>,
+        crypto: Option<SharedWsCrypto>,
     ) {
         let running = self.running.clone();
 
@@ -159,6 +209,10 @@ impl WsClient {
         let heartbeat = self.heartbeat.clone();
 
         let (write, read) = stream.split();
+        // 帧级链路加密（升级期协商成功才有）：读侧 open / 写侧 seal；
+        // 无密码 = 明文直通（与服务端本地豁免 / off 策略同口径）。
+        let receiver_crypto = crypto.clone();
+        let sender_crypto = crypto;
         // write（SplitSink）仅由 sender 任务独占访问：receiver 的 Ping/Pong 回复
         // 经 ws_sender channel 转发，避免两个任务竞争同一把锁并在 send().await
         // 期间持有它（对端停止读时背压会让另一任务无限等锁）
@@ -184,6 +238,17 @@ impl WsClient {
                         msg = rx.next() => {
                             match msg {
                                 Some(Ok(WsMsg::Text(text))) => {
+                                    // 链路加密：密文信封 → 明文 JSON（失败即断链，不把密文
+                                    // 当业务帧路由；序号错误是重放/乱序的硬信号）
+                                    let text = match open_ws_text(&receiver_crypto, &text) {
+                                        Ok(text) => text,
+                                        Err(message) => {
+                                            error!("[WsClient] {}", message);
+                                            request_manager.on_error(&message).await;
+                                            let _ = event_tx.send(WsClientEvent::Error { message });
+                                            break;
+                                        }
+                                    };
                                     debug!("[WsClient] <<< RECV: {}...", &text[..text.len().min(LOG_PREVIEW_MAX_LEN)]);
 
                                     // 任意入站帧都证明链路还通：业务帧同样刷新心跳活动基准
@@ -196,7 +261,7 @@ impl WsClient {
                                     //    · Push = 可解析的业务推送帧 → 广播 + 交给 handler
                                     //    · Unroutable = 无法解析为业务 Message 的帧（插件端点事件帧/
                                     //      畸形帧）→ **同样交 handler**——handler 内 PluginEventRouter
-                                    //      正是在此闭环；匹配层吞掉 = 事件帧到不了路由（票 03 必红）
+                                    //      正是在此闭环；匹配层吞掉 = 事件帧到不了路由（必红）
                                     match request_manager.try_match(WsMsg::Text(text.clone())).await {
                                         MatchOutcome::Matched => {
                                             // 已匹配 pending 请求，无需处理
@@ -253,6 +318,16 @@ impl WsClient {
                                 }
                                 Some(Ok(WsMsg::Binary(data))) => {
                                     debug!("[WsClient] <<< RECV Binary: {} bytes", data.len());
+                                    // 链路加密：二进制帧同为密封载荷
+                                    let data = match open_ws_binary(&receiver_crypto, &data) {
+                                        Ok(data) => data,
+                                        Err(message) => {
+                                            error!("[WsClient] {}", message);
+                                            request_manager.on_error(&message).await;
+                                            let _ = event_tx.send(WsClientEvent::Error { message });
+                                            break;
+                                        }
+                                    };
                                     // 二进制业务帧同样算链路活跃（与 Text 分支同口径）
                                     heartbeat.on_activity().await;
                                     // Binary 消息交给 handler 处理
@@ -266,7 +341,7 @@ impl WsClient {
                                     }
                                 }
                                 Some(Ok(WsMsg::Close(reason))) => {
-                                    // M1：保留 close **code**（认证类 4001/4003 致命，
+                                    // 保留 close **code**（认证类 4001/4003 致命，
                                     // 供 ConnMonitor/自愈监督判定「重连无意义」）；
                                     // 未携带 CloseFrame 时按 1005（无状态码）处理
                                     let code = reason
@@ -337,6 +412,13 @@ impl WsClient {
                             match msg {
                                 Some(WsMsg::Text(text)) => {
                                     debug!("[WsClient] >>> SEND: {}...", &text[..text.len().min(LOG_PREVIEW_MAX_LEN)]);
+                                    let text = match seal_ws_text(&sender_crypto, &text) {
+                                        Ok(text) => text,
+                                        Err(message) => {
+                                            error!("[WsClient] {}", message);
+                                            break;
+                                        }
+                                    };
                                     let mut write = write_for_sender.lock().await;
                                     if let Err(e) = write.send(WsMsg::Text(text)).await {
                                         error!("[WsClient] Send error: {}", e);
@@ -344,6 +426,13 @@ impl WsClient {
                                     }
                                 }
                                 Some(WsMsg::Binary(data)) => {
+                                    let data = match seal_ws_binary(&sender_crypto, &data) {
+                                        Ok(data) => data,
+                                        Err(message) => {
+                                            error!("[WsClient] {}", message);
+                                            break;
+                                        }
+                                    };
                                     let mut write = write_for_sender.lock().await;
                                     if let Err(e) = write.send(WsMsg::Binary(data)).await {
                                         error!("[WsClient] Send binary error: {}", e);
@@ -552,8 +641,8 @@ impl WsClient {
     }
 
     async fn await_tasks(&self, _timeout_secs: u64) {
-        // Note: We cannot directly await JoinHandle wrapped in Arc.
-        // The tasks will be aborted when running flag is set to false above.
+        // 无法直接 await 包在 `Arc` 里的 `JoinHandle`；把 running 置 false 后
+        // 任务会在自己的循环边界退出，这里只做超时等待的空壳。
     }
 
     /// 发送消息（不等待响应）
@@ -630,7 +719,7 @@ impl WsClient {
     }
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 // 用例按功能拆至 `ws_client/tests/`（本内联模块的子模块路径由 rustc
 // 自动解析到该目录；模块树 `connection::ws_client::tests::<文件>` 与内联形态等价，私有项可见性不受影响）。

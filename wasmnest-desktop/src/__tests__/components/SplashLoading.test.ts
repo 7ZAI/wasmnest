@@ -212,7 +212,7 @@ describe('SplashLoading Component', () => {
     const iconPoints = [...ICON_SVG.matchAll(/<polyline points="([^"]+)"/g)].map((m) => m[1])
     expect(lines.map((line) => line.getAttribute('points'))).toEqual(iconPoints)
 
-    // 源码顺序 = 四根圆柱从左到右（各 31 条）：先画左圆柱，再一路画到右边
+    // 源码顺序 = 四根圆柱从左到右（29/31/31/29 条，两端头部装饰线已移除）：先画左圆柱，再一路画到右边
     const meanX = lines.map((line) => {
       const xs = line
         .getAttribute('points')!
@@ -220,7 +220,7 @@ describe('SplashLoading Component', () => {
         .map((pair) => Number(pair.split(',')[0]))
       return xs.reduce((sum, x) => sum + x, 0) / xs.length
     })
-    const cuts = [0, 31, 62, 93, ICON_POLY_COUNT]
+    const cuts = [0, 29, 60, 90, ICON_POLY_COUNT]
     const cylinderMeanX = cuts.slice(0, -1).map((start, i) => {
       const group = meanX.slice(start, cuts[i + 1])
       return group.reduce((sum, x) => sum + x, 0) / group.length
@@ -241,7 +241,7 @@ describe('SplashLoading Component', () => {
     const expected = splashDrawingPlan(geometry)
     expect(expected.length).toBe(ICON_POLY_COUNT)
 
-    // 组间 = 左柱 → 左中 → 右中 → 右柱；每组 31 条
+    // 组间 = 左柱 → 左中 → 右中 → 右柱；按柱边界分组
     const groupSize = Math.ceil(ICON_POLY_COUNT / 4)
     const groupOf = (index: number) => Math.floor(index / groupSize)
     expect(expected.map((t) => groupOf(t.index))).toEqual(

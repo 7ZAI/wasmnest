@@ -10,6 +10,7 @@
  */
 
 import { invoke } from '@/utils/invoke'
+import { ensureHostCredential } from '@/utils/appCommands'
 
 /** 保存到配置文件的日志段（与后端 LogConfig 对齐，camelCase 序列化） */
 export interface LogSettingsPayload {
@@ -24,7 +25,7 @@ export interface LogSettingsPayload {
 export function useLogSettings() {
   /** 运行时热调日志文件级别（debug/info/warn/error） */
   async function setLogLevel(level: string): Promise<void> {
-    await invoke('set_log_level', { level })
+    await invoke('set_log_level', { level, credential: await ensureHostCredential() })
   }
 
   /** 打开系统文件管理器定位日志目录 */
@@ -34,7 +35,7 @@ export function useLogSettings() {
 
   /** 持久化日志配置（替换配置文件 log 段；format/rotation/max_files/capacity_bytes 重启生效） */
   async function saveLogSettings(log: LogSettingsPayload): Promise<void> {
-    await invoke('save_log_settings', { log })
+    await invoke('save_log_settings', { log, credential: await ensureHostCredential() })
   }
 
   return { setLogLevel, openLogDir, saveLogSettings }

@@ -306,7 +306,7 @@ async fn service_lease_lifecycle_flow() {
     );
 
     // 界面关闭：宿主命令层对运行期租约应用 no-op（界面不再决定 8775 生死）
-    wasmnest_desktop_lib::commands::plugin_surface_close(BG_HTTP_PLUGIN_ID.to_string())
+    wasmnest_desktop_lib::commands::surface_close_lease(BG_HTTP_PLUGIN_ID)
         .await
         .expect("surface close on background app must be a no-op success");
     let snapshot = registry.snapshot().await;
@@ -318,7 +318,7 @@ async fn service_lease_lifecycle_flow() {
     assert!(supervisor.is_running().await, "界面关闭后传输面必须继续运行");
 
     // 界面打开同样不重复记账（幂等 no-op）
-    wasmnest_desktop_lib::commands::plugin_surface_open(BG_HTTP_PLUGIN_ID.to_string())
+    wasmnest_desktop_lib::commands::surface_open_lease(BG_HTTP_PLUGIN_ID)
         .await
         .expect("surface open on background app must be a no-op success");
     assert_eq!(

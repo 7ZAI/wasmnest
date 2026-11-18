@@ -58,6 +58,13 @@ export default {
       home: '主屏',
       homeTitle: '回到主屏（应用继续在后台运行）',
     },
+    /** 悬浮导航（开关开启后常驻在任意面之上；与移动端同键名同文案） */
+    floatingNav: {
+      back: '返回',
+      home: '回主屏',
+      recents: '切换应用',
+      move: '悬浮导航，可拖动；聚焦后可用方向键移动',
+    },
     toolbar: {
       notifs: '通知中心，{count} 条',
       notifsTitle: '通知中心（{count} 条）',
@@ -88,7 +95,15 @@ export default {
       },
       settings: {
         name: '设置',
-        desc: '界面 · 背景 · 皮肤 · 系统 · 关于',
+        desc: '外观 · 系统 · 日志 · 授权 · 关于',
+      },
+      appearance: {
+        name: '外观',
+        desc: '明暗模式 · 语言 · 字号 · 壁纸 · 主题',
+      },
+      shortcuts: {
+        name: '快捷键',
+        desc: '壳层键盘快捷键 · 可改可清空',
       },
     },
     quickSettings: {
@@ -100,6 +115,7 @@ export default {
       tileAnim: '动画',
       tileCrypto: '链路加密',
       tileSleep: '防止休眠',
+      tileNav: '悬浮导航',
     },
     notif: {
       title: '通知中心',
@@ -129,7 +145,7 @@ export default {
       },
       uninstalled: {
         title: '已卸载',
-        body: '{name} 及其数据已移除',
+        body: '{name} 已从本机移除',
       },
       approved: {
         title: '已批准并启动',
@@ -142,10 +158,6 @@ export default {
       },
       open: '查看',
       reopen: '重新打开',
-      ready: {
-        title: '运行时就绪',
-        body: '已加载 {count} 个应用，授权策略层 fail-closed 自检通过。',
-      },
     },
     ctx: {
       aria: '应用操作菜单',
@@ -156,6 +168,31 @@ export default {
       stop: '停用',
       uninstall: '卸载',
       uninstallDisabled: '请先停用应用后再卸载',
+    },
+    // 壳快捷键（ADR 0060）：动作名 / 录制交互 / 行内校验文案。
+    // 动作 id 集合见 shortcutsModel SHORTCUT_ACTIONS，key 段与动作一一对应。
+    shortcuts: {
+      cardTitle: '按键绑定',
+      hint: '录制时按下新组合键 · Esc 取消 · Backspace 清除（组合归还应用）。组合必须包含 Ctrl 或 Alt。',
+      unbound: '未绑定',
+      recording: '按下组合键…',
+      changeBinding: '更改「{action}」的快捷键',
+      resetRow: '恢复默认',
+      resetAll: '全部恢复默认',
+      conflict: '与「{action}」冲突，换个组合再试。',
+      reserved: '该组合可能被系统或内置浏览器截获，不保证生效。',
+      missingModifier: '组合必须包含 Ctrl 或 Alt。',
+      action: {
+        appNext: { name: '下一个应用', desc: '切到下一个运行中的应用' },
+        appPrev: { name: '上一个应用', desc: '切到上一个运行中的应用' },
+        multitask: { name: '多任务视图', desc: '开合多任务切换面板' },
+        home: { name: '回主屏', desc: '收起当前面回到主屏' },
+        settings: { name: '打开设置', desc: '打开「设置」系统页' },
+        appsManage: { name: '打开应用管理', desc: '打开「应用管理」系统页' },
+        theme: { name: '切换明暗模式', desc: '在浅色与深色之间切换' },
+        fontUp: { name: '增大界面字号', desc: '字号档位上调一档' },
+        fontDown: { name: '减小界面字号', desc: '字号档位下调一档' },
+      },
     },
     dialog: {
       close: '关闭弹窗',
@@ -175,9 +212,26 @@ export default {
       },
       uninstall: {
         title: '卸载「{name}」？',
-        body: '将删除安装目录、插件存储与启用状态，不可恢复。授权记录随之清除。',
+        body: '默认删除应用数据；勾选可保留。审批 / 授权记录始终撤销，重装后需重新批准。',
+        keepData: '保留应用数据（重装后继续使用）',
+        deleteDataHint: '未勾选「保留应用数据」：将同时删除应用私有数据库与存储，不可恢复。',
         confirm: '确认卸载',
         success: '{name} 已卸载',
+      },
+      install: {
+        success: '「{name}」已安装',
+        upgradeSuccess: '「{name}」已升级',
+      },
+      installUpgrade: {
+        title: '升级「{name}」？',
+        body: '已安装同 id 应用。就地升级保留其数据（插件存储与授权记录）；包内容变更后，下次启动需重新审批。',
+        confirm: '升级',
+      },
+      installRestore: {
+        title: '恢复旧应用数据？',
+        body: '该应用上次卸载时保留了数据（私有库与存储）。可在此选择恢复；不恢复（默认）会删除旧数据，且不可撤销。',
+        discard: '不恢复并安装',
+        restore: '恢复数据并安装',
       },
       stopService: {
         title: '停止服务「{name}」？',
@@ -189,16 +243,46 @@ export default {
         desc: '以下应用仍在运行：',
         none: '没有应用在运行，可直接退出。',
         confirm: '仍然退出',
+        quitting: '正在优雅关闭应用…',
+        quittingHint: '若长时间无响应，将自动强制退出。',
+        quittingButton: '正在退出…',
       },
     },
     settings: {
+      // 外观入口卡（设置页首卡）：样式调整项在二级页 SysAppearanceView
+      appearanceEntry: {
+        title: '外观',
+        desc: '明暗模式、语言、字号、壁纸与主题',
+        open: '打开外观',
+      },
+      // 快捷键入口卡（设置页第二卡，2026-10-28）：录制 / 恢复在二级页 SysShortcutsView
+      shortcutsEntry: {
+        title: '快捷键',
+        desc: '查看与修改壳层键盘快捷键',
+        open: '打开快捷键',
+      },
+      nav: {
+        title: '导航',
+        label: '悬浮导航',
+      },
       ui: {
         title: '界面',
+        // 术语（2026-10-27）：「主题」只指主题预设；深浅色在壳页叫「明暗模式」。
+        // 不复用 settings.appearance.theme（那是与应用副本共享的旧标签）。
+        colorMode: '明暗模式',
         themeLight: '浅色',
         themeDark: '深色',
         themeSystem: '跟随系统',
         language: '语言',
         fontSize: '字号',
+        // 字号滑杆五档划分（不再显示 px），键序即档位序（useFontSize FONT_SIZE_LEVELS）
+        fontLevel: {
+          xs: '极小',
+          s: '小',
+          normal: '正常',
+          l: '大',
+          xl: '超大',
+        },
         animations: '动画',
         animationsDesc: '屏幕切换与覆层动效（关闭即降级）',
       },
@@ -225,12 +309,17 @@ export default {
         hint: '安全闸门的管理入口，完整记录见「权限与授权」页',
         open: '打开权限与授权',
       },
-      skins: {
-        title: '主题皮肤',
-        desc: '平台外壳的配色方案；应用仍可自持配色。',
+      themes: {
+        title: '主题',
+        desc: '平台外壳的整体外观；应用仍可自持配色。',
         default: '默认',
-        defaultDesc: '跟随平台默认色板',
-        hint: '皮肤只覆盖平台外壳的 CSS 变量；应用根容器自己声明的配色优先。',
+        defaultDesc: '暖调工作台，实心卡面',
+        glass: '玻璃拟态 · 液态玻璃',
+        glassDesc: '镜面棱线、多层折射、整屏玻璃语汇',
+        hyper: '超色彩主义',
+        hyperDesc: '高饱和色块，硬边投影',
+        dynamic: '动态',
+        hint: '主题覆盖平台外壳与图标语汇；应用根容器自己声明的配色优先。',
       },
     },
     apps: {
@@ -238,8 +327,26 @@ export default {
         '按授权风险排序（「始终允许」最宽松置顶）。运行中的应用不可卸载；启用方向先过审批门。',
       listAria: '已安装应用列表',
       install: '安装应用',
-      installDesc: '本地 zip（plugin_install_from_file）',
-      installToast: '安装应用：请选择本地 zip 包（正式链路待接入）',
+      installDesc: '从本地 zip 应用包安装外部应用；同 id 已装时可在确认后就地升级（保留应用数据）',
+      // 应用更新面（应用版本更新全链路）：兼容判断在壳（useAppUpdates），不兼容
+      // 只给原因不出更新按钮；版本号参数只承载显示值
+      update: {
+        check: '检查更新',
+        apply: '更新到 v{version}',
+        checking: '正在检查更新…',
+        upToDate: '已是最新',
+        available: '可更新到 v{version}',
+        incompatible: '发现新版本 v{version}，但与当前平台不兼容',
+        updating: '正在下载并更新…',
+        failed: '更新检查失败，请稍后重试',
+        stopFirst: '请先停用应用后再更新（更新需替换插件目录）',
+        reason: {
+          noCompat: '该发布物缺少兼容声明（旧版发布格式），无法确认与当前平台兼容',
+          mountContract: '要求挂载契约 {required}，当前平台为 {current}',
+          hostRuntime: '要求宿主运行时 {required}，当前为 {current}；请先升级平台',
+          hostRuntimeInvalid: '兼容声明版本形态异常（{required}），已拒绝',
+        },
+      },
       kvSource: '来源',
       kvSize: '体积',
       kvViews: '视图',
@@ -322,6 +429,10 @@ export default {
       wallpaper: {
         invalid: '无法使用这张图片：请选择 PNG / JPG / WebP，且不超过 20 MB',
       },
+      install: {
+        builtinConflict: '「{name}」是随宿主分发的内置应用，不能覆盖安装',
+        runningConflict: '「{name}」正在运行，请先停用再升级',
+      },
     },
   },
   desktop: {
@@ -384,6 +495,21 @@ export default {
     system: {
       title: '系统设置',
       preventSleep: '防止系统休眠',
+    },
+    // 链路加密（2026-11-04 用户裁决）：策略属于应用，宿主只执行与只读审计。
+    linkCrypto: {
+      title: '链路加密',
+      wsNotEncrypted:
+        '当前宿主版本不支持 WS 端点的帧级链路加密；应用策略只对 HTTP 生效，WS 流量仍为明文。更新宿主后 WS 帧才会加密。',
+      fingerprint: '本机指纹',
+      apps: '应用策略（只读）',
+      appsEmpty: '当前没有注册中的插件端点（应用未运行或未暴露端点）。',
+      endpointCount: '{count} 个端点',
+      policyRequired: '强制加密',
+      policyPreferred: '尽量加密',
+      policyOff: '不要求',
+      capabilityMissing: '当前宿主不提供按应用的链路加密能力（旧版本），状态不可用。',
+      loadFailed: '链路加密状态读取失败，请查看日志。',
     },
     log: {
       title: '日志设置',

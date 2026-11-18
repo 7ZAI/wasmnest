@@ -155,6 +155,7 @@ describe('自定义壁纸（宿主选图 + 单槽位偏好，随迁）', () => {
     mockImportWallpaper.mockRejectedValueOnce(new Error('picker unavailable'))
     const { useShellPreferences } = await import('@/shell/composables/useShellPreferences')
     const prefs = useShellPreferences()
+    const before = prefs.wallpaper.value
     const wrapper = mount(AppearanceSettingsView)
 
     // 选图器异常：不产生未处理 rejection，现有偏好不被改动
@@ -164,12 +165,13 @@ describe('自定义壁纸（宿主选图 + 单槽位偏好，随迁）', () => {
     await wrapper.vm.$nextTick()
 
     expect(prefs.wallpaperImage.value).toBeNull()
-    expect(prefs.wallpaper.value).toBe('aurora')
+    expect(prefs.wallpaper.value).toBe(before)
     wrapper.unmount()
   })
 
   it('should_fallBackToBuiltin_when_customImageRemoved', async () => {
-    const { useShellPreferences } = await import('@/shell/composables/useShellPreferences')
+    const { useShellPreferences, WALLPAPER_DEFAULT } =
+      await import('@/shell/composables/useShellPreferences')
     const prefs = useShellPreferences()
     prefs.setWallpaperImage('/data/x.png')
     const wrapper = mount(AppearanceSettingsView)
@@ -179,7 +181,10 @@ describe('自定义壁纸（宿主选图 + 单槽位偏好，随迁）', () => {
     await remove.trigger('click')
 
     expect(prefs.wallpaperImage.value).toBeNull()
-    expect(prefs.wallpaper.value, '回落默认内置档，不留「自定义无图」空档').toBe('aurora')
+    expect(
+      prefs.wallpaper.value,
+      '回落默认内置档，不留「自定义无图」空档',
+    ).toBe(WALLPAPER_DEFAULT)
     wrapper.unmount()
   })
 })

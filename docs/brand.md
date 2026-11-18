@@ -41,8 +41,8 @@
 
 | 位置 | 文件 / key | 现在的内容 | 与定稿的差异 |
 | --- | --- | --- | --- |
-| 仓库首屏定位句 | `README.md` 第 3 行加粗句 | 「双端 Wasm 应用宿主：桌面与 Android 共用一套应用契约……」 | 纯技术描述，**待换为「主标 + 副标句」** |
-| 仓库首屏定位句（英） | `README_en.md` 第 3 行加粗句 | 同上（英文直译） | 同上 |
+| 仓库首屏定位句 | `README.md` 首屏 hero（标题下加粗句） | 主标「你的工具，住进你的巢。」+ 副标句「双端 Wasm 应用宿主 —— 能力即权限，宿主保持极简。」 | 已对齐定稿（2026-10-31）；技术定位描述移至首段正文 |
+| 仓库首屏定位句（英） | `README_en.md` 首屏 hero（标题下加粗句） | 主标「Your tools. Your nest. Your rules.」+ 副标句「A dual-end Wasm app host — capability is permission, the host stays thin.」 | 已对齐定稿（2026-10-31）；技术定位描述移至首段正文 |
 | 桌面开屏副标题 | `wasmnest-desktop/src/i18n/host-zh-CN.ts` `desktop.splash.tagline` | 多 WASM 应用运行平台 | 技术描述；且 `WASM` 全大写与 README 的「Wasm / wasm 应用」口径不一致 |
 | 桌面开屏副标题（英） | `wasmnest-desktop/src/i18n/host-en.ts` `desktop.splash.tagline` | Multi-WASM app runtime | 同上 |
 | 移动开屏副标题 | `wasmnest-mobile/src/locales/zh-CN/mobile.ts` `splash.tagline`（key 由 `wasmnest-mobile/src/config/splash.ts` 的 `taglineKey` 引用） | 局域网远程终端 | **与当前移动宿主定位（wasm 应用壳）不符，疑为远程终端时期遗留**；改前先确认移动宿主定位 |

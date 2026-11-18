@@ -16,6 +16,12 @@ vi.mock('@/plugin/commands', () => ({
   pluginActivate: vi.fn(async () => {}),
   pluginDeactivate: vi.fn(async () => {}),
   pluginInstallFromFile: vi.fn(async () => 'installed-id'),
+  pluginPeekAppPackage: vi.fn(async () => ({
+    path: '/sdcard/app.zip',
+    pluginId: 'com.test.picked',
+    hasRetainedData: false,
+    installed: false,
+  })),
   pluginUninstall: vi.fn(async () => {}),
 }))
 
@@ -39,6 +45,7 @@ import { getPluginRegistry } from '@/plugin/registry'
 import { getShellRegistry } from '@/shell/registry'
 import type { PluginInfo, PluginState } from '@/plugin/types'
 import { createPluginAppSource, PLUGIN_APP_SOURCE_ID, toShellApp } from '@/shell/adapters/pluginAppSource'
+import { logger } from '@/utils/frontendLogger'
 
 /** 最小插件信息 */
 function info(state: PluginState, patch: Partial<PluginInfo> = {}): PluginInfo {
@@ -49,7 +56,7 @@ function info(state: PluginState, patch: Partial<PluginInfo> = {}): PluginInfo {
     description: '',
     author: '',
     main: 'index.js',
-    pluginType: 'rust-ts',
+    pluginType: 'full',
     permissions: [],
     contributes: {},
     state,
@@ -153,6 +160,32 @@ describe('运行面解析（票 2026-10-10 C1：只认 registerSurface）', () =
   })
 })
 
+describe('运行面解析的告警口径', () => {
+  it('should_notWarn_when_appNotRunningHasNoSurface', () => {
+    // 非运行态没有运行面是正常事实（随激活注册、随停用回收）。对账会拿清单里的
+    // 应用逐条查询，若一律 warn，停用后台应用就会刷黄警（2026-11-09 真机日志）。
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    shellRegistry.upsertApps(PLUGIN_APP_SOURCE_ID, [toShellApp(info({ state: 'deactivated' }))])
+
+    expect(createPluginAppSource().resolveSurface?.('com.test.app')).toBeUndefined()
+    expect(warn).not.toHaveBeenCalled()
+
+    warn.mockRestore()
+  })
+
+  it('should_warn_when_runningAppHasNoSurface', () => {
+    // 运行中却拿不到运行面是真缺口：保留 fail-visible 告警，点名应用
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    shellRegistry.upsertApps(PLUGIN_APP_SOURCE_ID, [toShellApp(info({ state: 'activated' }))])
+
+    expect(createPluginAppSource().resolveSurface?.('com.test.app')).toBeUndefined()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.[0])).toContain('com.test.app')
+
+    warn.mockRestore()
+  })
+})
+
 describe('启动与停止', () => {
   it('should_preauthorizeThenLoadFrontend_when_pluginHasFrontend', async () => {
     vi.mocked(cmds.pluginGetInfo).mockResolvedValueOnce(info({ state: 'loaded' }))
@@ -166,15 +199,15 @@ describe('启动与停止', () => {
     expect(cmds.pluginActivate).not.toHaveBeenCalled()
   })
 
-  it('should_activateBackendOnly_when_pluginIsRustOnly', async () => {
+  it('should_activateBackendOnly_when_pluginIsBackendForm', async () => {
     vi.mocked(cmds.pluginGetInfo).mockResolvedValueOnce(
-      info({ state: 'loaded' }, { pluginType: 'rust' }),
+      info({ state: 'loaded' }, { pluginType: 'backend' }),
     )
     const source = createPluginAppSource()
 
     await source.launch('com.test.app')
 
-    // rust-only 没有前端入口，loader 会尝试 import 不存在的入口而失败
+    // backend 形态没有前端入口，loader 会尝试 import 不存在的入口而失败
     expect(cmds.pluginActivate).toHaveBeenCalledWith('com.test.app')
     expect(pluginLoader.activate).not.toHaveBeenCalled()
   })
@@ -190,10 +223,10 @@ describe('启动与停止', () => {
 })
 
 describe('能力诚实口径', () => {
-  it('should_returnFalse_when_permissionGrantUnsupported', async () => {
+  it('should_notAdvertisePermissionGrant_when_backendHasNoCommand', () => {
     const source = createPluginAppSource()
-    // 后端暂无逐项授权命令：返回 false 让 UI 置灰并说明，而不是假装通过
-    await expect(source.setPermissionGrant?.('com.test.app', 'fs:read', true)).resolves.toBe(false)
+    // 后端没有逐项授权命令：能力本身不成立，不提供可被 UI 误判为「支持」的方法
+    expect(source.setPermissionGrant).toBeUndefined()
   })
 
   it('should_returnNullWithoutInstalling_when_userCancelsFilePicker', async () => {
@@ -209,9 +242,75 @@ describe('能力诚实口径', () => {
     vi.mocked(dialogOpen).mockResolvedValueOnce('/sdcard/app.zip')
     const source = createPluginAppSource()
 
-    // 返回安装后的应用 id：壳要用它把「已安装」通知挂到正确的应用上
+    // 返回安装后的应用 id：壳要用它把「已安装」通知挂到正确的应用上。
+    // 无旧数据 = 不询问，按默认「不恢复」安装。
     await expect(source.installFromLocalPackage?.()).resolves.toBe('installed-id')
-    expect(cmds.pluginInstallFromFile).toHaveBeenCalledWith('/sdcard/app.zip')
+    expect(cmds.pluginInstallFromFile).toHaveBeenCalledWith('/sdcard/app.zip', false, false)
+  })
+
+  it('should_askBeforeInstalling_when_freshInstallHasRetainedData', async () => {
+    vi.mocked(dialogOpen).mockResolvedValueOnce('/sdcard/app.zip')
+    vi.mocked(cmds.pluginPeekAppPackage).mockResolvedValueOnce({
+      path: '/sdcard/app.zip',
+      pluginId: 'com.test.returning',
+      hasRetainedData: true,
+      installed: false,
+    })
+    const decideRestore = vi.fn(async () => true)
+    const source = createPluginAppSource()
+
+    await source.installFromLocalPackage?.(decideRestore)
+
+    // 询问发生在安装之前，且用户选择被带进安装命令（恢复 = 保留私有库 + KV）
+    expect(decideRestore).toHaveBeenCalledWith({ pluginId: 'com.test.returning' })
+    expect(cmds.pluginInstallFromFile).toHaveBeenCalledWith('/sdcard/app.zip', false, true)
+  })
+
+  it('should_discardRetainedData_when_userDeclinesRestore', async () => {
+    vi.mocked(dialogOpen).mockResolvedValueOnce('/sdcard/app.zip')
+    vi.mocked(cmds.pluginPeekAppPackage).mockResolvedValueOnce({
+      path: '/sdcard/app.zip',
+      pluginId: 'com.test.returning',
+      hasRetainedData: true,
+      installed: false,
+    })
+    const source = createPluginAppSource()
+
+    await source.installFromLocalPackage?.(async () => false)
+
+    expect(cmds.pluginInstallFromFile).toHaveBeenCalledWith('/sdcard/app.zip', false, false)
+  })
+
+  it('should_notInstall_when_userCancelsRestorePrompt', async () => {
+    vi.mocked(dialogOpen).mockResolvedValueOnce('/sdcard/app.zip')
+    vi.mocked(cmds.pluginPeekAppPackage).mockResolvedValueOnce({
+      path: '/sdcard/app.zip',
+      pluginId: 'com.test.returning',
+      hasRetainedData: true,
+      installed: false,
+    })
+    const source = createPluginAppSource()
+
+    // 取消询问 = 取消安装（不是「不恢复并继续」——那会在用户没确定时删数据）
+    await expect(source.installFromLocalPackage?.(async () => null)).resolves.toBeNull()
+    expect(cmds.pluginInstallFromFile).not.toHaveBeenCalled()
+  })
+
+  it('should_notAsk_when_appIsAlreadyInstalled', async () => {
+    vi.mocked(dialogOpen).mockResolvedValueOnce('/sdcard/app.zip')
+    vi.mocked(cmds.pluginPeekAppPackage).mockResolvedValueOnce({
+      path: '/sdcard/app.zip',
+      pluginId: 'com.test.installed',
+      hasRetainedData: true,
+      installed: true,
+    })
+    const decideRestore = vi.fn(async () => true)
+    const source = createPluginAppSource()
+
+    await source.installFromLocalPackage?.(decideRestore)
+
+    // 已安装应用的自身数据不是「旧数据」：不询问（重装走升级链路，恒保数据）
+    expect(decideRestore).not.toHaveBeenCalled()
   })
 
   it('should_callApproveCommand_when_approvingApp', async () => {
@@ -237,7 +336,7 @@ describe('卸载（运行期收口）', () => {
     // 卸载即结束运行期：前端对称拆解（注册表 / 事件 / 运行期 store 作用域 + 后端停用）
     // 必须先于后端删包——否则应用卸载后其运行面与 store 会残留在 WebView 直到重载
     expect(pluginLoader.deactivate).toHaveBeenCalledWith('com.test.app')
-    expect(cmds.pluginUninstall).toHaveBeenCalledWith('com.test.app')
+    expect(cmds.pluginUninstall).toHaveBeenCalledWith('com.test.app', false)
     const deactivateOrder = vi.mocked(pluginLoader.deactivate).mock.invocationCallOrder[0]
     const uninstallOrder = vi.mocked(cmds.pluginUninstall).mock.invocationCallOrder[0]
     expect(deactivateOrder).toBeLessThan(uninstallOrder)

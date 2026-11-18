@@ -23,12 +23,30 @@ export interface AppMountEnv {
   mountContract: string
   /** 宿主面命令（白名单代理，ADR 0058 方案 A）：plugin_list_loaded / get_app_settings 等；白名单真源在桌面 src-tauri APP_FRONTEND_INVOKE_WHITELIST */
   invoke: <T = unknown>(command: string, args?: Record<string, unknown>) => Promise<T>
+  /** 应用更新检查（宿主统一默认实现；dev-shell 无真实发布源，可省略） */
+  appUpdate?: {
+    check: () => Promise<{
+      status: 'idle' | 'checking' | 'up-to-date' | 'available' | 'incompatible' | 'error'
+      latestVersion?: string
+      currentVersion?: string
+      reason?: { key: string; params?: Record<string, string> }
+    }>
+  }
   /** 插件面命令（plugin_invoke，本 app 通道令牌已绑定） */
   appInvoke: <T = unknown>(command: string, ...args: unknown[]) => Promise<T>
   /** 本 app 插件 KV 存储（plugin_storage_*，宿主面凭证已绑定） */
   appStorageGet: <T = unknown>(key: string) => Promise<T | undefined>
   appStorageSet: (key: string, value: unknown) => Promise<void>
   appStorageDelete: (key: string) => Promise<void>
+  /**
+   * 本应用链路加密策略（可选：旧宿主不注入 = 无此能力，应用必须显性提示）
+   *
+   * 策略属于应用（2026-11-04 裁决）：应用在自己的设置页决定 off / preferred /
+   * required，覆盖本应用全部 HTTP / WS 端点；宿主不设全局下限、只执行与只读审计。
+   * 通道令牌已绑定本 app，只能读写自己。
+   */
+  appLinkCryptoGet?: () => Promise<'off' | 'preferred' | 'required'>
+  appLinkCryptoSet?: (policy: 'off' | 'preferred' | 'required') => Promise<void>
   /** 宿主面事实（挂载时快照；后续变更经 handle.setLocale / setTheme 通知） */
   locale: string
   theme: string
@@ -90,43 +108,14 @@ export interface AppMountHandle {
 }
 
 /**
- * 应用预览环境（宿主注入；只读面）
- *
- * 与 {@link AppMountEnv} 的差异是**收窄**而非放行：不提供宿主面 `invoke`、写 / 删
- * 存储、事件出口（navigate / route）。预览是卡片里的旁路展示，不能请求宿主导航、
- * 不能写存储、不能上报路由；安全边界仍由 Rust 权限仲裁（预览没有新增权限）。
- */
-export interface AppPreviewEnv {
-  /** 插件 id（= 应用 id） */
-  appId: string
-  /** 应用上次自报的内部路径；无记录 = undefined（应用自行回落落地页） */
-  lastRoute?: string
-  /** 本 app 插件面命令（与主界面同一令牌 / 权限；预览侧只读使用） */
-  appInvoke: <T = unknown>(command: string, ...args: unknown[]) => Promise<T>
-  /** 本 app 插件 KV 只读访问 */
-  appStorageGet: <T = unknown>(key: string) => Promise<T | undefined>
-  locale: string
-  theme: string
-  platform?: string
-}
-
-/** 应用预览句柄（卸载卡片时宿主调用；预览实例不登记到主应用 mounted 表） */
-export interface AppPreviewHandle {
-  unmount(): Promise<void>
-}
-
-/** entry.ts 可选导出；未导出 = 不支持预览（缺失不是错误，是能力声明） */
-export type MountPreview = (root: HTMLElement, env: AppPreviewEnv) => Promise<AppPreviewHandle>
-
-/**
  * app 挂载包模块面（dev-shell 侧）
  *
- * `mountApp` 必有（否则契约不匹配，dev-shell 显性报错）；`mountPreview` 可选。
- * 与宿主 `useAppMount.ts` 的 `AppBundleModule` 同形。
+ * `mountApp` 必有（否则契约不匹配，dev-shell 显性报错）。
+ * 与宿主 `useAppMount.ts` 的 `AppBundleModule` 同形。自绘预览面（mountPreview）
+ * 已随宿主退役（2026-10-30：多任务卡改挂载保活实例的真实页面，应用不再自报预览）。
  */
 export interface AppBundleModule {
   mountContract?: string
   mountApp?: (root: HTMLElement, env: AppMountEnv) => Promise<AppMountHandle>
-  mountPreview?: MountPreview
   mountMonitorPanel?: MountMonitorPanel
 }

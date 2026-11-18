@@ -2,13 +2,15 @@
  * 链路加密配置与 pin 状态（issue 05/06）
  *
  * 配置域镜像桌面端 trafficEncryption 的移动端 HTTP 子集（spec §6）：
- * - enabled：主开关（默认 false，opt-in；无 pin 时开启会被 UI 引导先配对）
+ * - enabled：本端「自愿加密」主开关（默认 false，opt-in）。对端应用策略
+ *   `required` 时由宿主侧强制加封，**不受本开关约束**（否则只是把服务端
+ *   安全下限降级成本地提前失败；见 `src-tauri/src/plugin/host_domains/http.rs`）
  * - strictMode：预期加密而遭降级时断连报错（默认 false → 明文续跑 + 提示）
  * - encryptHttp：HTTP REST 载荷加密（默认开）
  *
- * WS 通道（ws-terminal / ws-event）子开关已随桌面端插件端点帧加密退役
- * （`TrafficChannel::WsPlugin => false`，插件端点帧永不加解密）一并删除——
- * 仅剩 HTTP 信封加密。
+ * WS 帧级加密由宿主 Rust 引擎透明处理（2026-11-04 升级期协商：engine
+ * `frame_crypto` 端口 + 101 策略/会话密钥回执），前端不持有 WS 子开关、也不经手
+ * WS 帧字节；本模块只保留 HTTP 子开关与主开关/pin 推送。
  *
  * pin（桌面端身份公钥+指纹）随认证凭据持久化，仅随重新配对/重认证刷新；
  * 协商失败不清除 pin —— 防主动降级攻击抹除信任锚。
@@ -31,7 +33,7 @@ export interface LinkEncryptionSettings {
   encryptHttp: boolean
 }
 
-/** 默认值：功能整体关（opt-in），HTTP 载荷加密默认开——用户只需打开主开关即生效 */
+/** 默认值：自愿加密关（opt-in），HTTP 载荷加密默认开；required 对端由宿主强制 */
 const DEFAULTS: LinkEncryptionSettings = {
   enabled: false,
   strictMode: false,
@@ -71,8 +73,8 @@ export function useLinkEncryptionSettings() {
     persist()
   }
   /**
-   * HTTP 载荷加密子开关（WS 通道子开关已随桌面端插件端点加密退役，
-   * 插件端点帧永不加解密；通道维度仅剩 http）
+   * HTTP 载荷加密子开关（WS 帧加密随主开关由宿主 Rust 引擎执行，
+   * 前端没有也不需要一个独立的 WS 子开关）
    */
   function setChannel(channel: LinkCryptoChannel, value: boolean) {
     if (channel === 'http') settings.value.encryptHttp = value
@@ -87,16 +89,20 @@ export function useLinkEncryptionSettings() {
  * HTTP 信封加密由 Rust 侧 http_proxy 裁决，而本模块状态存于 WebView
  * localStorage——经 set_link_crypto_context 命令桥接。调用时机：
  * 设置变更 / pin 刷新 / 应用启动。失败静默（老宿主无此命令时 HTTP 载荷
- * 保持明文，与默认关行为一致，不阻断 UI）。WS 通道加密已退役，不再推送。
+ * 保持明文，与默认关行为一致，不阻断 UI）。WS 侧无需推送——宿主 Rust
+ * 引擎在每次 WS 建连时读取同一份上下文自行裁决。
  */
 export async function syncLinkCryptoContextToNative(): Promise<void> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
+    const { ensureHostCredential } = await import('@/plugin/credentials')
     await invoke('set_link_crypto_context', {
       enabled: settings.value.enabled,
       strictMode: settings.value.strictMode,
       encryptHttp: settings.value.encryptHttp,
       kdPublicB64: getPinnedKey(),
+      // 宿主面门（安全审查 #42）：开关是安全降级面，应用前端不得触达
+      credential: await ensureHostCredential(),
     })
   } catch (e) {
     logger.warn('[LinkEncryption] sync to native failed (non-fatal):', e)
@@ -104,8 +110,8 @@ export async function syncLinkCryptoContextToNative(): Promise<void> {
 }
 
 /**
- * 链路加密参与判定的通道（WS 通道已随桌面端插件端点帧加密退役，仅剩 HTTP
- * 信封加密；类型保留通道维度以兼容断言与既有调用面）
+ * 前端可判定的加密通道（仅 HTTP；WS 由宿主 Rust 引擎透明处理，
+ * 类型保留通道维度以兼容断言与既有调用面）
  */
 export type LinkCryptoChannel = 'http'
 

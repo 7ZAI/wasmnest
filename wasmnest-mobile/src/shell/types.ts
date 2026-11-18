@@ -16,6 +16,7 @@
  */
 
 import type { Component } from 'vue'
+import type { PluginUpdateDecl, ShellSurfaceIntent } from '@binblink/wasmnest-plugin-sdk-mobile'
 
 /** 可释放句柄：注册扩展点的返回值，dispose 即摘除该注册 */
 export interface Disposable {
@@ -53,10 +54,20 @@ export interface ShellPermissionGrant {
 /** 应用贡献给平台首页的快捷卡片 */
 export interface ShellSlotContribution {
   id: string
-  /** 卡片组件：接收 { app: ShellApp } prop，内容由应用自持 */
+  /**
+   * 卡片组件：接收 { app: ShellApp } prop，内容由应用自持。
+   *
+   * 壳把整张卡渲染成按钮并负责点击打开该应用（含启动），卡片内不得再放
+   * 按钮 / 链接；外观由应用用 SDK QuickCard 等公共组件承载。
+   */
   component: Component
   /** 排序权重，小者靠前；缺省 100 */
   order?: number
+  /**
+   * 点击卡片时应用要进入的内部位置（按点击时刻现算）。返回值由壳原样投递给
+   * 该应用运行面（`ui.onSurfaceIntent`），壳不解释内容；缺省 = 只打开应用。
+   */
+  onPress?: () => ShellSurfaceIntent | null | undefined
 }
 
 /** 应用的运行面（在壳内被打开时挂载） */
@@ -111,8 +122,18 @@ export interface ShellApp {
   sizeBytes?: number
   /** 上一次失败的简短原因（state === 'error' 时展示） */
   error?: string
+  /** manifest `update` 段（缺省 = 不参与更新检查） */
+  update?: PluginUpdateDecl
   contributions: ShellAppContributions
 }
+
+/**
+ * 本地包安装的「旧数据是否恢复」询问（fresh install 且同 id 留有 keep-data 旧数据时）
+ *
+ * 壳层负责呈现询问（默认不恢复，与卸载的「保留应用数据」口径对称）；
+ * 返回 true = 恢复并安装 / false = 丢弃旧数据后安装 / null = 取消安装。
+ */
+export type ShellInstallRestoreDecider = (info: { pluginId: string }) => Promise<boolean | null>
 
 /**
  * 应用数据源：宿主壳与具体应用形态之间的唯一耦合面。
@@ -152,15 +173,18 @@ export interface ShellAppSource {
   /**
    * 安装本地应用包（数据源自行完成选包与校验）。
    *
-   * @returns 安装后的应用 id；`null` = 用户取消选包（不是失败）。
+   * 同 id 留有 keep-data 卸载的旧数据时，数据源在**落盘前**回调 `decideRestore`
+   * （壳层负责呈现「是否恢复」询问，默认不恢复）：未提供决策者按不恢复处理。
+   *
+   * @returns 安装后的应用 id；`null` = 用户取消选包或取消恢复询问（不是失败）。
    *          未实现时宿主不渲染「安装本地包」入口——不提供点了没反应的按钮。
    */
-  installFromLocalPackage?(): Promise<string | null>
+  installFromLocalPackage?(decideRestore?: ShellInstallRestoreDecider): Promise<string | null>
   /**
-   * 卸载应用并删除其数据。
+   * 卸载应用；`keepData` = 保留应用数据（私有库 + KV），重装后继续使用。
    * 未实现时宿主不渲染「卸载」入口，同理不留死按钮。
    */
-  remove?(appId: string): Promise<boolean>
+  remove?(appId: string, keepData?: boolean): Promise<boolean>
   /**
    * 查询「启动时自动激活」偏好。
    * 未实现时宿主不渲染自启开关（能力诚实原则）。

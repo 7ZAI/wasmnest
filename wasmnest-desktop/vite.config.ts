@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
+import { i18nPrecompile } from '../scripts/i18n-precompile.mjs'
 
 const host = process.env.TAURI_DEV_HOST
 
@@ -10,14 +11,25 @@ const host = process.env.TAURI_DEV_HOST
  * `@` 别名与入口均指向宿主前端源码（`src/`，新 UI 宿主 = 方案 C 壳）。各 wasm
  * app 前端是独立构建的挂载包（scripts/build.js 各自产出 → resources/plugins/
  * desktop/<id>/index.js），宿主运行时经 useAppMount 装载，不在宿主构建内 import。
+ *
+ * i18n：宿主文案构建期预编译 + `vue-i18n` 运行时构建（丢弃消息编译器），产物不含
+ * eval → 双端 CSP 才能撤 `'unsafe-eval'`（安全审查 #50）。新增语言文件必须加进清单。
  */
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    i18nPrecompile({ include: ['src/i18n/host-zh-CN.ts', 'src/i18n/host-en.ts'] }),
+  ],
+  define: {
+    __INTLIFY_JIT_COMPILATION__: false,
+    __INTLIFY_DROP_MESSAGE_COMPILER__: true,
+  },
   resolve: {
     alias: {
       '@': resolve(import.meta.dirname, 'src'),
+      'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js',
     },
   },
   server: {

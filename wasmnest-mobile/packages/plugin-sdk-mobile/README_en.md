@@ -65,7 +65,7 @@ A minimal plugin needs just two files:
   "author": "you",
   "icon": "🧩",
   "main": "index.js",
-  "pluginType": "ts-only",
+  "pluginType": "frontend",
   "permissions": ["storage", "ui:input"],
   "contributes": {
     "commands": [{ "id": "my-plugin.hello", "title": "Hello" }],
@@ -106,7 +106,7 @@ The `PluginContext` received by `activate(context)` is the **single channel** th
 |-----|-------------|---------------------|
 | `context.commands` | Register / execute commands (`register` / `execute`) — including the app's own business commands (e.g. `file-transfer.list-remote`) | granted by default |
 | `context.session` | Session list, single-session lookup, status change subscription | `session:read` / `session:write` |
-| `context.ui` | Host-shell surface / home quick cards / capsule menu / platform settings entries / dynamic routes (`registerSurface` / `registerSlot` / `registerCapsuleItem` / `registerSettingsEntry` / `registerRoute`), navigation (`openPage` / `goBack`), system back-key interception (`onBackPressed`), global dialogs (`showDialog`) | `ui:route` / `ui:back` / `ui:dialog` / `ui:settings` |
+| `context.ui` | Host-shell surface / home quick cards / capsule menu / platform settings entries / dynamic routes (`registerSurface` / `registerSlot` / `registerCapsuleItem` / `registerSettingsEntry` / `registerRoute`), navigation (`openPage` / `goBack`), system back-key interception (`onBackPressed`), surface entry intents (`onSurfaceIntent`), global dialogs (`showDialog`) | `ui:route` / `ui:back` / `ui:dialog` / `ui:settings` |
 | `context.events` | Host event subscription & publishing (`on` / `emit`) | granted by default |
 | `context.storage` | Key-value storage (`get` / `set` / `delete`) | `storage` (**always granted on mobile** — see note below) |
 | `context.lifecycle` | App lifecycle hooks (`onAppStartup` / `onAppShutdown` / `onAuthSuccess` / `onDisconnect` / `onSessionCreated` / `onSessionStopped`) | granted by default |
@@ -324,11 +324,72 @@ const options = [
 </template>
 ```
 
+### Home quick cards (QuickCard)
+
+A host-shell quick card = **shared SDK chrome + app-owned content + host navigation**.
+The app only implements the content and registers it with `context.ui.registerSlot` during
+`activate`; the host shell renders it, auto-rotates the rail (up to 5 cards) and opens the
+owning app on tap. The app must not handle navigation inside the card.
+
+A card can **deep-link into a position inside the app** (e.g. an "active sessions" card that
+jumps into the most recent session): the optional `onPress()` on `registerSlot` computes an
+entry intent (`{ key, payload }`, entirely app-owned) at tap time. The host launches and
+opens the app, then delivers that intent verbatim to the surface — subscribe with
+`context.ui.onSurfaceIntent(handler)` in the surface's `onMounted`. Intents that arrive
+before subscription are queued and flushed on subscribe, so a surface created after the tap
+does not lose them; the queue is cleared when the app is stopped / uninstalled.
+
+```vue
+<script setup lang="ts">
+import QuickCard from '@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card'
+
+defineProps<{ activeCount: number }>()
+</script>
+
+<template>
+  <QuickCard
+    label="Active sessions"
+    :value="activeCount"
+    hint="Running"
+    tone="success"
+    :icon-path="['M4 5h16v14H4z', 'M8 10l3 2.5-3 2.5']"
+  />
+</template>
+```
+
+```ts
+context.ui.registerSlot({
+  id: 'sessions',
+  component: SessionCard,
+  order: 10,
+  // Deep link target; omit to only open the app (previous behavior)
+  onPress: () => ({ key: 'open-session', payload: { sessionId: latestLiveSessionId() } }),
+})
+```
+
+```ts
+// App surface root: consume the host-delivered entry intent
+const sub = context.ui.onSurfaceIntent((intent) => {
+  if (intent.key !== 'open-session') return
+  openSession((intent.payload as { sessionId: string }).sessionId)
+})
+// sub.dispose() on unmount
+```
+
+- The host wraps the whole card in a button (tap = launch and open the contributing app,
+  then deliver the value returned by `onPress()`); do not put buttons or links inside the card;
+- The host truncates by registration order (currently 5 cards) and auto-rotates when there
+  are several — paused on touch / keyboard focus / background / system reduced motion, with
+  a pause/play control in the section header;
+- `label` / `value` / `hint` / `tone` / `iconPath` cover the common metric card; use the
+  default slot for custom content.
+
 Currently provided (each subpath is an independent export):
 
 | Subpath | Contents | Purpose |
 |---------|----------|---------|
 | `./ui` | `Select` component | Dropdown (`update:modelValue` / `open` events, `md` / `sm` sizes) |
+| `./ui/quick-card` | `QuickCard` component | Shared chrome for host-shell home quick cards (host tokens / dark mode / font scale; tap handled by the host) |
 | `./ui/plugin-global-dialog` | `PluginGlobalDialog` component | Mobile host global dialog (mounted once at the app root; rendering driven by the global dialog controller, same shape as desktop) |
 | `./ui/swipe-tabs` | `useSwipeTabs` composable | Horizontal swipe switching for dialog/tab content areas (a dominant-horizontal swipe past the threshold fires `onSwitch`; dominant-vertical swipes record no offset; `shouldSkip` excludes touch origins that must not act as page-swipe gestures, e.g. input controls) |
 | `./global-dialog` | global dialog controller | Publish-subscribe dialog queue (FIFO, at most one open at a time; `update()` builds a fresh entry object before broadcasting), shared by the host and the dev-shell |
@@ -341,6 +402,7 @@ Currently provided (each subpath is an independent export):
 | `@binblink/wasmnest-plugin-sdk-mobile/vite` | `wasmnestPlugin()` Vite build plugin |
 | `@binblink/wasmnest-plugin-sdk-mobile/types` | Pure types (types only, no runtime) |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui` | Shared Vue component: `Select` |
+| `@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card` | `QuickCard` home quick card |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui/plugin-global-dialog` | `PluginGlobalDialog` |
 | `@binblink/wasmnest-plugin-sdk-mobile/ui/swipe-tabs` | `useSwipeTabs` |
 | `@binblink/wasmnest-plugin-sdk-mobile/global-dialog` | global dialog controller |

@@ -294,6 +294,15 @@ fn production_code_lines(content: &str) -> Vec<String> {
         }
         if pending_cfg_test {
             pending_cfg_test = false;
+            // `code_lines` 会丢掉 `mod X;` 声明行：若下一可见行仍是 `#[cfg(test)]`，
+            // 说明上一条属性挂在外置测试模块声明上（`#[cfg(test)] mod foo;`），
+            // 本行是新属性的起点——重新挂起。丢掉它会把后面内联的
+            // `#[cfg(test)] mod tests { … }` 整段误判成生产代码（真实假红：
+            // `wasm-core/src/lib.rs` 的 `mod manifest_type_tests;` 之后就是内联测试模块）。
+            if line == "#[cfg(test)]" {
+                pending_cfg_test = true;
+                continue;
+            }
             if line.contains('{') {
                 let depth = braces(&line);
                 if depth > 0 {
@@ -358,6 +367,36 @@ pub fn after_tests() {
             .iter()
             .any(|l| l.contains("internal-business") || l.contains("business-app")),
         "测试段内容必须被跳过: {lines:?}"
+    );
+}
+
+/// 外置测试模块声明不得吐掉紧随其后的内联测试段
+///
+/// 回归：`#[cfg(test)] mod manifest_type_tests;` 的声明行被 `code_lines` 丢掉后，
+/// 下一个可见行是另一个 `#[cfg(test)]`；旧实现把后者当成「属性项」吞掉，导致其后的
+/// `mod tests { … }` 整段被当成生产代码（wasm-core/src/lib.rs 因此假红进 L2 扫描面）。
+#[test]
+fn production_code_lines_keeps_inline_test_region_after_external_module() {
+    let src = r#"
+#[cfg(test)]
+mod manifest_type_tests;
+
+#[cfg(test)]
+mod tests {
+    fn t() {
+        let _ = "internal-business";
+    }
+}
+pub fn after_tests() {}
+"#;
+    let lines = production_code_lines(src);
+    assert!(
+        !lines.iter().any(|l| l.contains("internal-business")),
+        "内联测试段必须被跳过: {lines:?}"
+    );
+    assert!(
+        lines.iter().any(|l| l.contains("after_tests")),
+        "测试段之后的生产代码必须保留: {lines:?}"
     );
 }
 

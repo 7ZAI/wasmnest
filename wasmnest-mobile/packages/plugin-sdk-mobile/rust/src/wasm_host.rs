@@ -16,14 +16,30 @@
 use crate::host::{
     ConfigKey, HostAuth, HostBus, HostConfig, HostConnection, HostError, HostEvents,
     HostFs, HostHttp, HostLog, HostMdns, HostMetrics, HostNotify, HostNotifyMobile, HostPeer,
-    HostPlatform, HostPluginDatabase, HostStorage, HostTerminalStream, HostWs, NotifyOptions,
+    HostPlatform, HostPluginDatabase, HostStorage, HostTerminalStream, HostTunnel, HostWs,
+    NotifyOptions, PeerNodeConfig, TunnelConfig, TunnelExposeConfig,
 };
-use crate::wasm::wasmnest::plugin::{
-    host_auth_client, host_bus, host_config, host_connection_target, host_events, host_fs,
-    host_fs_mobile, host_http, host_log, host_mdns, host_metrics, host_notify, host_notify_mobile,
-    host_peer, host_platform, host_plugin_database, host_storage, host_terminal_stream,
-    host_websocket,
-};
+use crate::wasm::wasmnest::auth_client::host_auth_client;
+use crate::wasm::wasmnest::plugin::host_bus;
+use crate::wasm::wasmnest::plugin::host_config;
+use crate::wasm::wasmnest::connection_target::host_connection_target;
+use crate::wasm::wasmnest::plugin::host_events;
+use crate::wasm::wasmnest::plugin::host_fs;
+use crate::wasm::wasmnest::fs_mobile::host_fs_mobile;
+use crate::wasm::wasmnest::http::host_http;
+use crate::wasm::wasmnest::plugin::host_log;
+use crate::wasm::wasmnest::mdns::host_mdns;
+use crate::wasm::wasmnest::plugin::host_metrics;
+use crate::wasm::wasmnest::notify::host_notify;
+use crate::wasm::wasmnest::notify_mobile::host_notify_mobile;
+use crate::wasm::wasmnest::peer::host_peer;
+use crate::wasm::wasmnest::plugin::host_platform;
+use crate::wasm::wasmnest::plugin::host_plugin_database;
+use crate::wasm::wasmnest::plugin::host_storage;
+use crate::wasm::wasmnest::terminal_stream::host_terminal_stream;
+use crate::wasm::wasmnest::tunnel::host_tunnel;
+use crate::wasm::wasmnest::ws::host_websocket;
+
 
 /// 宿主 API 绑定（WASM 插件侧）
 ///
@@ -375,6 +391,11 @@ impl HostPeer for WasmHost {
         host_peer::dial_peer(&endpoint_json).map_err(|e| host_err("peer_dial", e))
     }
 
+    fn peer_dial_addrs(&self, endpoint: &serde_json::Value) -> Result<String, HostError> {
+        let endpoint_json = to_json_string("peer_dial_addrs", endpoint)?;
+        host_peer::dial_peer_addrs(&endpoint_json).map_err(|e| host_err("peer_dial_addrs", e))
+    }
+
     fn peer_close(&self, handle: &str) -> Result<bool, HostError> {
         host_peer::close(handle).map_err(|e| host_err("peer_close", e))
     }
@@ -389,6 +410,14 @@ impl HostPeer for WasmHost {
 
     fn peer_revoke_trusted(&self, node_id: &str) -> Result<bool, HostError> {
         host_peer::revoke_trusted(node_id).map_err(|e| host_err("peer_revoke_trusted", e))
+    }
+
+    fn peer_trust_node(
+        &self,
+        node_id: &str,
+        display_name: Option<&str>,
+    ) -> Result<bool, HostError> {
+        host_peer::trust_node(node_id, display_name).map_err(|e| host_err("peer_trust_node", e))
     }
 
     fn peer_send_files(
@@ -426,6 +455,15 @@ impl HostPeer for WasmHost {
         host_peer::set_shared_roots(&dirs_json).map_err(|e| host_err("peer_set_shared_roots", e))
     }
 
+    fn peer_set_config_snapshot(&self, snapshot_json: &str) -> Result<(), HostError> {
+        host_peer::set_config_snapshot(snapshot_json)
+            .map_err(|e| host_err("peer_set_config_snapshot", e))
+    }
+
+    fn peer_fetch_config(&self, session: &str) -> Result<Option<String>, HostError> {
+        host_peer::fetch_config(session).map_err(|e| host_err("peer_fetch_config", e))
+    }
+
     fn peer_list_shared_roots(&self, session: &str) -> Result<serde_json::Value, HostError> {
         peer_json("peer_list_shared_roots", host_peer::list_shared_roots(session).map_err(|e| host_err("peer_list_shared_roots", e))?)
     }
@@ -458,8 +496,13 @@ impl HostPeer for WasmHost {
         host_peer::set_download_dir(path).map_err(|e| host_err("peer_set_download_dir", e))
     }
 
-    fn peer_start_node(&self) -> Result<bool, HostError> {
-        host_peer::start_node().map_err(|e| host_err("peer_start_node", e))
+    fn peer_start_node(&self, config: &PeerNodeConfig) -> Result<bool, HostError> {
+        let wit_config = host_peer::PeerNodeConfig {
+            data_dir: config.data_dir.clone(),
+            device_name: config.device_name.clone(),
+            listen_port: config.listen_port,
+        };
+        host_peer::start_node(&wit_config).map_err(|e| host_err("peer_start_node", e))
     }
 
     fn peer_stop_node(&self) -> Result<bool, HostError> {
@@ -564,5 +607,76 @@ impl HostWs for WasmHost {
 
     fn ws_is_connected(&self, handle: &str) -> Result<bool, HostError> {
         host_websocket::is_connected(handle).map_err(|e| host_err("ws_is_connected", e))
+    }
+}
+
+// ==================== HostTunnel（内网穿透，T06） ====================
+
+impl HostTunnel for WasmHost {
+    fn tunnel_configure(&self, config: &TunnelConfig) -> Result<bool, HostError> {
+        let relay_addrs_json = serde_json::to_string(&config.relay_addrs)
+            .map_err(|e| host_err("tunnel_configure", format!("relayAddrs 序列化失败：{e}")))?;
+        host_tunnel::configure(&host_tunnel::TunnelConfig {
+            allow_wan: config.allow_wan,
+            relay_addrs_json,
+        })
+        .map_err(|e| host_err("tunnel_configure", e))
+    }
+
+    fn tunnel_expose(&self, config: &TunnelExposeConfig) -> Result<String, HostError> {
+        host_tunnel::expose(&host_tunnel::ExposeConfig {
+            port: config.port,
+            kind: config.kind.clone(),
+            label: config.label.clone(),
+            allowed_peers: config.allowed_peers.clone(),
+        })
+        .map_err(|e| host_err("tunnel_expose", e))
+    }
+
+    fn tunnel_unexpose(&self, rule_id: &str) -> Result<bool, HostError> {
+        host_tunnel::unexpose(rule_id).map_err(|e| host_err("tunnel_unexpose", e))
+    }
+
+    fn tunnel_connect(
+        &self,
+        node_id: &str,
+        port: u16,
+        kind: &str,
+        addrs: &[String],
+        pairing_ticket: Option<String>,
+    ) -> Result<serde_json::Value, HostError> {
+        let addrs_json = serde_json::to_string(addrs)
+            .map_err(|e| host_err("tunnel_connect", format!("addrs 序列化失败：{e}")))?;
+        // WIT `option<string>` 的生成参数是 `Option<&str>`：trait 收 `Option<String>`
+        // 是为了让插件侧能直接持有票据（不引发生命周期绑定），转借在绑定层做
+        let raw = host_tunnel::connect(node_id, port, kind, &addrs_json, pairing_ticket.as_deref())
+            .map_err(|e| host_err("tunnel_connect", e))?;
+        parse_json("tunnel_connect", raw)
+    }
+
+    fn tunnel_close(&self, handle: &str) -> Result<bool, HostError> {
+        host_tunnel::close(handle).map_err(|e| host_err("tunnel_close", e))
+    }
+
+    fn tunnel_issue_pairing_ticket(&self, port: u16, ttl_secs: u32) -> Result<String, HostError> {
+        host_tunnel::issue_pairing_ticket(port, ttl_secs)
+            .map_err(|e| host_err("tunnel_issue_pairing_ticket", e))
+    }
+
+    fn tunnel_probe_relay(
+        &self,
+        addrs: &[String],
+        timeout_ms: u32,
+    ) -> Result<serde_json::Value, HostError> {
+        let addrs_json = serde_json::to_string(addrs)
+            .map_err(|e| host_err("tunnel_probe_relay", format!("addrs 序列化失败：{e}")))?;
+        let raw = host_tunnel::probe_relay(&addrs_json, timeout_ms)
+            .map_err(|e| host_err("tunnel_probe_relay", e))?;
+        parse_json("tunnel_probe_relay", raw)
+    }
+
+    fn tunnel_status(&self) -> Result<serde_json::Value, HostError> {
+        let raw = host_tunnel::status().map_err(|e| host_err("tunnel_status", e))?;
+        parse_json("tunnel_status", raw)
     }
 }

@@ -1,6 +1,4 @@
-//! Client Business Router - 业务路由器
-//!
-//! 将解析后的 Message 按类型分发给已注册的处理器
+//! 业务路由器：把解码后的 `Message` 按类型分发给已注册处理器
 
 use async_trait::async_trait;
 use std::sync::Arc;

@@ -29,8 +29,12 @@ html.platform-linux {
  * 新增色板 = 加一组 [data-palette='xxx'] 变量覆盖 + 设置页选项，无需改其他代码。
  */
 
-/* 浅色模式 · 默认色板 warm（暖调工作台） */
-:root {
+/* 浅色模式 · 默认色板 warm（暖调工作台）
+   `.theme-base` 与 `:root` 共用这一份基础档：设置页「默认主题」的预览块挂这个类，
+   以免它继承当前主题（<html data-theme>）的 token——否则「默认」那张预览会长成
+   当前主题的样子，用户看不见默认长什么样。 */
+:root,
+.theme-base {
   color-scheme: light;
 
   /* 基础排版：拉丁字形在前、CJK 字形在后（逐字回退）——不写 CJK 家族时，
@@ -75,8 +79,8 @@ html.platform-linux {
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
 
   /* 动态字体大小：各档以"正常"档位实际像素为基准，随 --ui-scale 等比缩放 */
-  --font-size-xs: calc(9px * var(--ui-scale));
-  --font-size-sm: calc(10px * var(--ui-scale));
+  --font-size-xs: calc(10px * var(--ui-scale));
+  --font-size-sm: calc(11px * var(--ui-scale));
   --font-size-base: calc(12px * var(--ui-scale));
   --font-size-lg: calc(14px * var(--ui-scale));
   --font-size-xl: calc(16px * var(--ui-scale));
@@ -239,11 +243,15 @@ html.platform-linux {
 
   /* 交互动效：壳与挂载面共用同一组节奏（时长按距离 / 复杂度分档，缓动统一减速到达）。
      组件 scoped 样式里不再各写一份 0.15s/0.2s —— 见 ui-ux-pro-max ux 域
-     Duration Timing：用共享 token，别把同一组数字抄进每个过渡。 */
+     Duration Timing：用共享 token，别把同一组数字抄进每个过渡。
+     曲线取「强减速」档（Emil Kowalski 动效技能 animate / AUDIT.md）：入场用
+     cubic-bezier(0.23, 1, 0.32, 1) 而不是内置 ease-out —— 内置曲线前段太软，
+     用户盯着看的那一下会显得迟滞。退场仍保留加速曲线（ui-ux-pro-max Easing：
+     到达减速、离开加速）。 */
   --motion-duration-fast: 130ms;
   --motion-duration-base: 200ms;
   --motion-duration-slow: 320ms;
-  --motion-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --motion-ease: cubic-bezier(0.23, 1, 0.32, 1);
   --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
 
   /* 键盘焦点环（所有自绘控件共用）：实色 2px + 2px 间隙，任何底色上都可辨 */
@@ -269,8 +277,11 @@ html.platform-linux {
   --action-button-size: 32px;
 }
 
-/* 深色模式 · 默认色板 warm */
-:root.dark {
+/* 深色模式 · 默认色板 warm
+   深色预览块也走这份基础档：`:root.dark .theme-base` 让默认主题的预览跟着壳的明暗走
+   （比让 JS 给预览块另挂一个 dark 类更稳——<html> 上的 dark 类是明暗的唯一真源）。 */
+:root.dark,
+:root.dark .theme-base {
   color-scheme: dark;
 
   --bg-page: #15130f;
@@ -352,6 +363,36 @@ html.platform-linux {
       color-mix(in srgb, var(--color-primary) 6%, var(--bg-page)) 60%,
       var(--bg-page) 100%
     );
+}
+
+/* 默认档的中性化：主题专属的三枚 token（环境光 / 图标外框 / 图标投影）不属于默认档，
+   显式归零——否则它们会从当前主题的 <html> 继承下来，默认预览就带上了别人的语汇。 */
+.theme-base {
+  --theme-ambient: none;
+  --theme-icon-shadow: none;
+  --theme-icon-radius: var(--radius-app-icon);
+  /* 玻璃材质 token 也归零：默认预览不挂 data-theme，若这些值从当前主题
+     继承下来，任何引用它们的预览规则都会偷偷长成玻璃。 */
+  --theme-glass-tint: var(--bg-card);
+  --theme-glass-fill-top: var(--bg-card);
+  --theme-glass-fill-bottom: var(--bg-card);
+  --theme-glass-control: var(--bg-card);
+  --theme-glass-control-hover: var(--bg-card);
+  --theme-glass-rim-hi: transparent;
+  --theme-glass-rim-lo: transparent;
+  --theme-glass-inner: transparent;
+  --theme-glass-edge: var(--border);
+  --theme-glass-sheen: transparent;
+  --theme-glass-caustic: transparent;
+  --theme-glass-glow: transparent;
+  --theme-glass-blur: 0px;
+  --theme-glass-sat: 100%;
+  --theme-glass-brightness: 1;
+  --theme-glass-grain: none;
+  --theme-glass-grain-opacity: 0;
+  --theme-glass-selected: var(--bg-card);
+  --theme-glass-radius-card: var(--radius-card);
+  --theme-glass-radius-control: var(--radius-button);
 }
 
 /* ==================== 色板：cool（冷灰调） ==================== */
@@ -721,9 +762,17 @@ body {
   box-shadow: var(--shadow-input-focus);
 }
 
+/* 只过渡真正会变的属性：`transition: all` 会把 width/height 等布局属性也纳入
+   过渡（按钮文字变化时整页重排），并且无法被合成器单独优化。 */
 .desktop-ui button,
 .desktop-ui a {
-  transition: all 200ms ease;
+  transition:
+    background-color var(--motion-duration-base) var(--motion-ease),
+    border-color var(--motion-duration-base) var(--motion-ease),
+    color var(--motion-duration-base) var(--motion-ease),
+    box-shadow var(--motion-duration-base) var(--motion-ease),
+    opacity var(--motion-duration-base) var(--motion-ease),
+    transform var(--motion-duration-base) var(--motion-ease);
 }
 
 /* ==================== Scrollbar ==================== */
@@ -768,22 +817,20 @@ body {
   flex-shrink: 0;
 }
 
-/* 小号全大写 section 标题（ENABLED · 2 等） */
+/* 小号 section 标题（ENABLED · 2 等）：sentence case，靠字号/颜色分层，不靠全大写 */
 .wb-section-title {
   font-size: calc(11px * var(--ui-scale));
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   color: var(--text-secondary);
   margin-bottom: 8px;
 }
 
-/* 侧边栏分组标签（Navigation / Plugins / Status） */
+/* 侧边栏分组标签（Navigation / Plugins / Status）：sentence case；技术 token 才保留大写 */
 .wb-sidebar-section {
-  font-size: calc(10px * var(--ui-scale));
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
+  font-size: calc(11px * var(--ui-scale));
+  font-weight: 500;
+  letter-spacing: 0;
   color: var(--text-tertiary);
   white-space: nowrap;
 }
@@ -897,7 +944,9 @@ html.anim-disabled *::after {
 :root {
   --motion-page-duration-in: 220ms;
   --motion-page-duration-out: 160ms;
-  --motion-page-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* 与 --motion-ease 同一档强减速曲线：页面入场是最常被注视的动效，
+     缓动强度不能比壳内小组件弱。 */
+  --motion-page-ease: cubic-bezier(0.23, 1, 0.32, 1);
   --motion-page-shift: 10px;
   --motion-page-scale: 0.985;
 }
@@ -1076,16 +1125,13 @@ html[data-page-fx='zoom'] .page-leave-to {
   --normal-border-hover: var(--border-strong) !important;
 }
 
-/* 覆盖 vue-sonner 自带的 prefers-reduced-motion 禁用规则：保留 toast 进出场过渡
-   （滑入淡入/滑出淡出），系统减弱动态效果不影响通知的可见性反馈 */
+/* 覆盖 vue-sonner 自带的 prefers-reduced-motion 禁用规则：保留 toast 的淡入淡出
+   （可见性反馈是必要的），但去掉位移动画与 height 等布局属性过渡，时长压到
+   200ms —— 减弱动态是「更轻」，不是「照旧播」。 */
 @media (prefers-reduced-motion: reduce) {
   [data-sonner-toast],
   [data-sonner-toast] > * {
-    transition:
-      transform 400ms,
-      opacity 400ms,
-      height 400ms,
-      box-shadow 200ms !important;
+    transition: opacity 200ms !important;
   }
 }
 

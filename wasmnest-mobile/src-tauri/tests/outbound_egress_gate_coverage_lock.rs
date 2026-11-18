@@ -152,16 +152,16 @@ fn plugin_download_calls_the_gate_before_building_the_http_client() {
     let src = std::fs::read_to_string(mobile_src_root().join("src/plugin/downloader.rs")).expect("read downloader");
 
     let body = src
-        .split("pub async fn download_and_install")
+        .split("pub async fn download_package")
         .nth(1)
-        .expect("download_and_install must exist");
+        .expect("download_package must exist");
 
     let gate_call = body
         .find("ask_consent(app, zip_url).await?")
-        .expect("download_and_install 必须调用 egress 闸门（ask_consent）");
+        .expect("download_package 必须调用 egress 闸门（ask_consent）");
     let client_build = body
         .find("reqwest::Client::builder()")
-        .expect("download_and_install 必须构造 reqwest 客户端");
+        .expect("download_package 必须构造 reqwest 客户端");
 
     assert!(
         gate_call < client_build,
@@ -171,7 +171,7 @@ fn plugin_download_calls_the_gate_before_building_the_http_client() {
     // 跳转面：首跳放行不代表整条链放行，跳转必须复检
     assert!(
         body.contains(".redirect(crate::egress::redirect_policy())"),
-        "download_and_install 未用 egress::redirect_policy() 复检跳转目标——闸门只管住了首跳"
+        "download_package 未用 egress::redirect_policy() 复检跳转目标——闸门只管住了首跳"
     );
 }
 
@@ -187,5 +187,43 @@ fn the_lock_actually_sees_outbound_faces() {
     assert!(
         http_proxy.contains("egress::policy()"),
         "http_proxy 已无 egress 引用——闸门判据失效，请重写本锁"
+    );
+}
+
+#[test]
+fn app_update_flow_calls_the_gate_before_every_request() {
+    // 应用更新链路（`plugin/updates.rs`）是**可下载并安装代码**的出站面，一度
+    // 绕过 egress（2026-11-03 实测锁红）。判据取偏移而非「文件里有没有 egress
+    // 字样」：`fetch_text` / `download_zip_verified` 两条发请求的路径都必须**在**
+    // 首次 `.get(url)` 之前调用闸门；客户端也必须装跳转复检策略
+    // （`github.com` 资产 302 到 `objects.githubusercontent.com`）。
+    let src = std::fs::read_to_string(mobile_src_root().join("src/plugin/updates.rs")).expect("read updates.rs");
+
+    for marker in ["async fn fetch_text", "async fn download_zip_verified"] {
+        let body = src
+            .split(marker)
+            .nth(1)
+            .unwrap_or_else(|| panic!("`{marker}` 缺失：更新链路的发请求路径变了，请重写本锁"));
+
+        let gate_call = body
+            .find("gate_update_url(url)?")
+            .unwrap_or_else(|| panic!("`{marker}` 未调用 egress 闸门（gate_update_url）"));
+        let send = body
+            .find(".get(url)")
+            .unwrap_or_else(|| panic!("`{marker}` 已不再发请求，请重写本锁"));
+
+        assert!(
+            gate_call < send,
+            "`{marker}` 的 egress 闸门晚于发请求——裁决前请求已出站"
+        );
+    }
+
+    assert!(
+        src.contains(".redirect(crate::egress::redirect_policy())"),
+        "更新客户端未用 egress::redirect_policy() 复检跳转——资产 302 到 CDN 就不受闸门管"
+    );
+    assert!(
+        src.contains("EgressDecision::NeedConsent"),
+        "更新链路未把 NeedConsent 当失败处理——宿主内置流程没有弹窗渠道，必须 fail-closed"
     );
 }

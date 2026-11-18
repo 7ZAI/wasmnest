@@ -1,7 +1,7 @@
-//! Plugin Loader（移动端）
+//! 插件加载器：APK assets 解压 + app_data 扫描 + WASM 组件实例化
 //!
-//! APK assets 内置插件解压 + app_data_dir 插件扫描
-//! 解析 plugin.json，编译并实例化 WASM 组件（Component Model，迁移 ticket 06）
+//! 先解压内置插件、再扫 `app_data_dir` 的用户插件，解析 `plugin.json` 后按
+//! Component Model 编译并实例化；加载期不激活（激活归 `manager`）。
 
 use crate::plugin::types::*;
 use crate::plugin::validation::{validate_dir_binding, validate_plugin_id};
@@ -64,10 +64,37 @@ impl PluginLoader {
             if id.starts_with('.') || !entry.path().is_dir() {
                 continue;
             }
+            // 已卸载标记只对 release 生效：debug（本函数仅在 debug 构建运行）以构建
+            // 产物为准——resources/plugins/mobile 里有完整产物就重新复制并加载，
+            // 否则卸载一次后 dev 重启永远看不到该应用。残留标记顺手清掉。
+            let uninstalled_marker = plugins_data_dir.join(PLUGIN_UNINSTALLED_DIR).join(&id);
+            if uninstalled_marker.exists() {
+                match fs::remove_file(&uninstalled_marker) {
+                    Ok(()) => tracing::info!(
+                        "[PluginLoader] Ignored stale uninstall marker in dev: {}",
+                        id
+                    ),
+                    Err(e) => tracing::warn!(
+                        "[PluginLoader] Failed to clear stale uninstall marker for {}: {}",
+                        id,
+                        e
+                    ),
+                }
+            }
             let dest = plugins_data_dir.join(&id);
             let marker = dest.join(PLUGIN_SOURCE_MARKER);
-            if marker.exists() && fs::read_to_string(&marker).unwrap_or_default().trim() == expected {
-                continue;
+            if marker.exists() {
+                let source = fs::read_to_string(&marker).unwrap_or_default();
+                let source = source.trim();
+                // 用户经应用更新安装的副本优先于内置产物：dev 重启也不覆盖；
+                // 卸载后目录移除，下次启动才重新复制内置版本。
+                if !source.is_empty() && !source.starts_with(SOURCE_APK_ASSET) {
+                    tracing::info!("[PluginLoader] Keeping user-updated plugin: {}", id);
+                    continue;
+                }
+                if source == expected {
+                    continue;
+                }
             }
             if dest.exists() {
                 fs::remove_dir_all(&dest)?;
@@ -83,9 +110,10 @@ impl PluginLoader {
 
     /// 扫描插件目录并加载所有 plugin.json
     ///
-    /// 对 pluginType: "wasm" 的插件，编译 + 实例化 WASM 组件（Component Model，
+    /// 对携带 wasm 后端的形态（pluginType: "backend" / "full"）的插件，编译 +
+    /// 实例化 WASM 组件（Component Model，
     /// 一次性切割无共存：产物必须为组件，core module 加载报错即检查员）
-    /// 对 pluginType: "ts-only" 的插件，仅注册 manifest
+    /// 对纯前端（pluginType: "frontend"）插件，仅注册 manifest
     pub(crate) fn load_all(
         plugins_dir: &Path,
         wasm_runtime: &WasmRuntime,
@@ -164,11 +192,11 @@ impl PluginLoader {
                     }
 
                     // ==================== 退役权限位闸门 ====================
-                    // 票 2026-10-10 批次 C2：宿主壳改纯 surface 形态后，`ui:toolbox` /
+                    // 宿主壳改纯 surface 形态后，`ui:toolbox` /
                     // `ui:navtab` / `ui:input` 三个权限位随对应扩展点整面退役。
                     // 这里**显式拒绝装载**而不是让它落进 grant 的静默丢弃分支——
                     // 否则旧插件会「加载成功但功能凭空消失」，排查方向被带偏
-                    // （§5.1.3 fail-visible 形态③）。
+                    // （fail-visible 形态）。
                     if let Err(e) =
                         wasmnest_wasm_core::permission::check_retired_permissions(&plugin_id, &manifest.permissions)
                     {
@@ -181,8 +209,19 @@ impl PluginLoader {
 
                     // WASM 插件：编译 + 实例化（组件路径；core module 在此编译失败，
                     // 报错信息明确——旧 ABI 产物残留在切换期即暴露）
-                    if manifest.plugin_type == PluginType::Wasm && !manifest.rust_library.is_empty() {
+                    if manifest.plugin_type.has_backend() && !manifest.rust_library.is_empty() {
                         let wasm_file = path.join(format!("{}{}", manifest.rust_library, WASM_FILE_EXT));
+                        if wasm_file.exists() && !wasm_file_inside_plugin_dir(&path, &wasm_file) {
+                            // 双保险（第一道 = manifest 校验）：符号链接可把目录内路径
+                            // 指到目录外，canonicalize 后必须仍在插件目录下。
+                            tracing::error!(
+                                "[PluginLoader] Rejecting plugin {:?}: wasm file escapes plugin dir: {:?}",
+                                plugin_id,
+                                wasm_file
+                            );
+                            seen_ids.remove(&plugin_id);
+                            continue;
+                        }
                         if wasm_file.exists() {
                             match wasm_runtime.compile_component_from_file(&wasm_file) {
                                 Ok(component) => {
@@ -305,22 +344,42 @@ impl PluginLoader {
             )));
         }
 
-        // TS-only 插件必须有 main 字段
-        if manifest.plugin_type == PluginType::TsOnly && manifest.main.is_empty() {
+        // 纯前端插件必须有 main 字段（前端入口）
+        if manifest.plugin_type == PluginType::Frontend && manifest.main.is_empty() {
             return Err(crate::AppError::Plugin(
-                "TS-only plugin.json missing main field".to_string(),
+                "frontend plugin.json missing main field".to_string(),
             ));
         }
 
-        // WASM 插件必须有 rustLibrary 字段
-        if manifest.plugin_type == PluginType::Wasm && manifest.rust_library.is_empty() {
+        // 携带 wasm 后端的形态必须有 rustLibrary 字段（wasm 模块名）
+        if manifest.plugin_type.has_backend() && manifest.rust_library.is_empty() {
             return Err(crate::AppError::Plugin(
-                "WASM plugin.json missing rustLibrary field".to_string(),
+                "backend/full plugin.json missing rustLibrary field".to_string(),
             ));
+        }
+        // rustLibrary 是拼插件目录内 wasm 路径的唯一输入：拒绝路径成分
+        // （绝对路径 / `..` 会让加载落到审批哈希覆盖不到的目录外）
+        if !manifest.rust_library.is_empty() {
+            wasmnest_wasm_core::manager::validation::validate_rust_library_name(&manifest.rust_library)?;
         }
 
         Ok(manifest)
     }
+}
+
+/// 最终 wasm 路径 canonicalize 后是否仍在插件目录内（防符号链接逃逸）
+///
+/// manifest 校验已拒绝路径分隔符 / `..`；本检查是装载期双保险：插件目录里的
+/// 符号链接仍可把 `{rustLibrary}.wasm` 指到目录外。canonicalize 失败（路径
+/// 不存在 / 环）按不安全处理。
+fn wasm_file_inside_plugin_dir(plugin_dir: &Path, wasm_file: &Path) -> bool {
+    let Ok(root) = plugin_dir.canonicalize() else {
+        return false;
+    };
+    let Ok(file) = wasm_file.canonicalize() else {
+        return false;
+    };
+    file.starts_with(&root)
 }
 
 /// 递归复制目录（dev 插件复制用）
@@ -343,7 +402,7 @@ fn copy_dir_all(src: &Path, dest: &Path) -> crate::Result<()> {
 mod tests {
     use super::*;
 
-    /// 迁移 ticket 06 验收：生产加载路径（PluginLoader::load_all）直接吃组件产物
+    /// 生产加载路径（PluginLoader::load_all）直接吃组件产物
     ///
     /// 覆盖 manifest 解析 → 组件编译（AOT 缓存）→ instantiate_component → 实例落表；
     /// 再经实例调用 activate 导出（SDK wasm_entry! 宏产物）。
@@ -365,7 +424,7 @@ mod tests {
                     "name": "BedCode",
                     "version": "1.0.0-beta",
                     "platform": "mobile",
-                    "pluginType": "wasm",
+                    "pluginType": "full",
                     "rustLibrary": "bedcode_plugin_terminal_session",
                     "permissions": ["auth", "bus", "network:http", "session:read", "storage", "terminal:output", "ui:route", "ws:client"]
                 }"#,
@@ -423,7 +482,7 @@ mod tests {
     fn test_load_manifest_rejects_non_mobile_platform() {
         let tmp = tempfile::tempdir().expect("tempdir");
 
-        // 每次覆写同一份最小清单（ts-only 形态免 wasm 产物即可过必填校验）
+        // 每次覆写同一份最小清单（frontend 形态免 wasm 产物即可过必填校验）
         let write_manifest = |platform_line: &str| -> std::path::PathBuf {
             let path = tmp.path().join("plugin.json");
             std::fs::write(
@@ -434,7 +493,7 @@ mod tests {
                         "name": "Platform Probe",
                         "version": "1.0.0",
                         {platform_line}
-                        "pluginType": "ts-only",
+                        "pluginType": "frontend",
                         "main": "index.js",
                         "permissions": [],
                         "contributes": {{}}

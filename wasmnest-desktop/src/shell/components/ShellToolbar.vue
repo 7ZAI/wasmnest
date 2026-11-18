@@ -44,7 +44,7 @@
     <nav class="flex items-center gap-0.5 ml-2.5 shrink-0" aria-label="导航">
       <button
         class="tb-btn"
-        :disabled="!canBack"
+        :disabled="!state.canGoBack.value"
         :title="t('shell.nav.backTitle')"
         :aria-label="t('shell.nav.back')"
         @click="state.goBack()"
@@ -191,16 +191,6 @@ const where = computed(() =>
     读屏仍会播报当前位置变化）。 */
 const hasWhere = computed(() => state.screen.value === 'card')
 
-/** 有可收的覆层或不在主屏 → 返回可用 */
-const canBack = computed(
-  () =>
-    state.screen.value !== 'home' ||
-    state.dialog.value !== null ||
-    state.ctxMenu.value !== null ||
-    state.panelOpen.value ||
-    state.recentsOpen.value,
-)
-
 /** 当前生效暗色（system 跟随系统偏好） */
 const isDark = computed(() =>
   settingsStore.settings.ui.theme === 'dark'
@@ -275,6 +265,24 @@ async function checkMaximized() {
   }
 }
 
+/**
+ * resize 合帧：拖边框缩放时 DOM resize 逐帧触发，而最大化态只会在手势结束时变化。
+ *
+ * 此前是每个 resize 事件就发一次 `plugin:window|is_maximized` IPC（高刷鼠标下
+ * ~60 次/s，与 Rust 主线程争用）。现在只留尾部一次；`toggleMaximize` 后的短延时
+ * 主动查询不受影响（它走 setTimeout，不经过这里）。
+ */
+const RESIZE_SETTLE_MS = 150
+let resizeTimer: ReturnType<typeof setTimeout> | null = null
+
+function onWindowResize() {
+  if (resizeTimer) clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(() => {
+    resizeTimer = null
+    void checkMaximized()
+  }, RESIZE_SETTLE_MS)
+}
+
 async function minimize() {
   if (!appWindow) return
   try {
@@ -300,8 +308,11 @@ function requestClose() {
 }
 
 onMounted(checkMaximized)
-window.addEventListener('resize', checkMaximized)
-onUnmounted(() => window.removeEventListener('resize', checkMaximized))
+window.addEventListener('resize', onWindowResize)
+onUnmounted(() => {
+  window.removeEventListener('resize', onWindowResize)
+  if (resizeTimer) clearTimeout(resizeTimer)
+})
 </script>
 
 <style scoped>

@@ -69,18 +69,19 @@ const RETIRED_FRONTEND_LITERALS: [&str; 8] = [
 /// 保留面必须仍在：本票只摘「宿主↔插件终端回调/写入面」，不摘输出传输面
 const RETAINED_FACE: [(&str, &str); 6] = [
     // WIT 保留接口（票 12 的 C3 二进制出口与连接事实原语）。
-    // 票 03 分片拼装后：移动接口定义从手写 `wasmnest.wit` 迁到生成物 `cap-mobile.wit`
-    // （`wasmnest.wit` 只剩 `include core; include cap-mobile;`）——needle 随真源落点走。
+    // ADR 0061 拆包后每个能力域独立包：host-terminal-stream 在
+    // `deps/terminal-stream/`，host-connection-target 在 `deps/connection-target/`
+    // （`wasmnest.wit` 只剩 include 列表）——needle 随真源落点走。
     (
-        "../packages/plugin-sdk-mobile/rust/wit/cap-mobile.wit",
+        "../packages/plugin-sdk-mobile/rust/wit/deps/terminal-stream/cap-terminal-stream.wit",
         "interface host-terminal-stream ",
     ),
     (
-        "../packages/plugin-sdk-mobile/rust/wit/cap-mobile.wit",
+        "../packages/plugin-sdk-mobile/rust/wit/deps/terminal-stream/cap-terminal-stream.wit",
         "forward-output: func(",
     ),
     (
-        "../packages/plugin-sdk-mobile/rust/wit/cap-mobile.wit",
+        "../packages/plugin-sdk-mobile/rust/wit/deps/connection-target/cap-connection-target.wit",
         "primary-target: func(",
     ),
     // SDK 权限词汇：terminal:output 保留（窄转发权限门复用）

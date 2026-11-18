@@ -1,7 +1,11 @@
 <template>
   <!-- 主屏：应用网格 + 服务网格 + 系统网格；壁纸由 ShellHost 壳根统一铺（所有宿主面共用），
        主屏自身保持透明。打开过 / 后台运行的面不在这里铺开（见工具栏「多任务」面板）。 -->
-  <section class="home-scroll" :aria-label="t('shell.home.aria')">
+  <section
+    class="home-scroll"
+    :class="{ 'home-entrance': playEntrance && q.trim() === '' }"
+    :aria-label="t('shell.home.aria')"
+  >
     <h1 class="sr-only">{{ t('shell.home.aria') }}</h1>
     <!-- type-to-search 提示（spec-c 已知边界：IME 合成中的 CJK 非本路径，由隐藏 input 承接）。
          悬在主屏顶部居中（与图块列无关，只是搜索态的高位提示）。 -->
@@ -33,8 +37,12 @@
             role="listitem"
             tabindex="0"
             :aria-label="`${app.name}，${chipMeta(appsStore.displayStates.value[app.id]).text}`"
-            @click="state.openApp(app.id)"
+            @click="onTileClick(app.id)"
             @keydown.enter="state.openApp(app.id)"
+            @pointerdown="lp.down($event, app.id)"
+            @pointermove="lp.move"
+            @pointerup="lp.up"
+            @pointercancel="lp.cancel"
             @contextmenu.prevent="onCtx(app, $event)"
           >
             <span class="glyph-wrap">
@@ -124,6 +132,15 @@
   </section>
 </template>
 
+<script lang="ts">
+/**
+ * 本次应用会话是否已播过图块入场。
+ * 必须放普通 `<script>`（模块作用域）：`<script setup>` 顶层绑定是每个实例的，
+ * 路由重挂后会复位，错峰入场就会在每次「回家」时重播。
+ */
+let homeEntrancePlayed = false
+</script>
+
 <script setup lang="ts">
 /**
  * ShellHome — 主屏（spec-c）：应用网格 + 服务网格 + 系统网格 + type-to-search。
@@ -133,10 +150,13 @@
  * 用户裁决（2026-10-17）把「正在运行」区从主屏撤掉，改由工具栏多任务全屏层承载。
  * 停用的应用也从这里缺席（启用 = 主屏入口可见性，2026-10-21 裁决；恢复入口
  * 在应用管理页，语义真源 = 宿主 lifecycle.rs `ENABLED_KEY_PREFIX` 文档）。
+ * 应用图标支持长按（鼠标 / 触屏同径，2026-10-28）弹操作菜单——与右键菜单
+ * 同一覆层，用户安装应用的「卸载」随之在主屏可达。
  */
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SYS_PAGES, appDotState, chipMetaOf } from '../composables/state'
+import { useLongPress } from '../composables/useLongPress'
 import { useShellState } from '../composables/useShellState'
 import { isServiceKind, useShellApps, type ShellAppEntry } from '../composables/useShellApps'
 import ShellIcon from './ShellIcon.vue'
@@ -146,7 +166,19 @@ const { t } = useI18n()
 const state = useShellState()
 const appsStore = useShellApps()
 
+/**
+ * 图块错峰入场只在本次应用会话的第一次主屏出现时播。
+ * 主屏随路由重挂（ShellHost 的 `v-if="isHome"`），若每次回主屏都重播，
+ * 320ms 动画 + 最多 210ms 延迟会变成每次「回家」的等待成本（主屏是几十次/天
+ * 的高频面）。模块级标记跨重挂保留；搜索是键盘高频动作，一旦开始就不再补播。
+ */
+const playEntrance = ref(!homeEntrancePlayed)
+homeEntrancePlayed = true
+
 const q = computed(() => state.homeQ.value)
+watch(q, (value) => {
+  if (value.trim() !== '') playEntrance.value = false
+})
 /** 搜索匹配：名称 / id（均小写包含） */
 const matchQ = (s: string) => s.toLowerCase().includes(q.value.toLowerCase())
 
@@ -248,7 +280,22 @@ function dotStateOf(app: ShellAppEntry): 'running' | 'degraded' | null {
 
 /** 右键菜单 */
 function onCtx(app: ShellAppEntry, e: MouseEvent) {
+  lp.cancel() // 右键先行：撤销可能按压中的长按计时，避免菜单打开后计时又触发
   state.ctxMenu.value = { appId: app.id, x: e.clientX, y: e.clientY }
+}
+
+/**
+ * 长按手势（鼠标 / 触屏同径）：按住图标弹操作菜单（与右键菜单同一覆层，
+ * 卸载入口随之可达）。触发后吞掉紧随的一次 click——长按不是打开。
+ */
+const lp = useLongPress<string>((appId, x, y) => {
+  state.ctxMenu.value = { appId, x, y }
+})
+
+/** 图标点击：长按触发后的那次 click 不打开应用 */
+function onTileClick(appId: string) {
+  if (lp.consumeClick()) return
+  void state.openApp(appId)
 }
 </script>
 
@@ -324,29 +371,32 @@ function onCtx(app: ShellAppEntry, e: MouseEvent) {
   transition:
     background-color var(--motion-duration-fast) var(--motion-ease),
     transform var(--motion-duration-fast) var(--motion-ease);
-  /* 入场：图块自下浮起 + 淡入，逐个错 30ms（只定义 from，填充模式 backwards——
-     动画结束后 transform 回到元素自身，:active 的按压缩放才不会被填充态压住） */
+}
+/* 入场：图块自下浮起 + 淡入，逐个错 30ms（只定义 from，填充模式 backwards——
+   动画结束后 transform 回到元素自身，:active 的按压缩放才不会被填充态压住）。
+   只在首次主屏挂载时由 .home-entrance 开启，重访 / 搜索中直接落终态。 */
+.home-entrance .appicon {
   animation: shell-tile-in var(--motion-duration-slow) var(--motion-ease) backwards;
 }
-.appicon:nth-child(2) {
+.home-entrance .appicon:nth-child(2) {
   animation-delay: 30ms;
 }
-.appicon:nth-child(3) {
+.home-entrance .appicon:nth-child(3) {
   animation-delay: 60ms;
 }
-.appicon:nth-child(4) {
+.home-entrance .appicon:nth-child(4) {
   animation-delay: 90ms;
 }
-.appicon:nth-child(5) {
+.home-entrance .appicon:nth-child(5) {
   animation-delay: 120ms;
 }
-.appicon:nth-child(6) {
+.home-entrance .appicon:nth-child(6) {
   animation-delay: 150ms;
 }
-.appicon:nth-child(7) {
+.home-entrance .appicon:nth-child(7) {
   animation-delay: 180ms;
 }
-.appicon:nth-child(8) {
+.home-entrance .appicon:nth-child(8) {
   animation-delay: 210ms;
 }
 

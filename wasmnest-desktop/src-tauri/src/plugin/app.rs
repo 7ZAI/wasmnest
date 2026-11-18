@@ -1,13 +1,12 @@
-//! host-app 宿主侧接线（路径 B：WIT 绑定 + `Host` impl + 域函数 + 自报，四件同处）
+//! host-app 宿主侧接线（WIT 绑定 + `Host` impl + 域函数 + 自报，四件同处）
 //!
-//! wasm-core 纯净性收口票 02 批次 05 自内核迁出（`host_api/app.rs` 整文件删除，
-//! 内核反向锁 `path_b_domains_must_not_return_to_wasm_core` 防回接）。与 auth /
-//! crypto 同款：**没有独立能力 crate**——装配方就是宿主本 crate（孤儿规则见
-//! [`super::bindings`] 模块文档）。
+//! 自内核迁出（原 `host_api/app.rs` 已删除，内核反向锁
+//! `path_b_domains_must_not_return_to_wasm_core` 防回接）。与 auth / crypto 同款：
+//! **没有独立能力 crate**——装配方就是宿主本 crate（孤儿规则见 [`super::bindings`]）。
 //!
 //! 应用域宿主实现（随包 CLI 生命周期，v8 host-app）：WASM 插件无注册表/PATH 直接
 //! 通道：安装/卸载全部由宿主侧完成（`PluginServices::install_cli/uninstall_cli`
-//! 经 PluginHost 实现，见 plugin/host/app_cli.rs）。插件只声明权限并传
+//! 经 PluginHost 实现，见 `wasmnest-wasm-core/src/manager/host/app_cli.rs`）。插件只声明权限并传
 //! file_name/bin_dir。
 
 use wasmnest_host_kit::ports::downcast_host;
@@ -20,7 +19,7 @@ use wasmnest_wasm_core::runtime_util::block_on_async;
 use crate::plugin::bindings::wasmnest;
 
 // 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报，见
-// `host_module_whitelist`）。路径 B 域的自报静态住在本 crate（宿主 lib 即最终
+// `host_module_whitelist`）。直连绑定域的自报静态住在本 crate（宿主 lib 即最终
 // 二进制）⇒ 无需能力 crate 那样的 `use <crate> as _;` 强制引用行。
 wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 
@@ -28,7 +27,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "app";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-app"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:app@0.0.1/host-app"];
 
 /// 本域的权限位（必须与 `wasmnest.wit` / SDK 权限表逐字一致）
 ///
@@ -56,7 +55,7 @@ impl HostModule for AppModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_app::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::app::host_app::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -79,7 +78,7 @@ fn ctx_of(state: &WasmPluginState) -> &WasmHostContext {
     downcast_host::<WasmHostContext>(state.host.as_ref())
 }
 
-impl wasmnest::plugin::host_app::Host for WasmPluginState {
+impl wasmnest::app::host_app::Host for WasmPluginState {
     fn install_cli(&mut self, payload_json: String) -> Result<String, String> {
         install_cli(ctx_of(self), ctx_of(self), &self.plugin_id, &payload_json)
     }
@@ -162,7 +161,7 @@ pub(crate) fn uninstall_cli(
 
 /// 插件自身资源目录（v25 函数级追加，**无权限门**——只返回调用方自己的安装路径）
 ///
-/// 会话创建编排移交插件后（session-engine-downsink P1-b）宿主不再产生 `Creating`
+/// 会话创建编排移交插件后，宿主不再产生 `Creating`
 /// 生命周期事件，本原语成为插件取自身资源目录的唯一途径（Agent 集成 hook 脚本源
 /// 位于该目录）。未加载的插件 / 服务不可用 → `Err`（不静默返回空串）。
 pub(crate) fn plugin_resource_dir(svc: &dyn ServicesScope, plugin_id: &str) -> Result<String, String> {
@@ -305,7 +304,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "app", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-app"],
+            &["wasmnest:app@0.0.1/host-app"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(

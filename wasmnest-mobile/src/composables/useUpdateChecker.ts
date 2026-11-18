@@ -8,6 +8,7 @@
 import { ref } from 'vue'
 import { externalRequest } from './useHttpApi'
 import i18n from '@/locales'
+import { logger } from '@/utils/frontendLogger'
 
 /** 更新状态 */
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'latest' | 'failed'
@@ -106,7 +107,9 @@ async function checkForUpdate(): Promise<UpdateInfo | null> {
     status.value = 'latest'
     return null
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : String(e)
+    // 技术详情只进日志：页面只显示「检查更新失败」，不把网络 / API 原文抛给用户
+    logger.warn('[UpdateChecker] check failed:', e)
+    errorMessage.value = i18n.global.t('errors.host.internal')
     status.value = 'failed'
     return null
   }

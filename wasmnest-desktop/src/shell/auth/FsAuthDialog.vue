@@ -247,9 +247,16 @@ async function denyAlways() {
 </script>
 
 <style scoped>
+/* 只过渡真正会变的属性：`transition: all` 会把子元素布局属性也纳入范围；
+   缩放必须在面板自身上声明过渡，父层的 all 不会替子元素补间。 */
 .modal-enter-active,
 .modal-leave-active {
-  transition: all 0.2s ease;
+  transition: opacity var(--motion-duration-base) var(--motion-ease, ease);
+}
+
+.modal-enter-active > :last-child,
+.modal-leave-active > :last-child {
+  transition: transform var(--motion-duration-base) var(--motion-ease, ease);
 }
 
 .modal-enter-from,
@@ -260,5 +267,21 @@ async function denyAlways() {
 .modal-enter-from > :last-child,
 .modal-leave-to > :last-child {
   transform: scale(0.95);
+}
+
+/* 减弱动态：保留淡入淡出，去掉缩放；弹窗 Teleport 到 body，壳根降级规则够不到。 */
+@media (prefers-reduced-motion: reduce) {
+  .modal-enter-active,
+  .modal-leave-active {
+    transition: opacity 120ms linear;
+  }
+  .modal-enter-active > :last-child,
+  .modal-leave-active > :last-child {
+    transition: none;
+  }
+  .modal-enter-from > :last-child,
+  .modal-leave-to > :last-child {
+    transform: none;
+  }
 }
 </style>

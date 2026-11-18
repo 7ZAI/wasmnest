@@ -1,8 +1,6 @@
-//! Mobile Settings Storage Module
+//! 移动端设置存储：JSON 文件（非 SQLite）
 //!
-//! 移动端设置存储 - 使用 JSON 文件而非 SQLite
-//!
-//! 仅在移动端编译 (target_os = "android" || target_os = "ios")
+//! 仅移动目标编译（`target_os = "android" || "ios"`）——桌面宿主有独立配置面。
 
 use crate::Result;
 use serde::{Deserialize, Serialize};

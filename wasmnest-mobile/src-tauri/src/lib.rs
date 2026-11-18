@@ -1,4 +1,8 @@
-//! WasmNest Mobile - Library Entry Point
+//! WasmNest 移动宿主库入口：域模块声明 + 启动装配
+//!
+//! 移动端是宿主壳 + WASM 插件运行时：插件由 APK assets / 安装包动态加载，业务事件
+//! 经 `router` 转发给前端。本文件只做模块声明、测试夹具挂载与 `run()` 启动装配，
+//! 域实现分住各子模块（connection / plugin / peer / router / egress / system）。
 
 pub mod auth;
 pub mod commands;
@@ -15,7 +19,7 @@ pub mod router;
 pub mod state;
 pub mod system;
 
-/// 假插件端点夹具（票 01 基线与夹具）：本地 WS server 模拟桌面插件
+/// 假插件端点夹具：本地 WS server 模拟桌面插件
 /// `com.wasmnest.bedcode` 的 session-control / terminal 端点。
 /// 单测（`#[cfg(test)]`）经此路径复用 `tests/support/mock_plugin_ws.rs`；
 /// 集成测试在 `tests/` 内经 `#[path = "support/mock_plugin_ws.rs"]` 自行引入。
@@ -24,7 +28,7 @@ pub mod system;
 #[path = "../tests/support/mock_plugin_ws.rs"]
 pub(crate) mod mock_plugin_ws;
 
-/// 移动宿主测试夹具构建器（票 08 批次三自能力仓迁入）：宿主编译单元内的
+/// 移动宿主测试夹具构建器（自能力仓迁入）：宿主编译单元内的
 /// `#[cfg(test)]` 用例（`plugin/loader.rs` / `plugin/manager.rs`）经此引用；
 /// 集成测试在 `tests/` 内经 `#[path = "support/fixtures.rs"]` 自行引入。
 /// 仅测试构建生效（生产构建零影响）。
@@ -32,7 +36,7 @@ pub(crate) mod mock_plugin_ws;
 #[path = "../tests/support/fixtures.rs"]
 pub(crate) mod test_fixtures;
 
-// Re-export core types
+// 核心类型再导出：调用方经 `crate::{AppError, Result, config}` 取用
 pub use system::config;
 pub use system::error::{AppError, Result};
 
@@ -84,7 +88,7 @@ pub fn run() {
         .setup(|app| {
             tracing::info!("WasmNest setup starting...");
 
-            // mDNS 共享守护平台钩子（双端共享 lib spec M3/D3）：Android 多播锁随
+            // mDNS 共享守护平台钩子：Android 多播锁随
             // 守护常驻获取（幂等，不随浏览句柄增删）。宿主函数可能运行于 tokio
             // worker，禁止 block_on（运行时内阻塞反模式）——fire-and-forget spawn；
             // 非 Android 平台 stub 立即返回，同走 spawn 保持单一代码路径（可测）。
@@ -97,11 +101,13 @@ pub fn run() {
                 });
             });
 
-            // 进程级发现端口（ADR 0054 / 票 04）：类型中枢的泵任务经
+            // 进程级发现端口：类型中枢的泵任务经
             // `DiscoveryPorts::spawn` 派生，而中枢进程级出口取 `ports::ports()`——
             // 移动端不经桌面的 host-kit 域装配链，必须在此显式装一次（幂等）。
-            // 早于任何 `subscribe_type`（老链路 mdns 命令 / peer-net 节点启动）
-            crate::plugin::host_domains::mdns::register_process_ports();
+            // 早于任何 `subscribe_type`（老链路 mdns 命令 / peer-net 节点启动）。
+            // app 句柄供自播回显过滤读本机节点 ID；权限与总线在调用期经
+            // `state::try_get_plugin_manager()` 结算（装配早于插件管理器初始化）
+            crate::plugin::host_domains::mdns::register_process_ports(Some(Arc::new(app.handle().clone())));
 
             tracing::info!("Plugins initialized");
 
@@ -123,7 +129,7 @@ pub fn run() {
             let settings_manager = Arc::new(SettingsManager::new(&app_data_dir)?);
             app.manage(settings_manager.clone());
 
-            // 对等网络节点身份：复用上方 app_data_dir 解析点（决策 D3 宿主只注入
+            // 对等网络节点身份：复用上方 app_data_dir 解析点（宿主只注入
             // 目录），node_identity.json 与 auth 域 device_identity.json 并列存放；
             // 错误经 ? 上抛走既有启动失败路径——静默换身份会让对端可信列表全部失效
             crate::peer::net::init_node_identity(&app_data_dir)?;
@@ -131,9 +137,9 @@ pub fn run() {
             // 对等网络节点状态容器（Engine 集中化 2026-10-10：状态类型真源在共享
             // 能力域 crate，与桌面同形以 `Arc` 托管——适配层持 Arc 句柄跨 await 存活）
             app.manage(Arc::new(crate::peer::net::PeerNetState::default()));
-            app.manage(Arc::new(crate::peer::transfer::PeerTransferState::default()));
-            app.manage(Arc::new(crate::peer::receive::PeerReceiveState::default()));
-            app.manage(Arc::new(crate::peer::remote::PeerRemoteState::default()));
+            app.manage(Arc::new(crate::peer::net::PeerTransferState::default()));
+            app.manage(Arc::new(crate::peer::net::PeerReceiveState::default()));
+            app.manage(Arc::new(crate::peer::net::PeerRemoteState::default()));
             // 节点自启已退役：peer-net 生命周期由应用作用域服务租约驱动
             // （插件经 host-peer.start-node 按引用记账；宿主不再按产品 id 驱动）
 
@@ -142,7 +148,7 @@ pub fn run() {
             let db_path = app_data_dir.join("wasmnest_plugins.db");
             // 连接所有权交 wasm-core `Database`；**建表与迁移的真源也在 crate 内**
             // （`init_schema` → `../wasmnest-lib/wasmnest-wasm-core/src/db/schema.sql`，单一
-            // 事实源，AGENTS §9）：宿主不自持 DDL 副本——曾自持的那份与内核
+            // 事实源）：宿主不自持 DDL 副本——曾自持的那份与内核
             // 真源漂移出旧形状 `plugin_auth_records`（缺 id），使 fs 授权记录读写
             // 全失败（2026-10-14 设备实证 `no such column: id`）。已装设备的旧形状
             // 库由内核侧对账迁移（`Database::init_schema` 内），宿主不再知表形状。
@@ -160,7 +166,7 @@ pub fn run() {
                 .init_schema()
                 .map_err(|e| anyhow::anyhow!("Failed to init plugin DB schema: {}", e))?;
 
-            // 票 05b：旧文件落盘 KV（plugins/*.json）→ 主库 plugin_storage 表一次性迁移；
+            // 旧文件落盘 KV（plugins/*.json）→ 主库 plugin_storage 表一次性迁移；
             // 随后旧版对等网络数据迁移（写入 DB-backed 插件存储；幂等，失败均不阻断启动）
             {
                 let storage = crate::plugin::storage::PluginStorage::new(plugin_db.clone());
@@ -180,15 +186,20 @@ pub fn run() {
             let plugin_manager = crate::state::init_plugin_manager(Arc::new(plugin_manager));
             app.manage(plugin_manager.clone());
 
-            // 移动宿主面凭证域（ADR 0058 方案 A：移动半场，issue #21）：管理类命令
-            // （plugin_preauthorize / activate / deactivate / approve / install /
-            // uninstall / download / reload）只认宿主前端 loader 会话凭证。与桌面
-            // lib PluginHost 的 channel 同机制（wasm-core FrontendChannelRegistry），
-            // 但移动命令面（plugin/commands.rs）独立持有自己的实例——移动不经
-            // 桌面的 api_bridge 装配链，registry 随 lib.rs setup 显式装配。
-            app.manage(Arc::new(
-                wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry::new(),
-            ));
+            // 移动宿主面凭证域（命令面身份绑定）。
+            // 管理类命令只认宿主前端 loader 会话凭证；插件面命令（plugin_invoke /
+            // plugin_storage_* / 自报面）认 `plugin_channel_token` 签发的通道令牌。
+            // 与桌面 lib PluginHost 的 channel 同机制（wasm-core FrontendChannelRegistry），
+            // 移动不经桌面的 api_bridge 装配链，registry 随 lib.rs setup 显式装配。
+            //
+            // **同一实例两处持有**：命令面经 Tauri state 取、manager 经
+            // `attach_frontend_channel` 注入（停用 / 卸载 / 热重载时由 manager 回收令牌，
+            // 与桌面 `PluginHost::deactivate_plugin` 同位）。两份必须是同一个 Arc，
+            // 否则会签在一张表、收在另一张表。
+            let frontend_channel =
+                Arc::new(wasmnest_wasm_core::security::frontend_channel::FrontendChannelRegistry::new());
+            plugin_manager.attach_frontend_channel(frontend_channel.clone());
+            app.manage(frontend_channel);
 
             // 应用作用域服务注册表：`net.peer-node` 服务经管理器的注册表注册
             // （管理器在 init_wasm_runtime 时把同一份注入 wasm 宿主上下文；
@@ -198,6 +209,25 @@ pub fn run() {
                 crate::peer::net::peer_ctx(&app_handle),
             )
             .expect("register net.peer-node service (duplicate key = assembly bug)");
+
+            // 内网穿透：移动端是拨号方（connect/close），不提供对等 HTTP/WS
+            // 面；expose / issue-pairing-ticket 由 Ports 显性 `tunnel-unavailable`。
+            let tunnel_service_registry = plugin_manager.service_registry();
+            let tunnel_manager = Arc::new(
+                wasmnest_server_peer_net::tunnel::TunnelManager::new(
+                    Arc::new(wasmnest_server_peer_net::tunnel::PeerCtxEngine::new(
+                        crate::peer::net::peer_ctx(&app_handle),
+                    )),
+                    Arc::new(crate::plugin::tunnel_ports::MobilePeerFaceStarter),
+                    wasmnest_server_peer_net::DEFAULT_PEER_PORT,
+                    wasmnest_server_peer_net::tunnel::DEFAULT_RELAY_CONTROL_PORT,
+                )
+                .expect("assemble tunnel manager (management ports must be real)"),
+            );
+            crate::plugin::tunnel_ports::install_manager(Arc::clone(&tunnel_manager));
+            wasmnest_server_peer_net::tunnel::TunnelService::register(&tunnel_service_registry, tunnel_manager)
+                .expect("register net.tunnel service (duplicate key = assembly bug)");
+            crate::plugin::tunnel_ports::install(Some(Arc::new(app_handle.clone())), tunnel_service_registry);
 
             // 异步：解压内置插件 → 初始化 WASM 运行时 → 扫描加载 → 自动激活
             // 使用 tauri::async_runtime::spawn 而非 tokio::spawn，
@@ -258,7 +288,7 @@ pub fn run() {
             tracing::info!("WasmNest Mobile started successfully!");
             Ok(())
         })
-        // 页面加载钩子（ADR 0058 方案 A；桌面同机制钩子见 wasmnest-desktop lib.rs 的
+        // 页面加载钩子（桌面同机制钩子见 wasmnest-desktop lib.rs 的
         // frontend_channel_session_hook）：重置**该 webview** 的前端通道会话——宿主前端
         // bootstrap 会在导入任何插件模块之前重新取得密钥，「域内首个调用者生效」恒由
         // 宿主前端赢得；dev 下页面刷新也能重新取得（否则刷新后宿主面命令全数被拒）。
@@ -288,19 +318,19 @@ pub fn run() {
             channel.reset(webview.label());
         })
         .invoke_handler(tauri::generate_handler![
-            // Token Commands (merged into connection)
+            // Token 命令（已并入连接域）
             commands::connection::ws_set_token,
             commands::connection::ws_get_token,
             commands::connection::ws_clear_token,
-            // Link Crypto Context（issue 09：事件 WS 链路加密桥）
+            // 链路加密上下文：事件 WS 的加解密桥
             commands::connection::set_link_crypto_context,
             // Egress Policy（外网授权弹窗回执 + 桌面端目标声明；设置页管理面已随死路由退役）
             commands::egress::egress_consent_resolve,
             commands::egress::egress_declare_desktop_target,
-            // HTTP 代理（ticket 03：统一请求出口，request_id 多路复用）
+            // HTTP 代理：前端唯一出站口，`request_id` 多路复用
             commands::http_proxy::http_request,
             commands::http_proxy::http_cancel,
-            // Connection Commands
+            // 连接命令
             commands::connection::ws_connect,
             commands::connection::ws_disconnect,
             commands::connection::ws_get_status,
@@ -309,35 +339,35 @@ pub fn run() {
             commands::connection::set_auto_reconnect,
             commands::connection::get_ws_token,
             commands::connection::get_ws_url,
-            // Terminal Link（票 12 协议客户端已迁插件 com.wasmnest.bedcode）：
+            // 终端链路（协议客户端已迁插件 `com.wasmnest.bedcode`）：
             // terminal_subscribe / unsubscribe / unsubscribe_all / remove /
             // send_input / ack_rendered / get_history / get_state 八命令已随
             // terminal_link.rs 退役，前端走插件命令面（plugin_invoke）；
             // 段2 页面 Channel 登记是 Tauri 传输机制，保留在宿主窄转发层
-            // （terminal_stream_gateway——ADR 0022 四类薄壳④）
+            // （terminal_stream_gateway：窄转发薄壳）
             plugin::commands::terminal_page_subscribe,
             plugin::commands::terminal_page_unsubscribe,
-            // Auth Commands（票 14 阶段 B：配对 / QR / 生物挑战编排已迁
-            // com.wasmnest.bedcode 插件，宿主只余引擎事实面）
+            // 认证命令（配对 / QR / 生物挑战编排已迁 `com.wasmnest.bedcode` 插件，
+            // 宿主只余引擎事实面）
             commands::auth::ws_authenticate,
             commands::auth::ws_get_auth_credentials,
             commands::auth::ws_bind_biometric_credential,
             commands::auth::ws_unbind_biometric_credential,
             commands::auth::ws_get_biometric_key_status,
-            // Session Commands（票 13：会话控制整体迁插件 com.wasmnest.bedcode——
-            // 三命令零消费者随 session.rs / commands/session.rs 退役；前端走
-            // src/plugin/sessionCommands.ts 的 plugin_invoke 命令面）
-            // Settings (移动端使用 JSON 文件)
+            // 会话命令已整体迁插件 `com.wasmnest.bedcode`：宿主三命令零消费者后
+            // 随 `session.rs` / `commands/session.rs` 退役，前端走
+            // `src/plugin/sessionCommands.ts` 的 plugin_invoke 命令面。
+            // 设置（移动端用 JSON 文件）
             commands::mobile_commands::get_all_db_settings_mobile,
             commands::mobile_commands::set_db_setting_mobile,
-            // App Settings
+            // 应用设置
             system::commands::get_app_settings,
             system::commands::save_app_settings,
-            // Utility
+            // 通用工具
             system::commands::ping,
             // 壳 UI 资产（选图 + 落 $APPDATA；前端零资源访问红线下由宿主代劳）
             system::shell_ui::shell_import_image,
-            // Android Specific
+            // Android 平台专用
             commands::android::set_screen_orientation,
             commands::android::keep_screen_awake,
             commands::android::open_url_in_browser,
@@ -346,18 +376,20 @@ pub fn run() {
             commands::mdns::mdns_start_discovery,
             commands::mdns::mdns_stop_discovery,
             commands::mdns::mdns_get_discovered_services,
-            // 对等网络传输 / 接收 / 远端浏览 —— 票 09 + 票 10 后**前端命令面为零**：
-            // ① 票 09 摘掉发现投影与连接编排面（设备列表 / 缓存解析拨号 / 共享目录
+            // 对等网络传输 / 接收 / 远端浏览 —— **前端命令面为零**：
+            // ① 发现投影与连接编排面已摘掉（设备列表 / 缓存解析拨号 / 共享目录
             //    注册表 CRUD / 节点启停 / 首连应答 / 信任管理）；
-            // ② 票 10 摘掉传输调度面（取消 / 暂停 / 恢复 / 选源 / 接收设置读面 /
+            // ② 传输调度面已摘掉（取消 / 暂停 / 恢复 / 选源 / 接收设置读面 /
             //    加密开关 / 并发上限 / 浏览 / 拉取）。
             // 真入口只有两条：① 插件 activate-deactivate 外壳（节点生命周期）
             // ② WIT host-peer 原语（拨号 / 发送 / 暂停恢复 / 应答 / 策略 / 落点 /
             //    共享根镜像 / 浏览 / 拉取）与 host-platform 选源原语。
             // 防回接锁：tests/retired_mobile_peer_transfer_command_face_lock.rs
-            // Plugin Commands
-            // 宿主面凭证签发（ADR 0058 方案 A：前端 bootstrap 首个调用，先于插件模块 import）
+            // 插件命令
+            // 宿主面凭证签发（前端 bootstrap 首个调用，先于插件模块 import）
             crate::plugin::commands::plugin_frontend_loader_session,
+            // 插件面通道令牌签发（loader 会话 + 运行态 → 插件身份令牌）
+            crate::plugin::commands::plugin_channel_token,
             crate::plugin::commands::plugin_list_loaded,
             crate::plugin::commands::plugin_get_info,
             crate::plugin::commands::plugin_preauthorize,
@@ -373,26 +405,31 @@ pub fn run() {
             crate::plugin::commands::plugin_storage_get,
             crate::plugin::commands::plugin_storage_set,
             crate::plugin::commands::plugin_storage_delete,
-            crate::plugin::commands::plugin_download,
+            crate::plugin::commands::plugin_peek_app_package,
+            crate::plugin::commands::plugin_download_package,
             crate::plugin::commands::plugin_install_from_file,
+            // 应用版本更新链路（GitHub Release 检查 / 校验下载；应用管理页与
+            // SDK 默认设置卡共用同一套判定）
+            crate::plugin::updates::plugin_check_app_update,
+            crate::plugin::updates::plugin_check_self_update,
+            crate::plugin::updates::plugin_download_update,
             crate::plugin::commands::plugin_uninstall,
             crate::plugin::commands::reload_wasm_plugin,
-            // File System Auth Commands（白名单管理命令随移动自实现退役，只剩弹窗回执）
+            // 文件系统授权命令（白名单管理面已退役，只剩弹窗回执）
             crate::plugin::commands::plugin_fs_auth_respond,
             crate::plugin::commands::plugin_log,
             crate::plugin::commands::plugin_invoke,
-            // Dev Console Relay（仅 debug 构建：前端 console 日志转发 → logcat → dev:log 电脑端落盘，见 commands::dev_logs）
+            // 开发者控制台日志转发（仅 debug 构建；见 `commands::dev_logs`）
             #[cfg(debug_assertions)]
             commands::dev_logs::report_frontend_log,
-            // System Open（历史「打开所在文件夹」真机路径，system:open 权限）
+            // 系统打开：「打开所在文件夹」真机路径（`system:open` 权限）
             crate::plugin::commands::plugin_reveal_received_file,
-            // System Open 配套：「所有文件访问」授权引导（system:open 权限）
+            // 「所有文件访问」授权引导（`system:open` 权限）
             crate::plugin::commands::plugin_open_all_files_access,
-            // System Open 配套：打开公共下载目录（设置页下载目录区「打开」，system:open 权限）
+            // 打开公共下载目录（设置页下载目录区，`system:open` 权限）
             crate::plugin::commands::plugin_open_download_dir,
-            // File Service Commands（插件 TS 通道）
-            // v2 批量传输批准（接收策略 / 异步批量批准）
-            // SAF 存储访问（SafIo 主 seam，共享目录/上传页）
+            // 受控文件服务 / SAF 命令面已退役：文件传输走 file-transfer 插件与
+            // host-peer 原语，宿主不再暴露任何 file service 命令。
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

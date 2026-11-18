@@ -1,6 +1,4 @@
 //! 前台服务保活（ForegroundServicePlugin）
-//!
-//! 从 android_plugins.rs 拆分。
 
 use tauri::plugin::Builder;
 

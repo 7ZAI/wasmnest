@@ -1,6 +1,4 @@
-//! Power Manager
-//!
-//! 管理系统休眠阻止 - 服务器运行时阻止系统进入休眠状态，但允许屏幕熄灭
+//! 系统休眠抑制：服务器运行时阻止系统睡眠，但允许屏幕熄灭
 //!
 //! 平台实现：
 //! - Windows：`nosleep` crate（PowerCreateRequest）
@@ -74,7 +72,7 @@ impl PowerManager {
     /// 测试专用构造器：跳过平台初始化，直接以 active=true 起步
     ///
     /// 使状态机（enable 幂等 / set_enabled(false) 自动释放 / disable 清理）
-    /// 可在无 D-Bus/nosleep 的环境下单测，不触碰真实平台句柄（票据 28）
+    /// 可在无 D-Bus/nosleep 的环境下单测，不触碰真实平台句柄
     #[cfg(test)]
     fn with_active() -> Self {
         Self {

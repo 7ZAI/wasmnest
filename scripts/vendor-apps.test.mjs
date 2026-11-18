@@ -11,7 +11,8 @@
  * | C-003 | planVendorApps | --only 过滤后为空 / apps 段为空 → 抛错 |
  * | C-004 | vendorUrl | `<base>/<tag>/<encodeURIComponent(file)>`；非 http(s) base → 抛错 |
  * | C-005 | verifyMeta | id / version / artifact.file / wasm.file / sha256 任一不符即抛错 |
- * | C-006 | verifyMeta | source.libRef 缺失或不等于清单 repos.lib.tag → 抛错（WIT 契约不匹配） |
+ * | C-006 | verifyMeta | 缺 compat.witVersion / 缺 compat.witPackages / 某包版本与 contract.packages 不等 → 抛错并点名包 |
+ * | C-008 | verifyMeta | source.libRef 与清单 lib tag 不同但包表全对 → 通过（lib tag 只溯源，ADR 0061） |
  * | C-007 | verifyPluginJson | id / version / platform / rustLibrary+'.wasm' / main 任一不符即抛错 |
  *
  * 副作用：import 本模块不得触发 CLI main（有 import.meta.url 守卫）。
@@ -134,17 +135,28 @@ describe('vendorUrl（C-004）', () => {
   })
 })
 
-describe('verifyMeta（C-005 / C-006）', () => {
+describe('verifyMeta（C-005 / C-006 / C-008）', () => {
   const plan = { id: 'com.wasmnest.demo', version: '0.0.1', sha256: SHA, packageName: 'demo-desktop-v0.0.1.zip', artifact: 'demo.wasm' }
-  const ctx = { libTag: 'lib-v0.0.1' }
+  const ctx = {
+    contractVersion: '0.1.0',
+    contractPackages: {
+      'wasmnest:plugin': '0.1.0',
+      'wasmnest:pty': '0.0.1',
+      'wasmnest:mdns': '0.0.1',
+    },
+  }
   const good = () => ({
     plugin: { id: 'com.wasmnest.demo', version: '0.0.1' },
     artifact: { file: 'demo-desktop-v0.0.1.zip', sha256: SHA },
     wasm: { file: 'demo.wasm' },
+    compat: {
+      witVersion: '0.1.0',
+      witPackages: { 'wasmnest:plugin': '0.1.0', 'wasmnest:pty': '0.0.1' },
+    },
     source: { libRef: 'lib-v0.0.1' },
   })
 
-  it('正例：完全一致不抛错', () => {
+  it('正例：包表与清单逐项一致不抛错', () => {
     assert.doesNotThrow(() => verifyMeta(good(), plan, ctx))
   })
 
@@ -161,13 +173,55 @@ describe('verifyMeta（C-005 / C-006）', () => {
     assert.throws(() => verifyMeta(mut((m) => (m.wasm.file = 'other.wasm')), plan, ctx), /wasm\.file/)
   })
 
-  it('C-006 反例：libRef 缺失 / 与清单 lib tag 不一致 → 抛错（WIT 契约不匹配）', () => {
-    const missing = good()
-    delete missing.source
-    assert.throws(() => verifyMeta(missing, plan, ctx), /libRef/)
-    const mismatch = good()
-    mismatch.source.libRef = 'lib-v0.0.2'
-    assert.throws(() => verifyMeta(mismatch, plan, ctx), /实例化失败/)
+  it('C-006a 反例：缺 compat.witVersion → 抛错（公共轴未知）', () => {
+    const m = good()
+    delete m.compat.witVersion
+    assert.throws(() => verifyMeta(m, plan, ctx), /witVersion/)
+  })
+
+  it('C-006b 反例：witVersion 与清单 contract.version 不等 → 抛错（公共轴漂移）', () => {
+    const m = good()
+    m.compat.witVersion = '0.0.2'
+    assert.throws(() => verifyMeta(m, plan, ctx), /contract\.version/)
+  })
+
+  it('C-006c 反例：缺 compat.witPackages / 缺 wasmnest:plugin → 抛错（发布下限）', () => {
+    const noPackages = good()
+    delete noPackages.compat.witPackages
+    assert.throws(() => verifyMeta(noPackages, plan, ctx), /witPackages/)
+
+    const noPlugin = good()
+    delete noPlugin.compat.witPackages['wasmnest:plugin']
+    assert.throws(() => verifyMeta(noPlugin, plan, ctx), /wasmnest:plugin/)
+  })
+
+  it('C-006d 反例：某包版本落后 → 抛错且点名包（只对该包要求重发）', () => {
+    const m = good()
+    m.compat.witPackages['wasmnest:pty'] = '0.0.0'
+    assert.throws(() => verifyMeta(m, plan, ctx), (err) => {
+      assert.match(err.message, /wasmnest:pty@0\.0\.0/)
+      assert.match(err.message, /wasmnest:pty@0\.0\.1/)
+      assert.match(err.message, /重发该 app/)
+      return true
+    })
+  })
+
+  it('C-006e 反例：app 依赖宿主没有的包（如移动包装进桌面）→ 抛错', () => {
+    const m = good()
+    m.compat.witPackages['wasmnest:fs-mobile'] = '0.0.1'
+    assert.throws(() => verifyMeta(m, plan, ctx), /fs-mobile/)
+  })
+
+  it('C-008：source.libRef 不同但包表全对 → 通过（lib tag 只溯源）', () => {
+    const m = good()
+    m.source.libRef = 'lib-v0.0.9'
+    assert.doesNotThrow(() => verifyMeta(m, plan, ctx))
+  })
+
+  it('C-008b 反例：缺 source.libRef → 抛错（溯源记录是发布下限）', () => {
+    const m = good()
+    delete m.source
+    assert.throws(() => verifyMeta(m, plan, ctx), /libRef/)
   })
 })
 

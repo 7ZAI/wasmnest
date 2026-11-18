@@ -32,7 +32,8 @@ import { openTerminalStream } from './terminal-stream'
 /**
  * 初始化插件系统
  *
- * 在 main.ts 中调用，在 app.mount() 之前
+ * 在 main.ts 中调用，**在 `app.mount()` 之后**（后台任务）：插件装载链（宿主凭证 +
+ * 清单 + 逐插件前端 import）不阻塞首帧，壳首屏只依赖宿主命令面。
  */
 export async function initPluginSystem(
   app: any,

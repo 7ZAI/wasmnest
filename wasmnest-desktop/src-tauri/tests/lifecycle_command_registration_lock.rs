@@ -1,7 +1,7 @@
 //! 生命周期命令面注册完备性锁（桌面 · 2026-10-17 lifecycle-sync）
 //!
 //! `#[tauri::command]` 只是给函数贴一个可被 invoke 的标签——真正让它成为命令的
-//! 是 `lib.rs` 里 `generate_handler![…]` 的注册条目。两处不一致编译器不校验：
+//! 是 `bootstrap/run.rs` 里 `generate_handler![…]` 的注册条目。两处不一致编译器不校验：
 //! 漏注册能过 `cargo build`、能在测试里直接调用，只有前端 `invoke` 到时才回
 //! "command not found"（移动端 `plugin_approve` 漏注册真实咬过，见移动端
 //! `command_registration_completeness_lock.rs` 头注释）。
@@ -11,6 +11,9 @@
 //! 会在运行时静默失效：
 //! `plugin_is_enabled / plugin_set_enabled / plugin_is_autostart /
 //! plugin_set_autostart / plugin_is_running / plugin_is_activated`。
+//!
+//! 另钉壳主屏清单臂 `plugin_list_with_prefs`（F1：清单 + enabled/autostart 同位，
+//! 壳一次 IPC 取齐）：漏注册 = 壳主屏停在「无应用」态，而 Rust 侧照常编译通过。
 
 use std::path::{Path, PathBuf};
 
@@ -23,6 +26,9 @@ const LIFECYCLE_COMMANDS: [&str; 6] = [
     "plugin_is_activated",
 ];
 
+/// 壳主屏清单臂（清单 + 偏好同位；壳 `useShellApps.refresh` 的唯一清单来源）
+const SHELL_LIST_COMMAND: &str = "plugin_list_with_prefs";
+
 fn src_tauri_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
 }
@@ -31,12 +37,12 @@ fn read_file(rel: &str) -> String {
     std::fs::read_to_string(src_tauri_root().join(rel)).expect("read source file")
 }
 
-/// bootstrap/mod.rs 的 generate_handler 注册块（2026-10-25 拆分自 lib.rs）（去注释；注释里的命令名是记账，不是注册）
+/// bootstrap/run.rs 的 generate_handler 注册块（2026-10-25 拆分自 lib.rs）（去注释；注释里的命令名是记账，不是注册）
 fn registered_block() -> String {
-    let lib = read_file("src/bootstrap/mod.rs");
+    let lib = read_file("src/bootstrap/run.rs");
     let start = lib
         .find("generate_handler![")
-        .unwrap_or_else(|| panic!("bootstrap/mod.rs 必须包含 generate_handler![ 注册块"));
+        .unwrap_or_else(|| panic!("bootstrap/run.rs 必须包含 generate_handler![ 注册块"));
     let body = &lib[start..];
     body.lines()
         .filter_map(|raw| {
@@ -54,17 +60,21 @@ fn lifecycle_commands_are_registered_in_the_invoke_handler() {
     for name in LIFECYCLE_COMMANDS {
         assert!(
             block.contains(&format!("::{}", name)),
-            "命令 {name} 未在 lib.rs generate_handler! 注册——\
+            "命令 {name} 未在 bootstrap/run.rs generate_handler! 注册——\
              壳 invoke 会得到 \"command not found\"，而 Rust 侧照常编译通过。\
-             修法：lib.rs 注册 `plugin::lifecycle::{name}`,"
+             修法：bootstrap/run.rs 注册 `plugin::lifecycle::{name}`,"
         );
     }
+    assert!(
+        block.contains(&format!("::{}", SHELL_LIST_COMMAND)),
+        "壳清单命令 {SHELL_LIST_COMMAND} 未注册——壳主屏会停在无应用态"
+    );
 }
 
 #[test]
 fn lifecycle_commands_are_declared_with_tauri_command_attr() {
     let lifecycle = read_file("src/plugin/lifecycle.rs");
-    for name in LIFECYCLE_COMMANDS {
+    for name in LIFECYCLE_COMMANDS.iter().chain([&SHELL_LIST_COMMAND]) {
         // 声明形态：`#[tauri::command]` 之后 `pub async fn <name>`
         let attr = lifecycle
             .find("#[tauri::command]")

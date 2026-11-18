@@ -50,6 +50,8 @@ export default {
       fsAuthRemember: '记住此路径，下次自动放行',
       fsAuthAllow: '允许',
       fsAuthDeny: '拒绝',
+      // desc 字段当前无渲染面（应用详情 2026-11-05 按布局自解释退役）；
+      // 保留供权限审批 / 总览面复用，不参与任何判定。
       perm: {
         unknown: '未知权限',
         storage: { title: '本地存储', desc: '读写插件专属键值存储与数据库' },
@@ -84,6 +86,8 @@ export default {
         cancel: '取消',
       },
     },
+    // 全局未捕获异常的兜底文案（renderer errorHandler / unhandledrejection）
+    runtimeUnexpected: '发生了未知错误，详情见日志',
     splash: {
       status: '正在启动…',
       tagline: '局域网远程终端',
@@ -94,6 +98,7 @@ export default {
       linePlugins: '装配插件面板',
       lineConnection: '向局域网喊话 · 搜索主机',
       lineUi: '校准显示与安全区',
+      lineApps: '清点 WASM 应用',
     },
   },
 }

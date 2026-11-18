@@ -6,7 +6,7 @@
   <!-- 壁纸挂在壳根：主屏 / 系统页 / 应用面共用同一背景（宿主页面不再自铺 --bg-page） -->
   <div
     :class="[themeClasses.container, 'shell-root', wallClass ? `shell-wall wall-${wallClass}` : '']"
-    :style="[wallStyle, skinStyle]"
+    :style="wallStyle"
   >
     <!-- ============ 壳态 / 应用态分流（路由为事实源） ============ -->
     <!-- 主屏（'/'）：ShellToolbar + ShellHome + 覆层 -->
@@ -55,6 +55,13 @@
     <FsAuthDialog />
     <NetworkAuthDialog />
 
+    <!-- ============ 悬浮导航（设置开启后常驻；主屏 / 系统页 / 应用面都可见） ============
+         Liquid Glass 胶囊（回主屏 / 多任务），与移动端 ShellFloatingNav 同构。挂在
+         壳根 = 唯一与所有面同层的装配点；bareWindow 独立窗口不渲染（窗口 chrome
+         归应用，与工具栏 / 状态栏同口径）。z-40 在工具栏 / 状态栏之上、宿主弹层
+         之下；状态栏可见时让出其条带，默认落位在其正上方。 -->
+    <ShellFloatingNav v-if="!isBareWindow" :bottom-reserve="floatNavBottomReserve" />
+
     <!-- 全局 Toast（vue-sonner，richColors 区分等级） -->
     <Toaster
       :theme="toasterTheme"
@@ -98,8 +105,10 @@
  *   装载该 app 独立构建的挂载包（ADR 0057 机制 B），宿主不 import 任何 app 源码。
  *   标题栏在应用态也常驻（wasm-app 只占其下方区域），终端独立窗口（bareWindow）
  *   除外——它由宿主另开窗口，窗口 chrome 归应用自持。
- * - 全局机制：启动画面 / 主题与壳皮肤 / 字号 / Toaster / 热区 / 平台状态栏 / 覆层
- *   （多任务·通知·右键·弹窗·启动屏·**授权询问**）/ type-to-search / 键盘（Esc 逐层收 → 返回主屏）。
+ * - 全局机制：启动画面 / 主题（`<html data-theme>`）与壁纸 / 字号 / Toaster / 热区 /
+ *   平台状态栏 / 覆层
+ *   （多任务·通知·右键·弹窗·启动屏·**授权询问**）/ type-to-search / 键盘（快捷键
+ *   capture 抢占层 ADR 0060 → Esc 逐层收 → 返回主屏）。
  *
  * 路由是唯一事实源：route.path 变化 → useShellState.syncFromRoute 同步面态
  * （主屏 / 系统页卡 / 应用卡 MRU）。
@@ -119,7 +128,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useShellState } from './composables/useShellState'
 import { useShellApps, pluginIdOfAppRoute } from './composables/useShellApps'
 import { useShellSettings } from './composables/useShellSettings'
-import { useShellThemeSkin } from './composables/useShellThemeSkin'
+import { useShellTheme } from './composables/useShellTheme'
 import { useCustomWallpaper } from './composables/customWallpaper'
 import ShellView from './views/ShellView.vue'
 import ShellCardScreen from './components/ShellCardScreen.vue'
@@ -132,7 +141,9 @@ import ShellContextMenu from './components/ShellContextMenu.vue'
 import ShellDialogLayer from './components/ShellDialogLayer.vue'
 import FsAuthDialog from '@/shell/auth/FsAuthDialog.vue'
 import NetworkAuthDialog from '@/shell/auth/NetworkAuthDialog.vue'
+import ShellFloatingNav from '@/shell/components/ShellFloatingNav.vue'
 import { useHomeSearch } from './composables/useHomeSearch'
+import { useShellShortcuts } from './composables/useShellShortcuts'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -140,8 +151,12 @@ const state = useShellState()
 const appsStore = useShellApps()
 const { prefs: shellPrefs } = useShellSettings()
 const { imageUrl: customWallUrl } = useCustomWallpaper()
-/** 主题皮肤只产出 token 表，与壁纸样式一起机械合并到壳根 */
-const { skinStyle } = useShellThemeSkin()
+/**
+ * 主题装配（壳内唯一调用点）：token 表挂 `<html data-theme>`，不是壳根。
+ * 抬到文档根的原因：图标外框 / 系统页 / 多任务 / 覆层都用同一套主题语汇，
+ * 挂在壳根会让 Teleport 到 body 的层（通知 / 弹窗 / Toast）掉回默认主题。
+ */
+useShellTheme()
 
 /** 壁纸类（none → 不铺壁纸）；类挂在壳根，由所有宿主面共享，页面自身保持透明。
  *  custom 在图片 URL 解析完成前先回落 aurora，避免壳根挂空背景下半秒变纯色。 */
@@ -194,19 +209,6 @@ const SPLASH_GUARD_MS = SPLASH_MIN_MS + 1500
 let splashTimer: ReturnType<typeof setTimeout> | null = null
 let splashGuard: ReturnType<typeof setTimeout> | null = null
 
-/** 应用清单就绪后落一条普通通知（运行时就绪；语义自 ShellBootScreen 迁入。
- *  非驻留项：用户可单条 × 清除，也参与「清除全部」——驻留语义只留给有自然
- *  退出路径的派生通知（如审批），避免无退出路径的常驻卡堵死通知中心）。 */
-function emitReadyNotif() {
-  state.pushNotif({
-    kind: 'info',
-    icon: 'check',
-    source: t('shell.notif.hostSource'),
-    title: t('shell.notif.ready.title'),
-    body: t('shell.notif.ready.body', { count: appsStore.plugins.value.length }),
-  })
-}
-
 // ==================== 路由分流 ====================
 
 const path = computed(() => route.path)
@@ -218,6 +220,14 @@ const isBareWindow = computed(() => route.meta.bareWindow === true)
 const currentAppId = computed(() => pluginIdOfAppRoute(path.value) ?? '')
 /** 是否处在应用面（常驻挂载槽的显隐判据） */
 const isAppRoute = computed(() => currentAppId.value !== '')
+
+/**
+ * 悬浮导航的底部让位：状态栏可见（主屏 / 系统页）时让出状态栏条带，应用面
+ * （状态栏隐藏）为 0。26 与 ShellStatusBar 的 .shell-statusbar height 同口径。
+ */
+const floatNavBottomReserve = computed(() =>
+  !isBareWindow.value && !isAppRoute.value ? 26 : 0,
+)
 
 /**
  * 表面实例回收：应用离开运行态（停用 / 卸载 / 错误终态）→ dispose。
@@ -236,6 +246,17 @@ watch(
       if (!running.has(appId)) void disposeAppBundle(appId)
     }
   },
+)
+
+/**
+ * 自启动 / 后台运行的应用补多任务卡（2026-11-01 用户裁决）：
+ * 清单落地或变化时调用——自启动应用在首拉里出现，但不经过 openApp，不会自己产卡。
+ * 只增不删（停用走 closeCard / stopAllCards 自己的移除路径）。
+ */
+watch(
+  () => appsStore.plugins.value.map((p) => `${p.id}:${p.state}`).join('|'),
+  () => state.syncRunningCards(),
+  { immediate: true },
 )
 
 /** 壳覆层是否开着（Esc 先收覆层的判据；应用态下也生效——覆层属壳 chrome） */
@@ -277,28 +298,27 @@ function openFirstMatch() {
 
 // ==================== 全局键盘 ====================
 
-function onKeydown(e: KeyboardEvent) {
-  const mod = e.ctrlKey || e.metaKey
+// 壳快捷键（capture 抢占层，ADR 0060）：在 window capture 阶段先于本组件的
+// 冒泡 onKeydown 与任何应用内元素监听；只有「已注册组合」被它消费，其余按键
+// 完全放行（应用照常收到）。Ctrl+,（打开设置）自 2026-10-28 起迁入快捷键注册表
+// （默认绑定，可在 /sys/settings/shortcuts 改绑），不再作为本函数的硬编码分支。
 
+/** 快捷键监听 teardown（onMounted 装配，onUnmounted 拆除） */
+let teardownShortcuts: (() => void) | null = null
+
+function onKeydown(e: KeyboardEvent) {
   // 启动画面期间：键盘不动作（无跳过语义，绘画动画短暂自动收起；
   // 原来 BootScreen 的「任意键跳过」随组件一起退役）
   if (showSplash.value) return
 
-  // 应用态：键盘归应用界面（终端 Esc / 应用内快捷键都由 app 自己处理），壳不抢。
-  // 唯一例外是壳覆层开着时的 Esc：通知中心 / 多任务 / 弹窗是壳 chrome，没有别的
-  // 退出入口（面板盖住工具栏按钮时也必须收得掉）；无覆层时 Esc 完全让给应用。
+  // 应用态：键盘归应用界面（终端 Esc / 应用内快捷键都由 app 自己处理），壳不抢——
+  // 已注册的快捷键组合是唯一例外，它们在上面 capture 层就被壳收走（ADR 0060）。
+  // 本层保留的壳态例外：壳覆层开着时的 Esc（覆层属壳 chrome，没有别的退出入口）。
   if (!isHome.value && !isSysPage.value) {
     if (e.key === 'Escape' && hasOverlay.value) {
       e.preventDefault()
       state.goBack()
     }
-    return
-  }
-
-  // Ctrl+,：设置卡（壳态）
-  if (mod && e.key === ',') {
-    e.preventDefault()
-    state.openSys('settings')
     return
   }
 
@@ -358,13 +378,15 @@ onMounted(async () => {
   setupFontSize()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('click', onWindowClick)
+  // capture 层装配在冒泡 onKeydown 之后注册（同 capture 相位只此一个，先后无碍；
+  // teardown 必须与 onKeydown 的移除彼此独立，避免卸载期悬挂）
+  teardownShortcuts = useShellShortcuts().setupShellShortcuts({ enabled: () => !showSplash.value })
 
   // 应用清单就绪后，等到绘画动画画完（SPLASH_MIN_MS）再收起启动面——
   // 画完即加载完成。清单加载更慢时（remain = 0）按就绪时刻收起，
   // 动画早已画完。
   const bootAt = Date.now()
   await appsStore.load()
-  emitReadyNotif()
   const remain = Math.max(0, SPLASH_MIN_MS - (Date.now() - bootAt))
   splashTimer = setTimeout(() => {
     showSplash.value = false
@@ -383,6 +405,8 @@ onUnmounted(() => {
   cleanupTheme()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('click', onWindowClick)
+  teardownShortcuts?.()
+  teardownShortcuts = null
 })
 </script>
 

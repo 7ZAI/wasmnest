@@ -8,9 +8,11 @@ import {
 /**
  * 应用表面实例记账（机制 B 的「保活半边」）契约
  *
- * 语义（`.scratch/2026-10-23-app-surface-keepalive/spec.md` §2.1）：
+ * 语义（`.scratch/2026-10-23-app-surface-keepalive/spec.md` §2.1；2026-10-30 追加预览态）：
  *   首次打开 → register + attach；切走 → detach（容器脱文档，实例保留）；
- *   切回 → attach（同一容器节点放回槽，状态不重建）；停用 / 卸载 → dispose（才 unmount）。
+ *   切回 → attach（同一容器节点放回槽，状态不重建）；停用 / 卸载 → dispose（才 unmount）；
+ *   多任务卡 → attachPreview（同一实例搬进卡片，等比缩小到整幅可见、不谎报前台）
+ * / detachPreview。
  *
  * 这些断言锁住的核心不变量是「detach 不销毁、dispose 才销毁」——写反了就是
  * 「切回来应用被重置」（用户可感知）或「停用了实例还赖在内存里」（泄漏）。
@@ -67,6 +69,31 @@ describe('应用表面实例注册表', () => {
 
   it('attach 未知实例返回 false（调用方应改走首次装载）', () => {
     expect(registry.attach('ghost', slot)).toBe(false)
+  })
+
+  it('attach 以挂载槽实测为应用整幅尺寸：容器首帧高度偏小不污染预览比例', () => {
+    // 回归（2026-11-07）：容器是槽内的 flex 项，首帧 / 布局未稳时 clientHeight 可能
+    // 只有应用内容高度（实测 432 vs 应用区 820）。若把它当成「应用整幅」，多任务卡会
+    // 按错误比例缩放：缩略区又宽又扁，页面被裁掉下半截（用户看到的「卡片没显示界面」）。
+    fakeSize(host, 1280, 432)
+    fakeSize(slot, 1280, 820)
+    registry.register(APP, host, handle)
+
+    registry.attach(APP, slot)
+
+    expect(registry.get(APP)?.size, '槽是应用区唯一几何真源').toEqual({
+      width: 1280,
+      height: 820,
+    })
+  })
+
+  it('槽没有可用尺寸（无布局的测试环境 / 隐藏态）时退回量容器自身', () => {
+    fakeSize(host, 1280, 800)
+    registry.register(APP, host, handle)
+
+    registry.attach(APP, slot)
+
+    expect(registry.get(APP)?.size).toEqual({ width: 1280, height: 800 })
   })
 
   it('detach 只摘槽不销毁：容器脱文档、实例仍在、通知后台', () => {
@@ -166,5 +193,119 @@ describe('应用表面实例注册表', () => {
     expect(host.parentElement).toBe(slot)
     expect(() => registry.detach(APP)).not.toThrow()
     expect(host.parentElement).toBeNull()
+  })
+})
+
+/** jsdom 不做布局：给元素伪造布局尺寸（只读 getter，模拟真实实测值） */
+function fakeSize(el: HTMLElement, width: number, height: number): void {
+  Object.defineProperty(el, 'clientWidth', { configurable: true, get: () => width })
+  Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => height })
+}
+
+describe('多任务卡预览态：真实实例搬运（2026-10-30）', () => {
+  let slot: HTMLElement
+  let box: HTMLElement
+  let registry: AppSurfaceRegistry
+  let host: HTMLElement
+  let handle: ReturnType<typeof makeHandle>
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    slot = document.createElement('div')
+    document.body.appendChild(slot)
+    box = document.createElement('div')
+    box.className = 'app-live-surface'
+    document.body.appendChild(box)
+    registry = createAppSurfaceRegistry()
+    host = document.createElement('div')
+    host.className = 'app-instance-host'
+    handle = makeHandle()
+    // 整幅（全屏应用区）1280×800；卡片缩略区 640×400（正好 0.5）
+    fakeSize(host, 1280, 800)
+    fakeSize(box, 640, 400)
+    registry.register(APP, host, handle)
+    registry.attach(APP, slot)
+    handle.setActive.mockClear()
+  })
+
+  it('搬进卡片：同一节点、不销毁、不谎报前台、固定整幅尺寸并等比缩小', () => {
+    expect(registry.attachPreview(APP, box)).toBe(true)
+
+    expect(host.parentElement, '必须是同一个容器节点（实例状态原样）').toBe(box)
+    expect(registry.get(APP)?.location).toBe('preview')
+    expect(handle.unmount).not.toHaveBeenCalled()
+    expect(handle.setActive, '卡片不是可交互前台，不得通知 setActive(true)').toHaveBeenCalledWith(
+      false,
+    )
+    // 布局尺寸保持整幅：终端不 resize / 不重排，只是视觉缩小
+    expect(host.style.width).toBe('1280px')
+    expect(host.style.height).toBe('800px')
+    expect(host.style.transform).toBe('translate(0px, 0px) scale(0.5)')
+    expect(host.inert, '卡片里的实例不可交互 / 不可聚焦').toBe(true)
+  })
+
+  it('卡片尺寸变化：fitPreview 重算缩放并整幅可见（contain 居中，不裁切）', () => {
+    registry.attachPreview(APP, box)
+    // 640×500 比整幅（1.6）更高：contain 取较小比例 0.5（整幅可见），上下各留 50px 边；
+    // cover 会取 0.625 并裁掉右侧内容——2026-11-04 用户裁决改为 contain
+    fakeSize(box, 640, 500)
+
+    expect(registry.fitPreview(APP)).toBe(true)
+    expect(host.style.transform).toBe('translate(0px, 50px) scale(0.5)')
+  })
+
+  it('卡片比整幅更宽：按高度缩小并横向居中（左右留边、不裁切）', () => {
+    registry.attachPreview(APP, box)
+    // 1600×400：按宽会放大（1.25）把整幅高度裁掉，contain 取 0.5 → 640×400 居中
+    fakeSize(box, 1600, 400)
+
+    expect(registry.fitPreview(APP)).toBe(true)
+    expect(host.style.transform).toBe('translate(480px, 0px) scale(0.5)')
+  })
+
+  it('detachPreview 摘回后台：清掉缩放内联样式，实例与记账保留', () => {
+    registry.attachPreview(APP, box)
+
+    expect(registry.detachPreview(APP)).toBe(true)
+
+    expect(host.parentElement, '卡片收起后必须脱离文档（后台不渲染）').toBeNull()
+    expect(registry.get(APP)?.location).toBe('detached')
+    expect(registry.has(APP), '摘卡片不得销毁实例').toBe(true)
+    expect(handle.unmount).not.toHaveBeenCalled()
+    expect(host.style.width).toBe('')
+    expect(host.style.transform).toBe('')
+    expect(host.inert).toBe(false)
+  })
+
+  it('卡片直接放回挂载槽：清缩放态并恢复前台通知', () => {
+    registry.attachPreview(APP, box)
+
+    expect(registry.attach(APP, slot)).toBe(true)
+
+    expect(host.parentElement).toBe(slot)
+    expect(host.style.width).toBe('')
+    expect(host.style.transform).toBe('')
+    expect(host.inert).toBe(false)
+    expect(handle.setActive).toHaveBeenLastCalledWith(true)
+  })
+
+  it('非预览态调 detachPreview / fitPreview 返回 false（幂等，不误伤槽内实例）', () => {
+    expect(registry.detachPreview(APP)).toBe(false)
+    expect(registry.fitPreview(APP)).toBe(false)
+    expect(host.parentElement).toBe(slot)
+  })
+
+  it('未知实例 attachPreview 返回 false（卡片回退品牌卡）', () => {
+    expect(registry.attachPreview('ghost', box)).toBe(false)
+  })
+
+  it('卡片里被停用：dispose 仍只 unmount 一次并移除容器', async () => {
+    registry.attachPreview(APP, box)
+
+    await expect(registry.dispose(APP)).resolves.toBe(true)
+
+    expect(handle.unmount).toHaveBeenCalledTimes(1)
+    expect(host.parentElement).toBeNull()
+    expect(registry.has(APP)).toBe(false)
   })
 })

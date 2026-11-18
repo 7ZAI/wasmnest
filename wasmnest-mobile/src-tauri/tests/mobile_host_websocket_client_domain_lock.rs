@@ -62,8 +62,15 @@ fn scan_file(path: &Path, needles: &[&str]) -> Vec<String> {
 /// 移动端 WIT 不得跟演桌面服务端域（含 `connection-context`）
 #[test]
 fn mobile_wit_never_grows_websocket_server_domain() {
-    let wit = mobile_root().join("packages/plugin-sdk-mobile/rust/wit/wasmnest.wit");
-    let violations = scan_file(&wit, &DESKTOP_SERVER_DOMAIN_FNS);
+    // ADR 0061 拆包后 host-websocket 属独立包 `deps/ws/ws.wit`；只扫 wasmnest.wit
+    // 会让本锁静默空转（include 列表里没有函数名），故两处都扫。
+    let root = mobile_root().join("packages/plugin-sdk-mobile/rust/wit");
+    let mut violations = Vec::new();
+    for rel in ["wasmnest.wit", "deps/ws/ws.wit"] {
+        let wit = root.join(rel);
+        assert!(wit.is_file(), "边界锁空转：扫描目标不存在 {}", wit.display());
+        violations.extend(scan_file(&wit, &DESKTOP_SERVER_DOMAIN_FNS));
+    }
     assert!(
         violations.is_empty(),
         "移动端 host-websocket 是客户端子集（5 函数，ADR 0018/0019 不跑 WS 服务器），\

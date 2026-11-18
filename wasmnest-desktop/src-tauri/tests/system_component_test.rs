@@ -267,13 +267,15 @@ async fn test_server_auth_policy_closed_loop() {
 
 /// 2026-09-29 事故真源回归锁（spec §10 票 05 第 1 条）：**裁决只认注册者**
 ///
-/// 复刻事故：agent-hub（按 id 排序在会话中心 **之前**、且 SDK 无条件导出
+/// 复刻 2026-09-29 事故（原始当事者 agent-hub 已退役，回归锁用 ai-chatbox
+/// 顶替其位置——任一 rust-ts SDK 都无条件导出默认拒绝实现，判据不依赖具体 app）：
+/// 候选按 id 排序在会话中心 **之前**、且 SDK 无条件导出
 /// auth-policy 默认拒绝实现）先行激活成候选；旧裁决按「能力探测 + 排序取首个」
-/// 会选中 agent-hub 而全局拒绝。现裁决只认注册表（ADR 0031 K1/K4，单中心）：
-/// ① 中心由 auth-center 插件 activate 自注册；agent-hub 排序在前也不被选中；
-/// ② 中心密钥签出的未撤销 token 放行（若旧逻辑选中 agent-hub，其默认拒绝会让它 Err）；
+/// 会选中它而全局拒绝。现裁决只认注册表（ADR 0031 K1/K4，单中心）：
+/// ① 中心由 auth-center 插件 activate 自注册；未注册候选排序在前也不被选中；
+/// ② 中心密钥签出的未撤销 token 放行（若旧逻辑选中未注册候选，其默认拒绝会让它 Err）；
 /// ③ 撤销后拒绝原因来自中心私有库 trust 真源（deny_kind=policy）；
-/// ④ 停用未注册者（agent-hub）不影响注册表（purge 只碰本人）。
+/// ④ 停用未注册者（ai-chatbox）不影响注册表（purge 只碰本人）。
 #[tokio::test(flavor = "multi_thread")]
 async fn test_auth_center_multi_candidate_registration_lock() {
     use wasmnest_desktop_lib::utils::auth::auth_center as bridge;
@@ -283,18 +285,18 @@ async fn test_auth_center_multi_candidate_registration_lock() {
     let _permit = registry::registry_gate().acquire().await.expect("registry test gate");
     // 闸门内清台：顺序反了会清掉另一个用例在闸门内登记的中心（并行红）
     registry::reset();
-    const AGENT_HUB_ID: &str = "com.wasmnest.agent-hub";
+    const OTHER_CANDIDATE_ID: &str = "com.wasmnest.ai-chatbox";
     const CENTER_ID: &str = "com.wasmnest.auth-center";
     const TEST_KEY: [u8; 32] = [0x5a; 32];
 
-    // agent-hub 与 bedcode 两个候选产物 + 中心产物都必须可加载
-    let hub_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../resources/plugins/desktop/com.wasmnest.agent-hub/wasmnest_plugin_agent_hub.wasm");
+    // ai-chatbox 与 bedcode 两个候选产物 + 中心产物都必须可加载
+    let other_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../resources/plugins/desktop/com.wasmnest.ai-chatbox/wasmnest_plugin_ai_chatbox.wasm");
     let session_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../resources/plugins/desktop/com.wasmnest.bedcode/bedcode_plugin_terminal_session.wasm");
     let center_wasm = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../resources/plugins/desktop/com.wasmnest.auth-center/wasmnest_plugin_auth_center.wasm");
-    if !hub_wasm.exists() || !session_wasm.exists() || !center_wasm.exists() {
+    if !other_wasm.exists() || !session_wasm.exists() || !center_wasm.exists() {
         eprintln!("[skip] wasm artifacts not built");
         return;
     }
@@ -311,10 +313,10 @@ async fn test_auth_center_multi_candidate_registration_lock() {
         .await
         .expect("activate auth-center");
 
-    // 两个导出 auth-policy 的候选都进实例表（agent-hub id 排序在前）；agent-hub
+    // 两个导出 auth-policy 的候选都进实例表（ai-chatbox id 排序在前）；ai-chatbox
     // 激活失败不阻断本锁（它的激活可能与测试宿主能力面不完全匹配），实例仍在册
     for (id, wasm, lib) in [
-        (AGENT_HUB_ID, &hub_wasm, "wasmnest_plugin_agent_hub"),
+        (OTHER_CANDIDATE_ID, &other_wasm, "wasmnest_plugin_ai_chatbox"),
         (
             bridge::SESSION_PLUGIN_ID,
             &session_wasm,
@@ -344,29 +346,29 @@ async fn test_auth_center_multi_candidate_registration_lock() {
         }
     }
 
-    // 单中心注册表：中心 = 自注册的 auth-center；agent-hub 排序在前 + 导出默认
+    // 单中心注册表：中心 = 自注册的 auth-center；未注册候选排序在前 + 导出默认
     // 拒绝实现也不被选中（旧「能力探测 + 排序取首个」会选中它）
     assert_eq!(
         registry::center().map(|e| e.owner),
         Some(CENTER_ID.to_string()),
-        "注册表只认注册者（agent-hub 排序在前也不被选中）"
+        "注册表只认注册者（未注册候选排序在前也不被选中）"
     );
 
     // token 用**中心自己那份密钥环**（本用例给 auth-center 种子）签出：
-    // 若裁决落到 agent-hub 的默认拒绝实现，它既没有这把密钥也验不过 → 裁决必错
+    // 若裁决落到未注册候选的默认拒绝实现，它既没有这把密钥也验不过 → 裁决必错
     let token = wasmnest_desktop_lib::utils::auth::test_tokens::sign_with_seeded_key(
         &TEST_KEY,
         "device-t",
         Some("Phone"),
         Some("fp-t"),
     );
-    // 私有库无撤销记录 → 放行（若旧逻辑选中 agent-hub 的默认拒绝，这里会是 Err）
+    // 私有库无撤销记录 → 放行（若旧逻辑选中未注册候选的默认拒绝，这里会是 Err）
     // 失败信息带裁决原文：三类拒因（no_center / unavailable / policy）排障路径完全不同，
     // 只报「assert is_ok」会把「注册表被并发清台」与「guest 调用超时」混成一个症状
     let decision = bridge::enforce_connection_policy(host.as_ref(), &token);
     assert!(
         decision.is_ok(),
-        "裁决必须落在已注册的 auth-center 身上（agent-hub 未被注册即使排序在前）: \
+        "裁决必须落在已注册的 auth-center 身上（未注册候选即使排序在前）: \
          decision={decision:?} registry={:?}",
         registry::center().map(|e| e.owner)
     );
@@ -400,10 +402,10 @@ async fn test_auth_center_multi_candidate_registration_lock() {
         "拒绝原因来自中心 trust 策略（deny_kind=policy）: {deny}"
     );
 
-    // 停用 agent-hub（未注册者）→ 注册表与裁决不受影响（purge 只碰本人）
-    host.deactivate_plugin(AGENT_HUB_ID, false)
+    // 停用未注册候选 → 注册表与裁决不受影响（purge 只碰本人）
+    host.deactivate_plugin(OTHER_CANDIDATE_ID, false)
         .await
-        .expect("deactivate agent-hub");
+        .expect("deactivate unregistered candidate");
     assert_eq!(
         registry::center().map(|e| e.owner),
         Some(CENTER_ID.to_string()),
@@ -624,7 +626,7 @@ async fn test_boot_activates_system_components_before_app_plugins() {
         let dir = plugins_dir.join(id);
         std::fs::create_dir_all(&dir).unwrap();
         let manifest = format!(
-            r#"{{"id": "{}", "name": "{}", "version": "0.1.0", "platform": "desktop", "pluginType": "rust-ts", "rustLibrary": "{}", "permissions": ["storage"]{}}}"#,
+            r#"{{"id": "{}", "name": "{}", "version": "0.1.0", "platform": "desktop", "pluginType": "full", "rustLibrary": "{}", "permissions": ["storage"]{}}}"#,
             id, id, rust_lib, manifest_extra
         );
         std::fs::write(dir.join("plugin.json"), manifest).unwrap();
@@ -714,7 +716,7 @@ fn write_wasm_package(
     let dir = plugins_dir.join(id);
     std::fs::create_dir_all(&dir).unwrap();
     let manifest = format!(
-        r#"{{"id": "{}", "name": "{}", "version": "0.1.0", "platform": "desktop", "pluginType": "rust-ts", "rustLibrary": "{}", "permissions": ["storage"]{}}}"#,
+        r#"{{"id": "{}", "name": "{}", "version": "0.1.0", "platform": "desktop", "pluginType": "full", "rustLibrary": "{}", "permissions": ["storage"]{}}}"#,
         id, id, rust_library, manifest_extra
     );
     std::fs::write(dir.join("plugin.json"), manifest).unwrap();

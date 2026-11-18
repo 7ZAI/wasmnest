@@ -267,7 +267,7 @@ dependencies = [
 
 [[package]]
 name = "wasmnest-plugin-api"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "inventory",
@@ -279,7 +279,7 @@ dependencies = [
 
 [[package]]
 name = "wasmnest-plugin-api-macros"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "proc-macro2",
  "quote",

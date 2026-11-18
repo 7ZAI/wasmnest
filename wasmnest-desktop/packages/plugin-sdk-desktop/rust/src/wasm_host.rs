@@ -15,18 +15,41 @@
 //! trait 签名（`host/*` 定义）保持不变，插件业务代码零改动。
 
 use crate::host::{
-    ConfigKey, CryptoKeypair, FsDirEntry, FsStat, HostApp, HostAuth, HostBus, HostConfig,
-    HostConnection, HostCrypto, HostError, HostEvents, HostFs, HostHttp, HostLog, HostMdns,
-    HostMetrics, HostNotify, HostPeer, HostPlatform, HostPluginDatabase, HostProcess, HostPty,
-    HostStorage, HostTask, HostWebsocket, NotifyOptions, ProcessSyncResult, PtyRingFetch,
+    ConfigKey, CryptoKeypair, FsDirEntry, FsStat, HostApp, HostAuth, HostBus, HostClipboard,
+    HostConfig, HostConnection, HostCrypto, HostError, HostEvents, HostFs, HostHttp, HostLog,
+    HostMdns, HostMetrics, HostNotify, HostPeer, HostPlatform, HostPluginDatabase, HostProcess,
+    HostPty, HostStorage, HostTask, HostTunnel, HostWebsocket, NotifyOptions, PeerNodeConfig,
+    PeerNodeInfo, ProcessSyncResult, PtyRingFetch, TunnelConfig, TunnelExposeConfig,
 };
-use crate::wasm::wasmnest::plugin::{
-    host_app, host_auth_center, host_bus, host_config, host_connection_registry, host_crypto, host_events,
-    host_fs, host_fs_desktop, host_http, host_http_endpoint, host_log, host_metrics,
-    host_mdns, host_notify, host_peer, host_platform, host_platform_desktop, host_plugin_database,
-    host_process, host_pty, host_storage, host_task, host_timer, host_websocket,
-    host_websocket_server,
-};
+use crate::wasm::wasmnest::app::host_app;
+use crate::wasm::wasmnest::auth_center::host_auth_center;
+use crate::wasm::wasmnest::plugin::host_bus;
+use crate::wasm::wasmnest::clipboard::host_clipboard;
+use crate::wasm::wasmnest::plugin::host_config;
+use crate::wasm::wasmnest::connection_registry::host_connection_registry;
+use crate::wasm::wasmnest::crypto::host_crypto;
+use crate::wasm::wasmnest::plugin::host_events;
+use crate::wasm::wasmnest::plugin::host_fs;
+use crate::wasm::wasmnest::fs_desktop::host_fs_desktop;
+use crate::wasm::wasmnest::http::host_http;
+use crate::wasm::wasmnest::http_endpoint::host_http_endpoint;
+use crate::wasm::wasmnest::plugin::host_log;
+use crate::wasm::wasmnest::plugin::host_metrics;
+use crate::wasm::wasmnest::mdns::host_mdns;
+use crate::wasm::wasmnest::notify::host_notify;
+use crate::wasm::wasmnest::peer::host_peer;
+use crate::wasm::wasmnest::plugin::host_platform;
+use crate::wasm::wasmnest::platform_desktop::host_platform_desktop;
+use crate::wasm::wasmnest::plugin::host_plugin_database;
+use crate::wasm::wasmnest::process::host_process;
+use crate::wasm::wasmnest::pty::host_pty;
+use crate::wasm::wasmnest::plugin::host_storage;
+use crate::wasm::wasmnest::task::host_task;
+use crate::wasm::wasmnest::timer::host_timer;
+use crate::wasm::wasmnest::tunnel::host_tunnel;
+use crate::wasm::wasmnest::ws::host_websocket;
+use crate::wasm::wasmnest::ws_server::host_websocket_server;
+
 
 /// 宿主 API 绑定（WASM 插件侧）
 ///
@@ -333,6 +356,18 @@ impl HostNotify for WasmHost {
     }
 }
 
+// ==================== HostClipboard（共享域契约 host-clipboard） ====================
+
+impl HostClipboard for WasmHost {
+    fn clipboard_read_text(&self) -> Result<Option<String>, HostError> {
+        host_clipboard::read_text().map_err(|e| host_err("clipboard_read_text", e))
+    }
+
+    fn clipboard_write_text(&self, text: &str) -> Result<(), HostError> {
+        host_clipboard::write_text(text).map_err(|e| host_err("clipboard_write_text", e))
+    }
+}
+
 // ==================== HostHttp ====================
 
 impl HostHttp for WasmHost {
@@ -502,6 +537,11 @@ impl HostPeer for WasmHost {
         host_peer::dial_peer(&endpoint_json).map_err(|e| host_err("peer_dial", e))
     }
 
+    fn peer_dial_addrs(&self, endpoint: &serde_json::Value) -> Result<String, HostError> {
+        let endpoint_json = to_json_string("peer_dial_addrs", endpoint)?;
+        host_peer::dial_peer_addrs(&endpoint_json).map_err(|e| host_err("peer_dial_addrs", e))
+    }
+
     fn peer_close(&self, handle: &str) -> Result<bool, HostError> {
         host_peer::close(handle).map_err(|e| host_err("peer_close", e))
     }
@@ -520,6 +560,14 @@ impl HostPeer for WasmHost {
 
     fn peer_revoke_trusted(&self, node_id: &str) -> Result<bool, HostError> {
         host_peer::revoke_trusted(node_id).map_err(|e| host_err("peer_revoke_trusted", e))
+    }
+
+    fn peer_trust_node(
+        &self,
+        node_id: &str,
+        display_name: Option<&str>,
+    ) -> Result<bool, HostError> {
+        host_peer::trust_node(node_id, display_name).map_err(|e| host_err("peer_trust_node", e))
     }
 
     fn peer_send_files(
@@ -561,6 +609,15 @@ impl HostPeer for WasmHost {
         host_peer::set_shared_roots(&dirs_json).map_err(|e| host_err("peer_set_shared_roots", e))
     }
 
+    fn peer_set_config_snapshot(&self, snapshot_json: &str) -> Result<(), HostError> {
+        host_peer::set_config_snapshot(snapshot_json)
+            .map_err(|e| host_err("peer_set_config_snapshot", e))
+    }
+
+    fn peer_fetch_config(&self, session: &str) -> Result<Option<String>, HostError> {
+        host_peer::fetch_config(session).map_err(|e| host_err("peer_fetch_config", e))
+    }
+
     fn peer_list_shared_roots(&self, session: &str) -> Result<serde_json::Value, HostError> {
         peer_json(
             "peer_list_shared_roots",
@@ -600,8 +657,13 @@ impl HostPeer for WasmHost {
         host_peer::set_download_dir(path).map_err(|e| host_err("peer_set_download_dir", e))
     }
 
-    fn peer_start_node(&self) -> Result<bool, HostError> {
-        host_peer::start_node().map_err(|e| host_err("peer_start_node", e))
+    fn peer_start_node(&self, config: &PeerNodeConfig) -> Result<bool, HostError> {
+        let wit_config = host_peer::PeerNodeConfig {
+            data_dir: config.data_dir.clone(),
+            device_name: config.device_name.clone(),
+            listen_port: config.listen_port,
+        };
+        host_peer::start_node(&wit_config).map_err(|e| host_err("peer_start_node", e))
     }
 
     fn peer_stop_node(&self) -> Result<bool, HostError> {
@@ -628,6 +690,33 @@ impl HostPeer for WasmHost {
             host_peer::collect_outgoing(&paths_json)
                 .map_err(|e| host_err("peer_collect_outgoing", e))?,
         )
+    }
+
+    fn peer_node_info(&self) -> Result<PeerNodeInfo, HostError> {
+        let info = host_peer::node_info().map_err(|e| host_err("peer_node_info", e))?;
+        Ok(PeerNodeInfo {
+            node_id: info.node_id,
+            device_name: info.device_name,
+            addrs: info.addrs,
+            relay_state: info.relay_state,
+        })
+    }
+
+    fn peer_configure_relay(
+        &self,
+        relay_addrs: &[String],
+        enable: bool,
+    ) -> Result<PeerNodeInfo, HostError> {
+        let relay_addrs_json = serde_json::to_string(relay_addrs)
+            .map_err(|e| host_err("peer_configure_relay", e.to_string()))?;
+        let info = host_peer::configure_relay(&relay_addrs_json, enable)
+            .map_err(|e| host_err("peer_configure_relay", e))?;
+        Ok(PeerNodeInfo {
+            node_id: info.node_id,
+            device_name: info.device_name,
+            addrs: info.addrs,
+            relay_state: info.relay_state,
+        })
     }
 }
 
@@ -935,5 +1024,76 @@ impl HostPlatform for WasmHost {
     fn platform_reveal_in_dir(&self, path: &str) -> Result<(), HostError> {
         host_platform_desktop::reveal_in_dir(path)
             .map_err(|e| host_err("platform_reveal_in_dir", e))
+    }
+}
+
+// ==================== HostTunnel（内网穿透，T06） ====================
+
+impl HostTunnel for WasmHost {
+    fn tunnel_configure(&self, config: &TunnelConfig) -> Result<bool, HostError> {
+        let relay_addrs_json = serde_json::to_string(&config.relay_addrs)
+            .map_err(|e| host_err("tunnel_configure", format!("relayAddrs 序列化失败：{e}")))?;
+        host_tunnel::configure(&host_tunnel::TunnelConfig {
+            allow_wan: config.allow_wan,
+            relay_addrs_json,
+        })
+        .map_err(|e| host_err("tunnel_configure", e))
+    }
+
+    fn tunnel_expose(&self, config: &TunnelExposeConfig) -> Result<String, HostError> {
+        host_tunnel::expose(&host_tunnel::ExposeConfig {
+            port: config.port,
+            kind: config.kind.clone(),
+            label: config.label.clone(),
+            allowed_peers: config.allowed_peers.clone(),
+        })
+        .map_err(|e| host_err("tunnel_expose", e))
+    }
+
+    fn tunnel_unexpose(&self, rule_id: &str) -> Result<bool, HostError> {
+        host_tunnel::unexpose(rule_id).map_err(|e| host_err("tunnel_unexpose", e))
+    }
+
+    fn tunnel_connect(
+        &self,
+        node_id: &str,
+        port: u16,
+        kind: &str,
+        addrs: &[String],
+        pairing_ticket: Option<String>,
+    ) -> Result<serde_json::Value, HostError> {
+        let addrs_json = serde_json::to_string(addrs)
+            .map_err(|e| host_err("tunnel_connect", format!("addrs 序列化失败：{e}")))?;
+        // WIT `option<string>` 的生成参数是 `Option<&str>`：trait 收 `Option<String>`
+        // 是为了让插件侧能直接持有票据（不引发生命周期绑定），转借在绑定层做
+        let raw = host_tunnel::connect(node_id, port, kind, &addrs_json, pairing_ticket.as_deref())
+            .map_err(|e| host_err("tunnel_connect", e))?;
+        parse_json("tunnel_connect", raw)
+    }
+
+    fn tunnel_close(&self, handle: &str) -> Result<bool, HostError> {
+        host_tunnel::close(handle).map_err(|e| host_err("tunnel_close", e))
+    }
+
+    fn tunnel_issue_pairing_ticket(&self, port: u16, ttl_secs: u32) -> Result<String, HostError> {
+        host_tunnel::issue_pairing_ticket(port, ttl_secs)
+            .map_err(|e| host_err("tunnel_issue_pairing_ticket", e))
+    }
+
+    fn tunnel_probe_relay(
+        &self,
+        addrs: &[String],
+        timeout_ms: u32,
+    ) -> Result<serde_json::Value, HostError> {
+        let addrs_json = serde_json::to_string(addrs)
+            .map_err(|e| host_err("tunnel_probe_relay", format!("addrs 序列化失败：{e}")))?;
+        let raw = host_tunnel::probe_relay(&addrs_json, timeout_ms)
+            .map_err(|e| host_err("tunnel_probe_relay", e))?;
+        parse_json("tunnel_probe_relay", raw)
+    }
+
+    fn tunnel_status(&self) -> Result<serde_json::Value, HostError> {
+        let raw = host_tunnel::status().map_err(|e| host_err("tunnel_status", e))?;
+        parse_json("tunnel_status", raw)
     }
 }

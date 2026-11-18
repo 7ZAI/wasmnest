@@ -5,7 +5,7 @@
  * 必须由前端 mock 顶上，否则 app 首屏就是空态 / 报错——而 dev-shell 的意义正是
  * 「不跑真后端也能调 UI」。
  *
- * 领域 mock（file-transfer / agent-hub）在这里注册命令 handler，种子数据来自
+ * 领域 mock（file-transfer）在这里注册命令 handler，种子数据来自
  * app 自己导出的 `devMock`（各 app 持有自己的演示数据，dev-shell 不写死业务内容）。
  *
  * 未注册的命令**显性失败**（reject + warn 日志），不静默返回 undefined：静默

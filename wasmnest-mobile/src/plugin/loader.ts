@@ -16,7 +16,8 @@ import { nextTick } from 'vue'
 import i18n from '@/locales'
 import { logger } from '@/utils/frontendLogger'
 import * as pluginCmds from './commands'
-import { ensureHostCredential } from './credentials'
+import type { PluginShellInfo } from './commands'
+import { ensureHostCredential, ensureChannelToken } from './credentials'
 import { toPluginAssetUrl } from './assets'
 import { createPluginContext } from './context'
 import { clearPluginEvents } from './events'
@@ -51,8 +52,11 @@ class PluginLoaderClass {
    * 应用启动时只预载「启动时自动激活」应用的前端模块
    *
    * 移动端是应用模型：启动只扫描已安装 wasm-app，不启动任何应用。只有显式
-   * 打开自启动开关（`plugin.autostart.{id}`，默认关）的应用才会在 boot 预载，
+   * 打开自启动开关（`plugin.autostart.{id}`）的应用才会在 boot 预载，
    * 其余应用由用户在宿主壳里点击后经 `activate()` 加载（后端激活 + 前端模块）。
+   *
+   * 自启偏好随清单同位返回（`plugin_list_loaded` 的 `autostart` 字段），不再
+   * 逐插件发 `plugin_is_autostart`——冷启动主链上的 N 次串行 IPC 就消在这里。
    */
   async loadAll(): Promise<void> {
     // 先于任何插件模块 import：loader 会话域内首个调用者生效（ADR 0058）——
@@ -67,7 +71,7 @@ class PluginLoaderClass {
     // 实测全程数秒（设备上 WASM 编译慢）。前端首次查询 plugin_list_loaded 极可能
     // 落在扫描完成前，拿到空列表 → 遍历 0 个 manifest → 扩展点（工具箱/导航/设置/
     // 终端）全部丢失，直到手动重开插件才恢复。此处异步轮询兜底：扫描完成（列表
-    // 非空）即补载；不阻塞 app.mount()（挂载不受插件初始化延迟）。
+    // 非空）即补载；loadAll 本身已在 mount 之后的后台任务里跑（main.ts），不阻塞首帧。
     if (manifests.length === 0) {
       this.scheduleScanRetry()
     }
@@ -100,26 +104,29 @@ class PluginLoaderClass {
   }
 
   /** 逐插件加载前端模块（幂等：重试/重复调用时跳过已加载插件） */
-  private async loadManifests(manifests: PluginInfo[]): Promise<void> {
+  private async loadManifests(manifests: PluginShellInfo[]): Promise<void> {
     for (const manifest of manifests) {
       // Rust-only 插件：前端无需加载
-      if (manifest.pluginType === 'rust') {
+      if (manifest.pluginType === 'backend') {
         logger.log(`[PluginLoader] Rust plugin ${manifest.id} managed by backend`)
         continue
       }
 
       if (this.plugins.has(manifest.id)) continue
 
-      // 门禁取「启动时自动激活」偏好（`plugin.autostart.{id}`，缺省关），
+      // 门禁取「启动时自动激活」偏好（`plugin.autostart.{id}`），
       // 而非插件运行时状态、也不是启用偏好：
       // - 不用运行时状态：后端 boot 自动激活是异步任务，前端首次查
       //   `plugin_list_loaded` 可能拿到尚未完成的 Loaded 态，据此跳过会
       //   让本应自启的应用漏载；偏好是持久化存储，查询时立即可用。
       // - 不用启用偏好（`plugin.enabled.{id}`）：启用只表示「应用可用」，
-      //   与 boot 是否启动解耦（持久化 ≠ 自启动）。默认一个应用都不自启，
-      //   前端自然也不预载，避免「前端已加载但后端未运行」的悬空状态
+      //   与 boot 是否启动解耦（持久化 ≠ 自启动）。业务应用缺省不自启，前端
+      //   自然也不预载，避免「前端已加载但后端未运行」的悬空状态
       //   （loader.activate 会因 plugins Map 已有记录而短路后端激活）。
-      const isAutostart = await pluginCmds.pluginIsAutostart(manifest.id)
+      // - 缺省口径归后端（L1/L2 服务缺省 true、L3 应用缺省 false，
+      //   `PluginManager::is_autostart`）：前端不得自己再定一套缺省，否则
+      //   服务型应用会在预载面被静默漏掉。
+      const isAutostart = manifest.autostart
       if (!isAutostart) {
         logger.log(`[PluginLoader] Plugin ${manifest.id} not autostart, skipping frontend load`)
         continue
@@ -162,7 +169,12 @@ class PluginLoaderClass {
       await pluginCmds.pluginActivate(pluginId)
     } catch (e: any) {
       logger.error(`[PluginLoader] Failed to activate ${pluginId}:`, e)
-      await pluginCmds.pluginMarkError(pluginId, e.message || 'Activation failed')
+      // 自报面身份（issue #28）：宿主代报用 loader 会话（可作用于任意目标）
+      await pluginCmds.pluginMarkError(
+        pluginId,
+        e.message || 'Activation failed',
+        await ensureHostCredential(),
+      )
       return
     }
     await this.loadFrontend(info)
@@ -184,12 +196,13 @@ class PluginLoaderClass {
     const plugin = this.plugins.get(pluginId)
 
     if (plugin) {
-      // 清理所有 Disposable
-      plugin.context._disposables.forEach((d: { dispose(): void }) => {
+      // 清理所有 Disposable：先取快照——每个句柄 dispose 时会把**自己**从
+      // `_disposables` 里摘掉（自摘改自 F8），直接 forEach 原数组会跳过后继条目
+      for (const d of [...plugin.context._disposables]) {
         try { d.dispose() } catch (e) {
           logger.error(`[PluginLoader] Error disposing resource for ${pluginId}:`, e)
         }
-      })
+      }
 
       // 调用插件的 deactivate（先于注册表清理：若模块停用期间再注册，随后即被清掉）
       if (plugin.module.deactivate) {
@@ -258,8 +271,12 @@ class PluginLoaderClass {
     const env: MonitorPanelEnv = {
       appId,
       panelId,
-      appInvoke: (command, ...args) => pluginCmds.pluginInvoke(appId, command, args[0] ?? null),
-      appStorageGet: (key) => pluginCmds.pluginStorageGet(appId, key),
+      // 面板代码属于提供方应用本身 ⇒ 用**该应用**的通道令牌（issue #28）；
+      // 应用未运行时宿主拒签，面板自行显示「应用未运行」（与 mountMonitorPanel
+      // 不激活后端的既有契约一致）
+      appInvoke: async (command, ...args) =>
+        pluginCmds.pluginInvoke(appId, command, args[0] ?? null, await ensureChannelToken(appId)),
+      appStorageGet: async (key) => pluginCmds.pluginStorageGet(appId, key, await ensureChannelToken(appId)),
       locale: i18n.global.locale.value,
       theme:
         typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -347,7 +364,11 @@ class PluginLoaderClass {
       } catch (deactivateErr) {
         logger.error(`[PluginLoader] Error tearing down backend for ${manifest.id}:`, deactivateErr)
       }
-      await pluginCmds.pluginMarkError(manifest.id, e.message || 'Frontend load failed')
+      await pluginCmds.pluginMarkError(
+        manifest.id,
+        e.message || 'Frontend load failed',
+        await ensureHostCredential(),
+      )
     }
   }
 

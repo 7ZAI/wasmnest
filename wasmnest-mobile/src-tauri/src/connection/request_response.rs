@@ -1,7 +1,6 @@
-//! Request-Response Manager
+//! 请求-响应管理器：用 `message_id → oneshot::Sender` 匹配 WS 响应
 //!
-//! 管理 WebSocket 请求-响应模式，使用 Map<message_id, oneshot::Sender> 实现
-//! 自己解码原始 WebSocket 消息，判断是否匹配 pending 请求
+//! 自己解码原始 WebSocket 消息并判断是否命中 pending 请求，避免上层各自维护等待表。
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -68,7 +67,7 @@ impl RequestResponseManager {
     /// - `Unroutable`：解析失败的帧（如插件端点事件帧 `{"type":"event",...}`——
     ///   这些帧不是移动端 `Message` 信封）。**必须交还调用方给 handler 侦察路由**（handler
     ///   内有 `PluginEventRouter` 或自行丢弃）：在匹配层吞掉 = 事件帧永远到不了
-    ///   handler（票 03 集成必红），畸形帧也无从留痕。
+    ///   handler（集成测试必红），畸形帧也无从留痕。
     pub async fn try_match(&self, raw_message: WsMsg) -> MatchOutcome {
         // 只处理 Text 消息
         let text = match raw_message {
@@ -270,7 +269,7 @@ mod tests {
         assert!(matches!(result, MatchOutcome::Push(_)));
     }
 
-    /// 票 03 关键：插件端点事件帧（`{"type":"event",...}`）不是移动端 `Message`
+    /// 关键：插件端点事件帧（`{"type":"event",...}`）不是移动端 `Message`
     /// 信封，**必须裁决为 `Unroutable` 交还调用方给 handler 侦察路由**——若在此层
     /// 吞掉，事件帧永远到不了 PluginEventRouter（集成必红）。
     #[tokio::test]
@@ -339,7 +338,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_match_invalid_json_keeps_pending() {
-        // 非法 JSON：解码失败裁决为 Unroutable（交还调用方留痕丢弃——票 03 关键：
+        // 非法 JSON：解码失败裁决为 Unroutable（交还调用方留痕丢弃——关键：
         // 插件事件帧也走此路径，吞掉即事件到不了 handler），pending 保持原样
         let mgr = RequestResponseManager::new();
         let _rx = mgr.register("m-1".to_string()).await;
@@ -350,7 +349,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_match_binary_frame_is_skipped() {
-        // try_match 入口只接受 Text 帧（文档明确“只处理 Text 消息”），
+        // try_match 入口只接受 Text 帧（约定：只处理 Text 消息），
         // Binary 帧直接被跳过、不进入解码也不消耗 pending；
         // Binary 解码能力由 codec::decode 独立提供（见 codec 测试）
         let mgr = RequestResponseManager::new();

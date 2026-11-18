@@ -10,7 +10,7 @@
 # 安装通道 = crates.io（平台仓刻意无根 workspace，`cargo install --git` 不能定位本 crate，
 # 见票据「关键裁决」）。批 2（issue #36）起宿主不再依赖桌面 SDK，发布无 SDK 前置。
 name = "wasmnest-desktop-runtime"
-version = "0.0.1"
+version = "0.0.2"
 license = "MIT"
 description = "WasmNest Desktop runtime - Tauri shell + plugin host for wasm apps (generic, full WIT)"
 authors = ["binblink"]
@@ -68,6 +68,7 @@ tauri-plugin-updater = "2"
 # 段尾，只有 Linux 编到，首次三平台发布才暴露。
 tauri-plugin-wdio = "1"
 tauri-plugin-process = "2"
+tauri-plugin-clipboard-manager = "2"
 
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "process", "test-util"] }
@@ -89,6 +90,9 @@ hex = "0.4"
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# 应用更新链路（plugin_updates.rs）：Release tag 版本比较 / 下载包摘要复核
+sha2 = "0.10"
 
 # UUID
 uuid = { version = "1", features = ["v4", "serde"] }
@@ -126,6 +130,11 @@ mdns-sd = "0.20"
 # Network utilities
 local-ip-address = "0.6"
 
+# 宿主进程 / WebView 进程指标（system/process_metrics.rs）：进程树 RSS + CPU 与
+# 进程名（角色判定）。0.33 与能力仓 wasmnest-server-core 同版本（已在本依赖图内，
+# 不新增传递树）；`Process::memory()` 自 0.30 起单位为字节。
+sysinfo = "0.33"
+
 
 # Plugin API 依赖已摘除（批 2，issue #36）：权限词汇 / FORM_COMPONENT / 事件 topic
 # 词汇真源已上提 wasm-core（permission / manager::runtime / host_api::topics），
@@ -145,7 +154,13 @@ local-ip-address = "0.6"
 wasmnest-link-crypto = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1" }
 # server-lib-split：桌面 server 基础层（错误/常量/错误边界/系统信息/网络配置/
 # 连接身份/端口 traits）与加密引擎（算法实现 + 注册表）
-wasmnest-server-base = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1" }
+# 三个 feature **显式开启**（不靠传递 feature 合并）：base 自 2026-11-08（能力仓 P0）
+# 起默认关 `tauri-compat` / `mdns` / `system-info`——桌面宿主是全量消费方，缺任一个
+# 都表现为「impl 不存在 / 端口类型不存在 / 采集函数不存在」的编译错。
+#   tauri-compat → From<tauri::Error> for AppError
+#   mdns         → MdnsPort / MdnsTypeSubscription / ServerPorts.mdns
+#   system-info  → SystemInfo::collect() / local_ipv4_addresses()
+wasmnest-server-base = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["tauri-compat", "mdns", "system-info"] }
 # 插件宿主机制内核（能力仓 `../wasmnest-lib`，双端共享锚点，wasm-core-lib-split 票 03）：
 # 插件实例状态 `WasmPluginState` + 能力模块契约 + 自动注册表 + Store 上限与指标值对象。
 # 它必须独立于宿主 bin crate —— 否则能力 crate 无法命名 `WasmPluginState`
@@ -176,7 +191,7 @@ wasmnest-server-http = { version = "0.0.1", git = "https://github.com/7ZAI/wasmn
 # server-lib-split 票 05：WebSocket 传输面（conn/channel/registry/endpoint/routes/manager）
 wasmnest-server-websocket = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["common-host"] }
 # server-lib-split 票 06：对等网络引擎域（节点身份/节点与发现守护生命周期/host-peer 引擎转发）
-wasmnest-server-peer-net = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["common-host"] }
+wasmnest-server-peer-net = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.0.1", features = ["common-host", "relay"] }
 inventory = "0.3"
 
 # Power management (prevent system sleep)

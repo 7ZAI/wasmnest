@@ -1,4 +1,4 @@
-//! host-fs-mobile 宿主 adapter（移动独有域；wasm-core-mobile-purity 票 04 自 wasm-core 迁入）
+//! host-fs-mobile 宿主 adapter（移动独有域；自 wasm-core 迁入）
 //!
 //! 2 函数（`write-media-downloads` / `save-to-document`）：SAF 与 MediaStore 落盘。
 //! 均经权限位 `fs:write`（fail-closed）+ 入参 src 校验（必须是宿主解析的 app
@@ -17,8 +17,8 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 /// 能力模块名
 pub const MODULE_NAME: &str = "mobile-fs";
 
-/// 本域提供的 WIT 接口（必须与 `cap-mobile.wit` 逐字一致）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-fs-mobile"];
+/// 本域提供的 WIT 接口（必须与生成物 `deps/fs-mobile/` 分片逐字一致）
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:fs-mobile@0.0.1/host-fs-mobile"];
 
 /// 本域的权限位（与 WIT / SDK 权限表逐字一致）
 pub const MODULE_PERMISSIONS: &[&str] = &["fs:write"];
@@ -47,7 +47,7 @@ impl HostModule for FsMobileModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_fs_mobile::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::fs_mobile::host_fs_mobile::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -93,7 +93,7 @@ fn saf_io_checked(
 
 // ==================== WIT 层（import 接口 → 域逻辑） ====================
 
-impl wasmnest::plugin::host_fs_mobile::Host for WasmPluginState {
+impl wasmnest::fs_mobile::host_fs_mobile::Host for WasmPluginState {
     fn write_media_downloads(
         &mut self,
         src_path: String,

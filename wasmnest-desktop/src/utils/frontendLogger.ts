@@ -73,11 +73,34 @@ let entries: FrontendLogEntry[] = []
 let flushTimer: ReturnType<typeof setInterval> | null = null
 let reportedFailure = false
 
+/**
+ * 定时 flush 只在有积压时运行
+ *
+ * 此前每个日志方法的 methodFactory 在**模块加载**时就建一个 400ms interval（空队列
+ * flush 直接 return），release 零日志时仍 2.5 次/s 唤醒，妨碍 WebView 长空闲（F14）。
+ * 现在首条入队才起、队列排空即停。
+ */
+function ensureFlushTimer(): void {
+  if (flushTimer) return
+  flushTimer = setInterval(flush, FLUSH_INTERVAL_MS)
+}
+
+function stopFlushTimer(): void {
+  if (!flushTimer) return
+  clearInterval(flushTimer)
+  flushTimer = null
+}
+
 /** 发送攒批日志到 Rust（失败静默，仅 warn 一次，避免转发本身引发递归日志） */
 function flush() {
-  if (entries.length === 0) return
+  if (entries.length === 0) {
+    // 定时器空转一帧就收掉（阈值 flush 后的残留 interval 也在这里清）
+    stopFlushTimer()
+    return
+  }
   const batch = entries
   entries = []
+  stopFlushTimer()
   invoke('report_frontend_log', { logs: batch }).catch(() => {
     if (!reportedFailure) {
       // 动态读取当前 console.warn：测试 spy 可捕获；reportedFailure 已保证只警告一次，
@@ -124,17 +147,14 @@ function makeMethodFactory(dev: boolean) {
     const fn = original ?? console.log
     const level = LEVEL_MAP[methodName] ?? 'debug'
 
-    // 启动定时器（幂等；release 下 error/warn 复用同一攒批/节流通道）
-    if (!flushTimer) {
-      flushTimer = setInterval(flush, FLUSH_INTERVAL_MS)
-    }
-
+    // 定时器不在方法创建时启动：首次入队才起（见 ensureFlushTimer）
     return (...args: unknown[]): void => {
       if (dev) fn.apply(console, args)
       const message = formatLogArgs(args)
       if (!message) return
       entries.push({ level, message })
       if (entries.length >= FLUSH_THRESHOLD) flush()
+      else ensureFlushTimer()
     }
   }
 }

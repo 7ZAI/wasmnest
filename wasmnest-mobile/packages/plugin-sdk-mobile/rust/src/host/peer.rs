@@ -10,12 +10,29 @@
 
 use crate::host::HostError;
 
+/// per-app 节点启动配置（WIT `peer-node-config` 的 Rust 映射）
+///
+/// 每个 app 声明自己的身份与网络参数，宿主按 app 维度隔离节点实例。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PeerNodeConfig {
+    /// 节点数据目录（存放 identity keypair、known peers 等持久状态）
+    pub data_dir: String,
+    /// 人类可读的设备名（广播给对端发现用）
+    pub device_name: String,
+    /// TCP 监听端口（0 = OS 自动分配）
+    pub listen_port: u16,
+}
+
 /// 对等网络能力 trait —— 函数签名与 WIT `host-peer` 一一对应，
 /// JSON 载荷在绑定层完成字符串 ↔ Value 转换
 pub trait HostPeer {
     /// 按 endpoint 拨号（endpoint = `{ nodeId, addr, port }`），成功返回 session
     /// 句柄；denied/unreachable 报错
     fn peer_dial(&self, endpoint: &serde_json::Value) -> Result<String, HostError>;
+    /// 多地址拨号（T11 方案 B）：endpoint = `{ nodeId, addrs: [multiaddr...] }`。
+    /// addrs 顺序 = 调用方拨号策略顺序（先 LAN，明确不在内网才 relay）；成功后
+    /// 句柄记忆全部候选地址，数据面断线重拨按同一顺序复用（不查发现缓存）
+    fn peer_dial_addrs(&self, endpoint: &serde_json::Value) -> Result<String, HostError>;
     /// 统一资源关闭：session 句柄 = 断开；传输句柄 = 取消。返回是否命中
     fn peer_close(&self, handle: &str) -> Result<bool, HostError>;
     /// 首次连接确认应答（返回是否命中了待确认项）
@@ -24,6 +41,15 @@ pub trait HostPeer {
     fn peer_list_trusted(&self) -> Result<serde_json::Value, HostError>;
     /// 撤销对指定节点的信任（返回是否删除了条目）
     fn peer_revoke_trusted(&self, node_id: &str) -> Result<bool, HostError>;
+    /// 登记可信对端（T07/T08：隧道配对成功落信任的唯一写入原语）。
+    /// `node_id` 必须是宿主已验证的对端身份（peer face 注入的 `peerNodeId`），
+    /// 不得传客户端自报值；`display_name` 为空串按缺省处理。返回是否为新加入
+    /// （幂等：已信任 false）
+    fn peer_trust_node(
+        &self,
+        node_id: &str,
+        display_name: Option<&str>,
+    ) -> Result<bool, HostError>;
     /// 向单个对端发送一批文件（扇出 = 对多个对端各调一次）。paths 元素双形态：
     /// 纯 string 或 `{ path, encrypt? }` 对象（任一元素 encrypt=true → 本批强制
     /// 加密）。返回传输句柄（batch-id 字符串）；仅接受 session 句柄寻址，
@@ -41,6 +67,22 @@ pub trait HostPeer {
     fn peer_resume_transfer(&self, batch_id: &str) -> Result<(), HostError>;
     /// 全量幂等替换引擎广播源：条目 `[{ id, name, safTreeUri }]`（SAF 树 URI）
     fn peer_set_shared_roots(&self, dirs: &[serde_json::Value]) -> Result<(), HostError>;
+    /// 写入本机穿透配置快照（不透明 JSON 对象，≤16 KiB；对端可经
+    /// `peer_fetch_config` 按需拉取）。旧宿主未实现时返回错误（不静默丢写）
+    fn peer_set_config_snapshot(&self, _snapshot_json: &str) -> Result<(), HostError> {
+        Err(HostError::custom(
+            -1,
+            "peer_set_config_snapshot unsupported by this host",
+        ))
+    }
+    /// 拉取可信对端的穿透配置快照（session 句柄寻址；`None` = 对端未设置）。
+    /// 旧宿主未实现时返回错误（不把「读不到」伪装成「没有配置」）
+    fn peer_fetch_config(&self, _session: &str) -> Result<Option<String>, HostError> {
+        Err(HostError::custom(
+            -1,
+            "peer_fetch_config unsupported by this host",
+        ))
+    }
     /// 浏览对端共享根清单（仅 session 句柄寻址；断线自动重拨）
     fn peer_list_shared_roots(&self, session: &str) -> Result<serde_json::Value, HostError>;
     /// 目录下钻（仅 session 句柄寻址；断线自动重拨）
@@ -60,9 +102,11 @@ pub trait HostPeer {
     ) -> Result<u32, HostError>;
     /// 设置接收落点目录（空串 = 恢复默认）；引擎落盘配置原语
     fn peer_set_download_dir(&self, path: &str) -> Result<(), HostError>;
-    /// 按需启动本机 peer 节点（引擎级生命周期原语）：幂等，false = 未改变状态；
+    /// 按需启动本机 peer 节点（引擎级生命周期原语）：app 声明自己的身份与
+    /// 网络参数（`PeerNodeConfig`），宿主按 app 维度隔离节点实例。
+    /// 幂等——该 config 对应的节点已在跑时返回 false（未改变状态）。
     /// 调用方成为节点属主（谁起谁停）
-    fn peer_start_node(&self) -> Result<bool, HostError>;
+    fn peer_start_node(&self, config: &PeerNodeConfig) -> Result<bool, HostError>;
     /// 属主插件让节点下线（幂等）；非属主拒绝
     fn peer_stop_node(&self) -> Result<bool, HostError>;
     /// 活跃传输批清单（引擎会话事实投影，供插件事件归约首屏重建）

@@ -1,10 +1,8 @@
-//! Auth Manager
+//! 认证管理器：HTTP 认证（配对码 / QR / JWT reauth / 生物挑战应答）
 //!
-//! 认证管理器 - HTTP 认证（配对码 / QR / JWT reauth / 生物挑战应答）。
-//! 设备身份持久化到文件，确保重启后 JWT 重连认证仍能使用相同身份
-//!
-//! 认证已从 WS 握手迁移到 HTTP（spec §4.5 六端点）：所有方法经
-//! `AuthHttpClient` 直连桌面端 `/api/auth/*`，不再依赖 WS 通道。
+//! 设备身份持久化到文件，确保重启后 JWT 重连仍能使用相同身份。认证已从 WS 握手
+//! 迁移到 HTTP（六端点）：所有方法经 `AuthHttpClient` 直连桌面端 `/api/auth/*`，
+//! 不再依赖 WS 通道——WS 只承载业务事件。
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -212,11 +210,11 @@ impl AuthManager {
         Ok((format_base_url(&target.address, target.port), target.address))
     }
 
-    /// 认证成功统一收尾：持久化凭据 + 全局 token + 设备级 Authed + 04 契口
+    /// 认证成功统一收尾：持久化凭据 + 全局 token + 设备级 Authed + 事件契口
     ///
     /// HTTP 认证路径不经过 `handler/auth.rs`（WS 应答处理器）——经此契口
-    /// 广播 `MobileEvent::AuthSuccess` 是唯一等价补齐点：04 的事件 WS 订阅
-    /// 后恢复建连；事件转发层（event.rs）同时转发为前端 ws_auth_success。
+    /// 广播 `MobileEvent::AuthSuccess` 是唯一等价补齐点：常驻事件 WS 订阅后
+    /// 恢复建连；事件转发层（event.rs）同时转发为前端 ws_auth_success。
     ///
     /// 链路加密 pin 随认证响应落地（修复：pin 此前仅在无人调用的 HTTP auth
     /// 函数里写入，配对/重认证全走本处导致前端 localStorage 恒空、设置页误报

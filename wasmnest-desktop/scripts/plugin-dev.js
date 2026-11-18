@@ -22,10 +22,6 @@ const IS_WIN = platform() === 'win32'
 
 // 插件配置 — `slug` 经 app-paths 解析到应用仓工程目录（<appsRoot>/apps/<slug>/desktop）
 const PLUGINS = {
-  // 与 plugin-build.js 同表同序（docs/commands.md §5.2 记的 agent-hub 独立命令）
-  'com.wasmnest.agent-hub': {
-    slug: 'agent-hub',
-  },
   'com.wasmnest.ai-chatbox': {
     slug: 'ai-chatbox',
   },

@@ -4,7 +4,8 @@
 
 /* 深色模式（默认） - 与桌面端 warm 色板深色同源
    （bg-page #15130F / bg-sidebar #191712 / bg-card #1D1A15 / bg-hover #2A261E，墨纸体系） */
-:root {
+:root,
+.theme-base {
   /* 背景色 - 与桌面端同名 token 对齐（tertiary 取 border-strong 色调，作强内嵌面） */
   --mobile-bg-primary: #15130F;
   --mobile-bg-secondary: #191712;
@@ -17,10 +18,12 @@
   --mobile-card-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
   --mobile-card-shadow-connected: 0 2px 12px rgba(34, 197, 94, 0.15), 0 1px 3px rgba(0, 0, 0, 0.2);
 
-  /* 文字色 - 与桌面端 warm 深色 text token 同源 */
+  /* 文字色 - 与桌面端 warm 深色 text token 同源。
+     muted 从 #6B6455 提到 #8A8270（2026-11-05 unslop 审核）：原值对页面 3.16:1，
+     承受不了 12px 分组标签 / 说明文字的阅读负担；新值对页面 4.87:1、对卡面 4.55:1。 */
   --mobile-text-primary: #ECE8DC;
   --mobile-text-secondary: #9C9482;
-  --mobile-text-muted: #6B6455;
+  --mobile-text-muted: #8A8270;
   --mobile-text-disabled: #55503F;
 
   /* 强调色上的文字 */
@@ -43,6 +46,10 @@
   --mobile-warning-muted: rgba(245, 158, 11, 0.1);
   --mobile-error: #ef4444;
   --mobile-error-muted: rgba(239, 68, 68, 0.1);
+  /* 信息色 - 与桌面端 --color-info 同源（深色 #60A5FA / 浅色 #2563EB），
+     玻璃主题的冷调采样源（体色 / caustic / 光晕 / 环境光）；不随主色色板变化，
+     与桌面「info 恒为蓝」同口径。 */
+  --mobile-info: #60A5FA;
 
   /* 弹窗遮罩 */
   --mobile-overlay: rgba(0, 0, 0, 0.6);
@@ -57,13 +64,13 @@
   --mobile-nav-bg: rgba(21, 19, 15, 0.9);
   --mobile-nav-border: rgba(236, 232, 220, 0.2);
   --mobile-nav-active: var(--mobile-accent);
-  --mobile-nav-inactive: #6B6455;
+  --mobile-nav-inactive: #8A8270;
 
   /* 输入框 - 终端输入区专属配色，比终端输出区稍亮 */
   --mobile-input-bg: #1D1A15;
   --mobile-input-border: rgba(236, 232, 220, 0.25);
   --mobile-input-focus: rgba(236, 232, 220, 0.45);
-  --mobile-input-placeholder: #55503F;
+  --mobile-input-placeholder: #8A8270;
 
   /* 触控目标最小尺寸（恒常值，不随屏幕缩放） */
   --mobile-input-height: 44px;
@@ -123,8 +130,8 @@
   --mobile-group-divider: rgba(236, 232, 220, 0.06);
   --mobile-group-row-active: rgba(236, 232, 220, 0.05);
 
-  /* 分组标题 */
-  --mobile-section-title-color: #6B6455;
+  /* 分组标题（删除 .group-section-title 后暂无消费方；保留给后续分组标题面） */
+  --mobile-section-title-color: #8A8270;
 
   /* 图标 chip 色调 (12% 透明底) - 状态色与桌面端语义色同源，violet 为移动端分类装饰色 */
   --mobile-chip-cyan: #ECE8DC;
@@ -148,7 +155,6 @@
   --mobile-row-title: #ECE8DC;
   --mobile-row-sub: #9C9482;
   --mobile-row-value: #ABA492;
-
   /* 滚动条 - 与桌面端全局 scrollbar 规则同源（track=bg-hover / thumb=text-tertiary / hover=text-secondary） */
   --scrollbar-track-bg: #2A261E;
   --scrollbar-thumb-bg: #6B6455;
@@ -162,8 +168,12 @@
    旧写法把浅色值限定在带类元素内，于是所有**不带类的渲染面**都掉回 :root 的深色默认值：
    设置二级页（SettingsSubPage 自带根节点）、Teleport 到 body 的抽屉（ShellSheet 只带 .shell-ui）
    在浅色主题下整片变深色（实测：设置子页 5 页 + 应用菜单抽屉）。深色默认值留在 :root，
-   浅色在 html:not(.dark) 上整体覆盖——这样「主题」不再依赖某个祖先类是否写对。 */
-html:not(.dark) {
+   浅色在 html:not(.dark) 上整体覆盖——这样「主题」不再依赖某个祖先类是否写对。
+
+   `.theme-base` 一并挂上：默认主题的预览块跟着壳的明暗走（深色档在 :root 那份，
+   浅色档在这里）。 */
+html:not(.dark),
+html:not(.dark) .theme-base {
   /* 背景色 - 与桌面端同名 token 对齐（tertiary 取 border-strong 色调，作强内嵌面） */
   --mobile-bg-primary: #F5F4F0;
   --mobile-bg-secondary: #EFEDE7;
@@ -176,10 +186,13 @@ html:not(.dark) {
   --mobile-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.08);
   --mobile-card-shadow-connected: 0 2px 8px rgba(5, 150, 105, 0.15), 0 1px 3px rgba(0, 0, 0, 0.08);
 
-  /* 文字色 - 与桌面端 warm 浅色 text token 同源（primary 对比度 ~13:1） */
+  /* 文字色 - 与桌面端 warm 浅色 text token 同源（primary 对比度 ~13:1）。
+     secondary #7C7565 → #6B6353（对页面 5.40:1）；muted #ABA492 → #776F5F
+     （对页面 4.52:1）。2026-11-05 unslop 审核：原 muted 只有 2.26:1，
+     12px 级说明文字几乎读不清；三档字色现在都过 4.5:1。 */
   --mobile-text-primary: #26231B;
-  --mobile-text-secondary: #7C7565;
-  --mobile-text-muted: #ABA492;
+  --mobile-text-secondary: #6B6353;
+  --mobile-text-muted: #776F5F;
   --mobile-text-disabled: #C6BFAE;
 
   /* 强调色上的文字 - 与桌面端 warm 色板 primary-contrast 同源 */
@@ -204,6 +217,7 @@ html:not(.dark) {
   --mobile-warning-muted: rgba(217, 119, 6, 0.1);
   --mobile-error: #dc2626;
   --mobile-error-muted: rgba(220, 38, 38, 0.1);
+  --mobile-info: #2563EB;
 
   /* 弹窗遮罩 */
   --mobile-overlay: rgba(0, 0, 0, 0.4);
@@ -218,13 +232,13 @@ html:not(.dark) {
   --mobile-nav-bg: rgba(253, 252, 250, 0.9);
   --mobile-nav-border: rgba(38, 35, 27, 0.1);
   --mobile-nav-active: var(--mobile-accent);
-  --mobile-nav-inactive: #ABA492;
+  --mobile-nav-inactive: #776F5F;
 
   /* 输入框 - 输入面取页面色（桌面端卡片内输入框同规则），聚焦用墨色 accent */
   --mobile-input-bg: #F5F4F0;
   --mobile-input-border: rgba(38, 35, 27, 0.2);
   --mobile-input-focus: rgba(29, 26, 20, 0.45);
-  --mobile-input-placeholder: #ABA492;
+  --mobile-input-placeholder: #776F5F;
 
   /* 代码查看器 */
   --mobile-code-gutter-bg: rgba(0, 0, 0, 0.04);
@@ -276,8 +290,8 @@ html:not(.dark) {
   --mobile-group-divider: rgba(38, 35, 27, 0.06);
   --mobile-group-row-active: rgba(38, 35, 27, 0.04);
 
-  /* 分组标题 */
-  --mobile-section-title-color: #ABA492;
+  /* 分组标题（删除 .group-section-title 后暂无消费方；保留给后续分组标题面） */
+  --mobile-section-title-color: #776F5F;
 
   /* 图标 chip 色调 - 浅色模式（状态色用加深变体保证对比度，色相与桌面端语义色同族） */
   --mobile-chip-cyan: #1D1A14;
@@ -290,17 +304,17 @@ html:not(.dark) {
   --mobile-chip-violet-bg: rgba(124, 58, 237, 0.1);
   --mobile-chip-red: #dc2626;
   --mobile-chip-red-bg: rgba(220, 38, 38, 0.1);
-  --mobile-chip-zinc: #7C7565;
+  --mobile-chip-zinc: #776F5F;
   --mobile-chip-zinc-bg: rgba(38, 35, 27, 0.06);
 
   /* badge 状态 */
-  --mobile-badge-zinc-color: #7C7565;
+  --mobile-badge-zinc-color: #6B6353;
   --mobile-badge-zinc-bg: rgba(38, 35, 27, 0.06);
 
   /* 行文字 */
   --mobile-row-title: #26231B;
-  --mobile-row-sub: #ABA492;
-  --mobile-row-value: #7C7565;
+  --mobile-row-sub: #776F5F;
+  --mobile-row-value: #6B6353;
 
   /* 输入助手悬浮球 */
   --mobile-input-assist-bg: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
@@ -309,6 +323,37 @@ html:not(.dark) {
   --scrollbar-track-bg: #E7E4DC;
   --scrollbar-thumb-bg: #ABA492;
   --scrollbar-thumb-hover-bg: #7C7565;
+}
+
+/* 默认档的中性化：主题专属的三枚 token（环境光 / 图标外框 / 图标投影）不属于默认档，
+   显式归零——否则它们会从当前主题的 <html> 继承下来，默认预览就带上了别人的语汇。
+   图标外框圆角取基础档值 24%（与 .theme-swatch-icon 的兜底一致）。 */
+.theme-base {
+  --theme-ambient: none;
+  --theme-icon-shadow: none;
+  --theme-icon-radius: 24%;
+  /* 玻璃材质 token 也归零：默认预览不挂 data-theme，若这些值从当前主题
+     继承下来，任何引用它们的预览规则都会偷偷长成玻璃。 */
+  --theme-glass-tint: var(--mobile-bg-card);
+  --theme-glass-fill-top: var(--mobile-bg-card);
+  --theme-glass-fill-bottom: var(--mobile-bg-card);
+  --theme-glass-control: var(--mobile-bg-card);
+  --theme-glass-control-hover: var(--mobile-bg-card);
+  --theme-glass-rim-hi: transparent;
+  --theme-glass-rim-lo: transparent;
+  --theme-glass-inner: transparent;
+  --theme-glass-edge: var(--mobile-border);
+  --theme-glass-sheen: transparent;
+  --theme-glass-caustic: transparent;
+  --theme-glass-glow: transparent;
+  --theme-glass-blur: 0px;
+  --theme-glass-sat: 100%;
+  --theme-glass-brightness: 1;
+  --theme-glass-grain: none;
+  --theme-glass-grain-opacity: 0;
+  --theme-glass-selected: var(--mobile-bg-card);
+  --theme-glass-radius-card: 0.75rem;
+  --theme-glass-radius-control: 0.5rem;
 }
 
 /* 主题切换过渡动画 */
@@ -408,16 +453,6 @@ html:not(.dark) {
 }
 
 /* ==================== 分组卡片通用语言 ==================== */
-
-.group-section-title {
-  font-size: clamp(0.625rem, 0.6875rem + (100vw - 360px) / 800, 0.75rem);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--mobile-section-title-color);
-  padding-left: 0.375rem;
-  margin-bottom: 0.5rem;
-}
 
 .group-card {
   background: var(--mobile-group-bg);
@@ -564,7 +599,6 @@ button.group-row:active,
 
 .dot-emerald {
   background: var(--mobile-chip-emerald);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--mobile-chip-emerald) 80%, transparent);
 }
 
 /* ==================== 页面标题 ==================== */
@@ -585,7 +619,8 @@ button.group-row:active,
 /* ==================== 页面 header ==================== */
 
 .page-header {
-  padding: 1.5rem 1.25rem 1rem;
+  /* 左右 16px 与内容区同边（2026-11-05 unslop 审核：原 20px 会让页标题比首张卡内缩 4px） */
+  padding: 1.5rem 1rem 1rem;
 }
 
 .page-header-row {
@@ -786,6 +821,35 @@ button.settings-row:active {
 .bottom-sheet-enter-from .modal-panel,
 .bottom-sheet-leave-to .modal-panel {
   transform: translateY(100%);
+}
+
+/* 减弱动态：弹窗 / 抽屉都 Teleport 到 body，壳根 `.shell-ui` 的统一降级规则
+   够不到这里。保留淡入淡出（可见性），去掉缩放与上滑位移。 */
+@media (prefers-reduced-motion: reduce) {
+  /* toast 与桌面同口径：sonner 自带的 reduce 规则会禁用全部过渡；这里只保留
+     200ms 淡入淡出，去掉位移与 height 布局过渡。 */
+  [data-sonner-toast],
+  [data-sonner-toast] > * {
+    transition: opacity 200ms !important;
+  }
+  .center-modal-enter-active,
+  .center-modal-leave-active,
+  .bottom-sheet-enter-active,
+  .bottom-sheet-leave-active {
+    transition: opacity 120ms linear;
+  }
+  .center-modal-enter-active .modal-panel,
+  .center-modal-leave-active .modal-panel,
+  .bottom-sheet-enter-active .modal-panel,
+  .bottom-sheet-leave-active .modal-panel {
+    transition: none;
+  }
+  .center-modal-enter-from .modal-panel,
+  .center-modal-leave-to .modal-panel,
+  .bottom-sheet-enter-from .modal-panel,
+  .bottom-sheet-leave-to .modal-panel {
+    transform: none;
+  }
 }
 
 /* ==================== 主色色板（与桌面端同名 palette 同源） ====================

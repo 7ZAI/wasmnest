@@ -17,16 +17,18 @@
          样式全失效故障。机制与结构锁见 public/splash.css 头注与
          src-tauri/tests/capabilities_lock.rs。 -->
     <link rel="stylesheet" href="/splash.css" />
-    <script type="module" crossorigin src="/assets/index-BhAmDb-a.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-6VmvdXj3.css">
+    <script type="module" crossorigin src="/assets/index-CBVN5gvJ.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CX3e-PcH.css">
   </head>
   <body class="bg-dark-900 text-dark-100">
     <div id="app">
       <!--
         静态首屏：Vue 挂载前（含 SplashLoading 之前）的过渡帧，随 #app 内容一起被替换掉。
-        样式在 public/splash.css（外链；勿内联，原因见 head 注释）。
+        只铺与品牌开屏首帧同色的底，**不画任何加载指示器**（2026-11-13 用户裁决：
+        不再先闪一个转圈页再进设计开屏）。样式在 public/splash.css（外链；勿内联，
+        原因见 head 注释）。
       -->
-      <div class="splash"><div class="spinner"></div></div>
+      <div class="splash"></div>
     </div>
     <!-- 宿主前端整体下沉 bedcode wasm-app（D2）：入口指向 app 前端 bootstrap；
          2026-10-17 壳恢复后 bootstrap 挂载壳根（ShellHost：主屏 + 系统页 + 应用面分流） -->

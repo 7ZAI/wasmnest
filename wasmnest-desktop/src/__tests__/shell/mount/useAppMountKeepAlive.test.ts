@@ -35,11 +35,14 @@ vi.mock('@/utils/invoke', () => ({
 
 import {
   MOUNT_CONTRACT,
+  appViewportAspect,
+  attachAppSurface,
   detachAppBundle,
   disposeAppBundle,
   listAppSurfaces,
   mountAppBundle,
 } from '@/shell/mount/useAppMount'
+import { appSurfaces } from '@/shell/mount/appSurfaceRegistry'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -85,6 +88,12 @@ function mountEnv(appId: string): AppMountEnv {
 /** 某个命令被调用了几次（invoke 的 mock 参数是 [command, args]） */
 function invokeCount(command: string): number {
   return asset.invoke.mock.calls.filter((call) => call[0] === command).length
+}
+
+/** jsdom 不做布局：给元素伪造布局尺寸（只读 getter，模拟真实实测值） */
+function fakeSize(el: HTMLElement, width: number, height: number): void {
+  Object.defineProperty(el, 'clientWidth', { configurable: true, get: () => width })
+  Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => height })
 }
 
 /** 已入文档的挂载槽（`app-instance-host` 的归属断言需要真实父链） */
@@ -182,5 +191,58 @@ describe('表面保活：首次建实例、切走保留、停用销毁', () => {
     expect(handleB).toBe(handleA)
     expect(invokeCount('plugin_surface_open'), '界面租约只 acquire 一次').toBe(1)
     expect(document.querySelectorAll('.app-instance-host'), '不得留下孤儿容器').toHaveLength(1)
+  })
+})
+
+describe('应用区比例（多任务卡片形状的来源）', () => {
+  it('取保活实例实测尺寸；一个都没量到 → 0（调用方回默认 16:10）', () => {
+    expect(appViewportAspect(), '没有实例时不得瞎猜比例').toBe(0)
+
+    const slot = createSlot()
+    const host = document.createElement('div')
+    host.className = 'app-instance-host'
+    fakeSize(slot, 1440, 900)
+    fakeSize(host, 1440, 900)
+    appSurfaces.register('com.wasmnest.lifecycle.aspect', host, { unmount: async () => {} })
+    appSurfaces.attach('com.wasmnest.lifecycle.aspect', slot)
+
+    expect(appViewportAspect()).toBeCloseTo(1440 / 900, 5)
+  })
+
+  it('尺寸还没量到的实例被跳过（不影响其它实例的比例）', () => {
+    const slot = createSlot()
+    fakeSize(slot, 1280, 800)
+
+    // 未量到：容器在文档外（clientWidth = 0）
+    appSurfaces.register('com.wasmnest.lifecycle.zero', document.createElement('div'), {
+      unmount: async () => {},
+    })
+    // 量到：挂进布局槽后实测
+    const host = document.createElement('div')
+    host.className = 'app-instance-host'
+    fakeSize(host, 1280, 800)
+    appSurfaces.register('com.wasmnest.lifecycle.good', host, { unmount: async () => {} })
+    appSurfaces.attach('com.wasmnest.lifecycle.good', slot)
+
+    expect(appViewportAspect()).toBeCloseTo(1.6, 5)
+  })
+
+  it('取挂载槽的实时尺寸：后台实例的旧尺寸不得决定卡片形状', () => {
+    const slot = createSlot()
+    fakeSize(slot, 1280, 800)
+
+    // 后台实例先注册：尺寸是切走那一刻的旧值（窗口 / 字号变过 → 与当前应用区不一致）
+    const bg = document.createElement('div')
+    appSurfaces.register('com.wasmnest.lifecycle.bg', bg, { unmount: async () => {} })
+    appSurfaces.get('com.wasmnest.lifecycle.bg')!.size = { width: 1280, height: 432 }
+
+    // 前台实例：经公开 attach 挂进槽 → 槽尺寸被记为当前应用区真值（1.6）
+    const fg = document.createElement('div')
+    fg.className = 'app-instance-host'
+    appSurfaces.register('com.wasmnest.lifecycle.fg', fg, { unmount: async () => {} })
+    attachAppSurface(slot, 'com.wasmnest.lifecycle.fg')
+
+    // 若按注册顺序 / 实例缓存取第一个，会拿到 1280/432 ≈ 2.96，整批卡片被解算成扁卡
+    expect(appViewportAspect()).toBeCloseTo(1.6, 5)
   })
 })

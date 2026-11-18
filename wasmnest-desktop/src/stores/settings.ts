@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { logger } from '@/utils/frontendLogger'
 import { ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { ensureHostCredential } from '@/utils/appCommands'
 
 /**
  * 宿主前端设置视图（AppConfig 的子集）
@@ -91,7 +92,12 @@ export const useSettingsStore = defineStore('settings', () => {
     try {
       const merged = { ...settings.value, ...newSettings }
       const mySeq = ++saveSeq
-      await invoke('save_app_settings', { settings: merged })
+      // 宿主面凭证（ADR 0058 方案 A）：全局设置写入口只认宿主前端，
+      // 应用前端同 webview 不带凭证即被拒（安全审查 #45/#48）
+      await invoke('save_app_settings', {
+        settings: merged,
+        credential: await ensureHostCredential(),
+      })
       // 期间已有更新的保存请求：回写会覆盖更新值，丢弃本次回写
       if (mySeq !== saveSeq) return
       settings.value = merged

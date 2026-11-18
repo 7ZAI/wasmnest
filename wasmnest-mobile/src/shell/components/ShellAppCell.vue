@@ -1,7 +1,7 @@
 <template>
   <button
     type="button"
-    class="flex flex-col items-center gap-2 py-2 rounded-[12px] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)] active:opacity-70"
+    class="flex flex-col items-center gap-2 py-2 rounded-[12px] transition-[transform,background-color] duration-200 active:scale-[0.96] active:bg-[var(--mobile-accent-muted)]"
     :aria-label="label"
     @click="$emit('open', app.id)"
   >
@@ -11,7 +11,7 @@
            待审批用「!」而不是小圆点：它需要用户动作，不是纯状态读数 -->
       <span
         v-if="app.state === 'approval'"
-        class="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold leading-none"
+        class="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full text-[11px] font-semibold leading-none"
         :style="{ background: 'var(--mobile-warning)', color: 'var(--mobile-text-on-accent)' }"
         aria-hidden="true"
       >

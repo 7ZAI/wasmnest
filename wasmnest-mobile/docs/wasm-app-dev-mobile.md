@@ -114,7 +114,7 @@ cd wasmnest-mobile && pnpm run plugins:build -- --plugin com.wasmnest.bedcode
 
 ### 创建纯前端插件
 
-默认模板为 wasm（前端 + WASM 后端）；`--ts-only` 生成纯前端插件（无 `rust/` 目录，`pluginType: ts-only`）：
+默认模板为 full（前端 + WASM 后端，移动端原 `wasm` 形态的归属）；`--ts-only` 生成纯前端插件（无 `rust/` 目录，`pluginType: frontend`）：
 
 ```bash
 wasmnest-plugin create com.example.ui-only "UI Only" --ts-only
@@ -140,7 +140,7 @@ wasmnest-plugin create com.example.ui-only "UI Only" --ts-only
   "description": "",
   "author": "you",
   "main": "index.js",
-  "pluginType": "wasm",
+  "pluginType": "full",
   "rustLibrary": "wasmnest_plugin_my_plugin",
   "permissions": ["storage"],
   "contributes": {}
@@ -153,7 +153,7 @@ wasmnest-plugin create com.example.ui-only "UI Only" --ts-only
 | `name` / `version` | ✅ | 展示名 / 版本 |
 | `platform` | ✅ | 适配平台，三值：`desktop`（仅桌面）/ `mobile`（仅移动）/ `both`（双端适配）。按工程所在端取值（移动工程写 `mobile`）；宿主加载 / zip 安装时按本端校验，移动拒 `desktop`，不匹配即显性拒绝 |
 | `main` | ✅ | 前端入口（产物文件名，通常 `index.js`） |
-| `pluginType` | ✅ | 产物形态，四值（真源 `packages/plugin-sdk-mobile/rust/src/types.rs::PluginType`）：`wasm`（前端 + WASM 后端，内置应用一律用它）/ `rust-ts` / `rust` / `ts-only`（纯前端） |
+| `pluginType` | ✅ | 产物形态三档（语言无关，2026-10-26 重定义；真源 `packages/plugin-sdk-mobile/rust/src/types.rs::PluginType`）：`frontend`（纯前端）/ `backend`（纯后端 worker）/ `full`（前端 + wasm 后端，内置应用一律用它）——旧值 wasm / rust-ts / rust / ts-only 已退役 |
 | `rustLibrary` | wasm 必填 | Rust crate 名（与 `Cargo.toml` 一致） |
 | `icon` | | 列表图标（SVG path 字符串或图标文件路径） |
 | `permissions` | | 权限声明，`storage` 默认授予且不可关闭（`src/shell/permissions.ts::SHELL_LOCKED_PERMISSIONS`） |
@@ -200,11 +200,11 @@ wasmnest-plugin create com.example.ui-only "UI Only" --ts-only
 | 子 API | 说明 |
 |---|---|
 | `context.ui` | 注册工具箱页 / navTab / 终端工具栏项 / 设置区 / 插件路由（registerRoute / openPage / goBack / onBackPressed） |
-| `context.commands` | 调用宿主命令（前端 handler 优先，未注册时回退 WASM 后端） |
+| `context.commands` | 调用宿主命令（前端 handler 优先，未注册时回退 WASM 后端）。失败抛出的 `Error.message` 已是可展示的友好文案（ADR 0030 `errors.<code>`），信封 `code/request_id/params` 挂在 Error 字段上供应用侧继续映射；**不要把 `err.message` 再交给 `context.i18n.t()` 当 key**，也无需自己拼接后端原文 |
 | `context.events` | 事件订阅与发射 |
 | `context.storage` | 插件键值存储（宿主 SQLite，dev-shell 中为 localStorage） |
 | `context.fileService` | 文件服务挂载（mount / updateRoots / dispose）与授权弹窗 |
-| `context.i18n` | 国际化（`registerMessages` / `t` 自动加插件 ID 前缀） |
+| `context.i18n` | 国际化（`registerMessages` / `t` 对已注册短 key 自动加插件 ID 前缀；未注册或传入错误正文时原样返回，不再回显前缀化 key） |
 | `context.logger` | 日志（转发宿主 tracing） |
 | `context.dialogs` | 弹窗 |
 | `context.notifications` | 系统通知 |
@@ -222,6 +222,39 @@ wasmnest-plugin create com.example.ui-only "UI Only" --ts-only
 | `getVue()` / `getVueI18n()` / `getPinia()` / `getRouter()` | 宿主实例 | 复用宿主 Vue / i18n / Pinia / Router（响应式共享） |
 | `getPresetTasks()` | `{ usePresetTasks }` | 宿主预设任务 composable |
 | `getMobileApi()` | `MobileHostApi` | 宿主连接/HTTP 能力：`activeSessionId`（响应式 ref）+ AutoTask 队列接口（`httpTaskQueue*`、`httpSessionSettings`、`httpSetSessionMode`、`httpCurrentTask`），对端桌面端 REST API |
+
+### 首页快捷卡片（QuickCard + registerSlot）
+
+宿主壳首页的快捷卡片 = **SDK 公共外观 + 应用内容 + 宿主跳转**：
+
+1. 用 SDK 公共卡片 `@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card` 写内容组件
+   （`label` / `value` / `hint` / `tone` / `iconPath`，复杂内容用默认插槽）；
+2. `activate` 期 `context.ui.registerSlot({ id, component, order })` 注册，返回值随停用回收；
+3. 宿主壳按注册顺序最多展示 5 张，多张时自动轮播（触摸 / 键盘聚焦 / 切后台 /
+   系统「减少动效」时停走，标题行有暂停 / 播放控件）；点击整张卡会启动并打开本应用。
+
+**直达应用内位置**：`registerSlot` 可带 `onPress()`，在**点击时刻**现算一个入口意图
+（`{ key, payload }`，key / payload 全归应用，宿主不解释），宿主启动并打开应用后把意图
+原样投递给运行面；运行面在 `onMounted` 里 `context.ui.onSurfaceIntent(handler)` 订阅。
+订阅前到达的意图由宿主排队补投（运行面晚于点击创建也不丢），应用停用 / 卸载时清空。
+bedcode 的「活跃会话」卡就是这样直达「最近活跃的存活会话」终端（key = `open-session`）。
+
+```ts
+// activate 期（卡片侧）
+context.ui.registerSlot({
+  id: 'host-sessions',
+  component: SlotCard,
+  onPress: () => ({ key: 'open-session', payload: { sessionId: latestId } }),
+})
+
+// 运行面（应用根组件）
+const sub = context.ui.onSurfaceIntent((intent) => {
+  if (intent.key === 'open-session') openSession(intent.payload)
+})
+```
+
+卡片内不要放按钮 / 链接：整张卡已经是宿主的按钮（嵌套交互会抢点击）；导航由
+`onPress()` + `onSurfaceIntent` 这条通道表达，卡片组件本身不做交互。
 
 ### 自渲染浮层（createApp 模式）
 
@@ -248,10 +281,12 @@ app.mount(container)
 ## 8. WASM 后端（rust）
 
 插件后端编译为 **WASM 组件（Component Model）**，契约真源在
-`../wasmnest-lib/wasmnest-wasm-core/wit/core.wit`（机制必需面，8 import + 4 export）+ 能力域
-`../wasmnest-lib/wasmnest-*/wit/<domain>.wit` + 端 `rust/wit-src/cap-mobile.wit`；端生成物
+`../wasmnest-lib/wasmnest-wasm-core/wit/core.wit`（机制必需面，10 import + 3 export）+ 能力域
+`../wasmnest-lib/wasmnest-*/wit/<domain>.wit` + 端 `rust/wit-src/cap-*.wit`（每域一文件）/ `plugin-face.wit`；端生成物
 `packages/plugin-sdk-mobile/rust/wit/wasmnest.wit` 由 `compose.json` 驱动
-`scripts/compose-wit.mjs` 拼装（`world plugin` = `include` core + 6 个 cap），
+`scripts/compose-wit.mjs` 拼装（`world plugin` = `include` core + `plugin-face` + 10 个能力域包：
+`mdns` / `peer` / `http` / `ws` / `notify` / `notify-mobile` / `fs-mobile` / `terminal-stream` /
+`connection-target` / `auth-client`，均 `@0.0.1`），
 **禁止手改生成物**（漂移锁：平台仓根 `pnpm run check:wit` + husky pre-commit）。
 `rust/src/lib.rs` 实现 `WasmPlugin` trait 后以 `wasm_entry!` 宏生成组件导出
 （manifest / activate / deactivate / invoke_command / 生命周期钩子 / 事件 / 上传与传输钩子）；
@@ -260,9 +295,11 @@ app.mount(container)
 
 **版本与形态模型**（整数 ABI 已退役，ADR 0051 D2）：
 
-- **包版本** = WIT package semver `wasmnest:plugin@0.0.1`，真源能力仓
-  `../wasmnest-lib/wasmnest-contract/src/lib.rs::PACKAGE_VERSION`；compose.json 只声明包名，
-  源文件 package 行由 `compose-wit.mjs` 注入，`wit_package_version_lock.rs` 钉一致。
+- **包版本** = WIT package semver（拆包后按包独立版本化，ADR 0061）；`wasmnest:plugin@0.1.0`
+  的版本真源是能力仓 `../wasmnest-lib/wasmnest-contract/src/lib.rs::PACKAGE_VERSION`，
+  其余能力域包各自持 `@0.0.1`（真源 = 分片 `.wit` 的 package 行 + 同 crate 的 `WIT_PACKAGE` 常量）。
+  compose.json 只声明包名，生成物 `wasmnest.wit` 的 package 行由 `compose-wit.mjs` 注入；
+  双端锁钉一致（桌面 `wit_package_version_lock.rs` / 移动 `mobile_wit_composition_lock.rs`）。
 - **组件形态**经 `AbiPolicy` 只管 `abi-form`：桌面要求 `form = 1`，移动端 `None`
   （移动 WIT 无 `abi-form` 导出，不要求）——`compose.json` 里的 `abi.version`
   （桌面 38 / 移动 21）仅作重建提示的参考号，不再由 wasm-core 强制校验。
@@ -277,10 +314,10 @@ wasm 构建开启 `--features wasm`（`wasm_entry!` / `WasmHost` / `WasmPlugin` 
 
 | 项 | 桌面端 | 移动端 | 说明 |
 |----|--------|--------|------|
-| 宿主导入接口 | 26 组 | 18 组 | 真源 = 两端 `rust/wit/` 生成物（`grep 'interface host-'` 即得） |
-| 插件导出接口 | 4 组 | 4 组 | `command` / `lifecycle` / `events-binary` / `manifest`，均住 `core.wit` |
-| 核心机制面 | 8 import | 8 import | `host-storage` / `host-plugin-database` / `host-log` / `host-config` / `host-events` / `host-bus` / `host-fs` / `host-platform`（ADR 0052 D1） |
-| 桌面独有 | `host-pty` / `host-process` / `host-task` / `host-api-call` / `host-app` / `host-crypto` / `host-auth-center` / `host-connection-registry` / `host-timer` / `host-websocket`（客户端域） / `host-websocket-server` / `host-http-endpoint` / `host-fs-desktop` / `host-platform-desktop` | — | 端扩展的声明与实现均住桌面宿主（ADR 0052 D4） |
+| 宿主导入接口 | 29 组 | 20 组 | 真源 = 两端 `rust/wit/` 生成物（`grep 'interface host-'` 即得） |
+| 插件导出接口 | 5 组 | 4 组 | `core.wit` 的 `command` / `lifecycle` / `manifest` + `plugin-face.wit` 的 `events`（桌面另有 `abi-form`） |
+| 核心机制面 | 10 import | 10 import | `host-storage` / `host-plugin-database` / `host-log` / `host-config` / `host-events` / `host-bus` / `host-fs` / `host-platform` / `host-metrics` / `host-worker`（ADR 0052 D1） |
+| 桌面独有 | `host-pty` / `host-clipboard` / `host-process` / `host-task` / `host-api-call` / `host-app` / `host-crypto` / `host-auth-center` / `host-connection-registry` / `host-timer` / `host-websocket-server` / `host-http-endpoint` / `host-fs-desktop` / `host-platform-desktop` | — | 端扩展的声明与实现均住桌面宿主（ADR 0052 D4） |
 | 移动独有 | — | `host-terminal-stream` / `host-fs-mobile` / `host-notify-mobile` / `host-auth-client` / `host-connection-target` | 端独有域整面落移动宿主 |
 | 通知 | `host-notify`（共享契约房） | `host-notify` + `host-notify-mobile`（4 函数） | 2026-10-13 通知功能级统一；移动端附加震动 / 声音 / 权限查询面 |
 | 认证 | `host-auth-center`（v32 四函数 + 组合式原语） | `host-auth-client` | 入场签发密钥与生物公钥托管均归认证中心自持（ADR 0031 / 0033） |
@@ -368,6 +405,6 @@ SAF 选择器、系统通知）仍需真机验证。首次运行自动安装 dev
 | 宿主壳（平台机制） | `wasmnest-mobile/src/shell/`（运行面挂载 / 权限总览与审批 / 通知栏 / 设置）——壳内不落业务页面（ADR 0046） |
 | Kotlin 解压桥 | `wasmnest-mobile/src-tauri/gen/android/.../PluginAssetExtractor.kt` |
 | 机制整核与能力域 crate | 能力仓 `../wasmnest-lib/wasmnest-wasm-core` 与 `../wasmnest-lib/wasmnest-*` |
-| WIT 契约真源 | `../wasmnest-lib/wasmnest-wasm-core/wit/core.wit` + 能力域 `../wasmnest-lib/wasmnest-*/wit/<domain>.wit` + 端 `rust/wit-src/cap-mobile.wit`；改契约后跑 `pnpm run check:wit`（平台仓根） |
+| WIT 契约真源 | `../wasmnest-lib/wasmnest-wasm-core/wit/core.wit` + 能力域 `../wasmnest-lib/wasmnest-*/wit/<domain>.wit` + 端 `rust/wit-src/cap-*.wit` / `plugin-face.wit`；改契约后跑 `pnpm run check:wit`（平台仓根） |
 | 开发约束清单 | [`../../docs/knowledge/wasm-app-development-checklist.md`](../../docs/knowledge/wasm-app-development-checklist.md)（权限 / 存储 / 事件 / 认证中心 / HTTP 面等红线） |
 | 桌面端指南 | [`../../wasmnest-desktop/docs/wasm-app-dev-desktop.md`](../../wasmnest-desktop/docs/wasm-app-dev-desktop.md) |

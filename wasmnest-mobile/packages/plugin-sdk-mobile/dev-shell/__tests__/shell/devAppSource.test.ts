@@ -138,9 +138,9 @@ describe('数据源行为', () => {
     expect(list.map((a) => a.id)).toEqual([a1.id, a2.id])
   })
 
-  it('should_refusePerPermissionGrant', async () => {
-    // 预览环境没有可写的权限真源；返回 true 会让开发者误以为权限逻辑已验证
-    await expect(source.setPermissionGrant?.('a1', 'fs:read', true)).resolves.toBe(false)
+  it('should_notAdvertisePerPermissionGrant', () => {
+    // 预览环境没有可写的权限真源：能力本身不成立，详情页只读呈现
+    expect(source.setPermissionGrant).toBeUndefined()
   })
 
   it('should_resolveRegisteredSurface', () => {

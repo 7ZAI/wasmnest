@@ -26,7 +26,7 @@ const BASE_MANIFEST = JSON.stringify(
     author: 'me',
     main: 'index.js',
     sandbox: 'inline',
-    pluginType: 'rust-ts',
+    pluginType: 'full',
     rustLibrary: 'test_plugin',
     permissions: [],
     contributes: {},

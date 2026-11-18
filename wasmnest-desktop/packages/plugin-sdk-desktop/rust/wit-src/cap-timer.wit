@@ -1,0 +1,14 @@
+package wasmnest:timer@0.0.1;
+
+// 桌面端能力域分片（WIT 按包拆分，ADR 0061）：一个能力域 = 一个独立包，
+// 版本独立演进——本包 WIT 变更只 bump 本包，不波及未 import 它的应用。
+// 端 `plugin` world 经 `include wasmnest:timer/cap-timer@0.0.1;` 并入本接口。
+
+/// 宿主周期定时器（原 timer.rs：timer_register，ABI v6）
+interface host-timer {
+    register: func(interval-secs: u64, command: string) -> result<_, string>;
+}
+
+world cap-timer {
+    import host-timer;
+}

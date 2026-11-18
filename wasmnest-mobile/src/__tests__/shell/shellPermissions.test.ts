@@ -7,7 +7,6 @@ import { describe, it, expect } from 'vitest'
 import {
   groupPermissions,
   isLockedPermission,
-  permissionDescKey,
   permissionTitleKey,
   SHELL_PERMISSION_GROUPS,
 } from '@/shell/permissions'
@@ -20,25 +19,22 @@ function grant(key: string, granted = true): ShellPermissionGrant {
 describe('权限文案映射', () => {
   it('should_mapToExistingI18nKey_when_permissionKnown', () => {
     expect(permissionTitleKey('terminal:output')).toBe('mobile.plugin.perm.terminalOutput.title')
-    expect(permissionDescKey('fs:write')).toBe('mobile.plugin.perm.fsWrite.desc')
+    expect(permissionTitleKey('fs:write')).toBe('mobile.plugin.perm.fsWrite.title')
   })
 
   it('should_mapMetricsRead_when_permissionAdded', () => {
-    // metrics:read 是全局只读指标位：标题 + 侧信道说明都必须可见，不能裸显英文 code
+    // metrics:read 是全局只读指标位：标题必须可见，不能裸显英文 code
     expect(permissionTitleKey('metrics:read')).toBe('mobile.plugin.perm.metricsRead.title')
-    expect(permissionDescKey('metrics:read')).toBe('mobile.plugin.perm.metricsRead.desc')
   })
 
   it('should_notMapRetiredTerminalInput_when_permissionRetired', () => {
     // 票 15 阶段 B：terminal:input 权限位整面退役，文案映射一并移除
     expect(permissionTitleKey('terminal:input')).toBeUndefined()
-    expect(permissionDescKey('terminal:input')).toBeUndefined()
   })
 
   it('should_returnUndefined_when_permissionUnknown', () => {
     // 未知权限返回 undefined，由 UI 回退原始权限词——回退成空白会让新权限凭空消失
     expect(permissionTitleKey('does:not:exist')).toBeUndefined()
-    expect(permissionDescKey('does:not:exist')).toBeUndefined()
   })
 })
 
@@ -119,11 +115,11 @@ describe('权限分组', () => {
     )
   })
 
-  it('should_resolveLocalizedTitleAndDesc_when_permissionIsInVocabulary', () => {
+  it('should_resolveLocalizedTitle_when_permissionIsInVocabulary', () => {
     // 守卫：归了组但没接文案，界面会裸显英文 code（auth / mdns / ws:client 混排中文）。
-    // 每个已归类权限词都必须能取到 title/desc 的 i18n key。
+    // 每个已归类权限词都必须能取到 title 的 i18n key。
     const missing = SHELL_PERMISSION_GROUPS.flatMap((g) => g.keys).filter(
-      (key) => !permissionTitleKey(key) || !permissionDescKey(key),
+      (key) => !permissionTitleKey(key),
     )
     expect(missing).toEqual([])
   })

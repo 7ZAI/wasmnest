@@ -1,6 +1,6 @@
 # 前端规范（宿主壳 / SDK UI / 挂载包前端面）
 
-> **本文件是 `AGENTS.md` 的拆分文档（前端规范）**：零资源访问红线、三层封锁、移动宿主壳优先、挂载包 / 运行面前端形态、注释命名与 i18n、UI 设计强制前置技能。
+> **本文件是 `AGENTS.md` 的拆分文档（前端规范）**：零资源访问红线、三层封锁、移动宿主壳优先、挂载包 / 运行面前端形态、注释命名与 i18n、UI 设计与动效强制前置技能。
 > 本文件与 `AGENTS.md` 的硬约束（「必须 / 禁止」字样）**同级别**；静态锁真源 = 根 `eslint.config.js` + 各端 `src/__tests__/**` 锁测试 + 双端 `src-tauri/tests/capabilities_lock.rs`。
 
 ## 1. 零资源访问红线（前端只做 UI）
@@ -8,6 +8,24 @@
 - 前端**禁止** `fetch` / `XMLHttpRequest` / `WebSocket` / `EventSource` / `navigator.sendBeacon`，禁止 `window.open` / `location.href=` 等导航原语，禁止裸 `__TAURI__`，禁止 import `@tauri-apps/plugin-{http,fs,shell,updater,opener}`。
 - 一切 HTTP / WS / 文件访问由 Rust 端发起并经权限仲裁：走 `invoke(...)` → 宿主命令 / `appInvoke(...)` → 插件命令面。允许 `convertFileSrc`（既定产物 / 图标加载路径）与 `invoke` / `listen`。
 - **三层封锁**：① 源码 ESLint 静态锁（根 `eslint.config.js`）② Tauri ACL 运行期拒（ACL 未写即拒）③ CSP 引擎级封（`connect-src 'none'`；`index.html` 不得内联 `<style>` / `<script>`，nonce 会令 `'unsafe-inline'` 失效——锁在 `src-tauri/tests/capabilities_lock.rs`）。**ACL 与 CSP 两层无豁免机制**：要开就改锁并写清理由。
+
+### 1.1 能力位 ↔ wasm 权限位对照表（安全审查 #47，2026-11-02）
+
+两套账的根源：用户在应用详情页看到 / 撤销的是 **wasm 权限位**（`PermissionManager`，guest host fn 入口仲裁），而 **Tauri 能力位**（ACL）是 webview 级、对同 webview 的所有应用前端一起生效。语义重叠的能力位因此等于「绕过权限位」。
+
+裁决真源 = `src-tauri/tests/capabilities_lock.rs` 的 `WASM_EQUIVALENT_PERMISSION_DECISIONS`（新增条目不写进该表则锁红）：
+
+| 能力位 | 重叠的 wasm 权限位 | 现状 | 收敛入口 |
+| --- | --- | --- | --- |
+| `dialog:allow-open`（桌面） | `fs:pick` | 保留：`bedcode` 桌面前端的目录选择器直接调 `@tauri-apps/plugin-dialog` | 应用改走宿主 `plugin.platform_picker`（wasm 侧已端口化）后撤除 |
+| `dialog:default`（移动） | `fs:pick` | 保留：宿主壳设置页 `confirm` + 插件安装对话框 | 逐步收窄到具体 `allow-*` |
+| `notification:default`（桌面） | `notify` | 保留：`file-transfer` 前端的本机进度提示 | 应用改走共享域契约 `host-notify`（已双端门禁） |
+| `task-notification:default`（移动） | `notify` | 保留：宿主壳连接 / 任务状态通知（Kotlin 插件命令） | 宿主命令封装（发起权归 Rust）+ 应用面走 `host-notify` |
+| `foreground-service:default`（移动） | 无 | 保留：宿主连接保活（宿主机制，应用无消费者） | 正向白名单固定命令面 |
+| `os:allow-{platform,arch,version,os-type}` | 无（平台信息面） | 保留：`usePlatform` 唯一入口（双端同形） | 已从 `os:default` 收窄到四条；主机名 / locale 不开 |
+| `process:allow-restart` | 无（进程面） | 保留：设置页「检查更新 → 安装后重启」（`relaunch()`） | 已从 `process:default` 收窄到单条；`exit` / `spawn` 不开 |
+
+配套口径：`machine-uid` 移动端为 **Rust 侧**调用（`app.machine_uid()`），不需要 ACL，已从 `mobile.json` 移除（前端拿到硬件指纹 = 跨应用关联面）。
 - 唯一豁免路径：ESLint 层逐行 `eslint-disable-next-line` 并注明理由（豁免随 code review 可见，不静默放行）。
 - 错误处理：统一 `logger`（真源 `src/utils/frontendLogger.ts`，双端头注释写明 release 落盘差异——**桌面 release 侧 error/warn 仍转发落盘、移动 release 侧整体空实现，勿强行统一**）；禁止静默 `catch`；IPC 调用统一走 `src/utils/invoke.ts`（带超时，失败承载为 ADR 0030 错误信封）；用户可见文案一律走 i18n。
 - 禁止用 viewport 宽度 / UA 字符串推断平台；平台判断统一走 Tauri API / `usePlatform`。
@@ -16,10 +34,11 @@
 
 - 桌面 app 前端：`build.lib` 单文件 `index.js`、CSS inline、**无 externals**（宿主锁禁止 `__WASMNEST_SHARED__`）；各 app 自持 tailwind 配置，类名自编译（宿主 Tailwind 不再扫 app，`tailwindContentCoverage` 锁钉住）。
 - 移动 app 前端：经 SDK `wasmnestPlugin()` 构建（共享 vue / vue-i18n / pinia 外置宿主全局 `__WASMNEST_SHARED__`，经 SDK 代理访问，插件不直接操作全局），入口 `src/index.ts` 导出 `activate(context)` / `deactivate()`；贡献面收拢为运行面 + 少量注册点，退役方法调用即显性报错（fail-visible）。
-- **桌面 app 入口契约（`src/entry.ts`）**：导出 `mountApp(root, env): Promise<AppMountHandle>`；**可选**导出 `mountPreview(root, env): Promise<AppPreviewHandle>`（多任务卡片缩略区的应用自绘只读预览面；缺失 = 不支持预览，宿主回退品牌卡）。`hostAppBoundaryLock` 逐字校验 `mountApp` 契约，**L5** 校验 `mountPreview` 契约（五个内置桌面 app 必须导出；第三方面向契约仍可选）。预览环境是**收窄面**：仅 `appId` / `lastRoute` / `appInvoke` / `appStorageGet` / `locale` / `theme` / `platform`——无宿主 `invoke`、无写 / 删存储、无事件出口；应用侧禁止在预览路径调 `refreshChannelToken`（会作废主实例正在用的令牌），预览 DOM 不得含可聚焦控件、不得启后台轮询 / 全局监听、不得挂主 `App.vue` / 主 router / 主 pinia。入口不是 lib 形态的 `activate(context)`；`src/index.ts` 若存在只作 dev-shell 兼容出口。
+- **桌面 app 入口契约（`src/entry.ts`）**：导出 `mountApp(root, env): Promise<AppMountHandle>`；`hostAppBoundaryLock` 逐字校验该契约（五个内置桌面 app 的清单在 `APP_ENTRIES`，新增 / 改名必须同步）。应用自绘的多任务预览面（`mountPreview` / `AppPreviewEnv` / `AppPreviewHandle`）随 2026-10-30「卡片 = 真实实例」裁决退役——卡片直接展示保活实例（宿主搬运 + 等比缩放），应用侧无需再实现预览导出。入口不是 lib 形态的 `activate(context)`；`src/index.ts` 若存在只作 dev-shell 兼容出口。
 - 双端 app 均**自足 i18n**；移动端样式经 `?inline` 注入（宿主不加载插件 CSS）。
-- **表面保活（双端同一口径，2026-10-23；移动承载 2026-10-24 升级）**：应用只要没被停用，切走就只是「藏起来」——前端 DOM / 组件实例 / 滚动 / 表单 / 内存路由原样保留，**禁止**在切走路径上卸载实例（双端同为 `detach` 不 `dispose`）。停用 / 卸载才是唯一销毁点（桌面 `ShellHost` 运行态 disposer；移动 `useShellApps.stop` / `removeApp` 显式「先 dispose UI 再拆插件上下文」+ refresh 兜底对账）。移动承载 = 每应用一个**独立 Vue 应用**（`surfaceAppRegistry` 容器注册表 + `ShellAppSurface` 适配器 attach/detach + `ShellHost` 对账；壳卸载只 detach）。多实例解决的是应用上下文与错误边界（每实例独立 `errorHandler` 带 appId），**不是** CSS / DOM / window / IPC 隔离（同 webview 同信任域，ADR 0058）。后台**不渲染**（容器脱文档），不做后台动画 / 活体缩略图。前后台契约：桌面 `AppMountHandle.setActive?(active)`、移动运行面内 `inject(SURFACE_ACTIVE_KEY)`（注册表按 attach/detach 推动，应用可据此暂停后台轮询，不实现零影响）。spec：`.scratch/2026-10-24-mobile-app-surface-vue-instances/spec.md`。
+- **表面保活（双端同一口径，2026-10-23；移动承载 2026-10-24 升级）**：应用只要没被停用，切走就只是「藏起来」——前端 DOM / 组件实例 / 滚动 / 表单 / 内存路由原样保留，**禁止**在切走路径上卸载实例（双端同为 `detach` 不 `dispose`）。停用 / 卸载才是唯一销毁点（桌面 `ShellHost` 运行态 disposer；移动 `useShellApps.stop` / `removeApp` 显式「先 dispose UI 再拆插件上下文」+ refresh 兜底对账）。移动承载 = 每应用一个**独立 Vue 应用**（`surfaceAppRegistry` 容器注册表 + `ShellAppSurface` 适配器 attach/detach + `ShellHost` 对账；壳卸载只 detach）。多实例解决的是应用上下文与错误边界（每实例独立 `errorHandler` 带 appId），**不是** CSS / DOM / window / IPC 隔离（同 webview 同信任域，ADR 0058）。后台**不渲染**（容器脱文档），不做后台动画 / 活体缩略图；唯一例外 = 多任务层打开期间实例被搬进卡片展示真实页面（桌面 `AppSurfaceTile` / 移动 `ShellSurfaceTile`，按整幅尺寸等比缩放；桌面缩略区 **contain 等比缩小到整幅可见**且**卡片形状跟应用区比例**（缩略区宽高比 = 应用区实测宽高比，卡高 = 缩略区高 + 信息条；2026-11-04 用户裁决取代 11-01 的「竖版 3:4 + cover 铺满」，竖卡配横版页面必然剩大片空白；卡片单张封顶 = 两张卡的格宽），移动同为 contain 留边；未运行 / 实例缺失卡回退品牌卡；层收起即回后台）。前后台契约：桌面 `AppMountHandle.setActive?(active)`、移动运行面内 `inject(SURFACE_ACTIVE_KEY)`（注册表按 attach/detach 推动，应用可据此暂停后台轮询，不实现零影响）。spec：`.scratch/2026-10-24-mobile-app-surface-vue-instances/spec.md`。
 - **服务型应用不进多任务（双端同一口径，2026-10-23）**：`isServiceKind`（`basic-service` / `internal-business`）的应用不产多任务卡——桌面服务面不入 `cards`（`enterServiceFace`）+ 右键菜单隐藏「停用」；移动 `ShellSwitcherScreen` 运行中与最近使用两个来源都过滤。关闭唯一入口 = 应用管理页（桌面）/ 应用详情页（移动）的「停用」。
+- **移动首页快捷卡片（2026-10-30）**：卡片 = SDK 公共外观（`packages/plugin-sdk-mobile/src/ui/QuickCard.vue`）+ 应用内容 + 宿主跳转。应用经 `registerSlot` 只登记内容组件；宿主把整张卡包成按钮（点击 = 启动并打开该应用），因此卡片内禁止再放按钮 / 链接。**直达应用内位置（2026-11-11）**：卡片可选 `onPress()` 在点击时刻给出应用自定义入口意图（key / payload 对宿主不透明），宿主打开应用后原样投递给运行面（`context.ui.onSurfaceIntent`，订阅前排队补投，停用 / 卸载清空）——bedcode「活跃会话」卡由此直达最近活跃会话终端。宿主按注册顺序最多展示 5 张（`src/shell/slotCards.ts`），多张时自动轮播（`useSlotCarousel`：触摸 / 键盘聚焦 / 切后台 / reduced motion 停走，标题行提供暂停 / 播放控件）。
 - 壳标题栏常驻：所有 app 页面共用壳标题栏，应用只占其下区域（`appChromeLock` 钉住；应用不得自绘标题栏 / 窗口控制 / 拖拽区）。
 
 ## 3. 移动宿主壳优先（强制）
@@ -29,9 +48,9 @@
 - **业务不落壳**：终端 / 文件 / 会话 / 设备 / AI 等业务页面归各 wasm 应用（`registerSurface` / `registerSlot`）；壳只提供挂载、生命周期与权限闸门。壳自持三类：运行面挂载与生命周期、平台机制与安全闸门、宿主公共组件。
 - 迁移面不许缩水：壳内复制面文件清单被锁正面钉住（`shellConstraintLocks`），新增复制件同步登记锁内清单。
 
-## 4. UI 设计强制前置技能（开发与审核均必须使用）
+## 4. UI 设计与动效强制前置技能（开发与审核均必须使用）
 
-> **规则**：任何前端 UI 相关元素的**开发与审核**（宿主壳 / 系统页 / 挂载包 / SDK 组件 / 样式 / 交互 / 动效 / i18n 文案呈现），启动前与完成审核时**必须**先装载并遵循以下两个用户级 skill；不满足即视为未完成交付。
+> **规则**：任何前端 UI 相关元素的**开发与审核**（宿主壳 / 系统页 / 挂载包 / SDK 组件 / 样式 / 交互 / 动效 / i18n 文案呈现），启动前与完成审核时**必须**先装载并遵循 §4.1 / §4.2 两个设计 skill；**凡涉及动效的改动**（新增或修改过渡、动画、手势反馈、加载 / 空态动效、多元素编排）**另必须**按 §4.3 走动效技能。不满足即视为未完成交付。
 
 ### 4.1 `ui-ux-pro-max`（主查工具，全平台适用）
 
@@ -47,13 +66,41 @@
 - **边界（如实标注，避免误导）**：该 skill 自带脚本流程（`draw.mjs` / `inspect.mjs` / `assets.mjs` 与 `.taste-skill/` 工作区）面向**营销 / 公开页面**，其 description 声明不适配 dashboard / app screens。因此宿主壳与挂载包（应用 UI）以 **§4.1 ui-ux-pro-max 为主查工具**，本 skill 取其方法论（anti-slop 决策、真实浏览器检查、审阅循环）；网页形态的公开面（若有）则完整走其脚本流程。
 - 任何页面如果显得「模板化 / AI 味 / 平庸」（用户原话或自评命中），必须以本 skill 的方法重新设计，不得靠加阴影 / 渐变糊弄。
 
-### 4.3 工作流锚点
+### 4.3 动效强制前置技能（`emilkowalski/skills`，7 个）
 
-1. **动手前**：加载两个 skill → `ui-ux-pro-max` 检索设计系统 / 领域 / 栈判据 → 形成设计与交互决策（写进实现说明）→ 才允许写 CSS / 组件。
-2. **完成审核时**：对照两个 skill 的检查项逐项过（无障碍 / 响应式 / 触摸目标 / 排版 / 配色对比 / 状态与错误 / 动效），发现问题按 §1 原则修复；交付说明里列出「跑了哪个 skill、查了什么、怎么裁决的」。
-3. 知识沉淀：把本项目的 UI 决策（配色 / 排版 / 组件口径）沉淀到项目自身 token / 样式资产，不把 skill 输出当设计真源——设计真源仍是双端 `tailwind.config.js` / CSS token / 组件库。
+> **规则**：凡涉及动效的**设计、实现、审查**（过渡 / 进出场动画 / 手势反馈 / stagger 编排 / 加载与空态动效 / 掉帧性能），**必须**先加载下面对应 skill 再动手，审核时**必须**用同一套判据过一遍。凭「加个 transition 看起来就行」直接交付 = 流程违规。
 
-### 4.4 布局自解释：避免多余的次级标签与描述
+- skill 落点：`~/.agents/skills/<name>/SKILL.md`，源 = [emilkowalski/skills](https://github.com/emilkowalski/skills)（Emil Kowalski / animations.dev，Vercel / Linear 出身）；安装 `npx skills add emilkowalski/skills -s <name> -g -y`（可多个 `-s`），更新 `npx skills update -g`。
+- **职责分流（一次一件事，别拿错）**：
+
+| 阶段 | 技能 | 用在哪 |
+| --- | --- | --- |
+| 设计 / 实现（单元素） | `animate` | 先判「该不该动」，再定属性 / 曲线 / 时长 / 打断与退出；它负责写出实现 |
+| 设计 / 实现（多元素） | `choreograph` | 列表 stagger、英雄区入场、步骤切换、容器内换面、元素离开后兄弟收拢 |
+| 术语对齐 | `animation-vocabulary` | 说不清要什么效果时先把术语取准，再写实现 |
+| 性能 | `animation-performance` | 掉帧 / 卡顿 / 掉到 30fps、选属性、`will-change` 与合成层、CSS vs WAAPI vs rAF |
+| 审查（单次改动） | `review-animations` | 审本次 diff 的动效（默认挑错，通过要挣）。该 skill 标 `disable-model-invocation` ⇒ **必须显式 `/skill:review-animations` 调用**，不会自动触发 |
+| 审计（全仓） | `improve-animations` | 全仓动效盘点 → 分批可执行计划（只读，不改代码）；「该动没动 / 不该动却动了」用 `find-animation-opportunities` |
+
+- **本仓硬边界（技能不豁免这些，冲突时以本仓为准）**：
+  1. **不引入动效运行时依赖**：只用 CSS transition / `@keyframes` / WAAPI。Motion（`motion` / `motion-v`）/ GSAP / Framer / Lottie 运行时**禁止**装——技能里偏 React + Motion 的配方**只取取值规则**（曲线、时长、`transform-origin`、只动 `transform` / `opacity`），不取库。确需新依赖先问用户。
+  2. **移动插件产物必须单文件**（§2）：动效代码不得引入新的动态 `import()` 分包——asset 协议下相对 chunk 解析到 scope 外必 403（2026-11-12 bedcode 源码空白事故）。CSS 关键帧不产生 chunk，优先这条路。
+  3. **禁止常驻动画**：不得给主题 / 背景 / 大面积 `backdrop-filter` 面挂常驻动画（`background-position` 漂移实测 62fps → 11fps，§6 主题裁决）；动效只在交互瞬间存在。
+  4. **必须尊重 `prefers-reduced-motion`**：先例 = `SplashLoading.vue`、`useSlotCarousel`（切后台 / reduced motion 停走）、`pageTransition.test.ts` 对 reduce 分支的锁。新增动效一律给出 reduce 分支（位移 / 缩放降为淡入或直接终态），**禁止**「reduced motion 照旧播」。**Teleport 到 `body` 的覆盖层**（弹窗 / 抽屉 / 右键菜单 / toast）不在 `.shell-root` / `.shell-ui` 的统一兜底范围内，必须自带 reduce 分支。
+  5. **表面保活口径 ⇒ 动效不得依赖卸载 / 重挂载**（§2、`AGENTS.md` §2）：切走只是 `detach`（实例与 DOM 保留），所以「离开动画」只能在 detach 前播完或干脆不做；**禁止**把退出动效实现成「等动画结束再卸载」。
+  6. **后台不渲染**：容器脱文档即停，不得以「切后台继续跑动效 / 轮播」为设计前提。
+  7. **不阻塞输入、不顶替语义**：动画期间控件必须可点（不要靠 `pointer-events: none` 熬时长）；动效不得替代焦点 / 状态 / 错误语义（无障碍真源仍见 §4.1）。
+  8. **重访面不重播入场**：主屏 / 屏幕栈随路由重挂，错峰入场只在本次会话首访播（模块级标记，普通 `<script>` 而非 `<script setup>` 顶层），重访直接落终态；键盘搜索 / 高频动作一旦开始就不再补播。
+
+- **审核判据**（技能的标准 + 本仓边界，逐条过）：动效**有理由**吗（空间连续 / 状态指示 / 反馈 / 解释变化）；**与出现频率匹配**吗（键盘触发、每天上百次的操作不加动效）；曲线是 `ease-out` 类而非 `ease-in`；UI 动效 < 300ms；原点物理正确（popover 从触发器缩放，不 `scale(0)`）；掉帧必须给出真实 webview 目验（桌面 WebKitGTK + Android WebView），不接受「我机器上很顺」。
+
+### 4.4 工作流锚点
+
+1. **动手前**：加载 §4.1 / §4.2 两个 skill → `ui-ux-pro-max` 检索设计系统 / 领域 / 栈判据 → 形成设计与交互决策（写进实现说明）；**含动效的改动**再按 §4.3 走一遍动效决策（该不该动 / 曲线 / 时长 / 编排）→ 才允许写 CSS / 组件。
+2. **完成审核时**：对照各 skill 的检查项逐项过（无障碍 / 响应式 / 触摸目标 / 排版 / 配色对比 / 状态与错误 / 动效），动效面**显式**用 `review-animations` 的标准过一遍（§4.3 审核判据 + 本仓硬边界），发现问题按 §1 原则修复；交付说明里列出「跑了哪些 skill、查了什么、怎么裁决的」。
+3. 知识沉淀：把本项目的 UI 决策（配色 / 排版 / 组件口径 / 动效时长与缓动）沉淀到项目自身 token / 样式资产——页面过渡的时长与效果已有单一 token 与 `pageTransition.test.ts` 锁，新增动效沿用同一 token 体系；不把 skill 输出当设计真源（设计真源 = 双端 `tailwind.config.js` / CSS token / 组件库）。
+
+### 4.5 布局自解释：避免多余的次级标签与描述
 
 > **规则**：布局本身能说明的，不再用文字重复——**避免多余的次级标签与描述，让布局自己说明**（Let the layout do the explaining）。
 
@@ -67,12 +114,21 @@
 - i18n：桌面 `src/i18n/host-{zh-CN,en}.ts`（+ `index.ts`）、移动 `src/locales/{zh-CN,en}/`；**新增 / 修改 key 必须双语同步**；用户可见文案禁止硬编码。
 - **宿主消息集只装宿主壳文案**：应用可见文案（含 bedcode 桌面自带机制副本 `errors.*` 与业务文案）归各应用仓自持，宿主不提供 app 文案副本（2026-10-27 迁移；原 `i18nDriftLock` 随之退役）。
 
-## 6. 桌面壳扩展点（状态栏 / 设置项 / 主题皮肤）
+## 6. 桌面壳扩展点（状态栏 / 设置项 / 主题）
 
 真源 = `wasmnest-desktop/src/shell/extensions/`（`types.ts` 契约、`registry.ts` 注册表、`index.ts` 公共入口）。
 
-- **三类贡献**：`registerStatusBarItem`（状态栏项，左右分区 + order + 可选动作）、`registerSettingsEntry`（设置页扩展行）、`registerThemeSkin`（壳 token 皮肤）。全部返回 Disposable，停用 / 卸载时 `dispose()` 摘除；同 id 重复注册覆盖旧项，旧句柄不得误删新项。
-- **注册表只做注册 / 撤销 / 排序 / 查询**：不感知贡献者是谁，不解释 `label` / `hint` / `onSelect` 的业务语义，不替扩展决定默认值。设置项**没有独立「扩展设置」分组**（用户 2026-10-22 裁决）：别的应用对系统设置的动态扩展，有注册才在「系统设置」卡内渲染，无固定占位；状态栏只显示宿主机制事实，皮肤区只保留内置默认皮肤。
+- **三类贡献**：`registerStatusBarItem`（状态栏项，左右分区 + order + 可选动作）、`registerSettingsEntry`（设置页扩展行）、`registerTheme`（主题：token 表 + glyph 表）。全部返回 Disposable，停用 / 卸载时 `dispose()` 摘除；同 id 重复注册覆盖旧项，旧句柄不得误删新项。
+- **注册表只做注册 / 撤销 / 排序 / 查询**：不感知贡献者是谁，不解释 `label` / `hint` / `onSelect` 的业务语义，不替扩展决定默认值。设置项**没有独立「扩展设置」分组**（用户 2026-10-22 裁决）：别的应用对系统设置的动态扩展，有注册才在「系统设置」卡内渲染，无固定占位；状态栏只显示宿主机制事实。
 - **状态栏是宿主 chrome**：常驻应用面与系统页底部（`bareWindow` 独立窗口除外），只展示宿主机制事实（运行时就绪 / 应用数 / 待审批）与注册项；扩展动作失败只进日志，不拖垮壳。
-- **主题皮肤是纯 token 表**：键必须是 `--` 开头的 CSS 自定义属性，浅色 `tokens` / 深色 `darkTokens` 在壳根（`.shell-root`）合并生效；内置 id `default` 保留且始终排在首位，未知持久化 id 渲染时回落 default。皮肤只覆盖壳 chrome，应用根容器自己声明的 token 优先（应用配色仍归应用）。
-- **设置页顺序是产品裁决**：界面 → 背景 → 皮肤 → 系统 → 日志 → 授权入口 → 恢复初始设置 → **关于（固定最后）**；`settingsOrderLock.test.ts` 钉住，插入新分组时不得把关于挤回中间。
+- **主题是「token 表 + 图标语汇」，作用于文档根**（ADR 0059）：`<html data-theme="<id>">` 由 `useShellTheme` 唯一写入，`themePresets.applyThemePresetDom` 是唯一 DOM 出口。键必须是 `--` 开头的 CSS 自定义属性，浅色 `tokens` / 深色 `darkTokens` 合并生效；`glyphs` 逐名替换图标路径、`glyphStyle` 调整描边/填充。
+  - **内置主题的 token 住 CSS**（`src/styles/theme-presets.css`，移动端同名文件）：结构规则（玻璃材质、图标外框、硬阴影）只有 CSS 能写，且**主题不得挂常驻动画**（背景漂移动 `background-position` 会每帧整屏重绘并让所有 `backdrop-filter` 面重新采样；2026-11-02 性能裁决，实测 62fps → 11fps），且 `data-theme` 静态生效、首帧零闪变。**token 块**选择器不写 `:root`，设置页预览块挂同一属性即渲染真配色；**结构规则**可用 `:root[data-theme]` 抬特异性压过组件 scoped 样式，但预览专属规则必须锚在预览块自身（见下条）。
+  - **预览保真两条口径**（2026-10-27 效果审查定）：① **默认主题的预览挂 `.theme-base`**（`style.css` 的基础档与 `:root` 共用），不挂 `data-theme`——它就是基线本身，不该继承当前主题的 token，否则「默认」那张预览会长成当前主题的样子；主题专属 token（`--theme-ambient` / `--theme-icon-*` / 玻璃材质 `--theme-glass-*`）在 `.theme-base` 上显式归零。② **主题的结构规则只作用于「代表自己的那张预览」**：预览卡的选择器锚在 `.theme-preview[data-theme='x']`，不写 `[data-theme='x'] .pv-card`——后者会顺着 `<html data-theme>` 漏进默认预览，且与组件 scoped 样式同特异性时会被组件样式盖掉。
+  - **扩展主题只能换 token 与 glyph**，加不了结构规则——契约边界，不是疏漏。内置全部 id（`default` / `glass` / `hyper`）保留，扩展占用即抛。`diffuse` / `liquid` 已退役，旧 localStorage 读档时折算到 `glass`。
+  - **持久化走 localStorage**（`wasmnest.shell-ui-prefs.v1` 的 `theme` 字段，与壁纸同层），不进 AppConfig；旧 `skin` / `diffuse` / `liquid` 读取时折算后丢弃（退役 id 会落到 `glass`，不静默回默认）。
+  - **玻璃主题是整屏材质替换，不是只换 token**：`glass` 在 `theme-presets.css` 里用结构规则重绘 chrome（工具栏 / 状态栏）、内容卡、浮层、按钮 / 分段 / 开关、主屏图块、多任务、通知、移动端分组与悬浮导航。光学层按公开玻璃实现归纳为六层：背景采样（blur + saturate + brightness）、上亮下暗体色、1px 渐变镜面棱线（mask 挖空）、左上 sheen / 右下 caustic、内壁亮线与底部内阴影、悬浮投影 + 环境光晕，另叠 `feTurbulence` 微噪点消 banding。**不用 SVG `backdrop-filter: url()`**（Chromium-only，桌面 WebKitGTK 会退成平坦 blur）。**材质数值双端同一组**（2026-11-04 对齐）：tint / fill / rim / sheen / caustic / glow / blur / sat / brightness / grain / 圆角 / 投影取同一组数值，只把颜色换成本端同名语义 token（`--color-info` ↔ `--mobile-info`、`--bg-card` ↔ `--mobile-bg-card`）——改一端必须同改另一端，否则切到 glass 会看到两套光学密度。`themePresetCoverage.test.ts`（双端各一）除 id / 决策面 / 动效外，还锁住「最少覆盖哪些核心表面」，防止主题退化成只改边框圆角。
+  - **应用配色仍归应用**：主题只承诺宿主域，应用根容器自己声明的 token 优先；`data-palette` 归应用，宿主任何路径都不写（`themePresetBeforeMount.test.ts` 反面锁）。
+- **跨主题不变量：决策面永远实心**（ADR 0059）：授权列表 / 授权弹窗 / 确认弹窗 / 壳弹窗层在任何主题下不得使用半透明表面或 `backdrop-filter`；`--bg-card` 不得被主题改成半透明。内容面与浮层由主题决定是否玻璃化。锁在 `themePresetCoverage.test.ts`（双端各一）+ `surfaceLadder.test.ts`。
+- **设置页顺序是产品裁决**：界面 → 背景 → 主题 → 系统 → 日志 → 授权入口 → 恢复初始设置 → **关于（固定最后）**；`settingsOrderLock.test.ts` 钉住，插入新分组时不得把关于挤回中间。
+- **设置页卡头只有一种头型（2026-11-09 用户裁决）**：每个设置分组 = `ShellCard`（`icon` + 标题在卡内）+ `.row-sw` 行；禁止「标题平铺在卡外（`.wb-section-title`）+ `.shell-panel`」这套第二种头型。锁在 `settingsSurfaces.test.ts`（图标 + 卡内标题 + 无卡外标题）。
+- **术语**：`ui.theme` = 深色模式（文案称「明暗模式」）；`data-theme` = 主题。见根 `GLOSSARY.md`，不要混用。

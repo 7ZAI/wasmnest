@@ -7,17 +7,25 @@
  *
  * 待审批应用是例外：它**不能启动**，点击直接进详情页走审批（那里有「批准并启动」），
  * 否则用户只会看到一条启动失败。
+ *
+ * 入口意图：快捷卡片可以在打开时带一个应用自定义的入口意图；意图在启动成功后
+ * 才入队，投递与消费都由应用自持（`context.ui.onSurfaceIntent`）。
  */
 
+import type { ShellSurfaceIntent } from '../../../../src/types'
 import { useShellApps } from './useShellApps'
 import { useShellNavigation } from './useShellNavigation'
+import { queueSurfaceIntent } from '../surfaceIntent'
 
 /** 启动并进入运行面；启动失败返回 false（由调用方决定是否提示） */
-export async function openShellApp(appId: string): Promise<boolean> {
+export async function openShellApp(
+  appId: string,
+  intent?: ShellSurfaceIntent | null,
+): Promise<boolean> {
   const { launch, getApp } = useShellApps()
   const nav = useShellNavigation()
 
-  // 待审批：进详情页审批，不尝试启动（启动必被后端拒绝）
+  // 待审批：进详情页审批，不尝试启动（启动必被后端拒绝）；此时也无从进入应用内部
   if (getApp(appId)?.state === 'approval') {
     nav.openDetail(appId)
     return true
@@ -25,6 +33,7 @@ export async function openShellApp(appId: string): Promise<boolean> {
 
   const ok = await launch(appId)
   if (!ok) return false
+  queueSurfaceIntent(appId, intent)
   nav.openApp(appId)
   return true
 }

@@ -77,11 +77,15 @@ const SCANNED_CRATES: &[&str] = &[
     // 通知域轻量契约房（2026-10-13 domain-owned-contracts 票 04）：只持 WIT 契约
     // （实现按端住宿主），零产品语义；抽根即入扫描面。
     "wasmnest-notify-engine",
-    // libp2p 机制引擎（`wasmnest-p2p-engine`）：**当前不在登记表内**——该 crate 只在能力仓
-    // `feat/p2p-engine` 分支存在，dev / uat 线尚未合并，平台线也不消费它。登记一个两条
-    // 测试线都找不到的目录会让 `crate_dir` fail-visible 直接 panic（本锁最危险的失守
-    // 形态），故随检测到的漂移撤下；能力仓把它合回 dev/uat 时，**同一次提交**把它加回
-    // 这里（新建即入面的规矩不变）。
+    // 系统剪贴板契约房（a426faf）：WIT 契约 + 权限词汇，实现按端住宿主，零产品语义；
+    // 新建即入扫描面（本锁 2026-11-07 补登记，ADR 0061 拆包时发现漏桶）。
+    "wasmnest-clipboard-engine",
+    // CLI 能力域机制骨架（3a811f1）：CLI 调用契约 / manifest cli 段，零产品语义；
+    // 同上补登记。
+    "wasmnest-cli-engine",
+    // libp2p 机制引擎（P1 传输栈换轨引入：身份桥 / swarm 生命周期 / 准入闸门 /
+    // 具名流协议；纯机制、零产品语义，新建即入扫描面）。
+    "wasmnest-p2p-engine",
     // 机制内核（ADR 0035 D1：组件状态 / 能力模块契约 / 自动注册表 / 自报面）
     // ——2026-10-14 自 PENDING_SCAN_CRATES 转正：本锁过去因它“不是能力域 crate”
     // 而暂缓，但机制面同样不得持产品身份：描述符词段锁（词段判据）管词汇归属，
@@ -95,6 +99,10 @@ const SCANNED_CRATES: &[&str] = &[
     // 无头宿主探针（能力域脱绑长期门禁：`cargo tree` 零 wasmtime / wit-bindgen /
     // inventory / host-kit / plugin-api）——纯门禁 crate，零产品语义；同上补登记。
     "wasmnest-headless-host-probe",
+    // 内网穿透中继守护进程（T13）：独立 Linux 二进制 + Docker 交付，零内部 crate
+    // 依赖（形态锁在 crate 内 `src/boundary_lock.rs`）。它跑在公网 VPS 上代替宿主
+    // 转发密文，**不得**知道任何产品身份——入扫描面正是这条边的判据。
+    "wasmnest-relay",
 ];
 
 /// 已知的、暂未纳入扫描的 `wasmnest-*` crate（各有明确在办票据）
@@ -118,7 +126,7 @@ const PRODUCT_ID_PREFIX: &str = "com.wasmnest.";
 /// 格式占位段：出现在**格式校验类**夹具 / 示例里的裸占位不是产品身份
 ///
 /// 只收「明显不是任何真实插件」的中性词。真实产品插件名（bedcode /
-/// agent-hub / file-transfer / ai-chatbox …）一律不在此表——出现在生产代码里就红。
+/// file-transfer / ai-chatbox / monitor …）一律不在此表——出现在生产代码里就红。
 const PLACEHOLDER_SEGMENTS: &[&str] = &["xxx", "test", "other", "example", "sample"];
 
 /// 已退役的宿主面词汇（AGENTS §5.3）：`host-session` / `host-terminal` 连同权限位
@@ -417,7 +425,7 @@ fn scanner_is_not_vacuous() {
         "字符串内的 `//` 不得被当注释起点（否则真命中会被静默丢弃，锁被无声解除），实得 {url_line:?}"
     );
     for (src, must_not_contain, why) in [
-        ("let a = 1; // com.wasmnest.agent-hub", "agent-hub", "行尾注释"),
+        ("let a = 1; // com.wasmnest.file-transfer", "file-transfer", "行尾注释"),
         ("// com.wasmnest.ai-chatbox", "ai-chatbox", "行首注释"),
     ] {
         let out = strip_line_comments(src);
@@ -443,7 +451,7 @@ fn scanner_is_not_vacuous() {
     fs::write(
         src_dir.join("probe.rs"),
         "let live = \"com.wasmnest.bedcode\";\n\
-         // com.wasmnest.agent-hub\n\
+         // com.wasmnest.file-transfer\n\
          #[cfg(test)]\n\
          mod tests {\n\
              let dead = \"com.wasmnest.ai-chatbox\";\n\
@@ -461,7 +469,7 @@ fn scanner_is_not_vacuous() {
         !text.contains("ai-chatbox"),
         "`#[cfg(test)]` 之后的测试区必须被截断，否则锁会把测试夹具当成生产代码；实得 {text:?}"
     );
-    assert!(!text.contains("agent-hub"), "注释必须被剥掉；实得 {text:?}");
+    assert!(!text.contains("file-transfer"), "注释必须被剥掉；实得 {text:?}");
     assert_eq!(
         probe.rel, "src/probe.rs",
         "rel 必须是 crate 内相对路径（报错文案靠它定位），实得 {:?}",
@@ -492,7 +500,7 @@ fn placeholder_segments_do_not_mask_real_product_segments() {
     // 反例：真实产品段必须被认出（逐一列举，防有人把真产品名塞进占位表）
     for real in [
         "bedcode",
-        "agent-hub",
+        "monitor",
         "file-transfer",
         "ai-chatbox",
         "auto-task",

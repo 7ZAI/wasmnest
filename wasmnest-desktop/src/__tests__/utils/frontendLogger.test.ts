@@ -117,6 +117,28 @@ describe('frontendLogger dev 转发链路', () => {
     logSpy.mockRestore()
   })
 
+  it('定时器按需起停：空闲零唤醒，队列排空即清理（F14）', () => {
+    configureLogger(true)
+    // 配置 logger / 模块加载不建 interval（release 零日志时不再 2.5 次/s 空转）
+    expect(vi.getTimerCount()).toBe(0)
+
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+    logger.info('queued')
+    // 首条入队才起定时器
+    expect(vi.getTimerCount()).toBe(1)
+
+    vi.advanceTimersByTime(FLUSH_INTERVAL_MS)
+    expect(mockInvoke).toHaveBeenCalledTimes(1)
+    // 排空即停：空闲期间不再有心跳
+    expect(vi.getTimerCount()).toBe(0)
+    infoSpy.mockRestore()
+
+    // 阈值 flush 同样不起残留 interval
+    const messages = Array.from({ length: FLUSH_THRESHOLD }, (_, i) => `burst ${i}`)
+    for (const m of messages) logger.info(m)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it('release：重复 error/warn 达阈值立即发送（复用攒批机制）', () => {
     configureLogger(false)
     const messages = Array.from({ length: FLUSH_THRESHOLD }, (_, i) => `rel ${i}`)

@@ -5,7 +5,8 @@
  * - 系统服务（L1/L2）不渲染卸载入口，即便数据源声明支持卸载；
  * - 系统服务显示自启开关（默认开由宿主 `isAutostart` 给出，UI 不伪造）；
  * - 切换自启写偏好：成功后更新本地态，失败不改（不制造「看起来开了」的假成功）；
- * - 系统服务的权限随包固定：权限清单只读呈现，**不渲染任何逐项开关**；
+ * - 权限清单统一只读（2026-11-04 与桌面端对齐）：系统服务与业务应用都
+ *   **不渲染任何逐项开关**；分区说明 / 条目描述等次级文字按布局自解释口径退役；
  * - 停止动作按 kind 分词语：服务说「停止服务」（`shell.detail.stopService`）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -22,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   autostartValue: true,
   autostartSetOk: true,
   setAutostart: vi.fn(async () => true),
+  removeApp: vi.fn(async () => true),
   back: vi.fn(),
   openApp: vi.fn(),
   stopSpy: vi.fn(async () => {}),
@@ -30,10 +32,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/shell/composables/useShellApps', () => ({
   useShellApps: () => ({
     getApp: () => mocks.app,
-    supportsPermissionControl: () => false,
-    setPermissionGrant: vi.fn(async () => true),
     supportsRemove: () => mocks.supportsRemove,
-    removeApp: vi.fn(async () => true),
+    removeApp: (...args: unknown[]) => mocks.removeApp(...args as [string, boolean?]),
     supportsAutostart: () => mocks.supportsAutostart,
     isAutostart: async () => mocks.autostartValue,
     setAutostart: (...args: unknown[]) => mocks.setAutostart(...args as []),
@@ -138,7 +138,7 @@ function autostartCheckbox(wrapper: Awaited<ReturnType<typeof mountDetail>>) {
   return group ? wrapper.findAll('input[type="checkbox"]').find((el) => group.contains(el.element)) ?? null : null
 }
 
-/** 详情页全部开关（Toggle 一律渲染为 checkbox：自启 + 权限逐项） */
+/** 详情页全部开关（Toggle 一律渲染为 checkbox；权限清单只读，现只剩自启） */
 function allToggles(wrapper: Awaited<ReturnType<typeof mountDetail>>) {
   return wrapper.findAll('input[type="checkbox"]')
 }
@@ -167,6 +167,24 @@ describe('系统服务详情：不可卸载 + 自启可关', () => {
 
     const wrapper = await mountDetail()
     expect(wrapper.text()).toContain('shell.detail.uninstall')
+  })
+
+  it('卸载确认缺省删除应用数据：removeApp(id, false)', async () => {
+    mocks.params.value = { appId: 'com.wasmnest.file-transfer' }
+    mocks.app = businessApp()
+
+    const { wrapper } = await mountDetailWithDialogStub()
+    const uninstall = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('shell.detail.uninstall'))
+    expect(uninstall, '卸载入口必须在位').toBeDefined()
+    await uninstall!.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.removeApp).toHaveBeenCalledWith('com.wasmnest.file-transfer', false)
   })
 
   it('服务显示自启开关并反映宿主偏好（默认开）', async () => {
@@ -207,23 +225,46 @@ describe('系统服务详情：不可卸载 + 自启可关', () => {
     expect(wrapper.text()).not.toContain('shell.apps.autostart')
   })
 
-  it('服务详情不渲染任何权限开关：清单只读 + 说明权限随包固定', async () => {
+  it('服务详情不渲染任何权限开关：权限词仍逐条展示', async () => {
     const wrapper = await mountDetail()
     // 只剩自启一个开关；声明的 metrics:read 仍以只读行呈现（信息不隐藏）
     expect(allToggles(wrapper)).toHaveLength(1)
     expect(wrapper.text()).toContain('metrics:read')
-    expect(wrapper.text()).toContain('shell.detail.permissionServiceFixed')
     expect(wrapper.text()).not.toContain('shell.detail.permissionUnsupported')
   })
 
-  it('业务应用仍按权限逐项渲染开关（服务守卫不外溢）', async () => {
+  it('业务应用权限也只读：清单保留，不再渲染逐项开关', async () => {
     mocks.params.value = { appId: 'com.wasmnest.file-transfer' }
     mocks.app = { ...businessApp(), permissions: [{ key: 'fs:write', granted: true }] }
 
     const wrapper = await mountDetail()
-    expect(allToggles(wrapper)).toHaveLength(2)
-    expect(wrapper.text()).toContain('shell.detail.permissionsNote')
+    // 只剩自启一个开关；权限词仍逐条展示（信息不隐藏）
+    expect(allToggles(wrapper)).toHaveLength(1)
+    expect(wrapper.text()).toContain('fs:write')
     expect(wrapper.text()).not.toContain('shell.detail.permissionServiceFixed')
+    expect(wrapper.text()).not.toContain('shell.detail.permissionUnsupported')
+  })
+
+  it('详情页不渲染次级说明与描述：布局自解释', async () => {
+    // 退役面反向锁：分区说明 / 行内提示 / 只读说明 / 授权记录占位文案不得回接
+    const retired = [
+      'shell.apps.autostartHint',
+      'shell.apps.systemServiceHint',
+      'shell.detail.permissionsNote',
+      'shell.detail.permissionsReadonly',
+      'shell.detail.permissionServiceFixed',
+      'shell.detail.grants',
+      'shell.detail.grantsNote',
+      'shell.detail.grantsEmpty',
+    ]
+    for (const app of [serviceApp(), businessApp()]) {
+      mocks.app = app
+      const wrapper = await mountDetail()
+      for (const key of retired) {
+        expect(wrapper.text(), `${key} 不得回接`).not.toContain(key)
+      }
+      wrapper.unmount()
+    }
   })
 
   it('业务应用的停止按钮仍为「停用应用」', async () => {

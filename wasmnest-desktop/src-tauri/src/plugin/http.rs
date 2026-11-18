@@ -1,18 +1,18 @@
 //! host-http 宿主侧适配器（能力域端口 `HttpPorts` 的宿主实现 + 装配自报）
 //!
 //! 域机制（入站端点注册表 / 出站 fetch 的执行体 / 跳转与响应体裁决）在
-//! `wasmnest-server-http`；本文件是**宿主侧的另一半**——wasm-core 纯净性收口票 02
-//! 批次 03 整段迁自 `wasmnest-wasm-core/src/host_api/http.rs`。
+//! `wasmnest-server-http`；本文件是**宿主侧的另一半**——整段迁自内核
+//! `host_api/http.rs`。
 //!
 //! 四件同处（与 pty / mdns / peer / ws 样板一致）：端口实现 / `install` 装配自报 /
 //! 白名单声明 + 强制引用行 / 装配器静态。
 //!
 //! 内核侧 `host_api/http.rs` **只剩** `HttpUnitExecutor`（host-task 单元执行器：
-//! 注册点必须与留 core 的任务引擎同侧，随票 02 批次 05 统一处置）；它执行
+//! 注册点必须与留 core 的任务引擎同侧）；它执行
 //! `http.fetch` 时经**实例级端口下发通道**（`HostPorts::domain_ports`）取本文件装入
 //! 的端口，不再自行构造 adapter。
 //!
-//! ## 哪些机制**刻意留在宿主**（AGENTS §5.1.3 允许的薄壳）
+//! ## 哪些机制**刻意留在宿主**（允许保留的薄壳）
 //!
 //! - **权限门**（`network:http`）：复用 wasm-core 的 `host_api::check_permission`（同一
 //!   份 PermissionManager、同一条拒绝 warn 路径）；
@@ -42,14 +42,14 @@ use crate::plugin::bindings::wasmnest;
 
 // 能力模块白名单条目与强制引用行**必须同处**（本文件），两者不漂移——漏引用 ⇒
 // 该 crate 的 inventory 自报静态不进最终二进制（装载期 missing 方向点名）；漏白名单
-// ⇒ unlisted 方向点名。判据与纪律见 `wasmnest_host_kit::assembly` 模块文档。
+// ⇒ unlisted 方向点名。判据：白名单条目与强制引用行必须同处，漏一处即装载期点名。
 wasmnest_host_kit::expect_host_module!(wasmnest_server_http::plugin_binding::MODULE_NAME);
 use wasmnest_server_http as _;
 
 /// 端口的宿主实现
 ///
 /// 生产路径在**开机期**捕获宿主上下文（`PluginHost::new` 已建好），之后每条原语
-/// 零查表地取权限门 / 出站授权 / 事件通道（转型见模块文档）。
+/// 零查表地取权限门 / 出站授权 / 事件通道（从 `HostPorts` 向下转型回具体上下文）。
 pub struct HostHttpPorts {
     /// 宿主上下文（擦除形态；`ctx()` 向下转型取具体类型）
     ctx: Arc<dyn HostPorts>,
@@ -61,7 +61,7 @@ impl HostHttpPorts {
         Self { ctx }
     }
 
-    /// 向下转型回具体宿主上下文（类型不符即 panic：装配期编程错误，见模块文档）
+    /// 向下转型回具体宿主上下文（类型不符即 panic：这是装配期编程错误，不是运行期输入）
     fn ctx(&self) -> &WasmHostContext {
         downcast_host::<WasmHostContext>(self.ctx.as_ref())
     }
@@ -69,14 +69,14 @@ impl HostHttpPorts {
 
 impl HttpPorts for HostHttpPorts {
     fn check_permission(&self, plugin_id: &str, permission: &str, api: &str) -> bool {
-        // 权限门留宿主（AGENTS §5.1.3「安全闸门」——闸门不应可插拔）。复用既有
+        // 权限门留宿主（安全闸门——闸门不应可插拔）。复用既有
         // `host_api::check_permission`：同一份 PermissionManager、同一条拒绝 warn
-        // 路径（AGENTS §8 结构化字段），不另起一套判定。
+        // 路径（结构化字段），不另起一套判定。
         check_permission(self.ctx(), plugin_id, permission, api)
     }
 
     fn authorize_outbound(&self, plugin_id: &str, url: &str, may_prompt: bool) -> OutboundAuth {
-        // 出站授权闸门整条链留宿主（票 06）。`may_prompt = false` 走「只认记录、
+        // 出站授权闸门整条链留宿主。`may_prompt = false` 走「只认记录、
         // 绝不弹窗」那一支——弹窗会占住任务池槽位最短 30s，且用户在错误的时机
         // 看到问题（与 fs 任务单元同款约束）。
         let checker = self.ctx().net_auth();
@@ -88,7 +88,7 @@ impl HttpPorts for HostHttpPorts {
             }
         });
         match verdict {
-            // origin 是归一化后的 origin（不含 path / query，AGENTS §8 凭据红线）
+            // origin 是归一化后的 origin（不含 path / query，凭据红线）
             Ok(verdict) if verdict.is_allowed() => OutboundAuth::Allowed {
                 origin: verdict.origin().to_string(),
             },
@@ -111,7 +111,7 @@ impl HttpPorts for HostHttpPorts {
 
     fn block_on_any(&self, fut: BoxedBlocked) -> Box<dyn Any + Send> {
         // 复用宿主那份唯一的同步↔异步桥（ambient runtime + actix current_thread
-        // 自锁规避都是实测产物，能力域不得复制第二份，见 ports 模块文档）
+        // 自锁规避都是实测产物，能力域不得复制第二份）
         wasmnest_wasm_core::runtime_util::block_on_async(fut)
     }
 }
@@ -164,11 +164,11 @@ wasmnest_host_kit::submit_domain_ports_installer!(HTTP_PORTS_INSTALLER);
 
 // ==================== host-http-endpoint（桌面扩展：WIT 绑定 + 模块自报） ====================
 //
-// ADR 0052 D4（票 03）：`host-http-endpoint`（桌面服务端域）的 WIT 声明归桌面
+// `host-http-endpoint`（桌面服务端域）的 WIT 声明归桌面
 // `wit-src/cap-http.wit`（world `cap-http-endpoint`，T-02 落位），`impl Host` 与模块
-// 自报落本文件（路径 B）。域引擎 API（权限门 + config 契约解析 + 注册表仲裁）复用
+// 自报落本文件。域引擎 API（权限门 + config 契约解析 + 注册表仲裁）复用
 // `wasmnest_server_http::plugin_binding::{http_register_endpoint, http_unregister_endpoint}`
-// —— 与服务器自身路由 / 中间件消费的 `registry` 同源，行为逐字不变（逐项盘点见票 03
+// —— 与服务器自身路由 / 中间件消费的 `registry` 同源，行为逐字不变（逐项盘点见
 // Comments：registry / 路由匹配是服务器引擎基础设施，不随 WIT 绑定面外迁）。
 
 wasmnest_host_kit::expect_host_module!(HTTP_ENDPOINT_MODULE_NAME);
@@ -177,7 +177,7 @@ wasmnest_host_kit::expect_host_module!(HTTP_ENDPOINT_MODULE_NAME);
 pub const HTTP_ENDPOINT_MODULE_NAME: &str = "http-endpoint";
 
 /// 本域提供的 WIT 接口（必须与桌面 wit-src 契约逐字一致；改错即 guest import 失配）
-pub const HTTP_ENDPOINT_MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-http-endpoint"];
+pub const HTTP_ENDPOINT_MODULE_INTERFACES: &[&str] = &["wasmnest:http-endpoint@0.0.1/host-http-endpoint"];
 
 /// 本域的权限位（与前端面 `http.registerEndpoint` 同权限位，真源内核 `permission.rs`）
 pub const HTTP_ENDPOINT_MODULE_PERMISSIONS: &[&str] = &["network:http"];
@@ -202,7 +202,7 @@ impl HostModule for HttpEndpointModule {
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
         type HasSelf = wasmtime::component::HasSelf<WasmPluginState>;
-        wasmnest::plugin::host_http_endpoint::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::http_endpoint::host_http_endpoint::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -214,7 +214,7 @@ inventory::submit! {
 }
 
 // WIT 层：入站路由注册两条原语 → 服务器引擎 API（薄转发，与迁移前 impl 逐字同源）
-impl wasmnest::plugin::host_http_endpoint::Host for WasmPluginState {
+impl wasmnest::http_endpoint::host_http_endpoint::Host for WasmPluginState {
     fn register_endpoint(&mut self, config_json: String) -> Result<String, String> {
         // 只登记路由，不启动监听器：路由表独立于服务器，boot 期注册（认证中心等
         // 基础设施）不构成对外可见性。传输面由应用界面挂载触发
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(module_name, "http", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             wasmnest_server_http::plugin_binding::MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-http"],
+            &["wasmnest:http@0.0.1/host-http"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配；ADR 0052 D4 后服务端域归宿主路径 B 模块）"
         );
         assert_eq!(
@@ -263,7 +263,7 @@ mod tests {
         );
     }
 
-    /// 桌面路径 B 模块声明：接口路径 / 权限位 / 白名单三件与 WIT 契约逐字一致
+    /// 桌面直连绑定模块声明：接口路径 / 权限位 / 白名单三件与 WIT 契约逐字一致
     #[test]
     fn http_endpoint_host_module_declaration_matches_contract() {
         assert!(
@@ -273,7 +273,7 @@ mod tests {
         assert_eq!(HTTP_ENDPOINT_MODULE_NAME, "http-endpoint");
         assert_eq!(
             HTTP_ENDPOINT_MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-http-endpoint"]
+            &["wasmnest:http-endpoint@0.0.1/host-http-endpoint"]
         );
         assert_eq!(HTTP_ENDPOINT_MODULE_PERMISSIONS, &["network:http"]);
         assert_eq!(HTTP_ENDPOINT_DESC.name, HTTP_ENDPOINT_MODULE_NAME);

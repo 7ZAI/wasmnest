@@ -331,12 +331,23 @@ describe('接线（dev 脚本必须真的用上内容感知复制）', () => {
   // 预检已收进 scripts/plugin-precheck.mjs（dev-run 只 import 并调用 runPluginPrecheck），
   // 接线面只留这一条轻量锁：预检真的被调用、且先于宿主启动点。四步内部顺序与判据由
   // pluginPrecheck.test.ts 的行为测试承载（issue #12 / spec §4.1：不回填旧函数名）。
+  // 2026-11-11 起默认带参 `runPluginPrecheck({ fresh })`（删旧产物 + 全量重建），
+  // 故这里只锁「同名调用存在且早于宿主启动」，fresh 语义由行为测试锁。
   it('dev-run 在宿主启动前调用 runPluginPrecheck（顺序错了仍会二次加载）', () => {
     const src = readFileSync(DEV_RUN, 'utf-8')
-    const precheckAt = src.indexOf('runPluginPrecheck()')
+    const precheckAt = src.indexOf('runPluginPrecheck(')
     const hostAt = src.indexOf('const host = start(')
     expect(precheckAt, '插件产物预检必须在宿主启动前真的被调用').toBeGreaterThan(-1)
     expect(hostAt, '宿主启动点在场').toBeGreaterThan(precheckAt)
+  })
+
+  // 热加载默认关闭（2026-11-11 用户裁决）：dev-run 默认不传 --watch 就不起插件前端 watch，
+  // 且默认 fresh 全量重建。锁住「开关默认值」这一行接线，避免哪天又被改成默认起 watch。
+  it('dev-run 默认关闭插件前端 watch、默认全量重建产物', () => {
+    const src = readFileSync(DEV_RUN, 'utf-8')
+    expect(src).toContain("const watchPlugins = process.argv.includes('--watch')")
+    expect(src).toContain('const noWatch = !watchPlugins')
+    expect(src).toContain('const freshPlugins = !reusePlugins')
   })
 
   it('bedcode 的 --frontend-only 真的构建前端（沙箱 fixture 驱动真实 build.js）', () => {

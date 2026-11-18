@@ -73,6 +73,8 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
         val pluginIds = (activity.assets.list(pluginsRoot) ?: return 0)
             .filter { !it.startsWith(".") }
             .toSet()
+        // 用户卸载过的内置应用标记（Rust 端写入；zip 重装时清除）
+        val uninstalledDir = File(pluginsBaseDir, UNINSTALLED_DIR)
 
         // 清理 APK 中已移除的插件（暂停开发/从 bundle 移除）：保留带 apk-asset
         // 标记但不在当前 assets 列表中的残留目录会继续被宿主 load_all 扫描加载，
@@ -81,6 +83,19 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
 
         var extracted = 0
         for (id in pluginIds) {
+            // 已卸载标记只对 release 生效（用户卸载的应用不该随宿主更新自己回来）。
+            // debug（tauri:android:dev）以构建产物为准：assets 里有完整产物就解压并加载，
+            // 否则卸载过一次后无论怎么重建产物都看不到该应用（本地 dev 的死状态）。
+            val uninstalledMarker = File(uninstalledDir, id)
+            if (uninstalledMarker.exists()) {
+                if (!BuildConfig.DEBUG) {
+                    Log.i(TAG, "Skipping uninstalled bundled plugin: $id")
+                    continue
+                }
+                if (uninstalledMarker.delete()) {
+                    Log.i(TAG, "Ignored stale uninstall marker in debug build: $id")
+                }
+            }
             val assetDir = "$pluginsRoot/$id"
             val destDir = File(pluginsBaseDir, id)
 
@@ -91,6 +106,16 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
             // 会一直加载旧产物 —— debug 下始终重新解压保证 dev 看到最新构建。
             val marker = File(destDir, MARKER_FILE)
             val manifestOk = File(destDir, PLUGIN_MANIFEST_FILE).isFile
+            // 用户经应用更新安装的副本（file-install / remote-download）优先于
+            // APK 内置版本：保留目录，不用内置产物覆盖。卸载该应用后目录被移除，
+            // 下次启动才会重新解压内置版本（回退路径）。
+            if (marker.exists()) {
+                val source = marker.readText().trim()
+                if (source.isNotEmpty() && !source.startsWith("$SOURCE_APK_ASSET:")) {
+                    Log.i(TAG, "Keeping user-updated plugin: $id ($source)")
+                    continue
+                }
+            }
             if (!BuildConfig.DEBUG &&
                 manifestOk &&
                 marker.exists() &&
@@ -160,7 +185,9 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
         val base = pluginsBaseDir
         if (!base.isDirectory) return
         base.listFiles()?.forEach { dir ->
-            if (!dir.isDirectory || dir.name in activeIds) return@forEach
+            // 点号开头的是宿主自用目录（`.uninstalled` 已卸载标记等），不是插件，
+            // 跳过——否则每次启动都会为它打一条「无来源标记」告警。
+            if (!dir.isDirectory || dir.name.startsWith(".") || dir.name in activeIds) return@forEach
             val marker = File(dir, MARKER_FILE)
             val isApkAsset = try {
                 if (!marker.exists()) {
@@ -223,6 +250,13 @@ class PluginAssetExtractor(private val activity: Activity) : Plugin(activity) {
 
         /** 插件数据目录名（与 Rust PLUGIN_DATA_DIR 一致，位于 app_data_dir 下） */
         private const val PLUGIN_BASE_DIR = "plugins"
+
+        /**
+         * 已卸载内置应用标记目录（与 Rust `PLUGIN_UNINSTALLED_DIR` 逐字一致）。
+         * 目录下以插件 id 为名的空文件存在时，解压器跳过该 id，直到 zip 重装清除。
+         * 仅 release 生效：debug 以构建产物为准（见 extractAll 内注释）。
+         */
+        private const val UNINSTALLED_DIR = ".uninstalled"
 
         /** 插件 manifest 文件名（与 Rust PLUGIN_MANIFEST_FILE 一致） */
         private const val PLUGIN_MANIFEST_FILE = "plugin.json"

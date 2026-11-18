@@ -39,14 +39,17 @@ beforeEach(() => {
 })
 
 describe('设置页 — 系统设置', () => {
-  it('防止休眠开关写 settings store', async () => {
+  it('防止休眠开关写 settings store（壳共享 .shell-sw，主题可接管材质）', async () => {
     const wrapper = mount(SettingsSystemSection)
-    expect(wrapper.find('[role="switch"]').attributes('aria-checked')).toBe('true')
+    // 必须走 .shell-sw：自绘方角开关不认主题规则，玻璃主题下会停在实心方块
+    const sw = () => wrapper.find('.shell-sw input[role="switch"]')
+    expect(sw().exists()).toBe(true)
+    expect(sw().attributes('aria-checked')).toBe('true')
 
-    await wrapper.find('[role="switch"]').trigger('click')
+    await sw().setValue(false)
 
     expect(storeMocks.settings.network.prevent_sleep).toBe(false)
-    expect(wrapper.find('[role="switch"]').attributes('aria-checked')).toBe('false')
+    expect(sw().attributes('aria-checked')).toBe('false')
   })
 
   it('无注册时不渲染扩展行（无固定「扩展设置」占位）', () => {

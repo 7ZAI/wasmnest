@@ -15,6 +15,7 @@ import { ref } from 'vue'
 const mocks = vi.hoisted(() => ({
   plugins: null as unknown as Ref<unknown[]>,
   busyId: null as unknown as Ref<string | null>,
+  installing: null as unknown as Ref<boolean>,
   dialog: null as unknown as Ref<string | null>,
   dialogAppId: null as unknown as Ref<string | null>,
   setEnabled: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('@/shell/composables/useShellApps', () => ({
   useShellApps: () => ({
     plugins: mocks.plugins as never,
     busyId: mocks.busyId as never,
+    installing: mocks.installing as never,
     setEnabled: mocks.setEnabled,
     setAutostart: mocks.setAutostart,
   }),
@@ -86,6 +88,7 @@ function groupTitles(wrapper: ReturnType<typeof mountView>): string[] {
 beforeEach(() => {
   mocks.plugins = ref([])
   mocks.busyId = ref(null)
+  mocks.installing = ref(false)
   mocks.dialog = ref(null)
   mocks.dialogAppId = ref(null)
   vi.clearAllMocks()

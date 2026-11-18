@@ -19,7 +19,7 @@ fn test_manifest_parse_with_defaults() {
     assert_eq!(m.description, "");
     assert_eq!(m.author, "");
     assert_eq!(m.main, "");
-    assert_eq!(m.plugin_type, PluginType::TsOnly);
+    assert_eq!(m.plugin_type, PluginType::Frontend);
     assert_eq!(m.permissions, vec!["storage", "mdns"]);
     assert_eq!(m.icon, None);
     assert_eq!(m.wasm_hash, "");
@@ -86,7 +86,7 @@ fn test_manifest_round_trip_fills_defaults() {
     let json = serde_json::json!({ "id": "com.wasmnest.x", "name": "X", "version": "1.0.0", "platform": "both" });
     let m: PluginManifest = serde_json::from_value(json).unwrap();
     let back = serde_json::to_value(&m).unwrap();
-    assert_eq!(back["pluginType"], serde_json::json!("ts-only"));
+    assert_eq!(back["pluginType"], serde_json::json!("frontend"));
     assert_eq!(back["wasmHash"], serde_json::json!(""));
     assert_eq!(
         back["platform"],

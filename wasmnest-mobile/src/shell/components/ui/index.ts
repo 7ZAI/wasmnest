@@ -25,8 +25,8 @@
  *
  * 三处刻意的差异（其余逐字复制，已在各文件内注明理由）：
  *   · ConfirmDialog 的 loading 转圈白边 → `--mobile-text-on-accent` 派生（token-bound）
- *   · QuickActionButton 的 hover 光晕 → `--shell-action-glow`（随主题/色板变化）
- *   · LetterAvatar 的六组渐变色 → `styles/shell.css` 的 `.shell-avatar-g*`（颜色只落样式表）
+ *   · QuickActionButton 去掉 hover 彩色光晕与按压缩放（2026-11-05 unslop），只留描边 / 透明度反馈
+ *   · LetterAvatar 六组彩虹渐变 → 统一中性 `.shell-avatar-tint`（颜色只落样式表）
  *
  * 待迁（本批未含，属业务组件或需先引机制，见落地说明的「待迁清单」）：
  *   终端域（Terminal*）、任务域（Task*）、

@@ -83,7 +83,7 @@ mod tests {
                 description: String::new(),
                 author: String::new(),
                 main: String::new(),
-                plugin_type: PluginType::Rust,
+                plugin_type: PluginType::Backend,
                 permissions: vec!["storage".to_string()],
                 contributes: PluginContributes::default(),
                 icon: None,
@@ -123,7 +123,7 @@ mod tests {
         // manifest 经函数指针重建，字段与插件定义一致
         let manifest = (entry.create_manifest)();
         assert_eq!(manifest.id, "com.wasmnest.test-plugin");
-        assert_eq!(manifest.plugin_type, PluginType::Rust);
+        assert_eq!(manifest.plugin_type, PluginType::Backend);
         // 未覆盖的扩展点走 trait 默认实现：空命令表
         assert!((entry.register_commands)().is_empty());
         // 默认启动/关闭回调可直接执行（async 无等待点）

@@ -85,4 +85,50 @@ describe('启动任务注册表', () => {
     expect(m.startupReady.value).toBe(true)
     expect(m.readyAt.value).not.toBeNull()
   })
+
+  it('apps 任务未完成时 startupReady 不为真(开屏不得先于应用清单收起)', async () => {
+    // 回归锁(2026-11-01):后端应用扫描晚于前端就绪,开屏若在清单落地前收起,
+    // 主界面会出现「应用晚几秒才显示」——apps 是收起的最后闸门,删行/漏打点在此变红
+    const m = await loadModule()
+    for (const line of SPLASH_CONFIG.lines) {
+      if (line.id === 'apps') continue
+      m.completeStartupTask(line.id)
+    }
+    expect(m.startupReady.value).toBe(false)
+    expect(m.readyAt.value).toBeNull()
+
+    m.completeStartupTask('apps')
+    expect(m.startupReady.value).toBe(true)
+  })
+})
+
+describe('apps 清单闸门 bindAppsTaskToListReady', () => {
+  // 模块含全局启动状态:resetModules + 动态 import 获取隔离实例
+  async function loadModule() {
+    vi.resetModules()
+    return await import('@/composables/useAppStartup')
+  }
+
+  it('空清单不打点,清单非空即打点(后端扫描完成、宫格数据就位)', async () => {
+    const m = await loadModule()
+    const { ref, nextTick } = await import('vue')
+    // 与真实调用方同构:传入的 getter 读响应式源(App.vue 传壳清单 computed)
+    const listLength = ref(0)
+    const stop = m.bindAppsTaskToListReady(() => listLength.value)
+
+    expect(m.taskCompletedAt['apps']).toBeNull()
+
+    listLength.value = 2
+    await nextTick()
+    expect(m.taskCompletedAt['apps']).not.toBeNull()
+    stop()
+  })
+
+  it('绑定前清单已就绪:immediate 补打点,返回停止函数可摘除', async () => {
+    const m = await loadModule()
+    const stop = m.bindAppsTaskToListReady(() => 3)
+
+    expect(m.taskCompletedAt['apps']).not.toBeNull()
+    stop()
+  })
 })

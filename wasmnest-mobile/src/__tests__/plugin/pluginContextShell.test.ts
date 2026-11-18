@@ -10,8 +10,10 @@
  * | C-S1 | registerSurface | appId 由宿主代填为插件 id；其它应用不受影响 | 挂在本插件 id 下，别的 id 无运行面 |
  * | C-S2 | 运行面包装 | 壳直渲染运行面时插件组件仍能拿到 pluginContext | 探针渲染出 ctx:<插件 id> |
  * | C-S3 | dispose 语义 | 返回值入 `_disposables`（loader 统一回收）且 dispose 即时摘除 | 壳侧解析不到运行面 |
+ * | C-S3b | 自摘（F8） | `_disposables` 只留活着的资源：dispose 后条目**移出数组** | 长会话只增不减 |
  * | C-S4 | 免权限 | 运行面注册不做 ui:* 权限快速失败（不触发宿主能力） | 无权限不抛；同上下文旧嵌入面仍抛 |
  * | C-S5 | 两面贡献 | slot / capsule 落到壳注册表对应集合 | 各集合含注册 id，order 透传 |
+ * | C-S7 | 入口意图桥 | `ui.onSurfaceIntent` 按插件 id 订阅，订阅前的排队意图补投；dispose 后不再收 | 收到本插件意图；别的 appId 不串台 |
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { defineComponent, h, inject } from 'vue'
@@ -19,11 +21,20 @@ import { mount } from '@vue/test-utils'
 import { createPluginContext } from '@/plugin/context'
 import { getPluginRegistry } from '@/plugin/registry'
 import { getShellRegistry } from '@/shell/registry'
+import {
+  queueSurfaceIntent,
+  resetSurfaceIntents,
+} from '@/shell/surfaceIntent'
 import type { PluginInfo } from '@/plugin/types'
 import type { ShellApp, ShellAppSource } from '@/shell/types'
 
 // 运行面经 PluginViewHost 包装（内部 useI18n）；本测试只验证包装行为本身，文案用替身
-vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+// 部分 mock：只替换组件里的 useI18n；保留 createI18n（plugin context 经
+// 错误消费层间接加载真实 i18n 实例，不能把它一起 mock 掉）
+vi.mock('vue-i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-i18n')>()
+  return { ...actual, useI18n: () => ({ t: (key: string) => key }) }
+})
 
 const PLUGIN_ID = 'com.test.surface-bridge'
 const OTHER_APP_ID = 'com.test.other-app'
@@ -136,6 +147,33 @@ describe('C-S3 运行面回收', () => {
     disposable.dispose()
     expect(shell.getApp(PLUGIN_ID)?.contributions.surface).toBeUndefined()
   })
+
+  it('should_removeEntryFromDisposables_when_disposed（F8 自摘，防只增不减）', () => {
+    const ctx = makeContext()
+    // 三条互不依赖的运行期资源（命令 / 槽位 / 运行面），都走同一条 track 登记
+    const command = ctx.commands.register('f8-cmd', () => undefined)
+    const slot = ctx.ui.registerSlot({ id: 'host-sessions', component: CtxProbe })
+    const surface = ctx.ui.registerSurface({ component: CtxProbe })
+
+    // 入数组（loader 统一回收的观测面）
+    expect(ctx._disposables).toContain(command)
+    expect(ctx._disposables).toContain(slot)
+    expect(ctx._disposables).toContain(surface)
+    expect(ctx._disposables).toHaveLength(3)
+
+    // 插件按组件生命周期自行解绑：条目必须同步移出，否则数组会钉住已释放的闭包
+    slot.dispose()
+    expect(ctx._disposables).toHaveLength(2)
+    expect(ctx._disposables).not.toContain(slot)
+
+    // 重复 dispose 幂等：数组不再二次收缩
+    slot.dispose()
+    expect(ctx._disposables).toHaveLength(2)
+
+    // 全量回收后数组归零（loader 停用后不残留任何闭包）
+    for (const d of [...ctx._disposables]) d.dispose()
+    expect(ctx._disposables).toHaveLength(0)
+  })
 })
 
 describe('C-S4 运行面免权限快速失败', () => {
@@ -178,6 +216,35 @@ describe('C-S6 已退役扩展点显性抛错（票 2026-10-10 C2 fail-visible�
     const ui = retiredUiOf(['ui:toolbox', 'ui:navtab', 'ui:input'])
     expect(() => ui.registerToolboxPage({} as never)).toThrow('registerToolboxPage')
     expect(() => ui.registerTerminalView({} as never)).toThrow('registerTerminalView')
+  })
+})
+
+describe('C-S7 入口意图桥（快捷卡片 → 运行面）', () => {
+  beforeEach(() => {
+    resetSurfaceIntents()
+  })
+
+  it('should_deliverQueuedIntentToOwnPlugin_when_subscribed', () => {
+    const ctx = makeContext()
+    const handler = vi.fn()
+    // 意图先到（点击 → 启动 → 运行面稍后创建），订阅时补投
+    queueSurfaceIntent(PLUGIN_ID, { key: 'open-session', payload: { sessionId: 's1' } })
+    queueSurfaceIntent(OTHER_APP_ID, { key: 'other' })
+
+    const sub = ctx.ui.onSurfaceIntent(handler)
+
+    expect(handler).toHaveBeenCalledTimes(1)
+    expect(handler).toHaveBeenCalledWith({ key: 'open-session', payload: { sessionId: 's1' } })
+
+    sub.dispose()
+    queueSurfaceIntent(PLUGIN_ID, { key: 'after-dispose' })
+    expect(handler, 'dispose 后不再投递').toHaveBeenCalledTimes(1)
+  })
+
+  it('should_keepOnSurfaceIntentIndependentOfShellStubs_when_called', () => {
+    // 该 API 不是退役面：不得落进 fail-visible 桩（桩对象只收旧扩展点）
+    const ctx = makeContext()
+    expect(typeof ctx.ui.onSurfaceIntent).toBe('function')
   })
 })
 

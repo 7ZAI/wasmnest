@@ -1,20 +1,20 @@
-//! 宿主壳组合根（server-lib-split 票 03 / 04 / 05 收口）
+//! 宿主壳组合根
 //!
 //! `wasmnest-server-core::app::serve` 只认 [`TransportFace`]，内核不再反向认识传输面。
-//! 本文件是宿主侧**唯一**同时看见两个传输面的装配点（原 `server/core/app.rs` 的 I3
-//! 组合物豁免点的归宿）：票 04/05 后两个面的 face 实现都已随面下沉进各自 crate，
+//! 本文件是宿主侧**唯一**同时看见两个传输面的装配点（组合物豁免点的归宿）：
+//! 两个面的 face 实现都已随面下沉进各自 crate，
 //! 这里只剩「把 faces 交给 `serve`」的纯壳——谁都不认识谁，横向依赖在清单层面就不成立。
 //!
 //! 另含链路加密的启动薄壳：core 的 `link_crypto` 不认识 `tauri::AppHandle` 与宿主
 //! `Database`，数据目录与主库连接在此解析后传入。
 //!
-//! **端口注册表的唯一装配点**（server-lib-split 票 07）：`install_server_ports` 是
+//! **端口注册表的唯一装配点**：`install_server_ports` 是
 //! 进程内**唯一**调 `wasmnest_server_base::ports::init` 的函数——GUI bootstrap
 //! （`lib.rs` setup）与无头 harness（`wasmnest-test/cross-end-tests` 的 `desktop_ctx`）都走它。
 //! 曾出现过「只有 GUI 装配、无头 rig 不装配」的分裂，症状是网关
 //! `ports::get() == None` 判 `PassThrough`，插件注册的全部宿主别名一律 404
-//! （见 `crates_carry_their_own_test_contracts_are_not_silently_skipped` 与
-//! `wasmnest-test/cross-end-tests` 的 `rig_assembles_the_same_server_ports_face_as_gui_boot`）。
+//! 无头 rig 与 GUI 的同装配不变量由 `wasmnest-test/cross-end-tests` 的
+//! `rig_assembles_the_same_server_ports_face_as_gui_boot` 钉住。
 
 use std::sync::Arc;
 use wasmnest_server_base::config::NetworkConfig;
@@ -86,28 +86,25 @@ pub async fn start_http_server(
 
 // ==================== 链路加密启动装配 ====================
 
-/// 启动期链路加密装配薄壳：解析应用数据目录与主库连接后交 core（spec §6：
-/// 必须在 `supervisor.start` 之前完成，第一条流量就要被开关裁决）
+/// 启动期链路加密装配薄壳：解析应用数据目录与主库连接后交 core
 ///
-/// 数据目录解析失败时不走 core 的正常装配：core 的 `init_at_startup` 需要目录
-/// 建身份，而拆分前这条分支的行为是「error 日志 + 读 DB 配置但强制全关」，
-/// 身份不可用时静默换钥比全关更糟，故该 fail-safe 在此逐字保持。
+/// 必须在 `supervisor.start` 之前完成：第一条流量就要按应用策略裁决。
+/// 数据目录解析失败 = 建不出链路身份，本启动期加密不可用（`required` 策略由
+/// 核心逐条 error 留痕并按明文执行）；静默换钥比不可用更糟，故直接报错，
+/// 不阻断宿主启动。
 pub async fn init_link_crypto_at_startup(app_handle: &tauri::AppHandle) {
     use tauri::Manager;
 
     let dir = app_handle.path().app_data_dir();
     let db = app_handle.state::<Arc<std::sync::Mutex<Database>>>();
-    let guard = db.lock().expect("main db lock poisoned");
+    let guard = db.lock().unwrap_or_else(|e| {
+        tracing::error!("main db lock poisoned; recovering inner guard for link crypto init");
+        e.into_inner()
+    });
 
     match dir {
         Ok(dir) => wasmnest_server_core::link_crypto::init_at_startup(&dir, guard.conn()),
-        Err(e) => {
-            tracing::error!("app data dir unavailable ({e}), link crypto stays off");
-            let mut config = wasmnest_server_core::link_crypto::load_config_from_db(guard.conn());
-            config.enabled = false;
-            wasmnest_server_core::link_crypto::update_config(config);
-            wasmnest_server_core::link_crypto::sync_registration();
-        }
+        Err(e) => tracing::error!("app data dir unavailable ({e}), link crypto stays off this boot"),
     }
 }
 

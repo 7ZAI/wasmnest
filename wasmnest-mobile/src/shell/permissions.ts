@@ -108,12 +108,6 @@ export function permissionTitleKey(key: string): string | undefined {
   return suffix ? `mobile.plugin.perm.${suffix}.title` : undefined
 }
 
-/** 权限说明的 i18n key（未知权限返回 undefined） */
-export function permissionDescKey(key: string): string | undefined {
-  const suffix = PERMISSION_I18N_KEY[key]
-  return suffix ? `mobile.plugin.perm.${suffix}.desc` : undefined
-}
-
 /** 权限是否默认授予且不可关闭 */
 export function isLockedPermission(key: string): boolean {
   return SHELL_LOCKED_PERMISSIONS.has(key)

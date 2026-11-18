@@ -21,7 +21,8 @@ impl WasmPlugin for Wasip3TestPlugin {
             // （host-crypto 的 WIT 实现迁宿主后，内核测试二进制不再注册该 interface，
             // 携带其 import 的夹具无法在内核测试里实例化）。
             permissions: vec![],
-            plugin_type: PluginType::Rust,
+            // 纯后端形态（原 `Rust`；三档重定义后 = wasm 后端、无页面产物）
+            plugin_type: PluginType::Backend,
             // 其余字段一律取 Default：SDK 追加可选字段不再连带本夹具编译红（票 14）
             ..Default::default()
         }

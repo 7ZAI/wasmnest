@@ -101,6 +101,7 @@ import { useI18n } from 'vue-i18n'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { logger } from '@/utils/frontendLogger'
+import { ensureHostCredential } from '@/plugin/credentials'
 import Toggle from '@/components/Toggle.vue'
 
 const { t } = useI18n()
@@ -203,6 +204,7 @@ async function allow() {
       allow: true,
       persist: remember,
       deny: false,
+      credential: await ensureHostCredential(),
     })
   } catch (e) {
     logger.error('[EgressConsent] Resolve allow failed:', e)
@@ -220,6 +222,7 @@ async function deny() {
       allow: false,
       persist: false,
       deny: forever,
+      credential: await ensureHostCredential(),
     })
   } catch (e) {
     logger.error('[EgressConsent] Resolve deny failed:', e)

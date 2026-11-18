@@ -25,17 +25,32 @@
 - **项目阶段（研发起步期）**：无真实用户、无对外 ABI 兼容义务——破坏性变更可直接进行，但跨仓契约按 tag 钉住（docs/contracts.md §1），退役面必须 **fail-visible**（点名缺失 + 给出路），禁止静默降级成「查不到就返回空」。
 ### 0.1 Agent 工作流（vibe coding 简则）
 
-1. **开工自检**：`git status` 认领改动来源；读相关模块头注释与 `docs/codemap.md` §6 任务路由表的「必读」；确认要改的是哪一端（桌面 / 移动 / SDK / 工具）。
+1. **开工自检**：`git status` 认领改动来源；读相关模块头注释与 `docs/codemap.md` §6 任务路由表的「必读」；确认要改的是哪一端（桌面 / 移动 / SDK / 工具）。**若在 git worktree 里开工，先跑 `pnpm run target:worktrees`**（target 共享桶硬规范，见 `docs/public/git.md` §8）——否则该 worktree 会自己长出一整套 8~24G 的 target。
 2. **边界判定**：动宿主侧前先过 §2 三问（能离宿主实现吗 → 携带产品语义吗 → 才放宿主）；改跨仓面（WIT / 清单 / 应用注册表）先读 docs/contracts.md / docs/boundaries.md。判不准就停下问用户。
 3. **小步实现**：最小 diff 完成一个可验证单元；不并行夹带无关改动；生成物不手改（docs/contracts.md §6）。
 4. **针对性验证**：按 docs/testing.md §3 跑改动类型对应的最小测试集；改锁 / 改注册表 / 改 WIT 时必须跑对应锁。
 5. **交付说明**：列出「改了什么 / 为什么 / 跑了什么命令与结果 / 没跑什么与风险」；凡按 docs/git.md §3 边界需要跨仓同步的（清单、子模块指针、应用注册表），逐项点名。
 
+### 0.2 交流准则（格赖斯合作原则）
+
+面向本仓人类与 AI 协作者（含 vibe coding）的沟通规则，以格赖斯（H. P. Grice）合作原则与四项会话准则为纲：**在不牺牲准确性与必要深度的前提下提高沟通效率**。任何回复、评审意见、任务汇报、交付说明均适用。
+
+- **量的准则（信息充分而不冗余）**：提供接收方完成行动所需的信息量，不多不少——既不遗漏关键结论 / 依据 / 风险 / 未跑项，也不堆砌无关背景、重复已知结论、贴大段代码或日志凑篇幅。判据：接收方能据此行动且无需再追问。
+- **质的准则（论述真实且有依据）**：不说无依据、无法核实或不信为真的话；凡论断必有依据（命令输出、源码引用、文档指针、可复现实验），并区分「事实 / 推断 / 猜测 / 待验证」，禁止把猜测包装成结论。数据、路径、版本、锁名引用前先核实（文档字面 ≠ 事实）。
+- **关系准则（回应紧扣问题）**：回应与所问直接相关，被问什么就答什么；不答非所问、不借题发挥、不夹带与当前任务无关的改动或建议。
+- **方式准则（表达清晰有序）**：避免晦涩、歧义与冗长；结论先行、要点编号、按逻辑顺序组织；术语一致，路径 / 命令 / 锁名 / 版本用可复制的准确字面；先给结论与证据，再给过程与细节。
+
+**底线而非上限**：这些准则是沟通下限，不是压缩上限——涉及准确性、安全、契约、跨仓同步、必要深度时，不得以「简洁」为由省略；与本文档其他硬约束冲突时，以对应硬约束为准。
+
+### 0.3 Rust 编写与审核（强制 skill）
+
+> **规则**：任何 Rust 代码的**编写与审核**（crate / 模块 / 命令面 / `Cargo.toml` / 测试 / rustdoc / unsafe），动手前与完成审核时**必须**显式加载并遵循 `/skill:rust-best-practices`（skill 落点 `~/.agents/skills/rust-best-practices/SKILL.md`）；未加载即开始写或评审 = 流程违规，视为未完成交付 / 无效评审。该 skill 是通用惯用法与 API 设计判据层（占 §0 裁决第 5 档「通用工程经验」），与本仓硬约束（`docs/backend.md` / `docs/security.md` / 契约与锁）冲突时**以本仓为准**；其自带的自检命令（fmt / clippy）不替代 `docs/testing.md` §3 的测试与锁门禁。
+
 ## 1. 仓速览（完整代码导航 → `docs/codemap.md`）
 
 平台仓 = 双端宿主 + 端内 SDK + 根工具；Rust **无根 workspace**。能力仓 `../wasmnest-lib` 是全部内部依赖 crate 的真源，平台经 Cargo path（`../../../wasmnest-lib/<crate>`）直接消费，版本由 `release-manifest.json` 的 `repos.lib.tag` 钉住；平台仓不复制、不镜像能力仓源码。应用源码住应用仓、产物落本仓 `resources/plugins/**`（不入库）。**双端一句话**：桌面 = 同窗口全屏挂载独立构建的应用包（机制 B）；移动 = 宿主壳运行面（`registerSurface` 等运行时注册），每个运行面由宿主建成**独立 Vue 应用**（`surfaceAppRegistry` 容器注册表承载，2026-10-24），共享模块外置宿主全局与桌面不同。
 
-**应用清单**（真源 = 各端构建注册表 + `release-manifest.json`）：`agent-hub`（desktop）、`ai-chatbox`（双端）、`bedcode`（显示名 BedCode，双端）、`file-transfer`（双端单产物，移动经 `desktop-compat` 桩）、`monitor`（双端，只读运行指标）。
+**应用清单**（真源 = 各端构建注册表 + `release-manifest.json`）：`ai-chatbox`（双端）、`bedcode`（显示名 BedCode，双端）、`file-transfer`（双端单产物，移动经 `desktop-compat` 桩）、`monitor`（双端，只读运行指标）。
 
 ## 2. 强制红线：宿主薄壳（动宿主前必读）
 
@@ -73,6 +88,7 @@
 | 前端测试 | 端目录 `pnpm run test:run`（桌面含 SDK 契约测试） |
 | Rust 全量测试 | `cd src-tauri && cargo test`（部分用例需先构建随包插件产物） |
 | 单应用调试 | 桌面 `pnpm run plugins:dev -- --plugin <id>`（详见 commands.md §5.2） |
+| worktree 共用 target 桶 | 根 `pnpm run target:worktrees`（把 `.worktrees/**` 的 target 软链到 `<container>/target-shared`；构建中的 worktree 自动跳过，详见 `docs/target-governance.md` §1.1） |
 
 ## 4. docs 体系（本文档的拆分文档，硬约束同级）
 
@@ -80,23 +96,25 @@
 | --- | --- |
 | `docs/codemap.md` | ★ 代码文件导航：仓结构树 / 端内模块导览 / 任务路由表（改 X 先读 Y）/ 代码查找纪律 / 锁索引 / 文档索引 |
 | `docs/commands.md` | 命令全集：通用约定（wasmtime 48 / wasip3 / sccache / 自适应构建）/ 根 / 桌面（含 host:pack）/ 移动 / 应用与插件（§5.2 单应用调试）/ target 治理 / husky |
+| `docs/target-governance.md` | 构建资源与 target 治理：四仓落点全景（可清 / 禁清）/ 手工精确清理三级阶梯（测试产物 → `cargo clean -p` → incremental）/ 禁止项 / 完成验证 / 实测基线 |
 | `docs/architecture.md` | 架构硬约束：宿主薄壳六判据与三问全量 / 桌面挂载形态 / 退役面纪律 / 双端差异与锁步 / 权限与安全闸门总览 / 跨端协议 / 数据库 |
 | `docs/contracts.md` | 契约：release-manifest 判据 / WIT 真源链与 bump 政策 / WIT-ABI 变更 7 步流程 / 权限声明 / plugin.json / SDK / 生成物清单 |
-| `docs/frontend.md` | 前端规范：零资源访问三层封锁 / 挂载包与运行面形态 / 移动壳优先 / **UI 设计强制前置技能（`ui-ux-pro-max` + `design-taste-frontend`）** / 注释命名 i18n |
+| `docs/frontend.md` | 前端规范：零资源访问三层封锁 / 挂载包与运行面形态 / 移动壳优先 / **UI 设计强制前置技能（`ui-ux-pro-max` + `design-taste-frontend`）** / **动效强制前置技能（`emilkowalski/skills` 7 个：`animate` / `choreograph` / `animation-vocabulary` / `animation-performance` / `review-animations` / `improve-animations` / `find-animation-opportunities`，§4.3）** / 注释命名 i18n |
 | `docs/brand.md` | 对外品牌文案真源：主标（中/英）/ 副标句 / 技术意象句 / 备选池 / 使用规则 / 落地位置与现状（视觉 token 另见两端 `src` 下的 CSS 变量） |
-| `docs/backend.md` | Rust 规范：命名 / AppError / Command 纪律 / 调试面门控 / 注释命名（后端面） |
+| `docs/backend.md` | Rust 规范：命名 / AppError / Command 纪律 / 调试面门控 / 注释命名（后端面）；写 / 审 Rust 前另须加载 `/skill:rust-best-practices`（§0.3） |
 | `docs/security.md` | 安全与日志红线：密钥禁令 / fail-closed / 加密引擎中性原语 / tracing 分级 / 结构化字段 |
 | `docs/testing.md` | 单元测试形态 / 测试工具链 / 完成定义与验证清单（迁移期口径 2026-10-18）/ 锁纪律（Seam 3） |
 | `docs/git.md` | 提交规范 / 能力仓 sibling 钉版纪律 / 三仓提交顺序与 tag 规则 / 文件回滚规范 |
 | `docs/boundaries.md` | 依赖方向（禁止反向引用）/ 跨仓锁 / Agent 禁行清单 |
 | `docs/docker.md` | 本机 Docker 部署事实：版本与 API / data-root / docker 组 / 镜像源 / 清理 |
+| `docs/nat-traversal.md` | 内网穿透：Circuit Relay v2 原理（预留 / 中继拨号 / 两段 Noise）/ 客户端状态机与 `allowWan` 引用计数 / 中继部署（Compose·单命令·systemd·防火墙·容器指标语义·卷名坑）/ 配置真源 `network.relay` 与 `network.wanPolicy` / 导入载荷校验 / 排障表 / 已知缺口 |
 | `docs/public/` ★ | **四仓共享通用规范真源**（其他仓经 `../wasmnest/docs/public/` 引用）：`git.md`（git 提交）/ `commenting.md`（注释与命名）/ `testing.md`（测试与验证底线）/ `versioning.md`（版本号管理：只有发布时 bump，dev 不 bump）/ `issues.md`（GitHub Issues = 跨会话存续 backlog 真源）——通用部分单一真源，本仓 docs 不复制 |
 
 **文档字面 ≠ 事实**：任何文档（含 `docs/`）都只是导航与判据，改结构 / 文案前先 `ls` / `rg` 核对；引用旧仓（`../../BedCode/`）内容时注意它与三仓现状的差异，机制以新仓代码为准。
 
 ## 5. 完成定义速查（完整清单 → `docs/testing.md` §3）
 
-本仓测试 CI = `.github/workflows/test.yml`：node 层 PR required（`check-wit` / `node-root` / `node-desktop` / `node-mobile`）+ Rust 分层（`rust-check (desktop|mobile)` 进 PR；`rust-full` 全量 cargo test 与随包产物 e2e 在主线推送 + nightly，不进 PR 阻断）；`check:manifest` 属发布 / tag 流水线，不做日常 PR check。门禁 = CI required checks + husky pre-commit + 本地命令 + 测试锁。**任何交付必须实际运行并贴出结果；无法运行要说明原因与风险。**
+本仓测试 CI = `.github/workflows/test.yml`：node 层 PR required（`check-wit` / `node-root` / `node-desktop` / `node-mobile`）+ Rust 分层（`rust-check (desktop|mobile)` 进 PR；`rust-full` 全量 cargo test 与随包产物 e2e 在 `main` 推送 + nightly，不进 PR 阻断）；`check:manifest` 属发布 / tag 流水线，不做日常 PR check。**`dev` 推送不触发 GitHub CI**（四仓同口径，用户 2026-10-28 定）——dev 验证靠本地命令 + husky + 显式 `workflow_dispatch`。门禁 = CI required checks + husky pre-commit + 本地命令 + 测试锁。**任何交付必须实际运行并贴出结果；无法运行要说明原因与风险。**
 
 - **当前迁移期口径（用户 2026-10-18）**：不逐项跑集成 / 全量回归，收口后统一跑；日常改动至少跑**针对性单测 + 所在端测试**（改动类型 → 最小测试集映射见 docs/testing.md §3）。
 - 改锁 / 改注册表 / 改 WIT：必须跑对应锁；锁清单过期**同一提交内同步更新**，禁止删锁、缩窄 glob、掏空断言（Seam 3：锁跑红一次证明不空转）。

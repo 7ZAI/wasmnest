@@ -10,6 +10,7 @@ import { useI18nStore } from '@/stores/i18n'
 import { initPluginSystem } from './plugin'
 import { completeStartupTask } from '@/composables/useAppStartup'
 import { initFrontendLogger } from '@/utils/frontendLogger'
+import { useToast } from '@/composables/useToast'
 import { presetThemeBeforeMount } from '@/composables/useTheme'
 import './style.css'
 import './styles/mobile.css'
@@ -20,9 +21,25 @@ import './shell/styles/shell.css'
 // 声明全局引入，使任意页面都能经 ensureTerminalFontLoaded 预热（会话页的网格预算、
 // 终端页的首次测量）；woff2 本体仍只在终端首次渲染时按需下载
 import './styles/terminal-font.css'
+// 主题预设（内置主题 token 表 + 结构性规则）：必须排在 mobile.css / shell.css 之后，
+// 同特异度时后写者胜；主题选择器本身也带 `[data-theme]` 前缀，多数规则不依赖顺序。
+import './styles/theme-presets.css'
 import 'vue-sonner/style.css'
 
 const app = createApp(App)
+
+// 全局异常处理（与桌面端同口径）：Vue 组件渲染/生命周期错误与未捕获 Promise 拒绝
+// 统一提示，避免静默失败。技术详情全量进日志，toast 只做用户可见的通用提示
+// （ADR 0030：用户面永不渲染后端错误原文 / code / request_id）。
+app.config.errorHandler = (err, _instance, info) => {
+  logger.error(`[GlobalError] ${info || 'render'}:`, err)
+  useToast().error(i18n.global.t('mobile.runtimeUnexpected'))
+}
+
+window.addEventListener('unhandledrejection', (event) => {
+  logger.error('[GlobalError] unhandledrejection:', event.reason)
+  useToast().error(i18n.global.t('mobile.runtimeUnexpected'))
+})
 
 // 尽早初始化（debug 构建专属）：把前端日志经 frontendLogger 批量转发到 Rust（tracing → logcat），
 // AI agent 通过 tauri:android:dev:log 落盘文件 grep `frontend` 获取；release 两端 logger 均为空函数
@@ -37,7 +54,7 @@ app.use(i18n)
 const settingsStore = useSettingsStore()
 const i18nStore = useI18nStore()
 
-// 异步初始化流程：设置加载 → 语言初始化 → 插件系统初始化 → 挂载应用
+// 异步初始化流程：设置加载 → 语言初始化 → 主题预设 → 挂载应用（首帧）→ 后台插件初始化
 // 插件系统必须在设置加载后初始化，因为插件的启用状态依赖设置
 Promise.all([
   initPlatform(),
@@ -54,16 +71,23 @@ Promise.all([
   // 消除深色用户「首帧浅色 → onMounted 后深色」的启动闪变
   presetThemeBeforeMount()
 
-  // 设置就绪后初始化插件系统
-  try {
-    await initPluginSystem(app, pinia, router, i18n)
-    logger.log('[Init] Plugin system initialized')
-  } catch (e) {
-    logger.error('[Init] Plugin system init failed:', e)
-  } finally {
-    // 插件初始化结束即打点(失败不卡开屏,交给兜底时长)
-    completeStartupTask('plugins')
-  }
-
+  // 设置就绪后初始化插件系统——**先挂载、再后台初始化**
+  //
+  // 插件初始化主链是「宿主凭证 + 清单 + 逐插件前端 import」，全程 await；放在
+  // mount 之前等于让首帧白等整条链（后端还在异步解压内置插件 / 编译 WASM）。
+  // 壳首屏的数据来源是宿主命令面（清单），不依赖前端插件注册表；插件注册的
+  // 扩展点（工具箱 / 导航 / 设置 / 终端）在就绪后经响应式注册表自动上线。
   app.mount('#app')
+
+  void (async () => {
+    try {
+      await initPluginSystem(app, pinia, router, i18n)
+      logger.log('[Init] Plugin system initialized')
+    } catch (e) {
+      logger.error('[Init] Plugin system init failed:', e)
+    } finally {
+      // 插件初始化结束即打点（失败不卡开屏，交给兜底时长）
+      completeStartupTask('plugins')
+    }
+  })()
 })

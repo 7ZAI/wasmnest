@@ -3,6 +3,7 @@ import type { Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 import { readFileSync, rmSync } from 'fs'
+import { i18nPrecompile } from '../scripts/i18n-precompile.mjs'
 
 const host = process.env.TAURI_DEV_HOST
 
@@ -32,13 +33,34 @@ const excludeDevOnlyPublicAssets: Plugin = {
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [vue(), excludeDevOnlyPublicAssets],
+  // 宿主文案构建期预编译 + `vue-i18n` 运行时构建（丢弃消息编译器）：移动端
+  // `window.__WASMNEST_SHARED__['vue-i18n']` 供各 wasm app 复用，编译器不在产物里
+  // 才能撤双端 CSP 的 `'unsafe-eval'`（安全审查 #50）。新增语言文件必须加进清单。
+  plugins: [
+    vue(),
+    i18nPrecompile({
+      include: [
+        'src/locales/zh-CN/common.ts',
+        'src/locales/zh-CN/mobile.ts',
+        'src/locales/zh-CN/settings.ts',
+        'src/locales/zh-CN/shell.ts',
+        'src/locales/en/common.ts',
+        'src/locales/en/mobile.ts',
+        'src/locales/en/settings.ts',
+        'src/locales/en/shell.ts',
+      ],
+    }),
+    excludeDevOnlyPublicAssets,
+  ],
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
+    __INTLIFY_JIT_COMPILATION__: false,
+    __INTLIFY_DROP_MESSAGE_COMPILER__: true,
   },
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js',
     },
   },
   server: {

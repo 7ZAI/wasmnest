@@ -1,7 +1,6 @@
-//! crate 边界锁（server-lib-split spec D7 / §4 票 06，由实施票 07 收口；
-//! wasm-core-lib-split 票 09 把机制内核与两个能力域 crate 并入登记表）
+//! crate 边界锁：宿主侧的全图依赖断言（机制内核与能力域 crate 也并入登记表）
 //!
-//! 票 03-05 已把结构锁逐面下沉进各自 crate（`wasmnest-server-websocket` /
+//! 结构锁已逐面下沉进各自 crate（`wasmnest-server-websocket` /
 //! `-peer-net` 的 `dependency_direction_lock.rs`）。那些锁有一个共同盲区：
 //! **每把锁只看得见自己与被点名的少数对侧**。例如 HTTP 面的清单里若被加上
 //! `wasmnest-server-peer-net`，没有任何一把面内锁会转红——而「传输面之间零横向」
@@ -12,11 +11,11 @@
 //!
 //! | 断言 | 守住什么 | 逐面锁为何覆盖不到 |
 //! | --- | --- | --- |
-//! | ① 拆分产物清单之间零横向 / 无反向依赖 | I1 + 「面之间零横向」的全矩阵 | 每把锁只钉自己 + 1~2 个对侧 |
-//! | ② 必需的向下依赖边存在 | I2 / D1（base 是所有面的地基） | 缺边只在**使用者**侧可见 |
+//! | ① 拆分产物清单之间零横向 / 无反向依赖 | 「面之间零横向」的全矩阵 | 每把锁只钉自己 + 1~2 个对侧 |
+//! | ② 必需的向下依赖边存在 | base 是所有面的地基 | 缺边只在**使用者**侧可见 |
 //! | ③ 宿主清单声明全部拆分产物 | 拆分产物没被悄悄摘掉 | 面内锁看不见宿主清单 |
-//! | ④ 双面认识点唯一 | I1 在宿主侧的表达（装配面收敛在组合根） | 面内锁看不见宿主源码 |
-//! | ⑤ 全局端口注册表只有一个装配点 | 组合根唯一性（票 07 的实测教训） | 无——纯宿主侧不变量 |
+//! | ④ 双面认识点唯一 | 「零横向」在宿主侧的表达（装配面收敛在组合根） | 面内锁看不见宿主源码 |
+//! | ⑤ 全局端口注册表只有一个装配点 | 组合根唯一性（实测教训） | 无——纯宿主侧不变量 |
 //!
 //! **登记表为什么带路径**：机制内核 `wasmnest-host-kit`、八个能力域 / 传输面 crate
 //! （2026-10-07 能力域 lib 迁根）与整核本体 `wasmnest-wasm-core`（2026-10-08 迁根）
@@ -26,9 +25,9 @@
 //!
 //! ## 为什么 ④ / ⑤ 值得单独锁（两次实测教训）
 //!
-//! - **④**：两个面各自抽 crate 后，I1 的执行方式从「源码文本锁」变成「靠注入而非
-//!   引用」。一旦宿主里多出第二个同时认识两面 crate 的生产模块，就说明有人在组合根
-//!   之外偷偷接了一根线——那正是票 03 让 `serve()` 只认 `TransportFace` 想消灭的形态。
+//! - **④**：两个面各自抽 crate 后，零横向的执行方式从「源码文本锁」变成「靠注入
+//!   而非引用」。一旦宿主里多出第二个同时认识两面 crate 的生产模块，就说明有人在
+//!   组合根之外偷偷接了一根线——那正是让 `serve()` 只认 `TransportFace` 想消灭的形态。
 //! - **⑤**：`wasmnest_server_base::ports` 是进程级 `OnceLock`。曾经 GUI bootstrap 装
 //!   它、无头 harness 不装，症状是网关 `ports::get() == None` 判 `PassThrough` →
 //!   插件激活期登记的**全部**宿主别名 404，而不依赖端口的路径（端口占用、WS 升级）
@@ -42,15 +41,14 @@ use std::path::{Path, PathBuf};
 
 /// 拆分产物清单：`(crate 名, 相对能力仓根 `../wasmnest-lib/` 的路径)`
 ///
-/// **单一事实源已上提 `wasmnest-wasm-core` crate**（wasm-core-whole-crate 票 05
-/// 收口：lib → crate 单向引用）。本表是那张登记表的**再导出**，不是第二份拷贝——
+/// **单一事实源已上提 `wasmnest-wasm-core` crate**（lib → crate 单向引用）。本表是那张登记表的**再导出**，不是第二份拷贝——
 /// 新增/改名拆分产物只改 `wasmnest_wasm_core::crate_boundary_lock::SPLIT_CRATES`
 /// 一处（曾为镜像表，两处同改的漂移风险已消除）。
 ///
-/// 表内容：server 五面 + 加密引擎（票 03-06）+ 机制内核（能力仓双端共享锚点）+
-/// 能力域 crate（wasm-core-lib-split 票 03/07/08）+ **整核本体 `wasmnest-wasm-core`**
-/// （wasm-core-whole-crate 票 02/05；2026-10-08 迁根）。ADR 0036 撤销的 `bedcode-sqlite-engine`
-/// 不在表内（`host-database` / `host-plugin-database` / `host-storage` 三域与
+/// 表内容：server 五面 + 加密引擎 + 机制内核（能力仓双端共享锚点）+ 能力域 crate
+/// + **整核本体 `wasmnest-wasm-core`**（2026-10-08 迁根）。已撤销的
+/// `bedcode-sqlite-engine` 不在表内（`host-database` / `host-plugin-database` /
+/// `host-storage` 三域与
 /// SQLite 引擎面留在核心）。
 ///
 /// **为什么带路径列**：机制内核、能力域 / 传输面 crate 与整核本体
@@ -74,44 +72,46 @@ fn split_crate_dir(crate_name: &str) -> PathBuf {
 }
 
 /// 宿主 crate 名——出现在任何拆分产物清单里即「反向依赖宿主」，在 crate
-/// 边界层面直接不成立（票 05/06 的面内锁也各自禁这一条，本锁在全矩阵上再钉一次）。
+/// 边界层面直接不成立（面内锁也各自禁这一条，本锁在全矩阵上再钉一次）。
 ///
-/// L2 runtime crate 化（2026-10-21）：`[package].name` 从 `wasmnest-desktop` 改为
+/// runtime crate 化（2026-10-21）：`[package].name` 从 `wasmnest-desktop` 改为
 /// `wasmnest-desktop-runtime`（二进制名仍是 `wasmnest-desktop`）。本常量跟随
 /// **包名**（依赖清单里出现的是包名），不是产物名。
 const HOST_CRATE: &str = "wasmnest-desktop-runtime";
 
 /// **登记表**：允许的向下依赖边（key crate → 它可以依赖的拆分产物兄弟）
 ///
-/// 形状即 server-lib-split spec §2 的依赖图：`base` 是叶子地基；`crypto-engine` 与
+/// 形状即依赖图：`base` 是叶子地基；`crypto-engine` 与
 /// `core` 向上取地基；两个传输面只向下取 base + core；`peer-net` 是**独立引擎域**
-/// （D2）——它不依赖 core，因为它对内核零引用，依赖 core 只是「同在 server 下」
+/// ——它不依赖 core，因为它对内核零引用，依赖 core 只是「同在 server 下」
 /// 的错觉。
 ///
-/// 形状即 spec §2 的依赖图：`base` 是叶子地基；`crypto-engine` 与 `core` 向上取
-/// 地基；两个传输面只向下取 base + core；`peer-net` 是**独立引擎域**（D2）——
+/// 形状即依赖图：`base` 是叶子地基；`crypto-engine` 与 `core` 向上取地基；两个
+/// 传输面只向下取 base + core；`peer-net` 是**独立引擎域**——
 /// 它不依赖 core，因为它对内核零引用，依赖 core 只是「同在 server 下」的错觉。
 ///
-/// 新增边 = 改动架构，必须改本表并在 spec / ADR 记理由（登记表语义）。
+/// 新增边 = 改动架构，必须改本表并说明理由（登记表语义）。
 ///
-/// `http → crypto-engine` 是票 08 新增的一条，**仅 `[dev-dependencies]`**（生产段
+/// `http → crypto-engine` 是后来新增的一条，**仅 `[dev-dependencies]`**（生产段
 /// 仍只有 base + core，断言 ② 钉着）：链路加密集成用例要扮演客户端、自建 x25519
 /// 对端密钥，生产代码一律经 core 的 `link_crypto` 取能力。判据对 `[dependencies]`
 /// 与 `[dev-dependencies]` 一视同仁（横向边在 dev 段也是横向），所以这条边必须显式
 /// 登记而不是「顺手加上去」。
 ///
-/// wasm-core-lib-split 追加的边（票 03/04/05/06）：`host-kit` 不依赖任何拆分
+/// 后续追加的边：`host-kit` 不依赖任何拆分
 /// 产物（机制内核自身零内部依赖）；其余拆分产物里，**凡带插件绑定层的**都必须站在
 /// 它上面——`add_to_linker::<WasmPluginState, D>` 的单态 `S` 在 kit 里，而绑定层就是
 /// 「实现搬进 crate 后仍要被装配」的那一半。传输面（http / websocket / peer-net）
-/// 与能力域 crate（discovery）同此。票 07/08 的 sqlite 能力域 crate 已由 ADR 0036
+/// 与能力域 crate（discovery）同此。后续的 sqlite 能力域 crate 已由
 /// 整体撤销，故不在本表内。
 ///
 /// **能力域之间、传输面之间、各域与传输面之间仍全部零横向**（各能力域之间不许互相
 /// 引用，否则会耦成一体，违背「按需组合不同核心」的前提）。
 const ALLOWED_DOWNWARD_EDGES: &[(&str, &[&str])] = &[
     ("wasmnest-server-base", &[]),
-    ("wasmnest-crypto-engine", &["wasmnest-server-base"]),
+    // 2026-11-08：crypto-engine 自带 `CryptoError`，不再向上取 base 的
+    // `AppError`（中性算法原语不背宿主错误信封）——它是本表里唯一零内部依赖的引擎域。
+    ("wasmnest-crypto-engine", &[]),
     (
         "wasmnest-server-core",
         &["wasmnest-server-base", "wasmnest-crypto-engine"],
@@ -131,20 +131,20 @@ const ALLOWED_DOWNWARD_EDGES: &[(&str, &[&str])] = &[
     ),
     (
         "wasmnest-server-peer-net",
-        &["wasmnest-server-base", "wasmnest-host-kit"],
+        &["wasmnest-server-base", "wasmnest-host-kit", "wasmnest-p2p-engine"],
     ),
     // 机制内核：不依赖任何拆分产物（机制面零内部依赖）
     ("wasmnest-host-kit", &[]),
     // 能力域 crate：向下只取机制内核
     ("wasmnest-discovery-engine", &["wasmnest-host-kit"]),
-    // host-pty 能力域（票 02 迁引擎体 → ADR 0039 整面迁出）：引擎面 + WIT 接线 +
+    // host-pty 能力域（引擎体迁入后整面迁出）：引擎面 + WIT 接线 +
     // 域机制都住在本 crate（自带 `bindgen!` + `HostModule` 自报）；端口 adapter 自
-    // 票 02 批次 02 起住宿主 `src/plugin/pty.rs`（宿主直接消费，wasm-core 不再依赖
+    // 住宿主 `src/plugin/pty.rs`（宿主直接消费，wasm-core 不再依赖
     // 本 crate）。向下边与四域同形：基础层（错误 / 常量）+ 机制内核 host-kit
     // （`WasmPluginState` / `HostModule` / `ModuleEntry` 是 `add_to_linker` 与自报
     // 的前提，与 http / ws / peer-net / discovery 完全一致）。
     ("wasmnest-pty-engine", &["wasmnest-server-base", "wasmnest-host-kit"]),
-    // 整核本体（wasm-core-whole-crate 票 05）：wasmnest-wasm-core 是全部拆分产物
+    // 整核本体：wasmnest-wasm-core 是全部拆分产物
     // 的组装点——站在基础层（base / host-kit）与全部能力域 crate（ws / peer / http）
     // 之上，把四通道与四闸门装配成一个可复用的插件机制内核。它依赖
     // `wasmnest-plugin-api`（SDK WIT 绑定）与能力仓的 `wasmnest-peer-net` /
@@ -157,18 +157,18 @@ const ALLOWED_DOWNWARD_EDGES: &[(&str, &[&str])] = &[
             // server-core 仅 dev-dependencies（host_harness 测试起服）；生产段已随
             // 端事实收口（2026-10-13）摘除：network.port 的 ServerSupervisor 读取迁
             // 桌面宿主 `src-tauri/src/plugin/host_facts.rs`，内核经 HostFactsPort 取
-            // 值（ADR 0049 D1「端差异不进机制」）。
+            // 值（端差异不进机制）。
             "wasmnest-server-core",
             "wasmnest-host-kit",
             "wasmnest-server-websocket",
             "wasmnest-server-peer-net",
             "wasmnest-server-http",
-            // 票 02 批次 02：`wasmnest-pty-engine` 边已摘除（端口 adapter 随域迁宿主
+            // `wasmnest-pty-engine` 边已摘除（端口 adapter 随域迁宿主
             // `src/plugin/pty.rs` 且内核不再引用该 crate）。
             //
             // **peer / ws / http 三条边仍是保留边**（本清单 + 下方 REQUIRED 表同时登记）：
             // 内核继续消费这些 crate 的**引擎面**（peer 的 `PeerCtx` 类型 / ws / http
-            // 的帧投递与连接清单）——peer 生命周期自 service-leases 起已改由宿主
+            // 的帧投递与连接清单）——peer 生命周期已改由宿主
             // 服务注册表驱动，内核只余类型面；摘边要把剩余消费点一并搬出内核，属另一件事。
             //
             // 单形态（2026-10-13）：`wasmnest-crypto-engine` 与 `wasmnest-discovery-engine`
@@ -180,11 +180,12 @@ const ALLOWED_DOWNWARD_EDGES: &[(&str, &[&str])] = &[
 
 /// 必需的向下依赖边（只看生产 `[dependencies]` 段）
 ///
-/// 缺失即红：要么有人把内核面复制进了本 crate，要么清单被误删——两种都是票 02
+/// 缺失即红：要么有人把内核面复制进了本 crate，要么清单被误删——两种都是
 /// 明确禁止的形态。`base` 出现在每一条里，因为它是端口 traits / 错误 / 网络配置
 /// 的定义处（`ports::get()` 唯一的合法来源）。
 const REQUIRED_DOWNWARD_EDGES: &[(&str, &str)] = &[
-    ("wasmnest-crypto-engine", "wasmnest-server-base"),
+    // 2026-11-08：`crypto-engine → server-base` 必填边摘除——crypto-engine
+    // 自带 `CryptoError`、零内部 crate 依赖；base 也不再为 `From<CryptoError>` 反向认识它。
     ("wasmnest-server-core", "wasmnest-server-base"),
     ("wasmnest-server-core", "wasmnest-crypto-engine"),
     ("wasmnest-server-http", "wasmnest-server-base"),
@@ -195,7 +196,7 @@ const REQUIRED_DOWNWARD_EDGES: &[(&str, &str)] = &[
     // 能力域 crate 必须真的站在机制内核上（`add_to_linker::<WasmPluginState, D>`
     // 的单态 S 在 kit 里；缺这条边说明绑定层搬错了位置）
     ("wasmnest-discovery-engine", "wasmnest-host-kit"),
-    // host-pty 能力域（票 02 + ADR 0039）：生产 `[dependencies]` 必须有基础层
+    // host-pty 能力域：生产 `[dependencies]` 必须有基础层
     // （错误 / 常量 / 连接身份真源在 wasmnest-server-base；缺边 = 引擎复制了错误
     // 类型或清单被误删）与机制内核（host-kit：WIT 接线 + 自报的前提，同四域）
     ("wasmnest-pty-engine", "wasmnest-server-base"),
@@ -205,9 +206,9 @@ const REQUIRED_DOWNWARD_EDGES: &[(&str, &str)] = &[
     ("wasmnest-server-http", "wasmnest-host-kit"),
     ("wasmnest-server-websocket", "wasmnest-host-kit"),
     ("wasmnest-server-peer-net", "wasmnest-host-kit"),
-    // 整核本体（wasm-core-whole-crate 票 05）：必须真的站在基础层与全部能力域之上
+    // 整核本体：必须真的站在基础层与全部能力域之上
     // （缺 host-kit ⇒ 机制内核被复制进本 crate；缺能力域 crate ⇒ 能力实现被复制进
-    // 内核——两种都是票 02 明令禁止的形态）。
+    // 内核——两种都是明令禁止的形态）。
     ("wasmnest-wasm-core", "wasmnest-server-base"),
     ("wasmnest-wasm-core", "wasmnest-host-kit"),
     // 单形态（2026-10-13）：wasm-core → crypto-engine 必须边已摘除（认证中心 /
@@ -221,7 +222,7 @@ const REQUIRED_DOWNWARD_EDGES: &[(&str, &str)] = &[
     ("wasmnest-wasm-core", "wasmnest-server-websocket"),
     ("wasmnest-wasm-core", "wasmnest-server-peer-net"),
     ("wasmnest-wasm-core", "wasmnest-server-http"),
-    // 票 02 批次 02：wasm-core → pty-engine 必须边已摘除（连同内核侧 adapter 一起
+    // wasm-core → pty-engine 必须边已摘除（连同内核侧 adapter 一起
     // 消失）；ws / peer-net / http 三条边因内核仍用其引擎面（bus 帧投递 / 连接清单 /
     // 端点登记）保留。discovery-engine 不进必填段且已整体摘边（单形态：mdns 引擎由
     // 两端宿主各自直连；见上方 ALLOWED 表注释）。
@@ -232,7 +233,11 @@ const REQUIRED_DOWNWARD_EDGES: &[(&str, &str)] = &[
 /// 只有组合根：`wasmnest_server_core::app::serve` 只认 `TransportFace`，两个面的
 /// face 实现各自随面下沉，把 faces 交给 `serve` 这一步只有一处。新增条目必须同时
 /// 回答「为什么不能在组合根之外接线」。
-const BOTH_FACES_ALLOWLIST: &[&str] = &["src/server/composition.rs"];
+///
+/// `src/commands.rs` 是唯一例外：`get_link_crypto_app_policies` **只读**地枚举
+/// HTTP / WS 端点注册表（`list_all()`）来展示「哪些应用当前有暴露面」，不装配面、
+/// 不调 `serve()`——审计读模型不是接线点（新增写面 / 装配面后仍必须回组合根）。
+const BOTH_FACES_ALLOWLIST: &[&str] = &["src/server/composition.rs", "src/commands.rs"];
 
 /// 宿主源码里**允许**调 `ports::init`（装全局端口注册表）的文件（断言 ⑤ 的登记表）
 ///
@@ -261,7 +266,7 @@ fn packages_dir() -> PathBuf {
 
 /// 拆分产物的 `src` 扫描根（供宿主的退役面防回接锁共用）
 ///
-/// **实现已收口为单向引用**（wasm-core-whole-crate 票 05）：扫描根由
+/// **实现已收口为单向引用**：扫描根由
 /// `wasmnest_wasm_core::crate_boundary_lock` 提供（单一事源），本函数只是
 /// 薄委托——面抽 crate 后，宿主那些「扫 `src` 树」的退役面锁
 /// （`retired_kernel_session_domain_*` / `retired_peer_transfer_orchestration_*` /
@@ -278,7 +283,7 @@ fn read_file(path: &Path) -> String {
 /// 逐行解析清单，返回 `(section 名, 依赖键)` 对
 ///
 /// 按**行**切段：段内值常含 `features = ["derive"]` 这类方括号，用「下一个 `[`」
-/// 找段尾会把清单截断在 serde 行上（票 05 首版实测踩中，误报「清单缺少内核依赖」）。
+/// 找段尾会把清单截断在 serde 行上（实测踩中，误报「清单缺少内核依赖」）。
 /// `[target.'cfg(x)'.dependencies]` 这类带条件的段按**后缀**匹配段名。
 fn parse_dependency_keys(manifest: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
@@ -390,7 +395,7 @@ fn format_hits(hits: &[(String, usize, String)]) -> String {
 /// 断言 ④ 只管**生产**源码：测试二进制与 `#[cfg(test)]` 树有权同时驱动两个面
 /// （`session_e2e` 就要经面 crate 的 DTO 造黄金形状），把它们算进来只会逼出一堆
 /// 无意义的豁免条目，稀释「登记 = 显式裁决」的语义。`tests.rs` 与 `tests/` 同名同义
-/// （AGENTS §6 模块入口文件与目录同名），一并视为测试面。
+/// （模块入口文件与目录同名），一并视为测试面。
 fn is_test_tree(rel: &str) -> bool {
     rel.split('/').any(|seg| matches!(seg, "tests" | "tests.rs")) || rel.ends_with("_test.rs")
 }
@@ -459,7 +464,7 @@ fn collect_host_itest_files() -> Vec<String> {
 }
 
 /// 源码里「某 crate 名以裸标识符形态出现」的命中（`use wasmnest_server_http::…`
-/// 形态里 crate 名前面**没有** `::`，故只能用词边界判据——票 05/06 的面内锁在
+/// 形态里 crate 名前面**没有** `::`，故只能用词边界判据——面内锁在
 /// 这点上都栽过一次：拿段判据去扫 crate 名，实测恒零命中、锁静默失效）
 fn find_crate_name_hits(files: &[String], crate_ident: &str) -> Vec<(String, usize, String)> {
     let mut hits = Vec::new();
@@ -475,10 +480,10 @@ fn find_crate_name_hits(files: &[String], crate_ident: &str) -> Vec<(String, usi
 
 /// 命中里的**文件集合**，**排除**纯强制引用行（`use <crate> as _;`）
 ///
-/// 为什么排除（断言 ④ 的精度修正，wasm-core-lib-split 票 06 实测触发）：
+/// 为什么排除（断言 ④ 的精度修正，实测触发）：
 /// `inventory` 的能力模块自报靠 linker-section 静态，**未被引用的 rlib 不进最终
 /// 二进制**⇒ 宿主必须有一行 `use <crate> as _;` 强制引用每个能力域所在的 crate。
-/// 能力域每迁出一个 crate（票 04 ws / 05 peer-net / 06 http），这行就把该 crate 名
+/// 能力域每迁出一个 crate（ws / peer-net / http），这行就把该 crate 名
 /// 写进了同一个文件，于是「同时认识两面」的机械扫描会把**能力模块注册面**误判成
 /// 「传输面接线」。
 ///
@@ -575,12 +580,24 @@ fn required_downward_edges_exist_in_production_deps() {
     }
 }
 
+/// 拆分产物里**不要求宿主直接声明**的嵌套底座
+///
+/// 登记表（能力仓 `crate_boundary_lock::SPLIT_CRATES`）同时服务「退役面扫描」与
+/// 「宿主接线」两个目的。`wasmnest-p2p-engine` 是 `wasmnest-server-peer-net` 的
+/// libp2p 传输底座：宿主经 peer-net 间接消费、不直接命名它；要求宿主清单声明一条
+/// 没人用的 git 依赖，反而会把「宿主直接依赖」这个语义写坏（旧 lib tag 里甚至还没
+/// 有这个 crate，发布形态要等下一次 tag 才能解析）。
+const HOST_NESTED_SPLIT_CRATES: &[&str] = &["wasmnest-p2p-engine"];
+
 /// 断言③：宿主清单声明全部拆分产物
 #[test]
 fn host_manifest_declares_every_server_lib_crate() {
     let manifest = read_file(&crate_root().join("Cargo.toml"));
     let deps = dep_keys(&manifest, ALL_DEP_SECTIONS);
     for crate_name in split_crate_names() {
+        if HOST_NESTED_SPLIT_CRATES.contains(&crate_name) {
+            continue;
+        }
         assert!(
             deps.iter().any(|k| k == crate_name),
             "宿主依赖清单缺少 `{crate_name}`——拆分产物没被接线（表：{SPLIT_CRATES:?}）"

@@ -84,6 +84,8 @@ beforeEach(() => {
   errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
   // 挂载时读取版本号
   invokeHandlers.set('get_app_version', async () => '1.0.0')
+  // 宿主面命令（install_update）带宿主凭证：loader session 命令必须可解析
+  invokeHandlers.set('plugin_frontend_loader_session', async () => 'test-host-credential')
   // 载入前把单例状态复位（模块级 ref 跨用例共享）
   const { status } = useUpdateChecker()
   status.value = 'idle'

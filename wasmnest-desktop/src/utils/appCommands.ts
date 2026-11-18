@@ -178,7 +178,10 @@ export async function appInvoke<T = unknown>(
 }
 
 /** 令牌失效自愈（同 appInvoke 口径）：被拒则换发、再试一次；业务失败不重试 */
-async function withAuthRetry<T>(appId: string, run: (credential: string) => Promise<T>): Promise<T> {
+async function withAuthRetry<T>(
+  appId: string,
+  run: (credential: string) => Promise<T>,
+): Promise<T> {
   let used: string | null = null
   try {
     used = await ensureChannelToken(appId)
@@ -192,7 +195,10 @@ async function withAuthRetry<T>(appId: string, run: (credential: string) => Prom
 
 // ==================== 插件存储（host-plugin-database KV，令牌限定 app 命名空间）====================
 
-export async function appStorageGet<T = unknown>(appId: string, key: string): Promise<T | undefined> {
+export async function appStorageGet<T = unknown>(
+  appId: string,
+  key: string,
+): Promise<T | undefined> {
   return (await withAuthRetry(appId, (credential) =>
     invoke('plugin_storage_get', { pluginId: appId, key, credential }),
   )) as T | undefined
@@ -207,6 +213,25 @@ export async function appStorageSet(appId: string, key: string, value: unknown):
 export async function appStorageDelete(appId: string, key: string): Promise<void> {
   return withAuthRetry(appId, (credential) =>
     invoke('plugin_storage_delete', { pluginId: appId, key, credential }),
+  )
+}
+
+// ==================== 链路加密策略（按应用；app 通道令牌限定自己）====================
+
+/** 应用链路加密策略（与能力仓 `link_crypto::EncryptionPolicy` 的 wire 字面量一致） */
+export type AppLinkCryptoPolicy = 'off' | 'preferred' | 'required'
+
+/** 读取本应用的链路加密策略（令牌限定 app 命名空间；宿主不设全局下限） */
+export async function appLinkCryptoGet(appId: string): Promise<AppLinkCryptoPolicy> {
+  return (await withAuthRetry(appId, (credential) =>
+    invoke('get_app_link_crypto_policy', { pluginId: appId, credential }),
+  )) as AppLinkCryptoPolicy
+}
+
+/** 写入本应用的链路加密策略（令牌限定 app 命名空间；宿主只执行应用的决定） */
+export async function appLinkCryptoSet(appId: string, policy: AppLinkCryptoPolicy): Promise<void> {
+  return withAuthRetry(appId, (credential) =>
+    invoke('set_app_link_crypto_policy', { pluginId: appId, policy, credential }),
   )
 }
 
@@ -253,10 +278,7 @@ export async function networkAuthRespond(
 
 // ==================== 应用授权读模型与策略面（宿主面命令，需宿主凭证）====================
 
-import {
-  type AuthStrategy,
-  type PluginAuthOverview,
-} from '@/shell/auth/authPolicy'
+import { type AuthStrategy, type PluginAuthOverview } from '@/shell/auth/authPolicy'
 
 /**
  * 应用授权读模型（spec §9.3）：策略 + 授权记录 + 第一方免询问项

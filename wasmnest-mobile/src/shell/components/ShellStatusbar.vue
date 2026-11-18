@@ -25,7 +25,7 @@
         <!-- 通知指示：有未读时显示条目数，没有则不占位（不显示「0」） -->
         <span
           v-if="badgeCount > 0"
-          class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-semibold leading-none"
+          class="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full text-[11px] font-semibold leading-none"
           :style="{ background: 'var(--mobile-error)', color: 'var(--mobile-text-on-accent)' }"
           aria-hidden="true"
         >

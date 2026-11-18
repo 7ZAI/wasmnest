@@ -1,7 +1,11 @@
 <template>
   <section class="shell-card card-frame">
     <h3 class="shell-card-title">
-      <ShellIcon :name="icon" :size="14" />
+      <!-- 卡头图标：缺省是壳内 glyph 表里的名字；应用卡片要显示应用自带图标
+           （`<img>`），由调用方经 `#icon` 槽替换（两处同一位置，不并排两枚图标）。 -->
+      <slot name="icon">
+        <ShellIcon v-if="icon" :name="icon" :size="14" />
+      </slot>
       <span>{{ title }}</span>
     </h3>
     <p v-if="desc" class="shell-card-desc">{{ desc }}</p>

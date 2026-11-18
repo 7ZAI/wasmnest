@@ -1,6 +1,4 @@
 //! 生物认证密钥插件（BiometricKeyPlugin，P-256 + Keystore）
-//!
-//! 从 android_plugins.rs 拆分。
 
 use std::sync::OnceLock;
 use tauri::plugin::{Builder, PluginHandle};

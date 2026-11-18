@@ -63,6 +63,13 @@ export default {
       home: 'Home',
       homeTitle: 'Home: apps keep running in the background',
     },
+    /** Floating navigation (stays above any face once enabled; same keys and copy as mobile) */
+    floatingNav: {
+      back: 'Back',
+      home: 'Back home',
+      recents: 'Switch apps',
+      move: 'Floating navigation, draggable; focus it and use arrow keys to move',
+    },
     toolbar: {
       notifs: 'Notifications, {count}',
       notifsTitle: 'Notification center ({count})',
@@ -93,7 +100,15 @@ export default {
       },
       settings: {
         name: 'Settings',
-        desc: 'Appearance · background · skins · system · about',
+        desc: 'Appearance · system · logging · permissions · about',
+      },
+      appearance: {
+        name: 'Appearance',
+        desc: 'Colour mode · Language · Font size · Wallpaper · Themes',
+      },
+      shortcuts: {
+        name: 'Shortcuts',
+        desc: 'Shell keyboard shortcuts · rebindable',
       },
     },
     quickSettings: {
@@ -105,6 +120,7 @@ export default {
       tileAnim: 'Animations',
       tileCrypto: 'Link crypto',
       tileSleep: 'Prevent sleep',
+      tileNav: 'Floating nav',
     },
     notif: {
       title: 'Notification Center',
@@ -134,7 +150,7 @@ export default {
       },
       uninstalled: {
         title: 'Uninstalled',
-        body: '{name} and its data removed',
+        body: '{name} was removed from this device',
       },
       approved: {
         title: 'Approved & started',
@@ -147,10 +163,6 @@ export default {
       },
       open: 'View',
       reopen: 'Reopen',
-      ready: {
-        title: 'Runtime ready',
-        body: '{count} apps loaded; authorization policy fail-closed self-check passed.',
-      },
     },
     ctx: {
       aria: 'App actions',
@@ -161,6 +173,32 @@ export default {
       stop: 'Stop',
       uninstall: 'Uninstall',
       uninstallDisabled: 'Stop the app before uninstalling',
+    },
+    // Shell shortcuts (ADR 0060): action names / recording interaction / inline
+    // validation copy. Action id set lives in shortcutsModel SHORTCUT_ACTIONS;
+    // key segments map one-to-one to actions.
+    shortcuts: {
+      cardTitle: 'Key bindings',
+      hint: 'Press a new combo while recording · Esc cancels · Backspace clears (frees the combo for apps). A combo must include Ctrl or Alt.',
+      unbound: 'Unbound',
+      recording: 'Press a combo…',
+      changeBinding: 'Change shortcut for {action}',
+      resetRow: 'Reset',
+      resetAll: 'Reset all to defaults',
+      conflict: 'Already used by "{action}". Pick another combo.',
+      reserved: 'May be intercepted by the system or the webview; not guaranteed to fire.',
+      missingModifier: 'A combo must include Ctrl or Alt.',
+      action: {
+        appNext: { name: 'Next app', desc: 'Switch to the next running app' },
+        appPrev: { name: 'Previous app', desc: 'Switch to the previous running app' },
+        multitask: { name: 'Multitask view', desc: 'Toggle the task switcher' },
+        home: { name: 'Go home', desc: 'Return to the home screen' },
+        settings: { name: 'Open settings', desc: 'Open the Settings system page' },
+        appsManage: { name: 'Open app management', desc: 'Open the Apps system page' },
+        theme: { name: 'Toggle colour mode', desc: 'Switch between light and dark' },
+        fontUp: { name: 'Increase interface font', desc: 'One font-size level up' },
+        fontDown: { name: 'Decrease interface font', desc: 'One font-size level down' },
+      },
     },
     dialog: {
       close: 'Close dialog',
@@ -181,9 +219,26 @@ export default {
       },
       uninstall: {
         title: 'Uninstall "{name}"?',
-        body: 'Deletes install directory, plugin storage and enable state; not recoverable. Auth records are removed too.',
+        body: 'App data is deleted by default; check the box to keep it. Approval / auth records are always revoked, so reinstall requires a new approval.',
+        keepData: 'Keep app data (reused after reinstall)',
+        deleteDataHint: 'Keep app data is unchecked (default): the private database and storage will be deleted. This cannot be undone.',
         confirm: 'Confirm uninstall',
         success: '{name} uninstalled',
+      },
+      install: {
+        success: '"{name}" installed',
+        upgradeSuccess: '"{name}" upgraded',
+      },
+      installUpgrade: {
+        title: 'Upgrade "{name}"?',
+        body: 'An app with the same id is already installed. Upgrading in place keeps its data (plugin storage and auth records); changed content requires re-approval on next launch.',
+        confirm: 'Upgrade',
+      },
+      installRestore: {
+        title: 'Restore old app data?',
+        body: 'Data from the previous install was kept (private database and storage). Choose whether to restore it; installing without data (the default) permanently deletes the old data.',
+        discard: 'Install without data',
+        restore: 'Restore data & install',
       },
       stopService: {
         title: 'Stop service "{name}"?',
@@ -195,16 +250,49 @@ export default {
         desc: 'These apps are still running:',
         none: 'No apps running; you can quit now.',
         confirm: 'Quit anyway',
+        quitting: 'Shutting down gracefully…',
+        quittingHint: 'The app will force-quit if it stops responding.',
+        quittingButton: 'Quitting…',
       },
     },
     settings: {
+      // Appearance entry card (first card on settings): style items live in the
+      // sub-page SysAppearanceView
+      appearanceEntry: {
+        title: 'Appearance',
+        desc: 'Colour mode, language, font size, wallpaper and themes',
+        open: 'Open appearance',
+      },
+      // Shortcuts entry card (second card, 2026-10-28): recording / reset live in
+      // the sub-page SysShortcutsView
+      shortcutsEntry: {
+        title: 'Shortcuts',
+        desc: 'View and rebind shell keyboard shortcuts',
+        open: 'Open shortcuts',
+      },
+      nav: {
+        title: 'Navigation',
+        label: 'Floating navigation',
+      },
       ui: {
         title: 'Appearance',
+        // Terminology (2026-10-27): "theme" means the preset only; light/dark is
+        // called "colour mode" here so one screen never has two things named Theme.
+        colorMode: 'Colour mode',
         themeLight: 'Light',
         themeDark: 'Dark',
         themeSystem: 'System',
         language: 'Language',
         fontSize: 'Font size',
+        // Discrete font-size slider levels (no raw px); key order = level order
+        // (useFontSize FONT_SIZE_LEVELS)
+        fontLevel: {
+          xs: 'Smallest',
+          s: 'Small',
+          normal: 'Normal',
+          l: 'Large',
+          xl: 'Largest',
+        },
         animations: 'Animations',
         animationsDesc: 'Screen transitions and overlay effects (disable to degrade)',
       },
@@ -231,12 +319,17 @@ export default {
         hint: 'Security-gate entry; full records live in Permissions & Authorization',
         open: 'Open permissions',
       },
-      skins: {
-        title: 'Theme skins',
-        desc: 'Color schemes for the platform shell; apps keep their own palettes.',
+      themes: {
+        title: 'Themes',
+        desc: 'Overall look of the platform shell; apps keep their own palettes.',
         default: 'Default',
-        defaultDesc: 'Follow the platform default palette',
-        hint: 'Skins only override shell CSS variables; palettes declared by an app root take precedence.',
+        defaultDesc: 'Warm workbench, solid surfaces',
+        glass: 'Glassmorphism · Liquid Glass',
+        glassDesc: 'Specular rims, layered refraction, glass across the whole shell',
+        hyper: 'Hyper colour',
+        hyperDesc: 'Saturated blocks, hard shadows',
+        dynamic: 'Animated',
+        hint: 'Themes cover the platform shell and icon language; palettes declared by an app root take precedence.',
       },
     },
     apps: {
@@ -244,8 +337,27 @@ export default {
         'Sorted by auth risk ("always allow" loosest first). Running apps cannot be uninstalled; enabling goes through the approval gate first.',
       listAria: 'Installed apps',
       install: 'Install app',
-      installDesc: 'Local zip (plugin_install_from_file)',
-      installToast: 'Install app: pick a local zip (full flow pending)',
+      installDesc:
+        'Install an external app from a local zip package; if the same id is already installed, confirm to upgrade in place (app data is kept)',
+      // App update surface: compatibility is judged by the shell (useAppUpdates);
+      // incompatible releases show a reason and never get an update button
+      update: {
+        check: 'Check for updates',
+        apply: 'Update to v{version}',
+        checking: 'Checking for updates…',
+        upToDate: 'Up to date',
+        available: 'v{version} available',
+        incompatible: 'New version v{version} found, but it is incompatible with this platform',
+        updating: 'Downloading and updating…',
+        failed: 'Update check failed, try again later',
+        stopFirst: 'Stop the app before updating (the update replaces the plugin directory)',
+        reason: {
+          noCompat: 'The release lacks a compatibility declaration (legacy release format); compatibility cannot be confirmed',
+          mountContract: 'Requires mount contract {required}; this platform is {current}',
+          hostRuntime: 'Requires host runtime {required}; this platform is {current}. Upgrade the platform first',
+          hostRuntimeInvalid: 'Malformed compatibility version ({required}); refused',
+        },
+      },
       kvSource: 'Source',
       kvSize: 'Size',
       kvViews: 'Views',
@@ -333,6 +445,10 @@ export default {
       wallpaper: {
         invalid: 'This image cannot be used: choose a PNG / JPG / WebP up to 20 MB',
       },
+      install: {
+        builtinConflict: '"{name}" ships with the host and cannot be overwritten',
+        runningConflict: '"{name}" is running — stop it before upgrading',
+      },
     },
   },
   desktop: {
@@ -407,6 +523,23 @@ export default {
     system: {
       title: 'System Settings',
       preventSleep: 'Prevent System Sleep',
+    },
+    // Link encryption (2026-11-04 decision): policy belongs to the app; the host
+    // only enforces and audits it read-only.
+    linkCrypto: {
+      title: 'Link Encryption',
+      wsNotEncrypted:
+        'This host does not support frame-level link encryption for WS endpoints (older build); app policy applies to HTTP only, and WS traffic stays plaintext. Update the host to encrypt WS frames.',
+      fingerprint: 'Local Fingerprint',
+      apps: 'App policies (read-only)',
+      appsEmpty: 'No plugin endpoints are currently registered (apps are stopped or expose none).',
+      endpointCount: '{count} endpoints',
+      policyRequired: 'Require encrypted',
+      policyPreferred: 'Prefer encrypted',
+      policyOff: 'Not required',
+      capabilityMissing:
+        'This host does not expose app-scoped link encryption capabilities (older version); status unavailable.',
+      loadFailed: 'Failed to read link encryption state; see logs.',
     },
     log: {
       title: 'Logging',

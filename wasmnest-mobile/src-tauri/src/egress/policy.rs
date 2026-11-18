@@ -65,11 +65,11 @@ pub enum EgressDecision {
     Deny(EgressError),
 }
 
-// ==================== 授权策略（三档，ADR 0022 2026-09-28 节对齐） ====================
+// ==================== 授权策略（三档） ====================
 
 /// 授权策略档位（每插件 × network 资源；与桌面 `security::auth_policy::AuthStrategy` 同形）
 ///
-/// 裁决要点（ADR 0022）：策略只回答一件事——遇到授权记录**未覆盖**的目标时，
+/// 裁决要点：策略只回答一件事——遇到授权记录**未覆盖**的目标时，
 /// 要不要问用户。它不是业务默认值（B5 不命中），是安全闸门（薄壳②）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthStrategy {
@@ -125,7 +125,7 @@ pub enum Tier {
     AutoAllow,
 }
 
-/// 策略层给出的下一步（档位 → 动作映射的**单点**；票 19 防回接锁目标）
+/// 策略层给出的下一步（档位 → 动作映射的**单点**；防回接锁目标）
 ///
 /// struct 而非 unit enum：档位副作用（读不读 allow 记录、是否必须落
 /// always_allow 审计）是随档位携带的一等字段，消费方无需在注释里记住义务——
@@ -225,7 +225,7 @@ impl AuthRecordSource {
 
 /// 记录效果取值（写入口径单点）
 ///
-/// `deny` 记录优先于一切放行路径（含策略档位与 allow 记录，ADR 0022 spec §6.1）。
+/// `deny` 记录优先于一切放行路径（含策略档位与 allow 记录）。
 pub const AUTH_EFFECT_ALLOW: &str = "allow";
 pub const AUTH_EFFECT_DENY: &str = "deny";
 
@@ -413,7 +413,7 @@ impl EgressPolicy {
         );
     }
 
-    /// 卸载插件：清策略 + 清记录（重装即全新授权，ADR 0022 §8 生命周期）
+    /// 卸载插件：清策略 + 清记录（重装即全新授权）
     pub fn purge_plugin(&self, plugin_id: &str) {
         self.plugin_strategies.write().unwrap().remove(plugin_id);
         self.save_plugin_strategies();
@@ -625,8 +625,12 @@ impl EgressPolicy {
             "path": request.path,
             "source": request.source,
         });
-        app.emit("egress_consent_request", payload)
-            .map_err(|e| AppError::Egress(format!("egress consent emit failed: {e}")))?;
+        if let Err(e) = app.emit("egress_consent_request", payload) {
+            // 事件没发出去 = 前端永远不会回执：必须立刻摘掉本次 oneshot，
+            // 否则 pending_consents 随每次重试累积（长生命周期 map 泄漏）。
+            self.pending_consents.lock().await.remove(&request.id);
+            return Err(AppError::Egress(format!("egress consent emit failed: {e}")));
+        }
         tracing::info!(
             request_id = %request.id,
             host = %request.host,
@@ -685,7 +689,7 @@ impl EgressPolicy {
 
     // ---------- 核心判定 ----------
 
-    /// 判定管线（同步；对齐 ADR 0022 2026-09-28 spec §6.1 顺序）：
+    /// 判定管线（同步，固定顺序）：
     ///
     /// ```text
     /// 0. manifest 声明门（权限位）      —— 资源侧（host_impl/http.rs 已先于本函数执行）
@@ -726,14 +730,17 @@ impl EgressPolicy {
             return EgressDecision::Allow(GrantSource::L2Builtin);
         }
 
-        // 第 2 步：L2 插件 preauthUrls 声明
-        let plugin_hit = self
-            .plugin_patterns
-            .read()
-            .unwrap()
-            .values()
-            .flatten()
-            .any(|p| p.matches(&parsed));
+        // 第 2 步：L2 插件 preauthUrls 声明（**只认调用方自己的声明**）
+        //
+        // 声明是插件对自己的授权，不是全局白名单：任意插件 A 声明某域名后，
+        // 插件 B / 宿主来源同域名请求都命中 L2 就等于让 A 替 B 放行，最小权限
+        // 与「授权主体绑定」双失效。宿主来源（host / useUpdateChecker 等）没有
+        // 插件 id，不享受任何插件声明。
+        let plugin_hit = source
+            .strip_prefix("plugin:")
+            .and_then(|id| self.plugin_patterns.read().unwrap().get(id).cloned())
+            .map(|patterns| patterns.iter().any(|p| p.matches(&parsed)))
+            .unwrap_or(false);
         if plugin_hit {
             return EgressDecision::Allow(GrantSource::L2Plugin);
         }
@@ -747,7 +754,7 @@ impl EgressPolicy {
             GRANT_PLUGIN_HOST
         };
 
-        // 第 3 步：硬拒绝记录优先于一切放行路径（ADR 0022 spec §6.1 第 1 步）
+        // 第 3 步：硬拒绝记录优先于一切放行路径
         if self.record_hit(&parsed.host, &parsed.path, plugin_id, AUTH_EFFECT_DENY) {
             tracing::info!(
                 plugin_id = %plugin_id,

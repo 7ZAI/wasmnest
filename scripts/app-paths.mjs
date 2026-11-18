@@ -51,7 +51,7 @@ export function appsRoot() {
 /**
  * 单个应用工程目录（`<appsRoot>/apps/<slug>/<end>`）。
  *
- * @param {string} slug 应用 slug（目录名：bedcode / ai-chatbox / file-transfer / agent-hub）
+ * @param {string} slug 应用 slug（目录名：bedcode / ai-chatbox / file-transfer）
  * @param {'desktop'|'mobile'} end 端
  * @param {{group?: 'apps'|'servers'}} [options] 工程分组：`apps`（默认，L3 产品应用）
  *        或 `servers`（服务型 wasm：L1 基础服务 / L2 内部业务，随宿主分发、不可卸载）

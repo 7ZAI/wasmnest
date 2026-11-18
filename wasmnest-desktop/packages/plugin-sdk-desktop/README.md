@@ -30,7 +30,7 @@ wasmnest-plugin-desktop create com.example.my-app "My App" --author "you" --rust
 cd my-app
 pnpm install
 ppnpm run dev        # 浏览器开发环境（Dev Shell：空壳宿主 + HMR）
-ppnpm run build      # 构建产物 dist/（vite 前端 + rust-ts 时 cargo wasm32）
+ppnpm run build      # 构建产物 dist/（vite 前端 + full 形态时 cargo wasm32）
 ppnpm run manifest   # 按源码自动填充 plugin.json 的 contributes / permissions
 ```
 
@@ -40,7 +40,7 @@ ppnpm run manifest   # 按源码自动填充 plugin.json 的 contributes / permi
 wasmnest-plugin-desktop build --resources-dir ../wasmnest-desktop/src-tauri/resources/plugins/desktop
 # 把产物复制到 src-tauri/resources/plugins/desktop/{id}/（内置 wasm 应用随安装包分发的方式）
 
-wasmnest-plugin-desktop build --frontend-only / --rust-only   # 只构建一半（rust-ts）
+wasmnest-plugin-desktop build --frontend-only / --rust-only   # 只构建一半（full 形态）
 wasmnest-plugin-desktop dev [pluginDir] [--port <port>] [--host] [--open]
 wasmnest-plugin-desktop manifest --check   # 只检查不写入（CI）
 wasmnest-plugin-desktop validate [--dir]   # 校验 plugin.json（id 格式 / 必填 / pluginType / 权限白名单 / 产物存在性）
@@ -65,7 +65,7 @@ wasmnest-plugin-desktop doctor             # 环境自检（Node / Rust / wasm32
   "description": "示例插件",
   "author": "you",
   "main": "index.js",
-  "pluginType": "ts-only",
+  "pluginType": "frontend",
   "permissions": ["storage", "ui:sidebar"],
   "contributes": {
     "commands": [{ "id": "my-plugin.hello", "title": "Hello" }],
@@ -76,7 +76,7 @@ wasmnest-plugin-desktop doctor             # 环境自检（Node / Rust / wasm32
 
 必填字段：`name` / `version` / `platform` / `main` / `pluginType` / `permissions` / `contributes`
 （校验真源 `bin/manifest-validate.js`；宿主反序列化无缺省，缺失即拒装）。
-`pluginType` 取值 `rust` / `rust-ts` / `ts-only`；`rust-ts` 时必须给 `rustLibrary`
+`pluginType` 取值 `frontend` / `backend` / `full`（语言无关三形态，2026-10-26 重定义，旧值 rust / rust-ts / ts-only 已退役）；`full` 时必须给 `rustLibrary`
 （与 Cargo.toml 包名一致）。
 
 > `sandbox` 已从 manifest 退役（审计票 06 裁决 2：前端不做隔离）——Rust 端类型会
@@ -236,6 +236,24 @@ context.events.on('task:status-changed', (payload) => {
 })
 ```
 
+## 应用更新检查（宿主统一默认实现）
+
+manifest 声明 `update`（缺省 = 不参与检查）后，宿主负责查 GitHub Release、校验身份 / 完整性并做平台兼容裁决；应用设置页直接嵌入 SDK 默认卡片：
+
+```vue
+<script setup lang="ts">
+import AppUpdateSection from '@binblink/wasmnest-plugin-sdk-desktop/ui/app-update'
+</script>
+
+<template>
+  <AppUpdateSection />
+</template>
+```
+
+- 默认数据面 = `PluginContext.appUpdate.check`（宿主注入，appId / 凭证已绑定）；应用也可给 `AppUpdateSection` 传 `check` 使用自实现，或只用 `useAppUpdate()` 自己画 UI。
+- 检查结果状态：`up-to-date` / `available` / `incompatible` / `error`；不兼容会带原因 key，不出现更新按钮。
+- **安装动作不在应用内**：统一在宿主应用管理页执行（需先停用、替换目录并重新审批）。
+
 ## 共享 UI 组件
 
 `./ui` 子路径导出的组件遵循宿主设计 token，插件 UI 与宿主观感一致（**禁止使用原生 `<select>` 等系统控件外观**）：
@@ -266,6 +284,7 @@ const options = [
 | `./ui/terminal-input-rail` | `TerminalInputRail` | 终端输入导航条（终端右侧悬浮，一根横线 = 一次用户输入，位置映射 buffer 相对位置） |
 | `./ui/plugin-global-dialog` | `PluginGlobalDialog` | 宿主全局弹窗（应用根挂载一次；渲染由全局弹窗控制器驱动，插件经 `context.ui.showDialog` 操控，挂载方无 props） |
 | `./ui/zoom-compensation` | （无组件） | fixed 定位覆盖层在根元素 CSS zoom 下的坐标换算（自校准；当前 F=1，作防御性 no-op 保留） |
+| `./ui/app-update` | `AppUpdateSection` | 应用更新检查（宿主统一 GitHub Release 判定；可传 `check` / `labels` 覆盖） |
 
 ## 子路径导出总览
 
@@ -279,6 +298,7 @@ const options = [
 | `@binblink/wasmnest-plugin-sdk-desktop/ui/terminal-input-rail` | `TerminalInputRail` |
 | `@binblink/wasmnest-plugin-sdk-desktop/ui/plugin-global-dialog` | `PluginGlobalDialog` |
 | `@binblink/wasmnest-plugin-sdk-desktop/ui/zoom-compensation` | zoom 坐标换算工具 |
+| `@binblink/wasmnest-plugin-sdk-desktop/ui/app-update` | `AppUpdateSection`（应用更新检查） |
 
 ## 本地开发本 SDK
 

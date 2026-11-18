@@ -1,6 +1,5 @@
-//! Mobile Plugin Types (Host)
+//! 宿主侧插件类型（manifest 词汇真源 = `wasmnest_wasm_core::manifest`）
 //!
-//! **manifest 词汇真源 = `wasmnest_wasm_core::manifest`**（与桌面宿主同源）。
 //! 移动 SDK 的 `wasmnest-plugin-api-mobile::types` 是 guest 面 wire 镜像，
 //! 编到 wasm32 时不能依赖 wasm-core；宿主侧不再消费它。
 
@@ -35,7 +34,7 @@ pub struct LoadedPlugin {
     pub extension_path: String,
 }
 
-/// 插件生命周期事件（真源 = fork crate `manager::types`，批次 2b 迁入；
+/// 插件生命周期事件（真源 = fork crate `manager::types`；
 /// 此处 re-export 保 `crate::plugin::types::PluginLifecycleEvent` 路径——
 /// handler/auth.rs 与 connection/manager.rs 的分发面零改动）
 pub use wasmnest_wasm_core::manager::types::PluginLifecycleEvent;
@@ -51,7 +50,7 @@ pub struct MobilePluginInfo {
     pub author: String,
     pub main: String,
     pub plugin_type: PluginType,
-    /// 装配角色（L1 基础服务 / L2 内部业务 / L3 应用）；缺省 = L3。
+    /// 装配角色（基础服务 / 内部业务 / 业务应用）；缺省 = 业务应用。
     /// 与桌面 `HostPluginInfo.kind` 同形，系统服务区 / 服务监控的唯一判据。
     pub kind: PluginKind,
     pub permissions: Vec<String>,
@@ -59,6 +58,9 @@ pub struct MobilePluginInfo {
     pub contributes: PluginContributes,
     /// 插件来源
     pub source: String,
+    /// manifest `update` 段（缺省 = 不参与更新检查）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update: Option<wasmnest_wasm_core::app_update::PluginUpdateDecl>,
     /// 插件目录路径（含 plugin.json 的目录），前端经 asset protocol 加载前端模块
     pub extension_path: String,
     /// 插件图标：emoji 或相对插件目录的图片路径，缺省时前端生成字母头像回退
@@ -92,6 +94,22 @@ fn dir_size(path: &std::path::Path) -> u64 {
     total
 }
 
+/// 返回给前端**宿主壳**的插件清单条目：清单字段平铺 + 偏好同位
+///
+/// 为什么单开一层而不给 [`MobilePluginInfo`] 加字段：同一结构体也被 `get_info` /
+/// 更新链路复用，那些调用点没有「本次装配的偏好」可填——加可选字段等于把
+/// 「这条清单到底查没查偏好」变成调用方可遗忘的约定。壳清单单独成型，
+/// `list_loaded`（含 `get_info` 等）形状与语义零变化。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileShellPluginInfo {
+    #[serde(flatten)]
+    pub plugin: MobilePluginInfo,
+    /// 启动时自动激活偏好（缺省按装配角色：基础服务 / 内部业务开；与
+    /// `PluginManager::is_autostart` 逐字一致）
+    pub autostart: bool,
+}
+
 /// 以 plugin.json 的 mtime 近似安装时间（unix 毫秒）
 fn manifest_installed_at(extension_path: &str) -> Option<i64> {
     let manifest = std::path::Path::new(extension_path).join("plugin.json");
@@ -121,6 +139,7 @@ impl From<&LoadedPlugin> for MobilePluginInfo {
             state: p.state.clone(),
             contributes: p.manifest.contributes.clone(),
             source: source_str.to_string(),
+            update: p.manifest.update.clone(),
             extension_path: p.extension_path.clone(),
             icon: p.manifest.icon.clone(),
             size_bytes: dir_size(std::path::Path::new(&p.extension_path)),

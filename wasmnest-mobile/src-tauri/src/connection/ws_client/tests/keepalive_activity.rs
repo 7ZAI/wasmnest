@@ -1,4 +1,4 @@
-//! keepalive —— 任意入站帧（Text / Binary / Ping）刷新心跳判活基准的接线测试
+//! 心跳判活接线测试：任意入站帧（Text / Binary / Ping）刷新活动基准
 //!
 //! 背景（2026-10-16 定位）：移动端 events WS 每 2.5 分钟判死重连，根因是
 //! Pong 通路不可达（`[WsClient] Received pong` 两天 0 次）且 receiver 循环

@@ -3,7 +3,7 @@
     :type="type"
     :disabled="disabled || loading"
     :title="title"
-    class="inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2"
+    class="inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-[background-color,border-color,color,opacity,transform] duration-200 active:scale-[0.97] disabled:active:scale-100 focus:outline-none focus:ring-2 focus:ring-offset-2"
     :class="[variantClass, sizeClass, { 'opacity-50 cursor-not-allowed': disabled || loading }]"
     @click="$emit('click', $event)"
   >

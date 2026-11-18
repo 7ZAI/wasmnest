@@ -1,7 +1,7 @@
-//! Error Boundary
+//! tokio 任务 panic 防护：后台任务 panic 转成结构化日志，避免静默崩溃
 //!
-//! 为 tokio::spawn 提供 panic 防护，防止后台任务静默崩溃。
-//! 所有重要的后台任务都应使用 spawn_with_error_boundary 启动。
+//! 重要后台任务都应经 `spawn_with_error_boundary` 启动；panic 只记录、不向调用方
+//! 传播（任务已 detach），因此日志里必须带 `task_name` 供定位。
 
 use futures_util::FutureExt;
 use std::future::Future;
@@ -10,7 +10,7 @@ use std::future::Future;
 ///
 /// 捕获 spawned 任务中的 panic 并记录日志，防止任务静默终止。
 ///
-/// # Example
+/// 示例（`ignore`：只示意用途，不参与编译）：
 ///
 /// ```ignore
 /// spawn_with_error_boundary("connection_monitor", async move {

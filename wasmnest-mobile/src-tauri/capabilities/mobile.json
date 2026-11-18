@@ -17,14 +17,16 @@
     "core:window:default",
     "core:webview:default",
     "dialog:default",
-    "os:default",
+    "os:allow-platform",
+    "os:allow-arch",
+    "os:allow-version",
+    "os:allow-os-type",
     "edge-to-edge:allow-enable",
     "edge-to-edge:allow-disable",
     "edge-to-edge:allow-get-safe-area-insets",
     "edge-to-edge:allow-get-keyboard-info",
     "edge-to-edge:allow-show-keyboard",
     "edge-to-edge:allow-hide-keyboard",
-    "machine-uid:default",
     "task-notification:default",
     "foreground-service:default"
   ]

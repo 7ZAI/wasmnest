@@ -11,6 +11,11 @@
          壳自行承担布局框与安全区（见 src/shell/views/ShellView.vue） -->
     <router-view />
 
+    <!-- 悬浮导航（回主屏 / 多任务）：挂在应用根而非壳根——开关开启后要在任意
+         页面可见，含旧设置二级页与 wasmnest 应用运行面；壳根只覆盖壳内屏。
+         默认关闭，开关在「设置 → 导航」。层次固定在宿主弹层之下（见 shell.css）。 -->
+    <ShellFloatingNav />
+
     <!-- Global Toast Container（vue-sonner，richColors 区分等级） -->
     <Toaster
       :theme="toasterTheme"
@@ -38,6 +43,7 @@ import { provide, computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { logger } from '@/utils/frontendLogger'
 import { Toaster } from 'vue-sonner'
 import SplashLoading from '@/shell/components/SplashLoading.vue'
+import ShellFloatingNav from '@/shell/components/ShellFloatingNav.vue'
 import { SPLASH_DRAW_TOTAL_MS, SPLASH_HOLD_AFTER_DRAW_MS } from '@/shell/components/splashTiming'
 import { usePlatform } from '@/composables/usePlatform'
 import { useOrientation } from '@/composables/useOrientation'
@@ -50,7 +56,8 @@ import { useTheme } from '@/composables/useTheme'
 import { syncLinkCryptoContextToNative, initLinkCryptoPinSync } from '@/composables/useLinkEncryption'
 import { useFontSize } from '@/composables/useFontSize'
 import { useSettingsStore } from '@/stores/settings'
-import { completeStartupTask, startupReady } from '@/composables/useAppStartup'
+import { completeStartupTask, startupReady, bindAppsTaskToListReady } from '@/composables/useAppStartup'
+import { useShellApps } from '@/shell/composables/useShellApps'
 import { useStandaloneRouteBack } from '@/composables/useStandaloneRouteBack'
 import { registerHostSurfaceEnv } from '@/shell/hostSurfaceEnv'
 // mDNS 广播暂时禁用：移动端目前不需要被发现，避免扫描到自身
@@ -74,8 +81,13 @@ const toasterTheme = computed(() => settingsStore.settings.ui.theme as 'light' |
 const showSplash = ref(true)
 /** 最低展示时长 = 绘画动画总时长 + 末笔停留（画完即加载完成） */
 const SPLASH_MIN_MS = SPLASH_DRAW_TOTAL_MS + SPLASH_HOLD_AFTER_DRAW_MS
-/** 启动任务挂起保底：必须覆盖完整动画并留出余量，否则开屏会在画完前被切掉 */
-const SPLASH_GUARD_MS = SPLASH_MIN_MS + 1500
+/**
+ * 启动任务挂起保底。正常路径由「应用清单就绪」（apps 任务，下方闸门观察壳清单
+ * 非空打点）驱动收起——后端应用扫描（解压 → WASM 运行时 → 扫描加载）实测数秒，
+ * 兜底必须覆盖之，否则开屏会在清单就绪前被切掉、应用晚到；超时（零应用 /
+ * 扫描挂起）强制进入首页，不让用户死等。
+ */
+const SPLASH_GUARD_MS = 8000
 const splashBootAt = Date.now()
 let splashHideTimer: ReturnType<typeof setTimeout> | null = null
 let splashGuardTimer: ReturnType<typeof setTimeout> | null = null
@@ -104,6 +116,13 @@ stopSplashReadyWatch = watch(startupReady, (ready) => {
 })
 // 保底：启动任务（如 connection）挂起时不永久停留在启动面
 splashGuardTimer = setTimeout(hideSplash, SPLASH_GUARD_MS)
+
+// apps 任务闸门：壳应用清单非空（后端扫描完成、首页宫格数据就位）即打点——
+// 开屏收起与应用显示的关联点。壳不感知开屏时序（L7 壳内自足锁），宿主在
+// 这儿观察壳清单事实；返回的停止函数随卸载摘除。
+// 视图模型只取一次：getter 每次求值都会新建 computed，取值处传已存在的视图模型。
+const shellApps = useShellApps()
+const stopAppsListWatch = bindAppsTaskToListReady(() => shellApps.apps.value.length)
 
 // mDNS 广播暂时禁用
 // const { startAdvertise, stopAdvertise } = useMdnsAdvertiser()
@@ -144,6 +163,7 @@ onUnmounted(async () => {
   if (splashGuardTimer) clearTimeout(splashGuardTimer)
   stopSplashReadyWatch?.()
   stopSplashReadyWatch = null
+  stopAppsListWatch()
   standaloneRouteBack.dispose()
   cleanupTheme()
   for (const unlisten of unlistenQueue.splice(0)) {

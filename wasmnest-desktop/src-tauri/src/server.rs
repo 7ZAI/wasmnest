@@ -1,9 +1,10 @@
-//! HTTP/WS Server
+//! 桌面宿主 HTTP / WS 传输面壳：组合根、端口实现、边界锁与宿主交互
 //!
-//! Actix-web 服务器 - HTTP API、WebSocket 终端、认证和会话管理
+//! Actix-web 服务器本体、HTTP / WebSocket 两个传输面与对等网络引擎住能力 crate；
+//! 本目录只保留宿主壳职责（组合根 / 端口实现 / 边界锁 / 端口占用交互 / 命令壳）。
 //!
-//! server-lib-split 票 03/04/05/06/07：传输无关内核（生命周期 / 流量过滤链 / 链路加密 / 指标 /
-//! 组合装配）、两个传输面（HTTP / WebSocket）与对等网络引擎域均已抽为独立 crate
+//! 传输无关内核（生命周期 / 流量过滤链 / 链路加密 / 指标 / 组合装配）、两个传输面
+//! （HTTP / WebSocket）与对等网络引擎域均已抽为独立 crate
 //! （`../wasmnest-lib/wasmnest-server-core` / `-http` / `-websocket` / `-peer-net`），宿主侧不再有
 //! `server::core` / `server::http` / `server::websocket` / `server::peer_net` 模块；
 //! 本目录只剩宿主壳职责：组合根（`composition`：把两个面的 face 交给内核 `serve`、

@@ -70,11 +70,11 @@ function mountMask() {
   })
 }
 
-/** 投递一次批量授权请求（模拟 agent-hub 激活期 fs_request_auth） */
+/** 投递一次批量授权请求（模拟 Agent 管理域激活期 fs_request_auth） */
 async function emitFsAuthRequest() {
   await emitFsAuthPayload({
     requestId: 'req-1',
-    pluginId: 'com.wasmnest.agent-hub',
+    pluginId: 'com.wasmnest.bedcode',
     paths: ['/home/u/.codex', '/home/u/.pi'],
     path: '/home/u/.codex',
     operation: 'read',
@@ -157,7 +157,7 @@ describe('FsAuthDialog Component', () => {
     const dialog = document.querySelector('.max-w-sm')
     expect(dialog).toBeTruthy()
     expect(dialog?.textContent).toContain('文件访问授权')
-    expect(dialog?.textContent).toContain('com.wasmnest.agent-hub')
+    expect(dialog?.textContent).toContain('com.wasmnest.bedcode')
     // 多路径批量请求：逐条展示
     expect(dialog?.textContent).toContain('/home/u/.codex')
     expect(dialog?.textContent).toContain('/home/u/.pi')
@@ -259,7 +259,7 @@ describe('FsAuthDialog Component', () => {
     const wrapper = mountDialog()
     await emitFsAuthPayload({
       requestId: 'req-exact',
-      pluginId: 'com.wasmnest.agent-hub',
+      pluginId: 'com.wasmnest.bedcode',
       paths: ['/home/u/data'],
       path: '/home/u/data',
       operation: 'write',

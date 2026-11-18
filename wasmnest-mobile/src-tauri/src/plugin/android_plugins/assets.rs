@@ -1,6 +1,4 @@
 //! 内置插件资源解压（PluginAssetExtractor）
-//!
-//! 从 android_plugins.rs 拆分。
 
 use std::sync::OnceLock;
 use tauri::plugin::{Builder, PluginHandle};

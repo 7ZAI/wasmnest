@@ -11,10 +11,18 @@
 //!    新建连接打 Debug ⇒ 实测 3.5 分钟 1400+ 行，占该次 logcat 输出 ~7 成。
 //! 2. **wasmtime / cranelift JIT 编译内部 debug**：插件加载瞬间洪水刷屏（历史实测
 //!    单日 dev 输出里量级最大的一类）；`mdns_sd::` 库内部 debug 同属此类。
+//! 3. **libp2p-swarm poll 心跳与 yamux RTT**：`#[instrument(level = "debug")]` 让每次
+//!    `Swarm::poll` / `Connection::poll` / `Pool::poll` 新建一个 span，tracing 的 `log`
+//!    feature 把它落成一条 `libp2p_swarm…: {Span}::poll;` 记录——频率 = 事件循环频率 ×
+//!    连接数（实测每秒数条，长连接常驻时持续刷屏）；yamux 的 RTT 探活同属此类。
+//!    这两类只丢心跳记录本身，同一 crate 的拨号失败 / 协议协商失败 / `Connection
+//!    established` 等 debug 事件照常保留（协议栈排障依赖它们）。
 //!
 //! 判定口径与宿主侧 `:dev:log` 落盘过滤脚本（`scripts/lib/dev-log-filter.js`）一致：
 //! - 库内部 target（cranelift / wasmtime JIT / mdns_sd）的 Debug/Trace 一律丢弃——
 //!   纯实现细节，无排障价值；
+//! - libp2p-swarm 只丢 poll 心跳 span；yamux 只丢 RTT 探活 target（按消息/target 判定，
+//!   不按 crate 整片丢弃，见上条）；
 //! - HTTP 客户端 target 只丢弃**消息含回环 host** 的记录：真机上回环连接只可能是
 //!   adb reverse 的 dev 代理（局域网对端是 LAN IP），因此连真实对端的 `reqwest`
 //!   连接日志与全部 Info 及以上记录照常保留（认证 / 链路排障依赖它们）。
@@ -46,7 +54,20 @@ const WASMTIME_CODE_MEMORY_TARGET: &str = "wasmtime::runtime::code_memory";
 /// 同上 target 的子模块前缀（避免 `code_memory_extra` 这类同前缀模块误判）
 const WASMTIME_CODE_MEMORY_PREFIX: &str = "wasmtime::runtime::code_memory::";
 
-/// HTTP 客户端库的 crate 名：只抑制其「连回环地址」的连接日志（见模块头注释）
+/// libp2p-swarm 的 crate 名（其 debug 只丢 poll 心跳 span，见下方常量）
+const LIBP2P_SWARM_CRATE: &str = "libp2p_swarm";
+
+/// libp2p-swarm 逐 poll 心跳 span 名（`#[instrument]` 在 `Swarm` / `Connection` / `Pool`
+/// 的 poll 上各建一个 debug span；span 名即这些字面量，字段为空）
+const LIBP2P_POLL_SPANS: &[&str] = &["Swarm::poll", "Connection::poll", "Pool::poll"];
+
+/// yamux RTT 探活 target（`sending ping` / `received pong … estimated round-trip-time`）
+///
+/// 按 target 整片丢弃：该模块只产出探活记录（keep-alive 周期触发），无其余诊断价值；
+/// yamux 的连接 / 流生命周期 debug 在 `yamux::connection` 等其它 target 上，照常保留。
+const YAMUX_RTT_TARGET: &str = "yamux::connection::rtt";
+
+/// HTTP 客户端库的 crate 名：只抑制其「连回环地址」的连接日志（dev 下这类日志会刷满 logcat）
 const HTTP_CLIENT_CRATES: &[&str] = &["reqwest", "hyper_util", "hyper", "h2", "rustls", "tokio_rustls"];
 
 /// 回环 host 字面量（设备上的回环连接 ⇔ adb reverse 的 dev 代理）
@@ -69,11 +90,13 @@ pub fn init(log_level: LevelFilter) {
         log::set_max_level(log_level);
         // dev 期确认本层已装配（排障锚点：此后 logcat 不应再出现回环 dev 代理连接行）
         #[cfg(debug_assertions)]
-        log::info!("logging: dev 噪音源头抑制已装配（dev 代理回环连接 + wasmtime/cranelift 内部 debug）");
+        log::info!(
+            "logging: dev 噪音源头抑制已装配（dev 代理回环连接 + wasmtime/cranelift 内部 debug + libp2p poll 心跳）"
+        );
     }
 }
 
-/// 带 dev 噪音抑制的 android_logger 包装（判定逻辑见模块头注释）
+/// 带 dev 噪音抑制的 android_logger 包装（按 crate / span / 地址过滤，业务日志原样保留）
 ///
 /// 泛型只为单测可注入计数替身（生产恒为 `AndroidLogger`）；struct 私有，不外泄类型。
 struct DevNoiseFilter<L: Log> {
@@ -103,10 +126,22 @@ impl<L: Log> Log for DevNoiseFilter<L> {
     }
 }
 
+/// 判定 libp2p-swarm 记录是否为逐 poll 心跳 span（纯函数，单测覆盖）
+///
+/// 消息形如 `Swarm::poll;` / `Connection::poll;`（`Span::new` 路径带 `++ ` 前缀；
+/// 带字段时 `;` 后跟 `field=value`），故先剥前缀、再取 `;` 前的 span 名精确比对。
+/// 不按 crate 整片丢弃：拨号失败 / 协议协商失败 / `Connection established` 等 debug
+/// 事件是有排障价值的，必须保留。
+fn is_libp2p_poll_record(message: &str) -> bool {
+    let message = message.strip_prefix("++ ").unwrap_or(message);
+    LIBP2P_POLL_SPANS.contains(&message.split(';').next().unwrap_or_default())
+}
+
 /// 判定一条日志记录是否属于 dev 噪音（纯函数，单测覆盖）
 ///
-/// 顺序：级别闸门（Info 及以上一律放行）→ 库内部 target → HTTP 客户端 target +
-/// 消息含回环 host。提前返回的路径不格式化消息（非 HTTP 客户端记录零额外开销）。
+/// 顺序：级别闸门（Info 及以上一律放行）→ 库内部 target / libp2p poll span / yamux
+/// RTT target → HTTP 客户端 target + 消息含回环 host。提前返回的路径不格式化消息
+/// （只有 libp2p-swarm 与 HTTP 客户端两类需要读消息，其余零额外开销）。
 fn is_dev_noise(record: &Record) -> bool {
     if record.level() < Level::Debug {
         return false;
@@ -121,6 +156,13 @@ fn is_dev_noise(record: &Record) -> bool {
         return true;
     }
     if target == WASMTIME_CODE_MEMORY_TARGET || target.starts_with(WASMTIME_CODE_MEMORY_PREFIX) {
+        return true;
+    }
+    if crate_name == LIBP2P_SWARM_CRATE {
+        // 只丢 poll 心跳 span（见 `is_libp2p_poll_record`）；非该 crate 记录零额外开销
+        return is_libp2p_poll_record(&record.args().to_string());
+    }
+    if target == YAMUX_RTT_TARGET {
         return true;
     }
     if !HTTP_CLIENT_CRATES.contains(&crate_name) {
@@ -279,6 +321,76 @@ mod tests {
             "memory image mapped"
         ));
         assert!(is_noise(Level::Debug, "mdns_sd::service_daemon", "daemon tick"));
+    }
+
+    #[test]
+    fn drops_libp2p_poll_heartbeat_spans() {
+        // 真实 logcat 样例（tracing→log 桥接的 span 记录；module 路径做 target）
+        assert!(is_noise(Level::Debug, "libp2p_swarm", "Swarm::poll;"));
+        assert!(is_noise(Level::Debug, "libp2p_swarm::connection", "Connection::poll;"));
+        assert!(is_noise(Level::Debug, "libp2p_swarm::connection::pool", "Pool::poll;"));
+        // `Span::new` 路径带 `++ ` 前缀；带字段时 `;` 后跟 field=value
+        assert!(is_noise(Level::Debug, "libp2p_swarm", "++ Swarm::poll;"));
+        assert!(is_noise(
+            Level::Debug,
+            "libp2p_swarm::connection",
+            "Connection::poll; addr=/ip4/192.168.1.5/tcp/4001"
+        ));
+    }
+
+    #[test]
+    fn keeps_libp2p_diagnostic_debug_records() {
+        // 反例防线：只丢 poll 心跳，协议栈排障 debug 事件必须保留
+        assert!(!is_noise(
+            Level::Debug,
+            "libp2p_swarm",
+            "Connection attempt to peer failed with Transport([...])"
+        ));
+        assert!(!is_noise(
+            Level::Debug,
+            "libp2p_swarm::connection",
+            "failed to upgrade inbound stream: Protocol(\"negotiation failed\")"
+        ));
+        assert!(!is_noise(
+            Level::Debug,
+            "libp2p_swarm::connection::pool",
+            "Failed to close connection to peer: KeepAliveTimeout"
+        ));
+        // 非 poll 的 span 名（每次拨号一条，带地址）也保留
+        assert!(!is_noise(
+            Level::Debug,
+            "libp2p_swarm",
+            "Transport::dial; address=/ip4/192.168.1.5/tcp/4001"
+        ));
+        // 同名 span 名来自别的 crate（非 libp2p_swarm）不套用本规则
+        assert!(!is_noise(
+            Level::Debug,
+            "wasmnest_server_peer_net::swarm",
+            "Swarm::poll;"
+        ));
+    }
+
+    #[test]
+    fn drops_yamux_rtt_keepalive_but_keeps_other_yamux_targets() {
+        // 真实 logcat 样例：yamux RTT 探活（keep-alive 周期触发）
+        assert!(is_noise(
+            Level::Debug,
+            "yamux::connection::rtt",
+            "received pong 13, estimated round-trip-time 50.467135ms"
+        ));
+        assert!(is_noise(Level::Debug, "yamux::connection::rtt", "sending ping 14"));
+        // 反例防线：yamux 连接/流生命周期 debug 有排障价值
+        assert!(!is_noise(
+            Level::Debug,
+            "yamux::connection",
+            "new connection: 1 (Client)"
+        ));
+        assert!(!is_noise(Level::Debug, "yamux::connection::stream", "1/3: eof"));
+        assert!(!is_noise(
+            Level::Info,
+            "yamux::connection::rtt",
+            "received pong 13, estimated round-trip-time 50.467135ms"
+        ));
     }
 
     #[test]

@@ -157,7 +157,7 @@ struct BaseBusHandlerAdapter(Box<dyn BusMessageHandler>);
 
 impl crate::plugin::message_bus::BusMessageHandler for BaseBusHandlerAdapter {
     fn on_message(&self, msg: &wasmnest_server_base::wire::BusMessage) -> anyhow::Result<()> {
-        // 签名与内层端口 trait 同型（票 02 M3 单形态收敛后双 trait 共用同一
+        // 签名与内层端口 trait 同型（单形态收敛后双 trait 共用同一
         // `wasmnest_server_base::wire::BusMessage`），不再需要逐字段值转换
         self.0.on_message(msg)
     }
@@ -223,7 +223,7 @@ impl SystemInfoPort for MobileSystemInfoPort {
 /// mDNS 端口：共享守护 + 宿主身份广播登记——**直接复用** `wasmnest-discovery-engine`
 /// 引擎函数（与桌面 `HostMdnsPort` 同源实现，零第二份 mDNS 代码）
 ///
-/// **浏览面归类型中枢**（ADR 0054 / 票 04）：`subscribe_type` /
+/// **浏览面归类型中枢**：`subscribe_type` /
 /// `request_type_requery` 直转引擎的类型中枢出口——全进程对该服务类型的
 /// `daemon.browse` 只由中枢发起（peer-net 的重查不再覆盖插件 browse 的 listener）。
 /// 两个值形态（引擎 `MdnsBrowseSubscription` / 端口 `MdnsTypeSubscription`）只在

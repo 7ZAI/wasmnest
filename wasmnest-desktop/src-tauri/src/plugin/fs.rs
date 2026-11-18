@@ -1,13 +1,12 @@
-//! host-fs-desktop（文件浏览域桌面扩展）宿主侧接线（路径 B：WIT 绑定 + `Host` impl 同处）
+//! host-fs-desktop（文件浏览域桌面扩展）宿主侧接线（WIT 绑定 + `Host` impl 同处）
 //!
-//! v36 交集接口切片（票 02 批次 06）：`host-fs.read-dir / canonicalize / stat` 拆入
+//! v36 交集接口切片：`host-fs.read-dir / canonicalize / stat` 拆入
 //! `host-fs-desktop`（桌面独有 3 函数；移动端 `host-fs` 保持交集 6 + 移动独有 2，
 //! 不跟演）。**WIT impl 落本文件**，实现本体与权限判据**显式留内核**
 //! （`wasmnest_wasm_core::host_api::fs::{fs_read_dir, fs_canonicalize, fs_stat}`，提 pub
 //! 供宿主复用）：① 内核 `FsUnitExecutor`（`fs.read-dir` / `fs.stat` 单元）与宿主
 //! WIT impl 是**双消费者、同一条实现**，行为逐字不变；② 权限位 `fs:read` + fs_auth
-//! 三层校验是内核机制（与 `check_permission` 提 pub 同款裁决，见内核 `host_api.rs`
-//! 模块文档）。宿主侧不复制任何判据。
+//! 三层校验是内核机制（与 `check_permission` 提 pub 同款裁决）。宿主侧不复制任何判据。
 
 use wasmnest_host_kit::ports::downcast_host;
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
@@ -16,7 +15,7 @@ use wasmnest_wasm_core::host_api::{fs_canonicalize, fs_read_dir, fs_stat};
 
 use crate::plugin::bindings::wasmnest;
 
-// 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报）。路径 B 域
+// 能力模块白名单条目（宿主自报；生效白名单 = 内核 IN_CRATE ∪ 宿主自报）。直连绑定域
 // 的自报静态住在本 crate（宿主 lib 即最终二进制）⇒ 无需强制引用行。
 wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 
@@ -24,7 +23,7 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 pub const MODULE_NAME: &str = "fs-desktop";
 
 /// 本域提供的 WIT 接口（必须与 `wasmnest.wit` 逐字一致；改错即 guest import 失配）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-fs-desktop"];
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:fs-desktop@0.0.1/host-fs-desktop"];
 
 /// 本域的权限位（三函数同用机制位 `fs:read`——真源在 wasm-core `permission.rs`，
 /// 与交集 `host-fs` 的 `fs:read` 同一判据，无第二份判定）
@@ -49,7 +48,7 @@ impl HostModule for FsDesktopModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_fs_desktop::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::fs_desktop::host_fs_desktop::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -66,7 +65,7 @@ inventory::submit! {
 
 // ==================== WIT 层（import 接口 → 内核实现转发） ====================
 
-impl wasmnest::plugin::host_fs_desktop::Host for WasmPluginState {
+impl wasmnest::fs_desktop::host_fs_desktop::Host for WasmPluginState {
     fn read_dir(&mut self, path: String) -> Result<String, String> {
         fs_read_dir(ctx_of(self), &self.plugin_id, &path)
     }
@@ -86,7 +85,7 @@ fn ctx_of(state: &WasmPluginState) -> &WasmHostContext {
     downcast_host::<WasmHostContext>(state.host.as_ref())
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 #[cfg(test)]
 mod tests {
@@ -201,7 +200,7 @@ mod tests {
         assert_eq!(MODULE_NAME, "fs-desktop", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             MODULE_INTERFACES,
-            &["wasmnest:plugin@0.0.1/host-fs-desktop"],
+            &["wasmnest:fs-desktop@0.0.1/host-fs-desktop"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配）"
         );
         assert_eq!(MODULE_PERMISSIONS, &["fs:read"], "三函数同用机制位 fs:read");

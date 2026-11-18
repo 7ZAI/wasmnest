@@ -41,12 +41,17 @@
   min-height: 0;
 }
 
-.shell-ui {
+/* 同时挂 :root：宿主 chrome 并非都住在 .shell-ui 内——App 根的悬浮导航
+   （任意整页路由都要可见）与启动画面都在壳根之外，必须能取到同一套
+   结构 / 动效 token，否则 `var(--shell-dur-fast)` 之类的引用会静默失效。 */
+.shell-ui,
+:root {
   /* 壳内结构 token：只定义与平台 token 无关的几何量，避免各处硬编码同一数值 */
   --shell-radius-card: 12px;
   --shell-radius-control: 10px;
   --shell-radius-pill: 999px;
-  --shell-radius-lg: 18px;   /* 多任务卡等大卡 */
+  --shell-radius-lg: 18px;   /* 大卡片通用面（弹层 / 分组卡） */
+  --shell-radius-recents: 12px; /* 多任务卡单独一档（2026-11-06 用户反馈「太圆」，与桌面 10px 同一收紧口径） */
   --shell-radius-sheet: 16px; /* 底部抽屉面板 */
   /* 应用图标规格（列表行 / 宫格运行卡 / 多任务预览位）：同一图标同一尺寸策略 */
   --shell-icon-row: 32px;
@@ -64,13 +69,14 @@
   --shell-dur-fast: 150ms;   /* 按压反馈、色值切换等即时响应 */
   --shell-dur-base: 240ms;   /* 屏幕栈 / 抽屉 / 覆盖层等空间位移 */
   --shell-dur-slow: 320ms;   /* 大件入场、内容展开 */
-  --shell-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  /* 入场用强减速曲线（Emil Kowalski 动效技能 animate / AUDIT.md）：内置 ease-out
+     与 Material decelerate 前段都太软，用户注视的那一下会显得迟滞。
+     退场仍保留加速曲线（ui-ux-pro-max Easing：到达减速、离开加速）。 */
+  --shell-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --shell-ease-in: cubic-bezier(0.4, 0, 1, 1);
   --shell-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   /* 系统宫格图标与桌面壳同口径：中性 card 表面 + stroke 线稿（样式见
      .shell-sys-tile）。不按入口上色，双端保持同一套图标语言（2026-10-23）。 */
-  /* 快捷磁贴 hover 光晕：由强调色派生，随主题与色板变化（原为硬编码青色 rgba） */
-  --shell-action-glow: 0 0 15px color-mix(in srgb, var(--mobile-accent) 12%, transparent);
 }
 
 /* ============================================================================
@@ -230,11 +236,17 @@
    横向位移用 26% 而非 100%：与移动端系统「上一级屏幕轻微后退」的手感一致，
    全屏位移在低端机上容易掉帧。
    ============================================================================ */
-.shell-screen-enter-active,
+/* 入场减速到达、退场加速离开：同一条 transition 声明会让退场也减速，
+   看起来像「被拖回去」而不是「被推走」。 */
+.shell-screen-enter-active {
+  transition:
+    transform var(--shell-dur-base) var(--shell-ease-out),
+    opacity var(--shell-dur-base) var(--shell-ease-out);
+}
 .shell-screen-leave-active {
   transition:
-    transform var(--shell-dur-base) var(--shell-ease-standard),
-    opacity var(--shell-dur-base) var(--shell-ease-standard);
+    transform var(--shell-dur-base) var(--shell-ease-in),
+    opacity var(--shell-dur-base) var(--shell-ease-in);
 }
 
 .shell-screen-forward-enter-from {
@@ -259,10 +271,17 @@
    进入时当前屏缩下去、多任务屏放大浮现；退出时反向，卡片像从应用窗口拉开。 */
 .shell-screen-recents-enter-active,
 .shell-screen-recents-leave-active {
+  transform-origin: center center;
+}
+.shell-screen-recents-enter-active {
   transition:
     transform var(--shell-dur-base) var(--shell-ease-out),
     opacity var(--shell-dur-base) var(--shell-ease-out);
-  transform-origin: center center;
+}
+.shell-screen-recents-leave-active {
+  transition:
+    transform var(--shell-dur-base) var(--shell-ease-in),
+    opacity var(--shell-dur-base) var(--shell-ease-in);
 }
 .shell-screen-recents-enter-from {
   transform: scale(0.9);
@@ -282,9 +301,12 @@
 /* ============================================================================
    底部抽屉（胶囊菜单 / 授权弹窗共用）
    ============================================================================ */
-.shell-sheet-enter-active,
-.shell-sheet-leave-active {
+/* 抽屉：入场 320ms 减速落位，退场 240ms 加速离场（系统响应比用户决定更快）。 */
+.shell-sheet-enter-active {
   transition: transform var(--shell-dur-slow) var(--shell-ease-out);
+}
+.shell-sheet-leave-active {
+  transition: transform var(--shell-dur-base) var(--shell-ease-in);
 }
 .shell-sheet-enter-from,
 .shell-sheet-leave-to {
@@ -301,18 +323,24 @@
 }
 
 /* ============================================================================
-   字母头像渐变档位（LetterAvatar 用）
+   字母头像（LetterAvatar 用）
    ----------------------------------------------------------------------------
-   迁移自旧 `components/LetterAvatar.vue` 的六组硬编码渐变：颜色落点收归本文件
-   （唯一允许出现字面色值的落点），组件只按 seed 哈希选档。档位固定不随主题
-   反转——头像底不是主题语义面，因此不做深浅两套。
+   2026-11-05 unslop 审核：六组彩虹渐变（靛 / 蓝 / 绿 / 琥珀 / 粉 / 青）退役。
+   头像底不是主题语义面，但仍属于宿主 chrome——用一层 accent tint + secondary
+   文字 + hairline，与桌面端收敛后的做法一致；不同 seed 只由首字母区分，
+   不再用色相区分。
    ============================================================================ */
-.shell-avatar-g0 { background: linear-gradient(135deg, #7c3aed, #4f46e5); }
-.shell-avatar-g1 { background: linear-gradient(135deg, #0ea5e9, #6366f1); }
-.shell-avatar-g2 { background: linear-gradient(135deg, #10b981, #0d9488); }
-.shell-avatar-g3 { background: linear-gradient(135deg, #f59e0b, #ef4444); }
-.shell-avatar-g4 { background: linear-gradient(135deg, #ec4899, #8b5cf6); }
-.shell-avatar-g5 { background: linear-gradient(135deg, #06b6d4, #3b82f6); }
+.shell-avatar-tint {
+  background: color-mix(in srgb, var(--mobile-accent) 12%, var(--mobile-bg-card));
+  border: 1px solid var(--mobile-border);
+  color: var(--mobile-text-secondary);
+}
+
+/* 分组卡片的默认悬浮影：ShellGroupCard 只给形状与分隔线，投影属于壳的
+   材质语汇（主题可整条覆盖；写进组件 inline style 会压过主题规则）。 */
+.shell-group-card {
+  box-shadow: var(--mobile-card-shadow);
+}
 
 /* ============================================================================
    系统宫格图标瓦片（与桌面壳同口径，.shell-sys-tile）
@@ -490,11 +518,15 @@
 /* ============================================================================
    通知栏（Android 式独立覆盖层：自顶部滑下）
    ============================================================================ */
-.shell-shade-enter-active,
+.shell-shade-enter-active {
+  transition:
+    transform var(--shell-dur-base) var(--shell-ease-out),
+    opacity var(--shell-dur-fast) var(--shell-ease-out);
+}
 .shell-shade-leave-active {
   transition:
-    transform var(--shell-dur-base) var(--shell-ease-standard),
-    opacity var(--shell-dur-fast) var(--shell-ease-standard);
+    transform var(--shell-dur-base) var(--shell-ease-in),
+    opacity var(--shell-dur-fast) var(--shell-ease-in);
 }
 .shell-shade-enter-from,
 .shell-shade-leave-to {
@@ -555,6 +587,30 @@
   min-width: 0;
   scroll-snap-align: start;
 }
+/* 整卡按钮：宿主接管点击（启动并打开贡献方应用），卡片内容不得再嵌套交互控件 */
+.shell-slot-card {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--shell-radius-card);
+  background: none;
+  color: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    opacity var(--shell-dur-fast) var(--shell-ease-standard),
+    transform var(--shell-dur-fast) var(--shell-ease-standard);
+}
+.shell-slot-card:active {
+  opacity: 0.86;
+  transform: scale(0.985);
+}
+.shell-slot-card:focus-visible {
+  outline: 2px solid var(--mobile-accent);
+  outline-offset: 2px;
+}
 
 /* ============================================================================
    应用运行页胶囊（菜单 / 多任务 / 回主屏）
@@ -587,6 +643,145 @@
   width: 1px;
   height: 16px;
   background: var(--mobile-border);
+}
+
+/* ============================================================================
+   悬浮导航（Liquid Glass 材质）
+   ----------------------------------------------------------------------------
+   用户明确要求「类似苹果手机的透明玻璃，形状是拉长的按钮」：横向胶囊
+   （约 133 × 56，两个 48 × 44 的图标键 + 中间细分隔），半透明材质 + 背景
+   模糊 + 极细描边 + 顶部高光。整壳只此一处，且默认关闭；材质只承担导航
+   控件，不铺到任何内容层。
+   三层降级（材质必须始终可读）：
+     · 不支持 backdrop-filter → 实色卡片底
+     · 用户开启「减少透明」 → 实色卡片底，不做模糊
+     · 减少动效 → 去掉入场动画与按压缩放，只留状态色
+   位置由组件写 transform（left/top 只是基准点），拖动时不触发布局。
+   ============================================================================ */
+.shell-floatnav {
+  position: fixed;
+  left: 0;
+  top: 0;
+  /* 宿主弹层（抽屉 / 通知栏 / 启动画面）均为 z-50+：悬浮条在它们之下，
+     弹层打开时由遮罩自然盖住，不抢弹窗的交互 */
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px;
+  border-radius: var(--shell-radius-pill);
+  border: 1px solid color-mix(in srgb, var(--mobile-text-primary) 16%, transparent);
+  background: color-mix(in srgb, var(--mobile-bg-card) 72%, transparent);
+  -webkit-backdrop-filter: blur(26px) saturate(200%);
+  backdrop-filter: blur(26px) saturate(200%);
+  box-shadow:
+    0 10px 28px color-mix(in srgb, var(--mobile-overlay) 40%, transparent),
+    0 1px 3px color-mix(in srgb, var(--mobile-overlay) 30%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--mobile-text-primary) 22%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--mobile-overlay) 22%, transparent);
+  opacity: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: grab;
+  transition:
+    opacity var(--shell-dur-fast) var(--shell-ease-standard),
+    box-shadow var(--shell-dur-fast) var(--shell-ease-standard);
+  animation: shell-floatnav-in var(--shell-dur-base) var(--shell-ease-out);
+}
+/* 玻璃高光面：斜向薄薄一层，让胶囊读作有厚度的材质而不是一块半透明色 */
+.shell-floatnav::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--mobile-text-primary) 13%, transparent) 0%,
+    color-mix(in srgb, var(--mobile-text-primary) 4%, transparent) 42%,
+    transparent 72%
+  );
+  pointer-events: none;
+}
+.shell-floatnav.is-ready {
+  opacity: 1;
+}
+.shell-floatnav:not(.is-ready) {
+  /* 尺寸未量到前不接收点击：避免首帧位置未定时被误触 */
+  pointer-events: none;
+}
+.shell-floatnav.is-dragging {
+  cursor: grabbing;
+  box-shadow:
+    0 18px 42px color-mix(in srgb, var(--mobile-overlay) 52%, transparent),
+    0 3px 8px color-mix(in srgb, var(--mobile-overlay) 34%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--mobile-text-primary) 28%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--mobile-overlay) 26%, transparent);
+}
+.shell-floatnav:focus-visible {
+  outline: 2px solid var(--mobile-accent);
+  outline-offset: 3px;
+}
+.shell-floatnav-btn {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 横向略宽于触控最小值：胶囊因此读作「拉长的按钮」而不是两个圆点 */
+  width: 48px;
+  height: var(--mobile-touch-target-min);
+  border-radius: var(--shell-radius-pill);
+  color: var(--mobile-text-primary);
+  transition:
+    background-color var(--shell-dur-fast) var(--shell-ease-standard),
+    transform var(--shell-dur-fast) var(--shell-ease-out);
+}
+.shell-floatnav-btn:active {
+  background: color-mix(in srgb, var(--mobile-accent) 20%, transparent);
+  /* 只缩放图标按钮的视觉，不改胶囊位置（transform 由外层承担） */
+  transform: scale(0.94);
+}
+/* 无可返回目标（已在主屏且无覆盖层）：置灰但保留占位——胶囊宽度不随面态跳，
+   也不给「能点」的假象；按压反馈一并撤掉 */
+.shell-floatnav-btn:disabled,
+.shell-floatnav-btn:disabled:active {
+  color: color-mix(in srgb, var(--mobile-text-primary) 34%, transparent);
+  background: none;
+  transform: none;
+}
+.shell-floatnav-divider {
+  position: relative;
+  z-index: 1;
+  width: 1px;
+  height: 18px;
+  background: color-mix(in srgb, var(--mobile-border-active) 64%, transparent);
+}
+
+/* 不支持背景模糊：玻璃退化为实色卡片（文字对比不变） */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .shell-floatnav {
+    background: var(--mobile-bg-card);
+  }
+}
+
+/* 系统「减少透明」：与不支持模糊同口径，不做半透明 */
+@media (prefers-reduced-transparency: reduce) {
+  .shell-floatnav {
+    background: var(--mobile-bg-card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@keyframes shell-floatnav-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* ============================================================================
@@ -629,7 +824,10 @@
   max-width: 214px;
   aspect-ratio: 3 / 4;
   min-width: 0;
-  border-radius: var(--shell-radius-lg);
+  /* 圆角单独一档（2026-11-06 用户反馈「太圆」）：`--shell-radius-lg` 是 18px 的
+     大圆角面口径，给多任务卡用显得像药丸。卡片用 12px，与桌面 .ts-card 的
+     10px 同一收紧口径，卡片边界更硬朗。卡片专用 token，不动其他面。 */
+  border-radius: var(--shell-radius-recents);
   /* 边框线不再显示（2026-10-25 用户裁决，对齐桌面 .ts-card 的强调口径）：
      保留 1px 宽度防内容抖动，颜色透明——卡片边界交给底色差与投影。 */
   border: 1px solid transparent;
@@ -647,12 +845,67 @@
   box-shadow: 0 14px 36px color-mix(in srgb, var(--mobile-text-primary) 16%, transparent);
 }
 /* 拖拽期间关掉过渡与入场动画并开启 will-change：抬手后交回 CSS 过渡，
-   否则手指与卡片之间会慢半拍，入场动画也会盖掉跟手位移。 */
+   否则手指与卡片之间会慢半拍，入场动画也会盖掉跟手位移。
+   位移经 CSS 变量由 pointermove 直写（rAF 合帧，F6）——逐帧移动不重建 vnode。 */
 .shell-recents-grid--dragging .shell-recents-grid-inner,
 .shell-recents-grid--dragging .shell-recents-card {
   animation: none;
   transition: none;
   will-change: transform;
+}
+.shell-recents-grid--dragging .shell-recents-grid-inner {
+  transform: translate3d(var(--grid-nudge, 0px), 0, 0);
+}
+/* 上滑关闭跟手：只有被拖的那张卡带 is-dragging（class 一次手势变一次） */
+.shell-recents-card.is-dragging {
+  transform: translate3d(0, var(--drag-y, 0px), 0);
+  opacity: var(--drag-opacity, 1);
+}
+
+/* ============================================================================
+   关闭渐隐（单关 / 全关 两种语义，2026-11-12）
+   ----------------------------------------------------------------------------
+   单关 = 只有这一张原地淡出（基础时长，强减速曲线——关闭是「已经决定了」的动作，
+   不留拖尾）；全部关闭 = 同一条渐隐 + 按序错峰（+22ms/张，封顶 5 步）+ 下沉 / 缩小
+   多一点 + 时长收到 fast，整组读成「一次清场」。位移只走 transform / opacity；
+   交错延迟与上滑方向由组件内联注入（--recents-close-delay / --recents-close-y）。
+   渐隐期间卡片仍是渲染清单里的一个 flex 项（幽灵占位）：布局不在卡还看得见时
+   收拢，窗口结束后整组一次性落位。
+   ============================================================================ */
+.shell-recents-card.is-closing {
+  pointer-events: none;
+  /* 关闭操作不需要入场动画；animation 关掉才不会盖住过渡的 transform */
+  animation: none;
+  opacity: 0;
+  transform: translate3d(0, var(--recents-close-y, 10px), 0) scale(0.96);
+  transition:
+    opacity var(--shell-dur-base) var(--shell-ease-out),
+    transform var(--shell-dur-base) var(--shell-ease-out);
+  transition-delay: var(--recents-close-delay, 0ms);
+}
+/* 全部关闭：整组一起退场，每张多下沉 / 多缩一点，时长收到 fast——张数多时逐张
+   240ms 会读成「排队」 */
+.shell-recents-grid--clearing .shell-recents-card.is-closing {
+  transform: translate3d(0, var(--recents-close-y, 16px), 0) scale(0.94);
+  transition-duration: var(--shell-dur-fast);
+}
+/* 关闭中的缩略区：实例已停用，品牌卡回退也跟着熄掉——只留缩略区底色，像屏幕熄灭；
+   不遮的话会在渐隐中途闪一张明亮的品牌渐变卡 */
+.shell-recents-card.is-closing .shell-live-fallback {
+  opacity: 0;
+}
+
+/* 空态：清场 / 关掉最后一张后淡入，避免「一片空白突然出现」 */
+.shell-recents-empty {
+  animation: shell-recents-empty-in var(--shell-dur-base) var(--shell-ease-out) backwards;
+}
+@keyframes shell-recents-empty-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* 信息条：图标打头 + 名称（异常态才追加状态行）。右侧 44px 留给关闭键，
@@ -703,6 +956,7 @@
    运行中给一层可辨的水洗底（success-muted 在浅色主题下几乎不可见，用 color-mix
    把实色按比例混进底面色）；状态另有信息条文字冗余，不靠颜色单独传达。 */
 .shell-recents-thumb {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -724,6 +978,51 @@
   color: var(--mobile-text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 缩略区 = 真实实例的当前页面（2026-10-30 用户裁决，与桌面同口径）。
+   实例容器由注册表搬进来：固定整幅尺寸 + transform 等比缩放（布局不重排、
+   滚动 / 输入原样），卡片 overflow:hidden 裁掉多余部分；contain 把实例的
+   绘制关在卡片里，普通 fixed / absolute 弹层也跟着缩进卡片。
+   **不留内边距**：缩略区必须整块交给实例（2026-11-06 用户裁决「内容应该跟着
+   卡片宽高铺满显示区域」），留 padding 会让画面四周空出一圈纸边。 */
+.shell-live {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  contain: layout paint;
+  background: var(--mobile-bg-primary);
+}
+/* 品牌卡 fallback：与真实画面对齐同一盒子，切换不引起布局变化。
+   padding 只作用于 fallback 自身（图标 + 元信息的呼吸位），不影响实例画面。 */
+.shell-live-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 10px;
+  pointer-events: none;
+  transition: opacity var(--shell-dur-fast) var(--shell-ease-standard);
+}
+.shell-live-fallback.is-hidden {
+  opacity: 0;
+}
+/* 实例容器挂载点：填满卡片 + 裁切；就绪后短淡入（只动 opacity） */
+.shell-live-surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--shell-dur-fast) var(--shell-ease-standard);
+}
+.shell-live[data-live-state='live'] .shell-live-surface {
+  opacity: 1;
 }
 
 /* 唯一打开动作：覆盖整张卡的空按钮（视觉层 pointer-events:none）。
@@ -820,10 +1119,20 @@
   .shell-shade-leave-active,
   .shell-recents-grid-inner,
   .shell-recents-card,
+  .shell-recents-card.is-closing,
+  .shell-recents-empty,
+  .shell-live-fallback,
+  .shell-live-surface,
   .shell-reveal,
+  .shell-floatnav,
   .notify-card--flee {
     transition-duration: 0.01ms;
     animation: none;
+  }
+  /* 关闭渐隐也不能等交错延迟（delay 是内联变量，只有 !important 压得住） */
+  .shell-recents-card.is-closing {
+    transition-delay: 0ms !important;
+    transform: none;
   }
   /* 位移 / 缩放型过渡收敛为瞬时 */
   .notify-card,
@@ -832,10 +1141,15 @@
   .shell-segmented button,
   .shell-icon-action,
   .shell-capsule-btn,
+  .shell-floatnav-btn,
   .shell-btn-danger-outline,
   .shell-btn-danger-text,
   .shell-sys-tile,
+  .shell-slot-card,
   .shell-run-backdrop {
     transition-duration: 0.01ms;
+  }
+  .shell-slot-card:active {
+    transform: none;
   }
 }

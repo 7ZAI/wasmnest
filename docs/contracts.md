@@ -8,7 +8,8 @@
 - **谁写**：平台仓发布流程；**谁读**：装配校验、各仓 release、CI。一致性判据（`pnpm run check:manifest`，逐条可复现）：
   1. `product` == 平台仓 `package.json` 版本；
   2. `repos.lib.tag` == 能力仓 `../wasmnest-lib` HEAD 的**精确 tag**（tag 漂移或工作树脏即红）；
-  3. `contract.version` == `../wasmnest-lib/wasmnest-contract/src/lib.rs` 的 `PACKAGE_VERSION`；
+  3. `contract.version` == `../wasmnest-lib/wasmnest-contract/src/lib.rs` 的 `PACKAGE_VERSION`（`wasmnest:plugin` 公共轴）；
+  3b. `contract.packages` == 双端生成物里出现过的**全部** WIT 包 → 版本（并集；同名包双版本即红），且 `packages['wasmnest:plugin']` == `contract.version`（ADR 0061 逐包兼容判据的真源）；
   4. `contract.witSha256` == 双端组合 WIT 产物指纹（`node scripts/check-release-manifest.mjs --print-hash` 重算）；
   5. `apps` 段覆盖应用仓**全部** `apps/<slug>/<end>/plugin.json`（end 感知，`ends.<end>.artifact` == 该端 `rustLibrary + '.wasm'`）；每个 app 必填 `version`（semver），`ends.desktop` 必填 `package`（`<slug>-desktop-v<version>.zip`，应用仓 `app-release.yml` 的固定命名）与 `sha256`（64 位 hex）—— 发布时由 `scripts/vendor-apps.mjs` 按这两项下载并校验成品包；
   6. `repos.apps.tag` == 应用仓 HEAD 精确 tag（发布装配口径）；
@@ -19,29 +20,36 @@
 
 ```text
 真源（能力仓 sibling `../wasmnest-lib`）：
-  wasmnest-wasm-core/wit/core.wit                # 核心机制面
-  各能力域 wit/<domain>.wit                      # 例如 wasmnest-pty-engine/wit/pty.wit
-  wasmnest-contract/src/lib.rs                   # 包名与版本唯一手写处（零依赖 crate；PACKAGE_NAME / PACKAGE_VERSION / PACKAGE）
+  wasmnest-wasm-core/wit/core.wit                # 核心机制面（包 wasmnest:plugin）
+  各能力域 wit/<domain>.wit                      # 例如 wasmnest-pty-engine/wit/pty.wit（各自独立包）
+  wasmnest-contract/src/lib.rs                   # wasmnest:plugin 包名/版本唯一手写处（PACKAGE_NAME / PACKAGE_VERSION / PACKAGE）
+  各能力域 crate 的 WIT_PACKAGE 常量             # 与该域 .wit 的 package 行互相加锁
         │
-端清单（本仓，声明「组合了什么」）：
-  wasmnest-desktop/packages/plugin-sdk-desktop/compose.json   # core + 各 cap 分片（含端独有 wit-src/cap-*.wit）
+端清单 v2（本仓，声明「组合了什么」）：
+  wasmnest-desktop/packages/plugin-sdk-desktop/compose.json   # core / face / caps.{key}.{file,package}
   wasmnest-mobile/packages/plugin-sdk-mobile/compose.json
-        │  node scripts/compose-wit.mjs --all（版本注入唯一发生在这里）
+        │  node scripts/compose-wit.mjs --all（先清空 out，再落 deps/ 布局）
         ▼
 生成物（本仓，**入库但禁止手改**，漂移由 husky / CI / 测试锁钉）：
-  wasmnest-{desktop,mobile}/packages/plugin-sdk-{desktop,mobile}/rust/wit/**
+  wasmnest-{desktop,mobile}/packages/plugin-sdk-{desktop,mobile}/rust/wit/
+    core.wit / plugin-face.wit / wasmnest.wit          # 顶层只放 wasmnest:plugin 包
+    deps/<pkg>/<file>.wit                             # 每个能力域/端扩展一包
 ```
 
-**bump 政策**（ADR 0051 D4）：任何 WIT 变更（含函数级追加）→ patch；interface 增删 / 签名变 → minor。bump 后必须：重拼双端 WIT → 重建**受影响应用**的 wasm 产物（版本进入 import 名，宿主与 guest 不等即实例化失败，失败信息点名版本）→ 同步 manifest 的 `contract.version` / `witSha256` → `pnpm run check:wit` 与 `pnpm run check:manifest` 双绿。
+**拆包口径**（ADR 0061）：`wasmnest:plugin` = core import + 全部 guest 导出面（公共轴）；
+每个能力域 / 端扩展各一包。顶层目录只能放同一 package 的文件（`wit-parser` 要求），
+其余包一律 `deps/`。
+
+**bump 政策**（ADR 0051 D4 + ADR 0061）：任何 WIT 变更（含函数级追加）→ patch；interface 增删 / 签名变 → minor；**只 bump 被改的包**，禁止为「对齐」把所有包一起 bump。`wasmnest:plugin` 改动仍需全部应用重建（有意边界）；其余包只要求**真正 import 它**的应用重建。bump 后必须：重拼双端 WIT → 重建受影响应用 → 同步 manifest 的 `contract.version` / `contract.packages` / `witSha256` → `pnpm run check:wit` 与 `pnpm run check:manifest` 双绿。
 
 ## 3. WIT / ABI 变更流程（改契约不在本仓生成物里改）
 
-1. 改能力仓真源（`../wasmnest-lib`）：`wasmnest-wasm-core/wit/core.wit` 或能力域 `wit/<domain>.wit`；按 bump 政策改 `wasmnest-contract/src/lib.rs` 的 `PACKAGE_VERSION`。
-2. 能力仓提交 + 打 tag（`lib-vX.Y.Z`）；平台仓同步 `release-manifest.json`（`repos.lib.tag` / `contract.version`），不移动任何 submodule 指针（平台直接读 sibling 工作树）。
-3. `node scripts/compose-wit.mjs --all` 重拼双端生成物 → `pnpm run check:wit`。
-4. 受影响端更新 SDK 侧 Rust / TS 面（`packages/plugin-sdk-*/`），跑 SDK 测试。
-5. 应用仓按当前 SDK **全量重建**受影响 app 产物（版本进入 import 名，旧产物实例化期被点名）。
-6. `node scripts/check-release-manifest.mjs --print-hash` 更新 `contract.witSha256` → `pnpm run check:manifest` 全绿。
+1. 改能力仓真源（`../wasmnest-lib`）：`wasmnest-wasm-core/wit/core.wit`（→ 改 `wasmnest-contract` 的 `PACKAGE_VERSION`）或能力域 `wit/<domain>.wit`（→ **只改该分片的 `package` 行版本**，并同步该 crate 的 `WIT_PACKAGE` 常量）。
+2. 能力仓提交 + 打 tag（`lib-vX.Y.Z`）；平台仓同步 `release-manifest.json`（`repos.lib.tag` / `contract.version` / `contract.packages`），不移动任何 submodule 指针（平台直接读 sibling 工作树）。
+3. `node scripts/compose-wit.mjs --all` 重拼双端生成物（顶层 + `deps/`）→ `pnpm run check:wit`。
+4. 受影响端更新 SDK 侧 Rust / TS 面（`packages/plugin-sdk-*/`）：`generate!` 必须 `generate_all`；import 路径为 `wasm::wasmnest::<pkg>::host_*`；跑 SDK 测试。
+5. 应用仓：按当前 SDK 重建**受影响 app**（`wasmnest:plugin` 改动 = 全部；单包改动 = 其 `compat.witPackages` 含该包者）。`compat.witPackages` 由构建期 `componentize --list-packages` 从组件二进制提取，禁止手填。
+6. `node scripts/check-release-manifest.mjs --print-hash` 更新 `contract.witSha256` → `pnpm run check:manifest`；vendor 门禁（`scripts/vendor-apps.mjs`）按 `compat.witVersion` + `compat.witPackages` 逐包判定，`source.libRef` 只溯源。
 7. 涉及行为的改动补测试（含失败路径）；不留「兼容旧产物」的冗余路径（研发起步期，无 ABI 兼容义务）。
 
 ## 4. 权限
@@ -63,12 +71,20 @@
 - `wasmHash` 由桌面构建链注入**产物目录**的 `plugin.json`（按 `<rustLibrary>.wasm` 现算 SHA-256）；**源清单不写该键**。
 - **移动端清单扩展**：`preauthDirs`（预授权目录，支持 `${downloads}` 等占位）/ `preauthUrls`（出站 URL 白名单 glob），宿主在 preauthorize 阶段收齐后一次弹窗；**桌面上这两个键无效**。
 - **桌面端清单扩展**：`backgroundTransport`（布尔，缺省 false）——服务端型应用在**运行期**（启动成功 → 停用 / Error）持有 `net.transport`（WS + HTTP + mDNS），界面挂载 / 卸载不决定其生死；代价是整段运行期对外可达，故必须同时声明 `ws:server` / `network:http` 至少一个（构建期 `manifest-validate.js` + 加载期 `wasm-core/manager/validation.rs` 双侧拒绝）。只在界面打开时供服的应用不要声明。
+- **双端清单扩展：应用更新源** `update`（缺省 = 不参与更新检查）：
+  ```json
+  "update": { "provider": "github-release", "repo": "7ZAI/wasmnest-apps", "tagPrefix": "bedcode-", "slug": "bedcode" }
+  ```
+  - `provider` 当前只支持 `github-release`；`repo` / `tagPrefix` / `slug` 均可省略——缺省 `repo` = `7ZAI/wasmnest-apps`，`slug` = 插件 id 末段，`tagPrefix` = `<slug>-`（tag `<slug>-v<X.Y.Z>`，资产 `<slug>-<end>-v<X.Y.Z>.zip` + 同名 `.json` 元数据）。
+  - 声明即参与宿主应用管理页与 SDK 默认设置卡的「检查更新」；纯判定真源 = 能力仓 `wasmnest-wasm-core::app_update`，双端宿主共用。
+  - **内置应用的就地升级口径（2026-11-02 用户裁决）**：`wasm-core` 的加载去重只在「同 id 用户副本声明了同一更新源且版本严格更新」时允许其覆盖内置条目；升级后的副本仍标 `UserInstalled` / `file-install`，目录哈希变化使旧审批失效，必须重新批准（升级保数据，不保信任）。未声明 `update` 的随包应用仍只能随宿主发布更新。
 
 ### 5.2 SDK（端内包，随端走）
 
 - 桌面：`@binblink/wasmnest-plugin-sdk-desktop`（bin `wasmnest-plugin-desktop`；crate `wasmnest-plugin-api` + 宏 crate `rust-macros`）+ manifest / wasm-hash 工具面（`bin/manifest-gen.js` / `manifest-validate.js` / `wasm-hash.js`）。
 - 移动：`@binblink/wasmnest-plugin-sdk-mobile`（bin `wasmnest-plugin`；crate `wasmnest-plugin-api-mobile`；含 `UIRegistry` 类型真源（`src/types.ts`）与 dev-shell）。
 - SDK 版本一致性：npm `package.json` 与 `Cargo.toml` 必须一致（`scripts/package-sdks.mjs` 校验）；发布产物 = npm tarball + crates + zip + SHA256 清单。
+- **应用更新默认实现（2026-11-02）**：双端 SDK 导出 `useAppUpdate()`（状态机）与 `ui/app-update`（`<AppUpdateSection />` 默认设置卡）。应用设置页直接嵌入即用宿主统一判定（manifest `update` 段 → GitHub Release），也可给 `check` 传入自己的检查器或完全不用本组件。更新**安装动作不在应用内**：统一收口在宿主应用管理页（需先停用、替换目录并重新审批）。
 - **桌面 dev-shell（2026-10-21 已对齐宿主）**：dev-shell 走**与宿主同一条装载路径**——加载 app 的 `src/entry.ts` 源码并调用 `mountApp(root, env)`，外围复刻宿主 chrome（标题栏 / 状态栏 / 挂载槽）。设计 token 走单一真源（alias 指向宿主 `src/style.css` + `src/shell/styles/shell.css`；npm 包内用自带副本，由 `dev-shell/__tests__/visualParity.test.ts` 钉住），挂载契约由 `dev-shell/__tests__/shell/contractDrift.test.ts` 与宿主 `src/shell/mount/useAppMount.ts` 逐字段比对。**改宿主挂载契约时必须同步改 dev-shell 侧声明，否则该锁测红**。
 - **已知漂移（写明责任）**：桌面 SDK 的 `README.md` / `template/` 仍是旧贡献面形态（`activate(context)` + `__WASMNEST_SHARED__` 外置），与 ADR 0057 后的挂载包形态（`mountApp` + 自足打包）不一致——写新代码以应用仓现有 app 为准；该漂移的修复在**平台仓侧**（docs/codemap.md §6 任务路由「改 SDK」行）。
 

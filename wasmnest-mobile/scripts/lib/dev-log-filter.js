@@ -3,7 +3,8 @@
  *
  * 判定分两层，顺序固定：
  *   ① 行内容规则（DROP_PATTERNS）：设备侧库内部输出（wasmtime/cranelift、mdns_sd、
- *      dev 服务代理连接、MIUI 属性探测告警）与主机侧 tauri CLI / Gradle（任务、
+ *      libp2p-swarm poll 心跳 span / yamux RTT 探活、dev 服务代理连接、MIUI 属性探测
+ *      告警）与主机侧 tauri CLI / Gradle（任务、
  *      transform、缓存原因）/ cargo-mobile2 / Vite 构建进展
  *   ② logcat tag 白名单：设备侧非本方框架 tag 一律丢弃；非 logcat 行（主机侧）不套用
  *
@@ -76,6 +77,13 @@ const DROP_PATTERNS = [
   /wasmtime::runtime::code_memory/,
   // mdns_sd crate 内部 debug（业务发现日志在 wasmnest_mobile_lib::mdns::* / wasmnest_peer_net::*）
   /mdns_sd::/,
+  // libp2p-swarm 每次 poll 新建 debug span（`#[instrument]` → tracing→log 桥接落成
+  // `{module}: {Span}::poll;`，频率 = 事件循环频率 × 连接数）；只丢这三类心跳 span，
+  // 同 crate 的拨号/协议协商/Connection established 等 debug 事件照常保留
+  /\blibp2p_swarm(?:::[a-z_]+)*: (?:\+\+ )?(?:Swarm|Connection|Pool)::poll(?:;|$)/,
+  // yamux RTT 探活（`sending ping` / `received pong … estimated round-trip-time`，
+  // keep-alive 周期触发）；yamux 连接/流生命周期 debug 在其它 module 路径上不受影响
+  /\byamux::connection::rtt: /,
   // MIUI/设备属性探测告警（libc tag 保留给崩溃信号行，这类 property 探测恒被拒、无排障价值）
   /Access denied finding property/,
   // 主机侧 tauri CLI -v 的 Debug 行（结构 dump / 文件监视器）与 neli 路由表 dump

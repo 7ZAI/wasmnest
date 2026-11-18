@@ -5,8 +5,8 @@
  * 插件；反过来，插件系统也不需要知道壳的存在。后续真源换成 WASM 应用平台时，
  * 只需新增一个实现 ShellAppSource 的适配器并替换注册处，壳内零改动。
  *
- * 能力诚实原则：后端目前没有「逐项开关权限」的命令，因此 setPermissionGrant
- * 明确返回 false（宿主据此置灰并说明原因），而不是假装开关生效。
+ * 权限面与桌面同口径：审批是整单的（全部声明权限 + 内容哈希钉扎），没有
+ * 「逐项开关权限」的命令。适配器不实现 setPermissionGrant，详情页据此只读呈现。
  */
 
 import { open } from '@tauri-apps/plugin-dialog'
@@ -19,6 +19,7 @@ import {
   pluginListLoaded,
   pluginInstallFromFile,
   pluginIsAutostart,
+  pluginPeekAppPackage,
   pluginPreauthorize,
   pluginSetAutostart,
   pluginUninstall,
@@ -106,6 +107,7 @@ export function toShellApp(info: PluginInfo): ShellApp {
     permissions: mapPermissions(info),
     sizeBytes: typeof info.sizeBytes === 'number' ? info.sizeBytes : undefined,
     error: info.state.state === 'error' ? info.state.error : undefined,
+    update: info.update,
     // 运行面不从清单下发：插件的 UI 入口在激活后才注册进插件注册表，
     // 因此在 resolveSurface 里按需解析（见下）
     contributions: {},
@@ -133,10 +135,10 @@ export function createPluginAppSource(): ShellAppSource {
       // 不能压在 loading 之下），用户拒绝即抛出、启动失败
       await pluginPreauthorize(appId)
 
-      // rust-only 插件没有前端模块入口，loader 会尝试 import 不存在的入口而失败，
-      // 因此这类插件只做后端激活
+      // backend 形态（语言无关三形态，2026-10-26 词汇）没有前端模块入口，
+      // loader 会尝试 import 不存在的入口而失败，因此这类插件只做后端激活
       const info = await pluginGetInfo(appId)
-      if (info?.pluginType === 'rust') {
+      if (info?.pluginType === 'backend') {
         await pluginActivate(appId)
         return
       }
@@ -153,26 +155,37 @@ export function createPluginAppSource(): ShellAppSource {
     /**
      * 安装本地应用包：复用插件包安装链路（zip），需经审批与哈希钉扎
      *
-     * 用户取消选包返回 null，不算失败——调用方据此不弹错误提示。
+     * 安装↔卸载闭环（与桌面同口径，2026-11-07）：先预读包内 id 与该 id 的旧数据
+     * 事实；**新装**且留有 keep-data 旧数据时交回壳层询问（默认不恢复），用户取消
+     * 那么不装。已安装同 id 不询问——那是它自己的数据，不是「旧数据」。
+     *
+     * 用户取消选包 / 取消恢复询问均返回 null，不算失败。
      */
-    async installFromLocalPackage(): Promise<string | null> {
+    async installFromLocalPackage(decideRestore): Promise<string | null> {
       const selected = await open({
         multiple: false,
         directory: false,
         filters: [{ name: 'WasmNest', extensions: ['zip'] }],
       })
       if (typeof selected !== 'string') return null
-      return await pluginInstallFromFile(selected)
+      const peek = await pluginPeekAppPackage(selected)
+      let restoreData = false
+      if (!peek.installed && peek.hasRetainedData) {
+        const decision = decideRestore ? await decideRestore({ pluginId: peek.pluginId }) : false
+        if (decision === null) return null
+        restoreData = decision === true
+      }
+      return await pluginInstallFromFile(selected, false, restoreData)
     },
 
-    /** 卸载应用并删除数据（仅用户安装的包可卸载，内置插件由后端拒绝并抛错） */
-    async remove(appId: string): Promise<boolean> {
+    /** 卸载应用；`keepData` = 保留应用数据（私有库 + KV），重装后继续使用 */
+    async remove(appId: string, keepData = false): Promise<boolean> {
       // 卸载即结束运行期：先走前端对称拆解（注册表 / 事件 / 运行期 store 作用域 +
       // 后端停用），再让后端删包。后端 uninstall 内部也会 deactivate，但那只回收
       // Rust 侧——前端模块与 store 若不在此时收掉，应用卸载后其运行面与状态会
       // 残留在 WebView 里直到页面重载（与 stop 同口径：没有"卸载了但 store 还在跑"）
       await pluginLoader.deactivate(appId)
-      await pluginUninstall(appId)
+      await pluginUninstall(appId, keepData)
       return true
     },
 
@@ -192,18 +205,6 @@ export function createPluginAppSource(): ShellAppSource {
      */
     async approve(appId: string): Promise<void> {
       await pluginApprove(appId)
-    },
-
-    /**
-     * 逐项权限开关：后端暂无对应命令，明确返回 false
-     *
-     * 不在这里做「写入本地并假装生效」的降级——权限是安全面，假成功比不支持更危险。
-     */
-    async setPermissionGrant(): Promise<boolean> {
-      logger.warn(
-        '[ShellAdapter] per-permission grant not supported by backend; permission toggles stay read-only',
-      )
-      return false
     },
 
     /**
@@ -227,14 +228,20 @@ export function createPluginAppSource(): ShellAppSource {
       // 运行面已由 context.ui.registerSurface 写进 ShellRegistry（含 PluginViewHost
       // 包装），壳的 useShellApps.resolveSurface 会先读那份。此处是插件数据源的兜底：
       // 仅当应用确实注册过 surface 才补解析，否则交回空态由运行屏显式提示。
-      const surface = getShellRegistry().getApp(appId)?.contributions.surface
-      if (!surface) {
+      const app = getShellRegistry().getApp(appId)
+      const surface = app?.contributions.surface
+      if (surface) return surface.component
+
+      // 只有「运行中却拿不到运行面」才是真缺口（fail-visible）。
+      // 非运行态（未启动 / 已停用 / 待审批 / 出错）没有 surface 是正常事实：
+      // 运行面随激活注册、随停用回收，而对账与运行屏会拿清单里的应用逐条查询本方法——
+      // 一律 warn 会在每次停用后台应用时刷一行黄警（2026-11-09 真机日志）。
+      if (app?.state === 'running') {
         logger.warn(
           `[ShellAdapter] app has no surface registered: appId=${appId}（退役扩展点不再回退，运行屏显示空态）`,
         )
-        return undefined
       }
-      return surface.component
+      return undefined
     },
   }
 }

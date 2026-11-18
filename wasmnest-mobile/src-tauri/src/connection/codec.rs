@@ -1,6 +1,4 @@
-//! WebSocket Message Codec
-//!
-//! 可插拔的消息编解码器，支持 JSON、Protobuf 等格式
+//! 可插拔的 WS 消息编解码器（JSON / Protobuf 等格式）
 
 use crate::model::message::Message;
 use crate::Result;
@@ -156,8 +154,8 @@ mod tests {
     fn test_decode_close_converts_to_error() {
         // Close 帧转 error 消息（code=close）。
         // 注意：tungstenite 0.24 的 CloseFrame Display 为 "{reason} ({code})"，
-        // 当前实现用 to_string() 导致 code 被拼进 message（既有 bug，见
-        // .scratch/test-coverage-bugs.md），此处锁定实际行为
+        // 当前实现用 to_string() 导致 code 被拼进 message（既有 bug）；
+        // 此处锁定实际行为，避免误改。
         let frame = CloseFrame {
             code: CloseCode::Normal,
             reason: Cow::Owned("going away".into()),

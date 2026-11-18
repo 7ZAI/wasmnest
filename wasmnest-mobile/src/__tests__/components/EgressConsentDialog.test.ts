@@ -58,6 +58,11 @@ vi.mock('vue-i18n', () => ({
 vi.mock('@/utils/frontendLogger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn() },
 }))
+// 宿主面门（安全审查 #42）：回执必须附宿主凭证——测试里固定一张，避免每次多一次
+// plugin_frontend_loader_session 调用干扰「只结算一次」的断言
+vi.mock('@/plugin/credentials', () => ({
+  ensureHostCredential: async () => 'host-cred',
+}))
 
 import EgressConsentDialog from '@/components/EgressConsentDialog.vue'
 
@@ -160,6 +165,7 @@ describe('EgressConsentDialog', () => {
       allow: true,
       persist: false,
       deny: false,
+      credential: 'host-cred',
     })
     expect(panel()).toBeNull()
   })
@@ -176,6 +182,7 @@ describe('EgressConsentDialog', () => {
       allow: true,
       persist: true,
       deny: false,
+      credential: 'host-cred',
     })
   })
 
@@ -188,6 +195,7 @@ describe('EgressConsentDialog', () => {
       allow: false,
       persist: false,
       deny: false,
+      credential: 'host-cred',
     })
     expect(panel()).toBeNull()
   })
@@ -203,6 +211,7 @@ describe('EgressConsentDialog', () => {
       allow: false,
       persist: false,
       deny: false,
+      credential: 'host-cred',
     })
   })
 
@@ -220,6 +229,7 @@ describe('EgressConsentDialog', () => {
       allow: false,
       persist: false,
       deny: false,
+      credential: 'host-cred',
     })
     // 队列推进 → 展示第二个
     expect(panel()!.textContent).toContain('second.example.com')
@@ -229,6 +239,7 @@ describe('EgressConsentDialog', () => {
       allow: true,
       persist: false,
       deny: false,
+      credential: 'host-cred',
     })
   })
 

@@ -4,10 +4,11 @@
 //!
 //! 移动宿主的对等网络引擎控制面（节点装配 / 生命周期闸门 / 会话句柄表 /
 //! 接收回执表与设置落盘 / 事件翻译载荷 / 远端拉取编排）已整体下沉共享能力域
-//! `../wasmnest-lib/wasmnest-server-peer-net`（双端同引纯引擎形态）；移动侧只剩适配层
+//! `../wasmnest-lib/wasmnest-server-peer-net`（双端同引）；移动侧只剩平台差异面
 //! ——2026-10-14 模块化收拢后住在 `src/peer/`（原五个 `src/peer_*.rs` 平铺文件：
-//! 原 `peer_net.rs` 拆为 `net.rs`（装配 + 生命周期 + 委托）/ `ports.rs`（端口实现）/
-//! `seam.rs`（平台缝），`transfer/receive/remote/migration` 原样入模块）。谁把这些
+//! 原 `peer_net.rs` 拆为 `net.rs`（装配 + 身份 + 状态再导出）/ `ports.rs`（端口实现）/
+//! `seam.rs`（平台缝），`transfer` 收为选源平台缝、`migration` 原样入模块；
+//! `receive` / `remote` 两个纯委托模块随 host-peer 脱绑删除）。谁把这些
 //! 符号加回宿主，谁就先把引擎拆回了第二份真源——本锁直接测红。
 //!
 //! ## 三面判据（缺一不可）
@@ -30,14 +31,16 @@ fn src_tauri_root() -> PathBuf {
 /// 模块入口：子模块声明必需，缺它整组 peer 代码不在编译面内（适配面在场判据之一）
 const MODULE_ENTRY: &str = "src/peer.rs";
 
-/// 适配层模块（退役面扫描面；对应拆分前 `peer_net.rs` + 三个委托模块的内容并集）
+/// 适配层模块（退役面扫描面；对应拆分前 `peer_net.rs` + 委托模块的内容并集）
+///
+/// `receive.rs` / `remote.rs` 已随 host-peer 脱绑删除（纯委托、零消费者：19 条
+/// 原语的 `Host` impl 在能力 lib `common-host` 层，直调 crate 域函数）；
+/// `transfer.rs` 只剩发送源选择平台缝。扫描面随之收窄，退役针脚不放松。
 const ADAPTER_FILES: &[&str] = &[
     "src/peer/net.rs",
     "src/peer/ports.rs",
     "src/peer/seam.rs",
     "src/peer/transfer.rs",
-    "src/peer/receive.rs",
-    "src/peer/remote.rs",
 ];
 
 /// 宿主侧迁移模块：**职责就是读旧文件**（把历史 `transfer_settings.json` 等

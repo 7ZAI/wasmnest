@@ -1,18 +1,13 @@
-//! WSL2 Support
+//! WSL 发行版列举（`host-platform-desktop.wsl-distros` 的平台事实支撑）
 //!
-//! **只提供平台事实：已安装发行版列举**（`host-platform-desktop.wsl-distros` 原语的
-//! 实现）。
+//! **只提供平台事实：已安装发行版**，不执行命令、不做路径转换。
 //!
-//! v36 交集接口切片（票 02 批次 06）：自 wasm-core `system/wsl.rs` 迁入（host-platform
+//! v36 交集接口切片：自 wasm-core `system/wsl.rs` 迁入（host-platform
 //! 桌面扩展 4 函数随 WIT impl 落宿主 `src-tauri/src/plugin/platform.rs`，本模块为其
 //! 支撑——内核不再持有 WSL 发行版列举这一桌面平台语义）。
 //!
 //! 曾同时承载「在 WSL 中执行命令」与「Windows → WSL 路径转换」——两者都是
-//! **业务会话语义**，已随 2026-09-23 PTY 解耦票退役：shell 包装与路径转换归
-//! 消费侧（业务会话 = 插件 `launch.rs::build_argv`，插件私有 PTY = 插件自己）。
-//!
-//! 曾同时承载「在 WSL 中执行命令」与「Windows → WSL 路径转换」——两者都是
-//! **业务会话语义**，已随 2026-09-23 PTY 解耦票退役：shell 包装与路径转换归
+//! **业务会话语义**，已随 2026-09-23 PTY 解耦退役：shell 包装与路径转换归
 //! 消费侧（业务会话 = 插件 `launch.rs::build_argv`，插件私有 PTY = 插件自己）。
 
 use crate::Result;

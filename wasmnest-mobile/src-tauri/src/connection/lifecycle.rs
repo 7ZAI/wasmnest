@@ -1,11 +1,11 @@
-//! Lifecycle Module - Connection State Machine
+//! WS 层连接状态机：状态转换与事件钩子
 //!
-//! 职责：管理连接生命周期状态，提供状态转换和事件钩子
-//! 状态：未连接、连接中、已连接、已认证（HTTP）、已配对、断开、重连中
+//! 状态：未连接 / 连接中 / 已连接 / 已认证 / 已配对 / 错误。设备级的「已认证」
+//! 结论由 `ConnectionManager` 自有 status 承载；本管理器的 `Authed` 是 WS 层状态，
+//! 两者不混用。
 //!
-//! 注意：认证已 HTTP 化后（spec §4.5），设备级的「已认证」语义由
-//! ConnectionManager 自有 status 承载（Authed），本 LifecycleManager 仅服务
-//! WsClient 的 WS 层状态（04 事件 WS 重新引入后才恢复完整语义）。
+//! 认证已 HTTP 化后，设备级的「已认证」语义由 `ConnectionManager` 自有 status
+//! 承载（Authed）；本管理器只服务 `WsClient` 的 WS 层状态，不与设备级结论混用。
 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -22,7 +22,7 @@ pub enum ConnectionStatus {
     Connecting,
     /// 已连接（WebSocket 连接已建立，等待认证）
     Connected,
-    /// 已认证（设备级 HTTP 认证成功，04 的事件 WS 复用此状态）
+    /// 已认证（设备级 HTTP 认证成功；常驻事件 WS 复用此状态）
     Authed,
     /// 已配对（WS 时代遗留语义，保留兼容）
     Paired,

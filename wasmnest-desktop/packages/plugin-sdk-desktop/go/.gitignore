@@ -1,0 +1,5 @@
+# 派生产物（gen-bindings.mjs 组装：rust/wit 拼装件 + wit-src/go-plugin.wit + TinyGo wasi-cli deps）
+wit/
+
+# 验证组件构建产物（重构建见 README）
+testplugin/*.wasm

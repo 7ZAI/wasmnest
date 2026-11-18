@@ -122,7 +122,7 @@ mod tests {
                 name: "Test Plugin".to_string(),
                 version: "0.1.0".to_string(),
                 permissions: vec!["storage".to_string()],
-                plugin_type: PluginType::Rust,
+                plugin_type: PluginType::Backend,
                 // 余下字段取 Default，SDK 追加可选字段时不必回来补格子（票 14）
                 ..Default::default()
             }
@@ -156,7 +156,7 @@ mod tests {
         // manifest 经函数指针重建，字段与插件定义一致
         let manifest = (entry.create_manifest)();
         assert_eq!(manifest.id, "com.wasmnest.test-plugin");
-        assert_eq!(manifest.plugin_type, PluginType::Rust);
+        assert_eq!(manifest.plugin_type, PluginType::Backend);
         // 未覆盖的扩展点走 trait 默认实现：空命令表/空终端处理器
         assert!((entry.register_commands)().is_empty());
         assert!((entry.terminal_handlers)().is_empty());

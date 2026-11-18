@@ -1,6 +1,6 @@
 {
   "name": "wasmnest",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "MIT",
   "private": true,
   "packageManager": "pnpm@12.2.1",
@@ -9,10 +9,12 @@
     "test:run": "node --test \"scripts/*.test.mjs\"",
     "check:wit": "node scripts/compose-wit.mjs --all --check",
     "check:manifest": "node scripts/check-release-manifest.mjs",
-    "check:links": "node scripts/check-markdown-links.mjs"
+    "check:links": "node scripts/check-markdown-links.mjs",
+    "target:worktrees": "node scripts/worktree-shared-target.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@intlify/bundle-utils": "^7.5.1",
     "@vue/eslint-config-typescript": "^14.9.0",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^9.1.2",

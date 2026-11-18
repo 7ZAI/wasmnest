@@ -1,5 +1,6 @@
 <template>
-  <!-- 全屏多任务层（安卓 recents 形态）：背景是当前界面的虚化快照，前景是运行中应用的大卡片。
+  <!-- 全屏多任务层（安卓 recents 形态）：背景是虚化底，前景是运行中应用的大卡片。
+       前台实例会被搬进自己的卡（缩略区展示真实页面），背景只剩壳的壁纸层。
        Teleport 到 body：壳根是 overflow:hidden 的定高 flex，且应用内容自带层叠上下文，
        留在里面会被裁掉 / 被应用弹层压住；全屏层必须独立于这两者。 -->
   <Teleport to="body">
@@ -34,28 +35,35 @@
           </header>
 
           <!-- 卡片带：卡片数决定卡片尺寸（2026-10-23 用户裁决，修正上一版反方向）。
-               1 张 = 带内最大 3:4 卡居中；越多越小，最小只缩到「3 列 × 2 行」的格子；
+               1 张 = 带内最大卡居中，但封顶「两张卡时的格宽」（2026-11-01 用户裁决）；
+               越多越小，最小只缩到「3 列 × 2 行」的格子；
                第 7 张起不再缩小，改为纵向滚动（解算见 composables/recentsLayout.ts）。
-               缩略区 = 应用可选导出的 mountPreview 自绘只读预览面；缺失 / 失败 /
-               超时回退品牌渐变 + 图标（预览是应用自己重画的点时刻视图，宿主不抓主实例
-               DOM——表面保活后后台 DOM 仍在，但抓取会让旁路实例耦合主实例状态；
-               见 .scratch/2026-10-20-app-preview-contract）。 -->
+               缩略区 = **真实实例的当前页面**（2026-10-30 用户裁决）：宿主把保活实例
+               搬进卡片、按整幅尺寸**等比缩小到整幅可见**（contain：比例不一致时居中留边，
+               不裁切；2026-11-04 用户裁决取代 cover；不重排 / 终端不 resize / 滚动与输入原样），
+               不是截图 / 不是 DOM 克隆 / 不是应用自绘预览面；卡片里的实例 inert，
+               多任务层收起后回后台（脱离文档不渲染）。系统页卡没有实例，保持品牌卡。 -->
           <div
             ref="bandEl"
             class="ts-cards"
             :class="{
-              'is-empty': !state.cards.value.length,
+              'is-empty': !renderKeys.length,
               'is-scrolling': scrolls,
+              'is-clearing': clearingAll,
             }"
             :style="bandStyle"
             role="list"
           >
             <article
-              v-for="(key, i) in state.cards.value"
+              v-for="(key, i) in renderKeys"
               :key="key"
               class="ts-card"
-              :class="{ active: key === state.activeCard.value }"
+              :class="{
+                active: key === state.activeCard.value,
+                'is-closing': ghosts.has(key),
+              }"
               :style="cardStyle(i)"
+              :inert="ghosts.has(key)"
               role="listitem"
               data-ts-keep
             >
@@ -80,19 +88,25 @@
                   {{ chipTextOf(key) }}
                 </span>
               </div>
+              <!-- 系统页卡缩略区：渐变底 + 图标（**.ts-thumb 不能挂 tone-system**：
+                   tone 类带 1px 边框，渐变背景会在边框环里按 background-origin 重绘，
+                   底部 1px 露出渐变起点色 = 一条彩色细线）。 -->
               <div
                 class="ts-thumb"
-                :class="kindOf(key) === 'app' ? undefined : 'tone-system'"
                 :style="kindOf(key) === 'app' ? undefined : thumbStyle()"
               >
-                <!-- app 卡：应用自绘只读预览面（未导出 / 失败 / 超时 → 品牌卡 fallback） -->
-                <AppPreviewTile
+                <!-- app 卡：保活实例本身（宿主搬进卡片并等比缩放；实例缺失 → 品牌卡 fallback）。
+                     缩略区尺寸由解算结果直接传入（首帧即准，避免卡片带还没写成
+                     `--ts-card-w` 时先按兜底三等分缩一次再跳）；容器尺寸变化仍由
+                     AppSurfaceTile 的 ResizeObserver 按 DOM 实测量校正。 -->
+                <AppSurfaceTile
                   v-if="kindOf(key) === 'app'"
                   :app-id="idOf(key)"
-                  :last-route="lastRouteOf(idOf(key))"
                   :icon="entryOf(key)?.icon ?? 'grid'"
                   :icon-file="entryOf(key)?.iconFile"
                   :tone="toneOf(key)"
+                  :thumb-width="thumbSize.width"
+                  :thumb-height="thumbSize.height"
                 />
                 <!-- 系统页卡：没有 app bundle，保持品牌渐变 + 36px glyph -->
                 <span v-else class="glyph-box tone-system ts-sys-glyph">
@@ -112,7 +126,9 @@
               <button
                 class="ts-card-x"
                 :title="
-                  kindOf(key) === 'app' ? t('shell.recents.stopInstance') : t('shell.recents.closePage')
+                  kindOf(key) === 'app'
+                    ? t('shell.recents.stopInstance')
+                    : t('shell.recents.closePage')
                 "
                 :aria-label="t('shell.recents.closeOne', { name: state.cardTitleOf(key) })"
                 @click="closeCard(key)"
@@ -123,7 +139,7 @@
 
             <!-- 空态：图标 + 一行说明，居中于卡片带——孤零零一句文字落在左上角
                  网格格里，读起来像页面没加载完 -->
-            <div v-if="!state.cards.value.length" class="ts-empty">
+            <div v-if="!renderKeys.length" class="ts-empty">
               <span class="ts-empty-ic">
                 <ShellIcon name="recents" :size="26" :stroke-width="1.4" />
               </span>
@@ -141,13 +157,20 @@
  * ShellTaskSwitcher — 全屏多任务（安卓 recents 形态）
  *
  * 主屏不铺「正在运行」区（用户裁决 2026-10-17），打开过 / 后台运行的面统一在这个
- * 全屏层里呈现：背景是当前界面的**虚化**快照（backdrop blur），前景是每个应用一张
- * 大卡片（卡片数决定尺寸：少卡大、多卡小，见 `recentsLayout`），点卡片切回（应用续接
- * 离开时那一页），卡片顶部信息条（图标 + 名称）右端 ✕ 关闭单个实例，头部「全部关闭」
- * 一键清场；点空白 / ✕ / Esc 收起。
+ * 全屏层里呈现：背景是**虚化**底（前景实例会被搬走，背景只剩壳的壁纸层），前景是
+ * 每个应用一张大卡片（卡片数决定尺寸：少卡大、多卡小，见 `recentsLayout`），点卡片
+ * 切回（应用续接离开时那一页），卡片顶部信息条（图标 + 名称）右端 ✕ 关闭单个实例，
+ * 头部「全部关闭」一键清场；点空白 / ✕ / Esc 收起。
  *
- * 缩略区：app 卡交给 `AppPreviewTile`（应用可选导出 `mountPreview` 自绘只读预览面；
- * 未导出 / 失败 / 3s 超时回退品牌渐变 + 图标），系统页卡保持品牌渐变 + 36px glyph。
+ * 缩略区（2026-10-30 用户裁决）：app 卡展示**真实实例的当前页面**——`AppSurfaceTile`
+ * 请求挂载层把保活实例搬进卡片、按整幅尺寸等比缩小到整幅可见（contain，居中留边，
+ * 2026-11-04 用户裁决取代 cover 裁切）；系统页卡没有实例，保持品牌
+ * 渐变 + 36px glyph。代价：多任务层打开期间所有运行中应用都会重新渲染（收起即回
+ * 后台不渲染）。
+ *
+ * 收货：普通收起（Esc / 点空白 / 切回同一张卡）时，前台实例必须送回挂载槽——
+ * 搬运发生在卡片里，不送回去应用就“消失”了。切到别的应用由 `AppMountSlot` 的
+ * appId watcher 接管（本层不抢）。
  *
  * 归属（AGENTS §5.1）：纯注册表投影 + 动作机械转发；卡清单与关闭语义唯一实现在
  * `useShellState`（activateCard 带页面续接、closeCard = 真停用），本组件不复制编排。
@@ -158,18 +181,22 @@ import { SYS_PAGES, chipMetaOf, type AppTone } from '../composables/state'
 import { useShellState } from '../composables/useShellState'
 import { useShellApps } from '../composables/useShellApps'
 import {
+  RECENTS_CARD_CHROME,
+  RECENTS_CARD_INSET,
   RECENTS_MAX_COLS,
   RECENTS_MAX_VISIBLE_ROWS,
-  recentsCardHeight,
+  normalizePreviewAspect,
   recentsCardPlacement,
-  recentsCardWidth,
+  recentsCardSize,
+  recentsThumbSize,
   recentsTrackCount,
   type RecentsBand,
+  type RecentsCardMetrics,
 } from '../composables/recentsLayout'
 import ShellIcon from './ShellIcon.vue'
 import ShellAppTile from './ShellAppTile.vue'
-import AppPreviewTile from '../mount/AppPreviewTile.vue'
-import { lastRouteOf } from '../mount/appSession'
+import AppSurfaceTile from '../mount/AppSurfaceTile.vue'
+import { appViewportAspect, returnAppSurfaceToSlot } from '../mount/useAppMount'
 import type { CardKey } from '../types'
 import type { ShellAppEntry } from '../composables/useShellApps'
 
@@ -186,23 +213,161 @@ const bandEl = ref<HTMLElement | null>(null)
  * 所以窗口缩放 / 卡片增减 / 滚动条出现都只需重算一次 computed。
  */
 const band = ref<RecentsBand>({ width: 0, height: 0, gap: 0 })
+
+/**
+ * 缩略区之外占用的高 / 宽（信息条 + 描边，实测；见 `measureCardChrome`）。
+ * 量不到时用 `recentsLayout` 的常量兜底（与 `.ts-meta` / `.ts-card` 的 CSS 同源）。
+ */
+const cardChrome = ref({ chrome: RECENTS_CARD_CHROME, inset: RECENTS_CARD_INSET })
+/** 每量一次带尺寸就刷新一次比例（`appViewportAspect` 读的是挂载注册表，非响应式） */
+const metricsTick = ref(0)
+
+/**
+ * 卡片形状 = 缩略区（应用整页）比例 + 信息条高度。
+ *
+ * 比例 = 运行期实测的应用区宽高比（`appViewportAspect`）：缩略区与页面同比例，
+ * 卡片里的实例按 contain 缩放（见 `mount/appSurfaceRegistry`）正好**铺满**缩略区，
+ * 不留边也不裁切（2026-11-04 用户裁决，取代竖版 3:4 + cover 裁切）。
+ * 一个实例都没量到（首帧 / 卡片全是系统页）→ 回默认 16:10。
+ */
+const metrics = computed<RecentsCardMetrics>(() => {
+  void metricsTick.value
+  return {
+    aspect: normalizePreviewAspect(appViewportAspect()),
+    chrome: cardChrome.value.chrome,
+    inset: cardChrome.value.inset,
+  }
+})
+/**
+ * 关闭渐隐（两种语义，2026-11-12 用户裁决「单关 / 全关各有对应的渐隐」）
+ *
+ * - **单关（卡片 ×）**：只有这一张原地淡出（200ms，强减速曲线），其余卡纹丝不动；
+ *   卡片在渐隐窗口内继续占位，窗口结束后整组一次性落到新尺寸。
+ * - **全部关闭**：沿用同一条渐隐，但按卡片顺序逐张 +22ms（封顶 5 步）错峰，每张多
+ *   下沉 / 多缩一点、时长收到 130ms——读起来是「一次清场」，不是「连按 N 次单关」。
+ *
+ * 为什么用「幽灵占位」而不是等动画走完再卸载：数据层的真停用（`useShellState`）在
+ * 点击那一刻就开跑，DOM 只是按快照多留一个渐隐窗口——动效不 gate 生命周期
+ * （docs/frontend.md §4.3.5）。卡片 key 不变 ⇒ Vue 复用同一个节点，实例停用后缩略区
+ * 自然空成卡片底（= 熄屏），不需要额外的占位 DOM。
+ */
+const CLOSE_FADE_MS = 200
+const CLOSE_ALL_FADE_MS = 130
+const CLOSE_ALL_STEP_MS = 22
+const CLOSE_ALL_MAX_STEPS = 5
+const GHOST_TAIL_MS = 30
+/** 幽灵兜底释放：数据层迟迟没把卡移走时也不能让卡永远隐身（fail-visible） */
+const GHOST_SAFETY_MS = 1600
+
+interface GhostCard {
+  /** 关闭前的卡位序号：合并渲染时插回原位，渐隐期间网格几何不重排 */
+  rank: number
+  /** 交错延迟（全关按序；单关恒 0），同一帧落到元素上供 CSS 过渡取用 */
+  delay: number
+  /** 渐隐结束的绝对时刻（performance.now 口径） */
+  until: number
+}
+
+/** 关闭中的卡（数据层已离开或正在离开，DOM 仍在渐隐） */
+const ghosts = ref(new Map<CardKey, GhostCard>())
+/** 本次是否为「全部关闭」：只影响整组的下沉幅度与时长（CSS 的 is-clearing） */
+const clearingAll = ref(false)
+const ghostTimers = new Map<CardKey, number>()
+
+/**
+ * 渲染清单 = 当前卡 + 关闭中的幽灵卡
+ *
+ * 幽灵按关闭前的卡位序号插回原位（序号相同时幽灵在前，即它原本的位置）：渐隐期间
+ * 网格里仍然是 N 张卡，尺寸 / 末行居中都不变；窗口结束后整组一次性落到 N−1 的
+ * 布局，不会出现「卡还在淡出、旁边已经长大」的半截重排。
+ */
+const renderKeys = computed<CardKey[]>(() => {
+  const live = state.cards.value
+  if (ghosts.value.size === 0) return live
+  const liveSet = new Set(live)
+  const entries = live.map((key, index) => ({ key, rank: index * 2 + 1 }))
+  for (const [key, ghost] of ghosts.value) {
+    // 数据层还没把卡移走：活卡自己带 is-closing，不能重复渲染（v-for key 会撞）
+    if (!liveSet.has(key)) entries.push({ key, rank: ghost.rank * 2 })
+  }
+  return entries.sort((a, b) => a.rank - b.rank).map((entry) => entry.key)
+})
+
+function clearGhostTimer(key: CardKey): void {
+  const timer = ghostTimers.get(key)
+  if (timer !== undefined) window.clearTimeout(timer)
+  ghostTimers.delete(key)
+}
+
+/** 标记关闭中的卡，返回渐隐结束的绝对时刻（调用方据此排释放） */
+function markClosing(key: CardKey, rank: number, delay: number, fadeMs: number): number {
+  const until = performance.now() + delay + fadeMs + GHOST_TAIL_MS
+  ghosts.value.set(key, { rank, delay, until })
+  // 兜底释放：真停用迟迟不结束（或压根没把卡移走）时，卡在安全窗口后淡回来，
+  // 绝不留下「看不见但一直占着卡位」的假象
+  scheduleGhostRelease(key, delay + fadeMs + GHOST_SAFETY_MS)
+  return until
+}
+
+function scheduleGhostRelease(key: CardKey, afterMs: number): void {
+  clearGhostTimer(key)
+  ghostTimers.set(
+    key,
+    window.setTimeout(() => releaseGhost(key), Math.max(0, afterMs)),
+  )
+}
+
+function releaseGhost(key: CardKey): void {
+  clearGhostTimer(key)
+  if (ghosts.value.has(key)) ghosts.value.delete(key)
+}
+
+/** 收起 / 卸载时清场：重开多任务不能再看到上一轮的幽灵卡 */
+function releaseAllGhosts(): void {
+  for (const key of [...ghostTimers.keys()]) clearGhostTimer(key)
+  if (ghosts.value.size > 0) ghosts.value.clear()
+  clearingAll.value = false
+}
+
+/**
+ * 单卡尺寸（高 + 宽同源解算）。
+ *
+ * 2026-11-06 用户裁决「卡片有最大最小高度限制，宽度稍微减少，高度加高」：
+ * 解算改成**高度优先**，宽度由高度派生（见 `recentsCardSize`）。这里必须一次拿到
+ * 高与宽两个值——高度优先下不存在「宽度 → 高度」的反解（旧的 `recentsCardHeight`
+ * 已随该口径退役），分开算必然对不上。
+ */
+const cardSize = computed(() => recentsCardSize(renderKeys.value.length, band.value, metrics.value))
 /** 单卡宽度；0 = 还没量到带尺寸 → 交给 CSS 兜底（三等分） */
-const cardWidth = computed(() => recentsCardWidth(state.cards.value.length, band.value))
-/** 行高（卡高）：显式喂给 grid-auto-rows，避免引擎把溢出的行压扁 */
-const cardHeight = computed(() => recentsCardHeight(cardWidth.value))
+const cardWidth = computed(() => cardSize.value.width)
+/** 卡高：显式喂给 grid-auto-rows，避免引擎把溢出的行压扁 */
+const cardHeight = computed(() => cardSize.value.height)
+/**
+ * 缩略区尺寸（px）——交给 `AppSurfaceTile` 做 contain 缩放。
+ *
+ * 取 `recentsThumbSize` 而非在组件里再算一遍：口径只能有一处（2026-11-07 修的是
+ * 「组件算卡宽−描边、导出函数返回收缩前的按比例宽」两套口径分叉，按后者接线会让
+ * 画面横向溢出 12%）。解算未就绪时返回 {0,0} → 交回 DOM 自量
+ * （`AppSurfaceTile` 的 ResizeObserver 兜底）。
+ */
+const thumbSize = computed(() =>
+  recentsThumbSize(renderKeys.value.length, band.value, metrics.value),
+)
 /** 超过可视 2 行 → 改滚动：必须置顶对齐，否则居中的首行会被滚出可视区 */
 const scrolls = computed(
   () =>
-    state.cards.value.length > 0 &&
-    Math.ceil(state.cards.value.length / RECENTS_MAX_COLS) > RECENTS_MAX_VISIBLE_ROWS,
+    renderKeys.value.length > 0 &&
+    Math.ceil(renderKeys.value.length / RECENTS_MAX_COLS) > RECENTS_MAX_VISIBLE_ROWS,
 )
-/** 注入 `--ts-card-w` / `--ts-card-h` / `--ts-tracks`：CSS 不重复尺寸算术 */
+/** 注入 `--ts-card-w` / `--ts-card-h` / `--ts-card-ratio` / `--ts-tracks` / `--ts-card-aspect`：CSS 不重复尺寸算术 */
 const bandStyle = computed<Record<string, string>>(() => {
-  const style: Record<string, string> = {}
-  if (cardWidth.value > 0) {
+  const style: Record<string, string> = { '--ts-card-aspect': `${metrics.value.aspect}` }
+  if (cardWidth.value > 0 && cardHeight.value > 0) {
     style['--ts-card-w'] = `${cardWidth.value}px`
     style['--ts-card-h'] = `${cardHeight.value}px`
-    style['--ts-tracks'] = String(recentsTrackCount(state.cards.value.length))
+    // 卡片自身比例（≠ 缩略区比例）：未测量时的 aspect-ratio 兜底必须与实测尺寸同比例
+    style['--ts-card-ratio'] = `${cardWidth.value} / ${cardHeight.value}`
+    style['--ts-tracks'] = String(recentsTrackCount(renderKeys.value.length))
   }
   return style
 })
@@ -216,11 +381,14 @@ const bandStyle = computed<Record<string, string>>(() => {
  */
 function cardStyle(index: number): Record<string, string | number> {
   const style: Record<string, string | number> = { '--i': index }
-  const placement = recentsCardPlacement(index, state.cards.value.length)
+  const placement = recentsCardPlacement(index, renderKeys.value.length)
   if (placement) {
     style.gridRow = placement.row
     style.gridColumn = `${placement.columnStart} / span 2`
   }
+  // 关闭中的卡：交错延迟必须与 is-closing 同帧落到元素上，过渡才带 delay
+  const ghost = ghosts.value.get(renderKeys.value[index] ?? '')
+  if (ghost) style.transitionDelay = `${ghost.delay}ms`
   return style
 }
 
@@ -243,10 +411,56 @@ function measureBand(): void {
   const el = bandEl.value
   if (!el) return
   const cs = getComputedStyle(el)
-  band.value = {
+  const next: RecentsBand = {
     width: el.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight),
     height: el.clientHeight - px(cs.paddingTop) - px(cs.paddingBottom),
     gap: px(cs.columnGap) || px(cs.rowGap),
+  }
+  // 等值短路：数值没变就不写回（否则一次「窗口没变」的 resize 也会让
+  // cardSize / thumbSize 全量重算并重渲染整片卡片，F9）
+  if (next.width !== band.value.width || next.height !== band.value.height || next.gap !== band.value.gap) {
+    band.value = next
+    // 比例来自运行期实测的应用区（非响应式），带宽变化才需要重新取一次
+    metricsTick.value += 1
+  }
+  measureCardChrome()
+}
+
+/**
+ * resize / ResizeObserver 合帧：一帧只量一次
+ *
+ * 两个入口都会在拖窗口时高频触发；`measureBand` 里有 `getComputedStyle` +
+ * `clientWidth/Height` 的强制同步布局，逐事件跑等于每帧多次全量测量（F9）。
+ * 打开态的首次测量仍走同步 `measureBand()`（`syncBandAndFocus`），保证首帧就有尺寸。
+ */
+let measureRaf: number | null = null
+
+function scheduleMeasureBand(): void {
+  if (measureRaf !== null) return
+  measureRaf = requestAnimationFrame(() => {
+    measureRaf = null
+    measureBand()
+  })
+}
+
+/**
+ * 量卡片信息条 + 描边实际占掉的高 / 宽。
+ *
+ * 卡高 = 缩略区高 + 这部分：写成常量的话，改 `.ts-meta` 的内边距 / 图标尺寸就会让
+ * 缩略区比例偏掉（页面与缩略区不一致 → contain 又出现留边），所以直接量 DOM。
+ */
+function measureCardChrome(): void {
+  const card = bandEl.value?.querySelector<HTMLElement>('.ts-card')
+  const meta = card?.querySelector<HTMLElement>('.ts-meta')
+  if (!card || !meta) return
+  const cs = getComputedStyle(card)
+  const next = {
+    chrome: meta.offsetHeight + px(cs.borderTopWidth) + px(cs.borderBottomWidth),
+    inset: px(cs.borderLeftWidth) + px(cs.borderRightWidth),
+  }
+  // 等值短路：数值没变就不触发下游 computed 重算（F9）
+  if (next.chrome !== cardChrome.value.chrome || next.inset !== cardChrome.value.inset) {
+    cardChrome.value = next
   }
 }
 
@@ -257,7 +471,7 @@ function observeBand(): void {
   unobserveBand()
   const el = bandEl.value
   if (!el || typeof ResizeObserver === 'undefined') return
-  bandObserver = new ResizeObserver(() => measureBand())
+  bandObserver = new ResizeObserver(() => scheduleMeasureBand())
   bandObserver.observe(el)
 }
 
@@ -268,7 +482,7 @@ function unobserveBand(): void {
 
 /**
  * 系统页卡缩略区品牌渐变底：tone 固定 system 的语义色（与 tone-system 类同源）。
- * app 卡的品牌渐变 fallback 由 `AppPreviewTile` 自绘（同一条公式，单一实现）。
+ * app 卡的品牌渐变 fallback 由 `AppSurfaceTile` 自绘（同一条公式，单一实现）。
  */
 function thumbStyle(): Record<string, string> {
   const accent = 'var(--color-info)'
@@ -284,25 +498,72 @@ function thumbStyle(): Record<string, string> {
 function syncBandAndFocus(): void {
   if (!open.value) {
     unobserveBand()
+    // 层收起 = 本轮关闭动效的终点：幽灵与交错标志不能留给下一次打开
+    releaseAllGhosts()
+    restoreOriginAfterClose()
     return
   }
+  slotOriginAppId = activeAppCardId()
+  switchedTo = null
   measureBand()
   observeBand()
   rootEl.value?.focus()
+}
+
+/**
+ * 打开时处于前台的卡片（实例正在挂载槽里，会被 `AppSurfaceTile` 搬进卡片）。
+ *
+ * 只认「有卡的 app」：服务型应用不入卡，实例留在槽里不动；系统页没有实例。
+ */
+let slotOriginAppId: string | null = null
+/**
+ * 本次收起是否由「点卡片切换」触发。null = Esc / 点空白 / 关闭键等普通收起。
+ * 切到别的应用时实例去向由 AppMountSlot 的 appId watcher 接管，本层不抢。
+ */
+let switchedTo: CardKey | null = null
+
+function activeAppCardId(): string | null {
+  const key = state.activeCard.value
+  if (!key || kindOf(key) !== 'app') return null
+  return state.cards.value.includes(key) ? idOf(key) : null
+}
+
+/**
+ * 普通收起时把前台实例送回挂载槽。
+ *
+ * 打开多任务把前台实例从槽里搬进了卡片；Esc / 点空白 / 切回同一张卡都不会触发
+ * `AppMountSlot` 的重新 attach（appId 没变），不送回去应用就“消失”了。
+ * 切到别的应用 / 关掉前台卡时 activeCard 已变（`closeCard` 内部会切 MRU 次卡或
+ * 回主屏），跳过——否则会把旧实例塞回新应用正在用的槽里。
+ */
+function restoreOriginAfterClose(): void {
+  const origin = slotOriginAppId
+  const target = switchedTo
+  slotOriginAppId = null
+  switchedTo = null
+  if (!origin) return
+  if (target !== null && target !== `app:${origin}`) return
+  if (state.activeCard.value !== `app:${origin}`) return
+  returnAppSurfaceToSlot(origin)
 }
 
 // 开合时同步：`flush: 'post'` 保证 `v-if` 插入的元素在回调里已经存在（不用手工 nextTick）
 watch(open, syncBandAndFocus, { flush: 'post' })
 
 onMounted(() => {
-  window.addEventListener('resize', measureBand)
+  window.addEventListener('resize', scheduleMeasureBand)
   // 覆盖「挂载时全屏层已经打开」的形态（immediate 观感上拿不到 ref，交给挂载钩子）
   syncBandAndFocus()
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', measureBand)
+  window.removeEventListener('resize', scheduleMeasureBand)
+  if (measureRaf !== null) {
+    cancelAnimationFrame(measureRaf)
+    measureRaf = null
+  }
   unobserveBand()
+  releaseAllGhosts()
 })
 
 // ---- 卡片 key 解析（面 key = 'app:<pluginId>' / 'sys:<pageId>'） ----
@@ -353,13 +614,42 @@ function onBackdropClick(e: MouseEvent): void {
 }
 
 function switchTo(key: CardKey): void {
+  // 记录切换目标：收起时据此判断实例去向（切到别的面不抢挂载槽）
+  switchedTo = key
   state.activateCard(key)
 }
-function closeCard(key: CardKey): void {
-  void state.closeCard(key)
+async function closeCard(key: CardKey): Promise<void> {
+  if (ghosts.value.has(key)) return
+  // 视觉立刻开始渐隐；真停用同时开跑（不 gate 生命周期）
+  const until = markClosing(key, Math.max(0, renderKeys.value.indexOf(key)), 0, CLOSE_FADE_MS)
+  const ok = await state.closeCard(key)
+  if (ok !== true) {
+    // 停用失败：卡片与运行面保留（提示由 useShellState 统一发出），视觉随之淡回
+    releaseGhost(key)
+    return
+  }
+  // 数据已离场：幽灵留到渐隐结束，布局在窗口之后一次性落位
+  scheduleGhostRelease(key, until - performance.now())
 }
+
 function closeAll(): void {
-  void state.stopAllCards()
+  if (clearingAll.value) return
+  const keys = renderKeys.value.slice()
+  if (keys.length === 0) return
+  clearingAll.value = true
+  // 两张以上才错峰：只有一张时它就是一次单关，不该多等一步
+  const deadlines: Array<[CardKey, number]> = keys.map((key, index) => {
+    const delay = keys.length > 1 ? Math.min(index, CLOSE_ALL_MAX_STEPS) * CLOSE_ALL_STEP_MS : 0
+    return [key, markClosing(key, index, delay, CLOSE_ALL_FADE_MS)]
+  })
+  void Promise.resolve(state.stopAllCards()).then(() => {
+    for (const [key, until] of deadlines) {
+      // 停用失败被保留的卡：立刻撤回幽灵（卡回来）；已关闭的跑到渐隐结束
+      if (state.cards.value.includes(key)) releaseGhost(key)
+      else scheduleGhostRelease(key, until - performance.now())
+    }
+    clearingAll.value = false
+  })
 }
 function close(): void {
   state.recentsOpen.value = false
@@ -398,6 +688,14 @@ function close(): void {
   background: color-mix(in srgb, var(--bg-page) 58%, transparent);
   -webkit-backdrop-filter: blur(20px) saturate(120%);
   backdrop-filter: blur(20px) saturate(120%);
+}
+/* 不支持背景模糊时，58% 的半透明底只能压暗、压不住下层文字（实机能看到工具栏
+   透出，观感就是「全透明」）。没有模糊就必须回实心底：宁可少一点氛围，也不能让
+   全屏层失去遮挡。 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ts-scrim {
+    background: var(--bg-page);
+  }
 }
 
 .ts-inner {
@@ -451,11 +749,15 @@ function close(): void {
 
 /* 卡片带：卡片数决定卡片尺寸（与移动端 recents 同一条产品口径）。
    卡宽由卡片自身注入（`--ts-card-w`，见 composables/recentsLayout.ts）：1 张 =
-   带内最大 3:4 卡、居中；越多越小，最小缩到「3 列 × 2 行」的格子；第 7 张起
+   带内最大卡、居中（单卡封顶 = 两张卡的格宽，2026-11-01）；越多越小，最小缩到
+   「3 列 × 2 行」的格子；第 7 张起
    不再缩小，改为整带纵向滚动。
    网格拆成 6 个半列轨道、每张卡跨 2 轨：(卡宽 - 间距) / 2 让「跨 2 轨 + 轨间
    gap」恰好等于一张卡宽，6 轨总宽 = 3 张卡 + 2 个间距。半列的唯一目的是末行
    不满 3 张时能精确居中（2 张各让半卡、1 张落在正中，见 recentsCardPlacement）。
+   align-items: stretch：行高由 `--ts-card-h` 给出时让卡片精确填满该行高度，
+   缩略区因此拿到「卡高 - 信息条」的确定高度，contain 才能正好铺满（留 center
+   会让卡片按 aspect-ratio 自算高度，行高与卡高两张皮）。
    注意：这里**不能**加 container-type:size 去按 cqh 收敛卡片高度——WebKitGTK
    下容器查询高度解析为 0，卡片会塌成不可见（2026-10-23 实测）。 */
 .ts-cards {
@@ -468,7 +770,7 @@ function close(): void {
     calc((var(--ts-card-w, calc((100% - var(--ts-gap) * 2) / 3)) - var(--ts-gap)) / 2)
   );
   justify-content: center;
-  align-items: center;
+  align-items: stretch;
   align-content: center;
   /* 行高 = 卡高（由 --ts-card-h 显式给出）：交给 auto 时，Chromium 会在内容超过
      带高的情况下把隐式行压扁去填满容器，卡片溢出到带顶之外、首行不可见。
@@ -496,22 +798,37 @@ function close(): void {
   align-content: start;
 }
 
-/* 卡片：竖版 3/4（缩略区 flex 撑满 + 顶部信息条），尺寸随卡片数自适应。
+/* 卡片：顶部信息条 + 缩略区。
+   缩略区宽高比 = 应用区整幅宽高比（默认 16:10，`--ts-card-aspect` 注入；2026-11-04），
+   缩略区里是真实实例按 contain 缩放（见 appSurfaceRegistry）：缩略区比例与实例比例
+   一致时正好铺满，不一致时居中留边、不裁切。
+   卡片比例 = 缩略区比例（2026-11-07 用户裁决「铺满优先」，外框收缩系数已退役）：
+   卡高有 [MIN, MAX] 上下限，卡宽由卡高按比例反解 + 描边，所以卡片与缩略区同比例。
+   `--ts-card-ratio` 仍单独表达（未测量时的兜底），**不要**复用 `--ts-card-aspect`：
+   前者是「卡宽 / 卡高」，后者是纯比例数值，两者混用会让引擎按缩略区比例反推卡宽
+   （实测 429 → 507，卡片横向溢出）。
    宽度 = 跨 2 个半列轨道（轨道宽由 `--ts-card-w` 注入，见 recentsLayout）：
-   少卡大、多卡小，最小到 2 行 3 列的格，第 7 张起整带滚动；兜底（首帧测量前 /
-   无 ResizeObserver）是三等分，保证未测量时也不会溢出。
+   少卡大、多卡小，第 7 张起整带滚动；兜底（首帧测量前 / 无 ResizeObserver）是
+   三等分，保证未测量时也不会溢出。
+   卡高由 `--ts-card-h` 显式给出（行高同源）；未测量时用 aspect-ratio 兜底，
+   量到后卡片按行高拉伸（`.ts-cards` 的 align-items: stretch），aspect-ratio 让位。
    末行不满 3 张时 `cardStyle` 注入起始轨把它整组居中；其余卡片自动排布。
    box-sizing 必须 border-box：卡宽含 1px 描边，否则轨宽按内容算会多 2px。
-   aspect-ratio 与 RECENTS_CARD_ASPECT 同源（改一处必须改另一处）。 */
+   aspect-ratio 只在未测量时生效（那时宽高都还不是确定值）。 */
 .ts-card {
   position: relative;
   box-sizing: border-box;
   min-width: 0;
+  width: var(--ts-card-w, auto);
   grid-column: span 2;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: var(--ts-card-ratio, 16 / 10);
   display: flex;
   flex-direction: column;
-  border-radius: var(--radius-sheet);
+  /* 卡片圆角单独一档（2026-11-06 用户反馈「太圆」）：`--radius-sheet` 是 16–28px 的
+     大圆角面口径，给多任务大卡用显得像药丸。卡片用 10px，与信息条 / 缩略区的
+     直角关系更硬朗。**不复用 `--radius-sheet`**：它还被通知面板 / 弹窗 / 快捷设置
+     共用，改它会连带改那些面。 */
+  border-radius: 10px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-card);
@@ -566,8 +883,8 @@ function close(): void {
 .ts-card .ts-thumb {
   pointer-events: none;
 }
-/* 缩略区：app 卡 = 应用自绘只读预览面（AppPreviewTile，尺寸由卡片决定）；
-   系统页卡 = 品牌渐变底 + 图标居中。预览挂载 / 回退切换不改变盒子尺寸，
+/* 缩略区：app 卡 = 真实实例的当前页面（AppSurfaceTile 搬运 + 等比缩放）；
+   系统页卡 = 品牌渐变底 + 图标居中。实例搬运 / 回退切换不改变盒子尺寸，
    卡片高度与网格位置不跳动。 */
 .ts-thumb {
   flex: 1;
@@ -684,6 +1001,38 @@ function close(): void {
 .ts-fade-leave-to {
   opacity: 0;
 }
+/* ==================== 关闭渐隐（单关 / 全关 两种语义） ==================== */
+/* 单关：只有这一张原地淡出，其余卡不动。强减速曲线让前 1/3 时长就落掉大部分
+   透明度（关闭是「已经决定了」的动作，不留拖尾）；位移只走 transform / opacity。
+   交错延迟由 `cardStyle` 内联给出（全关按序 +22ms，单关恒 0）。
+   渐隐期间卡片仍是网格项（幽灵占位），布局不会在卡还看得见时塌陷。 */
+.ts-card.is-closing {
+  opacity: 0;
+  transform: scale(0.97) translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity var(--motion-duration-base) var(--motion-ease),
+    transform var(--motion-duration-base) var(--motion-ease);
+}
+/* 全关：整组一起退场，每张多下沉 / 多缩一点，时长收到 fast——张数多时逐张 200ms
+   会读成「排队」，而清场是一次动作 */
+.ts-cards.is-clearing .ts-card.is-closing {
+  transform: scale(0.94) translateY(12px);
+  transition-duration: var(--motion-duration-fast);
+}
+/* 空态：清场 / 关掉最后一张后淡入，避免一片空白突然出现 */
+.ts-empty {
+  animation: ts-empty-in var(--motion-duration-base) var(--motion-ease) backwards;
+}
+@keyframes ts-empty-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* 退出：卡片随全屏层一起轻微缩回（反向的 recents 缩放），
    先关掉入场 animation，避免它盖住 leave 过渡的 transform。 */
 .ts-fade-leave-active .ts-card {
@@ -700,6 +1049,16 @@ function close(): void {
 /* 多任务层 Teleport 到 body，壳根的统一 reduced-motion 规则够不到这里 */
 @media (prefers-reduced-motion: reduce) {
   .ts-card {
+    animation: none;
+  }
+  /* 关闭渐隐同样收敛为瞬时：只保留状态变化，不做位移 / 缩放，也不等交错延迟
+     （delay 是内联 style，只有 !important 压得住它） */
+  .ts-card.is-closing {
+    transition-duration: 0.01ms;
+    transition-delay: 0ms !important;
+    transform: none;
+  }
+  .ts-empty {
     animation: none;
   }
   .ts-fade-enter-active,

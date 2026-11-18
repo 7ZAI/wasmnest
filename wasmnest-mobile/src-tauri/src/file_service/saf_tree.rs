@@ -1,6 +1,6 @@
-//! SAF 树根解析与中转复制（file_service 三端点 SAF 化，M2）
+//! SAF 树根解析与中转复制（file_service 三端点 SAF 化）
 //!
-//! 挂载根分两类（spec「Implementation Decisions」file_service 三端点）：
+//! 挂载根分两类：
 //! - 真实路径根（`PathBuf`）：app 私有下载目录特殊条目等，走 std::fs（现有逻辑）
 //! - SAF 树根（`content://tree/...`）：经 [`SafIo`]::list_tree（DocumentsContract
 //!   遍历）替代 std::fs::read_dir；下载源经 [`SafIo`]::read_to_cache 中转复制
@@ -17,7 +17,7 @@
 //! - [`arm_relay_cleanup`] / [`sweep_relay_dir`]：副本 TTL 清理（滑动续期）与
 //!   启动扫描清理（服务启动时删除全部副本，重启残留可重新生成）
 //!
-//! 中转副本生命周期（spec）：服务完成/超时后清理（TTL 内续传命中需文件仍在）；
+//! 中转副本生命周期：服务完成/超时后清理（TTL 内续传命中需文件仍在）；
 //! 启动扫描清理兜底进程崩溃残留。本模块不依赖 tauri / actix，可独立单测。
 
 use crate::plugin::saf_io::{SafEntry, SafIo};
@@ -29,8 +29,11 @@ use std::time::{Duration, Instant};
 /// 副本可随时从 SAF 重新生成，无需更长保留）
 const RELAY_CACHE_TTL: Duration = Duration::from_secs(3600);
 
-/// 中转复制完成轮询间隔（Kotlin 复制在后台线程执行，轮询取其终态）
+/// 中转复制轮询间隔（Kotlin 复制在后台线程执行，轮询取其终态）
 const COPY_POLL_INTERVAL: Duration = Duration::from_millis(200);
+
+/// 单次中转复制的总超时（Kotlin/provider 不回调时不得永久挂起）
+const RELAY_COPY_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// 中转副本共享状态（进程内；服务重启时由 sweep_relay_dir 重置）
 struct RelayState {
@@ -261,8 +264,19 @@ pub async fn ensure_relay_copy(saf: &dyn SafIo, relay_dir: &Path, uri: &str) -> 
         .read_to_cache(uri, &part_name)
         .map_err(|e| crate::AppError::Plugin(format!("ensure_relay_copy: read_to_cache({}) failed: {}", uri, e)))?;
 
-    // 轮询复制终态（顺序流不可续，等待完成；取消/失败即整体失败）
+    // 轮询复制终态（顺序流不可续，等待完成；取消/失败即整体失败）。
+    // Kotlin 侧卡住或 provider 不回调时必须有截止时间：先 cancel 再报错，
+    // 否则 async 任务与调用方永久挂起。
+    let deadline = tokio::time::Instant::now() + RELAY_COPY_TIMEOUT;
     loop {
+        if tokio::time::Instant::now() >= deadline {
+            let _ = saf.cancel_copy(&handle.copy_id);
+            return Err(crate::AppError::Plugin(format!(
+                "ensure_relay_copy: relay copy timed out after {}s ({})",
+                RELAY_COPY_TIMEOUT.as_secs(),
+                uri
+            )));
+        }
         let status = saf.copy_status(&handle.copy_id).map_err(|e| {
             crate::AppError::Plugin(format!(
                 "ensure_relay_copy: copy_status({}) failed: {}",
@@ -409,7 +423,7 @@ pub fn sweep_relay_dir(relay_dir: &Path) -> usize {
     removed
 }
 
-// ==================== Tests ====================
+// ==================== 测试 ====================
 
 #[cfg(test)]
 mod tests {

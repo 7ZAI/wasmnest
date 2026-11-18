@@ -262,7 +262,7 @@ describe('授权记录四分区（票 07）', () => {
 
   it('firstPartyLabel：home 形态显示 ~/ 前缀，project-segment 显示 <project>/ 前缀', () => {
     expect(
-      firstPartyLabel({ pluginId: 'com.wasmnest.agent-hub', kind: 'home', value: '.agents' }),
+      firstPartyLabel({ pluginId: 'com.wasmnest.bedcode', kind: 'home', value: '.agents' }),
     ).toBe('~/.agents')
     expect(
       firstPartyLabel({

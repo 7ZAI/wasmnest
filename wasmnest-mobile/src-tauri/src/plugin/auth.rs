@@ -1,6 +1,6 @@
-//! host-auth-client 宿主 adapter（移动独有认证引擎面；wasm-core-mobile-purity 票 04 自 wasm-core 迁入）
+//! host-auth-client 宿主 adapter（移动独有认证引擎面；自 wasm-core 迁入）
 //!
-//! **编排在消费插件，密码学与凭据在宿主**（C4 红线）：设备身份文件 / JWT 持有 /
+//! **编排在消费插件，密码学与凭据在宿主**：设备身份文件 / JWT 持有 /
 //! AuthHttpClient / 生物凭证绑定与 Keystore 签名全部留在 auth 引擎
 //! （`crate::auth::manager` 经 `HostEnginePorts::auth_engine` 投影），本 adapter
 //! 只把引擎调用投影给插件；**凭据零过境**——任何函数都不向插件返回凭据材料。
@@ -19,8 +19,8 @@ wasmnest_host_kit::expect_host_module!(MODULE_NAME);
 /// 能力模块名
 pub const MODULE_NAME: &str = "mobile-auth";
 
-/// 本域提供的 WIT 接口（必须与 `cap-mobile.wit` 逐字一致）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:plugin@0.0.1/host-auth-client"];
+/// 本域提供的 WIT 接口（必须与生成物 `deps/auth-client/` 分片逐字一致）
+pub const MODULE_INTERFACES: &[&str] = &["wasmnest:auth-client@0.0.1/host-auth-client"];
 
 /// 本域的权限位（与 WIT / SDK 权限表逐字一致）
 pub const MODULE_PERMISSIONS: &[&str] = &["auth"];
@@ -49,7 +49,7 @@ impl HostModule for AuthModule {
     }
 
     fn register(&self, linker: &mut wasmtime::component::Linker<WasmPluginState>) -> wasmtime::Result<()> {
-        wasmnest::plugin::host_auth_client::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
+        wasmnest::auth_client::host_auth_client::add_to_linker::<WasmPluginState, HasSelf>(linker, |s| s)
     }
 }
 
@@ -69,7 +69,7 @@ fn denied() -> String {
 
 /// 取认证引擎（宿主端口投影；未装配 = 无头/测试上下文，fail-visible 拒绝）
 ///
-/// C4：密码学与凭据留宿主引擎（`auth_engine()` 投影五方法），本域只透传调用
+/// 密码学与凭据留宿主引擎（`auth_engine()` 投影五方法），本域只透传调用
 /// 结果——凭据零过境。
 fn require_auth_engine(
     state: &WasmPluginState,
@@ -82,7 +82,7 @@ fn require_auth_engine(
 
 // ==================== WIT 层（import 接口 → 域逻辑） ====================
 
-impl wasmnest::plugin::host_auth_client::Host for WasmPluginState {
+impl wasmnest::auth_client::host_auth_client::Host for WasmPluginState {
     /// 请求配对（HTTP `POST /api/auth/request-pairing`，桌面端出码）
     fn request_pairing(&mut self) -> Result<(), String> {
         if !check_permission(self, PERMISSION_AUTH, "host_auth_request_pairing") {

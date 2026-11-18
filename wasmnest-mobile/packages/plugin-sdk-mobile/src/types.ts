@@ -12,7 +12,13 @@ export interface Disposable {
 }
 
 /** 插件类型 */
-export type PluginType = 'rust' | 'rust-ts' | 'ts-only' | 'wasm'
+/**
+ * 插件产物形态（语言无关三形态，2026-10-26 语义重定义，wasmnest-apps#21）
+ *
+ * 词汇只表达形态（是否携带 wasm 后端 / 前端产物），不表达后端语言。
+ * 旧值 rust / rust-ts / ts-only / wasm 已退役：scaffold 校验点名拒绝并给出迁移出路。
+ */
+export type PluginType = 'frontend' | 'backend' | 'full'
 
 /** 插件运行时状态
  *
@@ -40,6 +46,18 @@ export type PluginState =
  */
 export type PluginPlatform = 'desktop' | 'mobile' | 'both'
 
+/** manifest `update` 段：应用更新源声明（缺省 = 不参与更新检查） */
+export interface PluginUpdateDecl {
+  /** 更新来源类型；当前只支持 `github-release` */
+  provider?: 'github-release'
+  /** GitHub 仓库 `owner/name`；缺省 = 官方应用仓 `7ZAI/wasmnest-apps` */
+  repo?: string
+  /** Release tag 前缀（完整形态 `<tagPrefix>v<X.Y.Z>`）；缺省 `<slug>-` */
+  tagPrefix?: string
+  /** Release 资产前缀（`<slug>-<end>-v<version>.zip`）；缺省 = 插件 id 末段 */
+  slug?: string
+}
+
 /** 插件描述文件结构 */
 export interface PluginManifest {
   id: string
@@ -66,6 +84,13 @@ export interface PluginManifest {
   preauthDirs?: string[]
   /** 外网访问预授权 URL 声明（Egress L2 glob：`[scheme://][*.]host[:port][/path-prefix]`） */
   preauthUrls?: string[]
+  /**
+   * 应用更新源声明（manifest `update`；缺省 = 不参与更新检查）
+   *
+   * 宿主按本段解析 GitHub 发布仓 / tag 前缀 / 资产 slug；缺省字段收敛到官方
+   * 应用仓命名约定。第三方应用可声明自己的 repo / tagPrefix / slug。
+   */
+  update?: PluginUpdateDecl
 }
 
 /** 移动端扩展点声明 */
@@ -193,13 +218,42 @@ export interface ShellSurfaceContribution {
   accent?: string
 }
 
+/**
+ * 应用内入口意图（宿主 → 本应用运行面）
+ *
+ * 宿主**不解释** `key` / `payload`：只负责把应用给的意图原样投递给同一应用的
+ * 运行面（`context.ui.onSurfaceIntent`）。载荷留在同进程，不做序列化，可传任意
+ * 对象；形状与含义全归应用自持（宿主判据 B1–B6 均不命中）。
+ */
+export interface ShellSurfaceIntent {
+  /** 应用自定义入口键（如 'session' / 'settings'） */
+  key: string
+  /** 应用自定义载荷（宿主不读取、不复制） */
+  payload?: unknown
+}
+
 /** 宿主壳首页快捷卡片（应用自持内容，如「N 个活跃会话」） */
 export interface ShellSlotContribution {
   id: string
-  /** 卡片组件；壳透传 { app } prop */
+  /**
+   * 卡片组件；壳透传 { app } prop。
+   *
+   * 卡片外观建议用 `@binblink/wasmnest-plugin-sdk-mobile/ui/quick-card` 的
+   * QuickCard（与宿主 token / 字号 / 明暗一致）。壳把整张卡渲染成按钮并负责
+   * 点击打开本应用——卡片内不得再放按钮 / 链接（嵌套交互会抢点击）。
+   * 宿主按自身展示上限截断（当前取注册顺序前若干张并自动轮播）。
+   */
   component: any
   /** 排序权重，小者靠前；缺省 100 */
   order?: number
+  /**
+   * 点击卡片时应用要进入的内部位置（按**点击时刻**现算，可随数据变化）。
+   *
+   * 宿主照常「启动并打开本应用」，再把返回值经 `context.ui.onSurfaceIntent`
+   * 投递给运行面；返回 null / undefined = 只打开应用（旧行为）。卡片内仍不得
+   * 自带交互——本回调就是卡片点击的唯一出口，宿主按钮才是点击落点。
+   */
+  onPress?: () => ShellSurfaceIntent | null | undefined
 }
 
 /** 宿主壳胶囊菜单附加项（平台项 order：权限 10 / 停用 30，应用用中间值插入） */
@@ -236,6 +290,18 @@ export interface MobileDeviceTarget {
   address: string
   port: number
   name?: string
+}
+
+/**
+ * `connectDevice` 行为选项。
+ *
+ * `pairingOnly`：只把目标写入连接引擎 / 设好 HTTP base（供后续 `/api/auth/*`
+ * 配对请求使用），**不**先探测 `/api/health`。首次经隧道配对时探测会消费掉
+ * 一次性配对票据（隧道准入先放行再判 403），随后真正的认证请求反而无票可用；
+ * 因此配对流程必须用本模式，认证成功后再走普通 `connectDevice`。
+ */
+export interface MobileConnectOptions {
+  pairingOnly?: boolean
 }
 
 /** 连接历史条目（宿主连接域引擎事实） */
@@ -287,7 +353,10 @@ export interface MobileHttpRequestOptions {
   headers?: Record<string, string>
 }
 
-/** 终端输出流句柄（openTerminalStream 返回；dispose = 注销页面通道） */
+/** 终端输出流句柄（openTerminalStream 返回；dispose = 注销本代页面通道）
+ *
+ * 注销携带登记时拿到的页面令牌：同一会话重复 open 时，旧句柄的 dispose 不会
+ * 摘掉新通道（宿主按令牌只摘当前代）。 */
 export interface TerminalStreamHandle {
   dispose(): void
 }
@@ -360,8 +429,11 @@ export interface MobileHostApi {
   currentDevice: import('vue').Ref<MobileDeviceTarget | null>
   /** 连接历史（此前尝试连接过的桌面端端点；宿主连接域引擎事实） */
   connectionHistory: import('vue').Ref<MobileConnectionHistoryItem[]>
-  /** 建立到目标桌面的连接（HTTP base url 探测 + WS 事件通道建链；宿主引擎动作） */
-  connectDevice(device: MobileDeviceTarget): Promise<void>
+  /** 建立到目标桌面的连接（HTTP base url 探测 + WS 事件通道建链；宿主引擎动作）
+   *
+   * `pairingOnly=true`：仅设置目标（不探测），供首次配对/扫码先走 `/api/auth/*`；
+   * 认证成功后再调用默认模式建立事件通道。 */
+  connectDevice(device: MobileDeviceTarget, options?: MobileConnectOptions): Promise<void>
   /** 取消进行中的连接 */
   cancelConnection(): Promise<void>
   /** 用宿主持有的凭据静默换新 JWT（返回用户免配对；凭据零过境，插件拿不到 token）
@@ -586,6 +658,14 @@ export interface UIRegistry {
   registerSurface(surface: ShellSurfaceContribution): Disposable
   /** 宿主壳首页快捷卡片（应用自持内容；壳 Home 屏渲染，appId 由宿主代填） */
   registerSlot(slot: ShellSlotContribution): Disposable
+  /**
+   * 订阅宿主投递的应用内入口意图（快捷卡片点击等；载荷由应用自持）。
+   *
+   * 订阅**之前**到达的意图由宿主按 appId 排队，订阅时按序补投（运行面晚于
+   * 点击创建时不会丢）；应用停用 / 卸载 / 运行面销毁时队列清空，旧意图不会在
+   * 下一次打开时突然生效。Disposable.dispose = 取消订阅。
+   */
+  onSurfaceIntent(handler: (intent: ShellSurfaceIntent) => void): Disposable
   /** 宿主壳胶囊菜单附加项（appId 由宿主代填） */
   registerCapsuleItem(item: ShellCapsuleItem): Disposable
   /** 动态注册插件路由（宿主 addRoute 至 /mobile/plugins/{pluginId}/{id}；Disposable.dispose = removeRoute 撤销） */
@@ -679,6 +759,31 @@ export interface LifecycleAPI {
   onSessionStopped(handler: (sessionId: string) => void): Disposable
 }
 
+/** 应用更新检查的拒绝 / 失败原因（展示层按 key 翻译；params 只承载版本号等非技术值） */
+export interface AppUpdateReason {
+  key: string
+  params?: Record<string, string>
+}
+
+/**
+ * 应用更新检查结果（宿主默认实现返回；SDK 默认设置卡直接展示）
+ *
+ * 宿主侧已经完成「取 Release → 校验身份/完整性 → 兼容性判定」，插件只消费状态。
+ * `available` 表示有新版本且兼容；`incompatible` 只给原因，绝不提供更新动作。
+ */
+export interface AppUpdateCheckResult {
+  status: 'idle' | 'checking' | 'up-to-date' | 'available' | 'incompatible' | 'error'
+  latestVersion?: string
+  currentVersion?: string
+  reason?: AppUpdateReason
+}
+
+/** 应用更新能力（宿主默认实现；appId 与凭据已由宿主绑定） */
+export interface AppUpdateAPI {
+  /** 检查本应用更新；失败已由宿主归一化为 `status: 'error'`，不抛技术错误 */
+  check(): Promise<AppUpdateCheckResult>
+}
+
 /** 插件上下文 */
 export interface PluginContext {
   readonly id: string
@@ -698,6 +803,8 @@ export interface PluginContext {
   readonly system: SystemAPI
   /** 生命周期状态上报（启用成功/失败） */
   readonly status: StatusAPI
+  /** 应用更新检查（宿主统一默认实现；可选——旧宿主 / dev-shell 可不提供） */
+  readonly appUpdate?: AppUpdateAPI
   readonly _disposables: Disposable[]
 }
 

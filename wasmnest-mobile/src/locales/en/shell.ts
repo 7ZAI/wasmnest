@@ -3,7 +3,8 @@
  *
  * Keys mirror zh-CN/shell.ts one-to-one (i18n bilingual discipline).
  * Grouping: home=home screen, switcher=recents, notify=notification shade,
- * run=app run screen, settings=platform settings, permissions=permission manager.
+ * run=app run screen, floatingNav=floating navigation, settings=platform settings,
+ * permissions=permission manager.
  *
  * Copy discipline (2026-10-14 revision): state only facts and consequences a user can
  * perceive — no platform implementation notes or prototype-stage explanations.
@@ -24,6 +25,9 @@ export default {
     },
     home: {
       slotsTitle: 'Quick cards',
+      slotOpen: 'Open {name}',
+      slotPause: 'Pause carousel',
+      slotPlay: 'Play carousel',
       appsTitle: 'Apps',
       appAria: '{name}, {state}',
       emptyApps: 'No WASM app installed',
@@ -49,17 +53,38 @@ export default {
       systemServices: 'System services',
       businessApps: 'Apps',
       autostart: 'Autostart',
-      autostartHint: 'Auto-activate at startup (preference only; takes effect next boot)',
-      systemServiceHint: 'Bundled system service; uninstall is disabled. Autostart can be turned off below.',
       addTitle: 'Add app',
       installLocal: 'Install local package (.wasm)',
       empty: 'No apps',
       permissionCount: '{count} permissions',
       installSuccess: 'Installed — approve and start it from the list',
       installFailed: 'Install failed: {error}',
-      uninstallConfirm: 'Uninstall "{name}" and delete its data? This cannot be undone.',
+      installRestoreTitle: 'Restore old app data?',
+      installRestoreBody: 'Data from the previous install was kept (private database and storage). Check to restore it; installing without data (the default) permanently deletes the old data.',
+      installRestoreKeep: 'Restore old app data (reused after reinstall)',
+      installRestoreDiscardHint: 'Restore is unchecked: the old app data will be deleted. This cannot be undone.',
+      installRestoreConfirm: 'Install',
+      uninstallConfirm: 'Uninstall "{name}"? App data is deleted by default; check the box to keep it. Approval and auth records will be revoked.',
       uninstallSuccess: 'Uninstalled {name}',
       uninstallFailed: 'Uninstall failed: {error}',
+      update: {
+        title: 'Version update',
+        check: 'Check for updates',
+        checking: 'Checking…',
+        upToDate: 'Up to date (v{version})',
+        available: 'v{version} available',
+        incompatible: 'v{version} found, but it is incompatible with this platform',
+        updating: 'Downloading and updating…',
+        failed: 'Update failed, try again later',
+        installed: 'Updated — approve it again before starting',
+        apply: 'Update to v{version}',
+        stopFirst: 'Stop the app before updating',
+        reason: {
+          noCompat: 'The release lacks a compatibility declaration (legacy format); compatibility cannot be confirmed',
+          hostRuntime: 'Requires host runtime {required}; this platform is {current}. Upgrade the platform first',
+          hostRuntimeInvalid: 'Malformed compatibility version ({required}); refused',
+        },
+      },
     },
     detail: {
       title: 'App details',
@@ -72,22 +97,17 @@ export default {
       /** Runtime state (each app owns its connection; the platform projects state only) */
       state: 'Runtime state',
       permissions: 'Permissions',
-      permissionsNote: '{granted} granted · {locked} by default',
-      permissionServiceFixed:
-        'System service permissions are fixed by the bundled manifest and cannot be changed.',
-      permissionLocked: 'Granted by default · cannot be turned off',
+      permissionLocked: 'Granted by default · cannot be changed',
       permissionUnsupported: 'Per-permission toggles are not supported by the current backend',
-      permissionToggleFailed: 'Permission change not applied: {reason}',
       storage: 'Storage',
       appData: 'App data',
-      grants: 'Grant log',
-      grantsNote: 'Last 7 days',
-      grantsEmpty: 'No grant records',
       disable: 'Disable app',
       stopService: 'Stop service',
       /** Stop-service confirmation (services are resident capabilities; a mistaken stop has wide impact) */
       stopServiceConfirm: 'Stop service "{name}"? It will stop providing its capability; restart it from App manager.',
-      uninstall: 'Uninstall and delete data',
+      uninstall: 'Uninstall app',
+      keepData: 'Keep app data (reused after reinstall)',
+      deleteDataHint: 'Keep app data is unchecked (default): the private database and storage will be deleted. This cannot be undone.',
       version: 'v{version}',
     },
     run: {
@@ -98,6 +118,13 @@ export default {
       noSurface: 'No interface available',
       noSurfaceHint: 'This app does not provide a run surface yet',
       notFound: 'App not found or uninstalled',
+    },
+    /** Floating navigation (stays above any page once enabled) */
+    floatingNav: {
+      back: 'Back',
+      home: 'Back home',
+      recents: 'Switch apps',
+      move: 'Floating navigation, draggable; use arrow keys to move',
     },
     switcher: {
       title: 'Switch apps',
@@ -172,7 +199,7 @@ export default {
         },
         uninstalled: {
           title: '{name} uninstalled',
-          body: 'The app and its data were deleted',
+          body: 'Removed from this device',
         },
         failed: {
           title: '{name} failed to start',
@@ -182,6 +209,9 @@ export default {
     },
     settings: {
       title: 'Settings',
+      navigation: 'Navigation',
+      floatingNavLabel: 'Floating navigation',
+      floatingNavHint: 'Back, Home and app switcher, draggable',
       platform: 'Platform',
       appearance: 'Appearance',
       appearanceHint: 'Theme and palette',

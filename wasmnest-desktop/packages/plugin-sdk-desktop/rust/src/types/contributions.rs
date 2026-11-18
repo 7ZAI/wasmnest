@@ -260,6 +260,7 @@ impl WsEndpointContribution {
             Self::Declared { auth, .. } => auth.as_deref(),
         }
     }
+
 }
 
 /// 一条 WASI 预打开目录声明（manifest `wasiPreopenDirs`，审计票 07 增只读档）

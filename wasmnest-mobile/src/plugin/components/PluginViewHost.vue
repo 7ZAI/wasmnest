@@ -1,7 +1,7 @@
 <template>
   <div class="plugin-view-host h-full">
     <component :is="component" v-if="component" />
-    <div v-else class="flex items-center justify-center h-full text-[var(--mobile-text-disabled)] text-sm">
+    <div v-else class="flex items-center justify-center h-full text-[var(--mobile-text-secondary)] text-sm">
       {{ t('mobile.plugin.loadFailed') }}
     </div>
   </div>

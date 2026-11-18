@@ -28,6 +28,28 @@ export function sysPageOf(id: string): (typeof SYS_PAGES)[number] | undefined {
   return SYS_PAGES.find((s) => s.id === id)
 }
 
+/**
+ * 系统页二级页（父页卡内的子路由面，键 = `${pageId}/${sub}`）。
+ *
+ * 二级页**不进** SYS_PAGES：SYS_PAGES 是主屏系统网格与多任务的一级面清单，
+ * 二级页只经父页入口卡跳转（如设置页「外观」入口），同一张系统页卡内切子路由，
+ * 不另产卡。
+ */
+export const SYS_SUB_PAGES: Readonly<
+  Record<string, { nameKey: string; descKey: string; icon: string }>
+> = {
+  'settings/appearance': {
+    nameKey: 'shell.sys.appearance.name',
+    descKey: 'shell.sys.appearance.desc',
+    icon: 'theme',
+  },
+  'settings/shortcuts': {
+    nameKey: 'shell.sys.shortcuts.name',
+    descKey: 'shell.sys.shortcuts.desc',
+    icon: 'bolt',
+  },
+}
+
 // ==================== 卡片键 ====================
 
 export function appCardKey(pluginId: string): CardKey {
@@ -154,5 +176,30 @@ export const WALLPAPER_DEFAULT = 'aurora'
 export const WALL_DIM_DEFAULT = 30
 export const WALL_DIM_MAX = 70
 
-/** 主题皮肤缺省 id（内置默认皮肤；扩展皮肤走 registerThemeSkin，覆盖同一 token 表） */
-export const SHELL_SKIN_DEFAULT = 'default'
+/**
+ * 主题缺省 id（内置默认主题）。
+ *
+ * 只放这一条常量、不放主题目录：`themePresets.ts` 依赖 `useShellSettings`（读偏好），
+ * 而 `useShellSettings` 需要默认 id——常量留在本文件（零依赖）才能断开这个环，
+ * 否则模块初始化期就会踩 TDZ（`load()` 在模块顶层执行）。
+ */
+export const SHELL_THEME_DEFAULT = 'default'
+
+/**
+ * 退役主题 id 的读档别名表。
+ *
+ * `diffuse`（弥散玻璃）与 `liquid`（液态玻璃）在 2026-11-01 合并为 `glass`
+ * （玻璃拟态 · 液态玻璃）。旧 localStorage 里仍可能存着这两个 id；读档时折算，
+ * 避免用户升级后主题静默回落到默认。未知 id 不在此表里，仍原样保留给扩展主题。
+ */
+export const RETIRED_THEME_ALIASES: Readonly<Record<string, string>> = {
+  diffuse: 'glass',
+  liquid: 'glass',
+}
+
+/** 主题 id 读档归一：空值返回 null，退役 id 折算到新 id，其余原样 */
+export function normalizeStoredThemeId(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const id = value.trim()
+  return RETIRED_THEME_ALIASES[id] ?? id
+}

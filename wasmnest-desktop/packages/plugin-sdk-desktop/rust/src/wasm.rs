@@ -30,6 +30,7 @@ wit_bindgen::generate!({
     path: "wit",
     world: "plugin",
     pub_export_macro: true,
+    generate_all,
     default_bindings_module: "$crate::wasm",
 });
 
@@ -207,7 +208,7 @@ mod tests {
                 id: Self::ID.to_string(),
                 name: "Test Wasm".to_string(),
                 version: "0.1.0".to_string(),
-                plugin_type: PluginType::Rust,
+                plugin_type: PluginType::Backend,
                 // 余下字段取 Default，SDK 追加可选字段时不必回来补格子（票 14）
                 ..Default::default()
             }

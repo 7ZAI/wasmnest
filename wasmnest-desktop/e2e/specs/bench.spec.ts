@@ -83,14 +83,15 @@ function ms(value: number): string {
  * withGlobalTauri=false 后 webview 不再注入 window.__TAURI__，全局 bundle 的
  * core 段（含 Channel）消失；而动态注入的脚本不经 vite 依赖解析，裸 specifier
  * （@tauri-apps/api/core）在 webview 里解析不了——故由 node 侧读打包产物源码、
- * 剥掉 ESM import / export 后经 JSON 字符串嵌进注入脚本，在 webview 内
- * `new Function` 求值取回 Channel。类源与 app 同版本同包。
+ * 剥掉 ESM import / export 后直接拼进注入脚本的 IIFE，取回 Channel。类源与 app
+ * 同版本同包。
  *
  * dist 形态注意：@tauri-apps/api 2.x 的 ESM dist 把类私有字段降级成模块级
  * WeakMap（`_Channel_*` 声明 + tslib 的 `__classPrivateFieldGet/Set`），
  * `Channel.toString()` **不自包含**（单独求值后构造即 ReferenceError），必须把
  * core.js 连同其相对依赖一起内联。模块运行时只依赖 `__TAURI_INTERNALS__`
- * （Tauri 无论开关恒注入的 IPC 内部桥），CSP script-src 已含 `'unsafe-eval'`。
+ * （Tauri 无论开关恒注入的 IPC 内部桥）。**不得用 `new Function` 求值**：
+ * 双端 CSP 已撤 `'unsafe-eval'`（安全审查 #50）。
  */
 function buildChannelRebuildSource(): string {
   const nodeRequire = createRequire(import.meta.url)
@@ -292,11 +293,12 @@ describe('桥接基准 · webview 层（wasm → 宿主 → 前端）', () => {
     // 全局 window.__TAURI__ 不再注入，改从打包的 @tauri-apps/api 源码重建
     // Channel——类源与 app 同版本同包。dist 把类私有字段降级成模块级 WeakMap，
     // Channel.toString() 不自包含，不能只嵌类体：node 侧读包源码、剥 ESM
-    // import/export（见 CHANNEL_REBUILD_SOURCE，已带构造自检），经 JSON 字符串
-    // 安全嵌入，webview 内 new Function 求值取回。注入脚本不经 vite 依赖解析，
-    // 裸 specifier（@tauri-apps/api/core）在这里解析不了，故不走 import。
+    // import/export（见 CHANNEL_REBUILD_SOURCE，已带构造自检），直接拼进注入脚本
+    // 的 IIFE 求值取回（CSP 已撤 `'unsafe-eval'`，webview 内不再用 `new Function`）。
+    // 注入脚本不经 vite 依赖解析，裸 specifier（@tauri-apps/api/core）在这里解析不了，
+    // 故不走 import。
     const w5Body =
-      `const ChannelCtor = new Function(${JSON.stringify(CHANNEL_REBUILD_SOURCE)})()\n` +
+      'const ChannelCtor = (() => {\n' + CHANNEL_REBUILD_SOURCE + '\n})()\n' +
       `
         // 载荷形态识别：tauri 2.11 的 IpcResponse 有泛型 blanket impl，
         // Channel<Vec<u8>> 会被 serde 序列化成 **JSON 数字数组**（[object Array]），

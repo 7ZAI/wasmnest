@@ -36,6 +36,7 @@ import {
 import { dialogService } from './mock/dialog-service'
 import PluginContextHost from './shell/components/PluginContextHost.vue'
 import { getShellRegistry } from './shell/registry'
+import { subscribeSurfaceIntent } from './shell/surfaceIntent'
 import { getSharedModule } from './shared-runtime'
 import {
   findRoute,
@@ -52,6 +53,27 @@ function storageKey(pluginId: string, key: string): string {
 }
 
 /** 创建插件的 PluginContext */
+/**
+ * 把插件的消息树展平为「完整点分 key → 叶子值」（与宿主 context.ts 同口径）
+ *
+ * 不展平时嵌套消息（`{ hub: { slotTitle } }`）会被挂成带点对象，`t()` 路径寻址
+ * 在第二段就断，插件文案全部回退成 key 字面量——预览与真机表现不一致。
+ */
+function flattenMessages(
+  source: Record<string, unknown>,
+  prefix: string,
+  out: Record<string, unknown>,
+): void {
+  for (const [key, value] of Object.entries(source)) {
+    const fullKey = prefix ? `${prefix}.${key}` : key
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      flattenMessages(value as Record<string, unknown>, fullKey, out)
+    } else {
+      out[fullKey] = value
+    }
+  }
+}
+
 export function createMockContext(pluginId: string): PluginContext {
   const disposables: Disposable[] = []
   // 供 ui.showDialog 闭包惰性引用（与桌面端 dev-shell 同模式，调用时 context 已初始化）
@@ -122,6 +144,10 @@ export function createMockContext(pluginId: string): PluginContext {
     },
     registerSlot(slot) {
       return track(shellRegistry.registerSlot(pluginId, slot))
+    },
+    onSurfaceIntent(handler) {
+      // 与宿主同构：入口意图按 appId 排队，订阅前到达的补投（见 shell/surfaceIntent.ts）
+      return track(subscribeSurfaceIntent(pluginId, handler))
     },
     registerCapsuleItem(item) {
       return track(shellRegistry.registerCapsuleItem(pluginId, item))
@@ -214,11 +240,8 @@ export function createMockContext(pluginId: string): PluginContext {
       const hostI18n = (window as any).__WASMNEST_SHARED__?.i18n
       if (!hostI18n) return
       const prefixed: Record<string, unknown> = {}
-      for (const [key, value] of Object.entries(messages)) {
-        prefixed[`${pluginId}.${key}`] = value
-      }
-      const existing = hostI18n.global.getLocaleMessage(locale)
-      hostI18n.global.mergeLocaleMessage(locale, { ...existing, ...prefixed })
+      flattenMessages(messages, pluginId, prefixed)
+      hostI18n.global.mergeLocaleMessage(locale, prefixed)
     },
     t(key: string, params?: Record<string, unknown>): string {
       const hostI18n = (window as any).__WASMNEST_SHARED__?.i18n

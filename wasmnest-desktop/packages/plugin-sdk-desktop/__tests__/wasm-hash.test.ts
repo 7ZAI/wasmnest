@@ -62,7 +62,7 @@ function baseManifest(overrides: Record<string, unknown> = {}): Record<string, u
     name: 'Test Plugin',
     version: '1.0.0',
     main: 'index.js',
-    pluginType: 'rust-ts',
+    pluginType: 'full',
     rustLibrary: 'test_plugin',
     permissions: [],
     contributes: {},
@@ -71,7 +71,7 @@ function baseManifest(overrides: Record<string, unknown> = {}): Record<string, u
 }
 
 /** 纯前端插件（ts-only 无 rustLibrary）——JSON 序列化时 undefined 的键不落盘 */
-const TS_ONLY_MANIFEST = baseManifest({ pluginType: 'ts-only', rustLibrary: undefined })
+const FRONTEND_ONLY_MANIFEST = baseManifest({ pluginType: 'frontend', rustLibrary: undefined })
 
 const readManifest = (): Record<string, unknown> =>
   JSON.parse(readFileSync(join(cwd, 'plugin.json'), 'utf-8'))
@@ -109,7 +109,7 @@ describe('injectWasmHash · C-W1 注入产物摘要', () => {
 
 describe('injectWasmHash · C-W2 纯前端插件 no-op', () => {
   it('C-W2 无 rustLibrary（纯前端插件）→ 不写文件、判为 no-op', () => {
-    const dir = scaffold(TS_ONLY_MANIFEST, {})
+    const dir = scaffold(FRONTEND_ONLY_MANIFEST, {})
     const before = readManifestRaw()
 
     expect(injectWasmHash(dir)).toEqual({
@@ -128,7 +128,7 @@ describe('injectWasmHash · C-W2 纯前端插件 no-op', () => {
   })
 
   it('C-W2 wasmFileName 判据：未声明返回 null，声明则加 .wasm 后缀', () => {
-    expect(wasmFileName({ pluginType: 'ts-only' })).toBeNull()
+    expect(wasmFileName({ pluginType: 'frontend' })).toBeNull()
     expect(wasmFileName({ rustLibrary: 'a_b' })).toBe('a_b.wasm')
   })
 })
@@ -219,7 +219,7 @@ describe('verifyWasmHash · C-W8 分发链复核四态', () => {
   })
 
   it('C-W8 纯前端产物无摘要也视为通过', () => {
-    const dir = scaffold(TS_ONLY_MANIFEST, {})
+    const dir = scaffold(FRONTEND_ONLY_MANIFEST, {})
     expect(verifyWasmHash(dir)).toEqual({ ok: true, hash: null })
   })
 

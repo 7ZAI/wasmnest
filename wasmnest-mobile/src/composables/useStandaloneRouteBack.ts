@@ -18,7 +18,7 @@
 import { watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { subscribeHostBackPressed, type BackPressPayload } from '@/plugin/back-button'
-import { SHELL_ROUTE_NAME } from '@/router/routeNames'
+import { leaveStandaloneRoute } from '@/router/standaloneBack'
 
 export interface StandaloneRouteBack {
   /** 停止接管并撤销订阅 */
@@ -38,12 +38,7 @@ export function useStandaloneRouteBack(): StandaloneRouteBack {
   function handleSystemBack(payload: BackPressPayload): boolean {
     // 正常已退订；过渡窗口内壳根与整页路由可能同时在场，壳根让给壳
     if (isShellRoot()) return false
-    if (payload.canGoBack) {
-      router.back()
-      return true
-    }
-    // 无浏览历史（深链冷启动直达二级页）：回落入口而不是退出应用
-    void router.replace({ name: SHELL_ROUTE_NAME })
+    leaveStandaloneRoute(router, payload.canGoBack)
     return true
   }
 

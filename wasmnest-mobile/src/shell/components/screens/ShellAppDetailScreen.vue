@@ -44,7 +44,7 @@
           class="rounded-[12px] border px-3 py-3"
           :style="{
             background: 'var(--mobile-warning-muted)',
-            borderColor: 'var(--mobile-warning)',
+            borderColor: 'color-mix(in srgb, var(--mobile-warning) 35%, transparent)',
           }"
         >
           <p class="shell-type-body text-[var(--mobile-text-primary)]">
@@ -80,19 +80,13 @@
 
       <!-- ==================== 自启（系统服务默认开，用户可关） ==================== -->
       <template v-if="canAutostart">
-        <ShellSection
-          :title="t('shell.apps.autostart')"
-          :note="isService ? t('shell.apps.systemServiceHint') : t('shell.apps.autostartHint')"
-        />
+        <ShellSection :title="t('shell.apps.autostart')" />
         <div class="px-4 pb-1">
           <ShellGroupCard>
             <div class="flex items-center gap-3 px-3 py-3 min-h-[var(--mobile-touch-target-min)]">
               <div class="flex-1 min-w-0">
                 <div class="shell-type-label text-[var(--mobile-text-primary)]">
                   {{ t('shell.apps.autostart') }}
-                </div>
-                <div class="shell-type-caption text-[var(--mobile-text-secondary)]">
-                  {{ t('shell.apps.autostartHint') }}
                 </div>
               </div>
               <Toggle
@@ -105,10 +99,65 @@
         </div>
       </template>
 
+      <!-- ==================== 版本更新 ====================
+           仅声明 manifest `update` 的业务应用出现；检查走宿主统一实现，
+           更新动作在本页执行（需先停用；升级会替换目录并要求重新审批）。 -->
+      <template v-if="isUpdatable">
+        <ShellSection :title="t('shell.apps.update.title')" />
+        <div class="px-4 pb-1">
+          <ShellGroupCard>
+            <div class="px-3 py-3 flex flex-col gap-2">
+              <div class="flex items-center gap-3">
+                <span class="flex-1 shell-type-label text-[var(--mobile-text-primary)] tabular-nums">
+                  v{{ app?.version }}
+                </span>
+                <button
+                  type="button"
+                  class="rounded-[8px] border border-[var(--mobile-border)] px-3 py-1.5 shell-type-micro text-[var(--mobile-accent)] transition-opacity duration-200 active:opacity-70 disabled:opacity-40"
+                  :disabled="updateBusy"
+                  data-testid="mobile-app-update-check"
+                  @click="onCheckUpdate"
+                >
+                  {{ updateBusy ? t('shell.apps.update.checking') : t('shell.apps.update.check') }}
+                </button>
+              </div>
+              <p
+                v-if="updateStatusText"
+                class="shell-type-caption"
+                :style="{ color: updateIsBad ? 'var(--mobile-error)' : 'var(--mobile-text-secondary)' }"
+                data-testid="mobile-app-update-status"
+              >
+                {{ updateStatusText }}
+              </p>
+              <p
+                v-if="updateReasonText"
+                class="shell-type-caption"
+                :style="{ color: 'var(--mobile-error)' }"
+              >
+                {{ updateReasonText }}
+              </p>
+              <button
+                v-if="updateState?.status === 'available'"
+                type="button"
+                class="w-full rounded-[10px] px-4 py-2.5 shell-type-label transition-opacity duration-200 active:opacity-80 min-h-[var(--mobile-touch-target-min)] disabled:opacity-40 disabled:cursor-not-allowed"
+                :style="{ background: 'var(--mobile-accent)', color: 'var(--mobile-text-on-accent)' }"
+                :disabled="app?.state === 'running'"
+                :title="t('shell.apps.update.stopFirst')"
+                data-testid="mobile-app-update-apply"
+                @click="onApplyUpdate"
+              >
+                {{ t('shell.apps.update.apply', { version: updateState?.latestVersion }) }}
+              </button>
+            </div>
+          </ShellGroupCard>
+        </div>
+      </template>
+
       <!-- ==================== 权限 ====================
-           系统服务（L1/L2）的权限随包固定、不经用户授权：保留只读清单，
-           但不渲染任何逐项开关（2026-10-23 用户裁决；同一裁决已把服务移出权限总览）。 -->
-      <ShellSection :title="t('shell.detail.permissions')" :note="permissionsNote" />
+           双端同一口径（2026-11-04 与桌面端对齐）：权限随应用包声明，由宿主
+           整单裁决（审批 / 加载），详情页只做只读呈现，不提供逐项开关。
+           系统服务（L1/L2）同样只读：权限随包固定，不经用户授权。 -->
+      <ShellSection :title="t('shell.detail.permissions')" />
       <div class="px-4 pb-1">
         <ShellGroupCard v-if="permissionGroups.length > 0">
           <template v-for="group in permissionGroups" :key="group.id">
@@ -125,28 +174,12 @@
                   {{ permissionTitle(grant.key) }}
                   <code class="ml-1.5 shell-type-micro text-[var(--mobile-text-secondary)]">{{ grant.key }}</code>
                 </div>
-                <div
-                  v-if="permissionDesc(grant.key)"
-                  class="shell-type-caption text-[var(--mobile-text-secondary)]"
-                >
-                  {{ permissionDesc(grant.key) }}
-                </div>
-                <div v-if="grant.locked" class="shell-type-caption text-[var(--mobile-text-secondary)]">
-                  {{ t('shell.detail.permissionLocked') }}
-                </div>
-                <div v-else-if="grant.scope" class="shell-type-caption text-[var(--mobile-text-secondary)]">
+                <div v-if="grant.scope" class="shell-type-caption text-[var(--mobile-text-secondary)]">
                   {{ grant.scope }}
                 </div>
               </div>
-              <!-- 锁定项：不给开关，只标徽标——隐藏会让用户误以为应用没有该能力 -->
+              <!-- 锁定项：只标徽标——隐藏会让用户误以为应用没有该能力 -->
               <ShellChip v-if="grant.locked" :label="t('shell.detail.permissionLocked')" tone="neutral" />
-              <!-- 系统服务不给开关（分区 note 已说明权限随包固定）；业务应用保持逐项开关 -->
-              <Toggle
-                v-else-if="!isService"
-                :model-value="grant.granted"
-                :disabled="!permissionControlEnabled"
-                @update:model-value="(next: boolean) => handleToggle(grant.key, next)"
-              />
             </div>
           </template>
         </ShellGroupCard>
@@ -156,16 +189,9 @@
         >
           {{ t('mobile.plugin.noPermissions') }}
         </p>
-        <!-- 能力缺失要显性说明：把开关置灰却不解释，用户会以为是应用的问题。
-             系统服务的「无开关」由分区 note 解释，不走这条后端能力提示。 -->
-        <p
-          v-if="!permissionControlEnabled && !isService"
-          class="mt-2 px-1 shell-type-caption text-[var(--mobile-text-secondary)]"
-        >
-          {{ t('shell.detail.permissionUnsupported') }}
-        </p>
-        <p v-if="toggleError" class="mt-2 px-1 shell-type-caption" :style="{ color: 'var(--mobile-error)' }">
-          {{ toggleError }}
+        <!-- 审批失败等动作错误：放在权限区下方沿用既有提示位，不伪造成功态 -->
+        <p v-if="actionError" class="mt-2 px-1 shell-type-caption" :style="{ color: 'var(--mobile-error)' }">
+          {{ actionError }}
         </p>
       </div>
 
@@ -181,16 +207,6 @@
           </div>
           <!-- 缓存行已删：后端没有缓存统计源，永远显示「—」的行属于空白项 -->
         </ShellGroupCard>
-      </div>
-
-      <!-- ==================== 授权记录 ==================== -->
-      <ShellSection :title="t('shell.detail.grants')" :note="t('shell.detail.grantsNote')" />
-      <div class="px-4 pb-1">
-        <p
-          class="rounded-[12px] border border-dashed border-[var(--mobile-border-hover)] px-3 py-4 text-center shell-type-caption text-[var(--mobile-text-secondary)]"
-        >
-          {{ t('shell.detail.grantsEmpty') }}
-        </p>
       </div>
 
       <!-- ==================== 操作 ==================== -->
@@ -217,7 +233,7 @@
             color: 'var(--mobile-error)',
             background: 'transparent',
           }"
-          @click="confirmRemove = true"
+          @click="confirmRemove = true; keepData = false"
         >
           {{ t('shell.detail.uninstall') }}
         </button>
@@ -243,7 +259,17 @@
       :cancel-text="t('shell.common.cancel')"
       @update:model-value="confirmRemove = $event"
       @confirm="handleRemove"
-    />
+    >
+      <label
+        class="mt-3 flex items-center gap-2.5 rounded-[10px] bg-[var(--mobile-input-bg)] px-3 py-2.5 shell-type-label text-[var(--mobile-text-primary)]"
+      >
+        <input v-model="keepData" type="checkbox" class="accent-[var(--mobile-accent)]" />
+        <span>{{ t('shell.detail.keepData') }}</span>
+      </label>
+      <p v-if="!keepData" class="mt-2 shell-type-caption text-[var(--mobile-error)]">
+        {{ t('shell.detail.deleteDataHint') }}
+      </p>
+    </ConfirmDialog>
     <!-- 系统服务停止确认（服务是常驻能力，误停影响面广；业务应用停用不弹） -->
     <ConfirmDialog
       :model-value="confirmStop"
@@ -262,18 +288,21 @@
 /**
  * 应用详情与权限
  *
- * 权限开关是 UX，裁决在 Rust 端（docs/security.md §1）。因此：
- *   · 后端不支持逐项授予时，开关置灰并显式说明，不做「点了就算通过」的假成功
- *   · 授权记录区没有后端真源，渲染空态而不是编造几条示例
+ * 权限清单只读（2026-11-04 与桌面端对齐）：裁决在 Rust 端——用户安装应用
+ * 整单审批 + 内容哈希钉扎，生效权限 = 批准 ∩ manifest 声明；内置应用随包受信。
+ * 详情页不提供逐项开关，只呈现声明事实（词 / locked / scope）。
+ * 页面只保留值、动作、命名、警告与异常；分区说明 / 条目描述等次级文字按
+ * docs/frontend.md §4.4「布局自解释」不渲染。授权记录没有后端读模型，不留占位区。
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import Toggle from '../ui/Toggle.vue'
 import { useToast } from '../../composables/useToast'
+import { useAppUpdates, type AppUpdateState } from '../../composables/useAppUpdates'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
-import { groupPermissions, permissionDescKey, permissionTitleKey } from '../../permissions'
+import { groupPermissions, permissionTitleKey } from '../../permissions'
 import { formatBytes, isServiceKind } from '../../utils'
 import ShellAppIcon from '../ShellAppIcon.vue'
 import ShellChip from '../ShellChip.vue'
@@ -285,8 +314,6 @@ const toast = useToast()
 const nav = useShellNavigation()
 const {
   getApp,
-  supportsPermissionControl,
-  setPermissionGrant,
   supportsRemove,
   removeApp,
   supportsAutostart,
@@ -295,15 +322,13 @@ const {
   stop,
   approveApp,
   launch,
+  refresh,
 } = useShellApps()
 
 /** 应用 id 来自导航参数（壳内导航不落 URL） */
 const appId = computed(() => nav.params.value.appId ?? '')
 const app = computed(() => getApp(appId.value))
 
-const permissionControlEnabled = computed(() =>
-  appId.value ? supportsPermissionControl(appId.value) : false,
-)
 const isService = computed(() => isServiceKind(app.value?.kind))
 const canRemove = computed(
   () => !isService.value && (appId.value ? supportsRemove(appId.value) : false),
@@ -322,35 +347,62 @@ const canStop = computed(
 const autostart = ref(false)
 const autostartBusy = ref(false)
 
+// ==================== 版本更新 ====================
+
+const updates = useAppUpdates()
+const isUpdatable = computed(() => Boolean(app.value?.update) && !isService.value)
+const updateState = computed<AppUpdateState | undefined>(() =>
+  app.value ? updates.states.value[app.value.id] : undefined,
+)
+const updateBusy = computed(
+  () => updateState.value?.status === 'checking' || updateState.value?.status === 'updating',
+)
+const updateIsBad = computed(
+  () => updateState.value?.status === 'error' || updateState.value?.status === 'incompatible',
+)
+const updateStatusText = computed(() => {
+  const st = updateState.value
+  if (!st) return ''
+  switch (st.status) {
+    case 'checking':
+      return t('shell.apps.update.checking')
+    case 'up-to-date':
+      return t('shell.apps.update.upToDate', { version: st.currentVersion ?? '' })
+    case 'available':
+      return t('shell.apps.update.available', { version: st.latestVersion ?? '' })
+    case 'incompatible':
+      return t('shell.apps.update.incompatible', { version: st.latestVersion ?? '' })
+    case 'updating':
+      return t('shell.apps.update.updating')
+    case 'error':
+      return t('shell.apps.update.failed')
+    default:
+      return ''
+  }
+})
+const updateReasonText = computed(() => {
+  const reason = updateState.value?.reason
+  if (!reason) return ''
+  return t(reason.key, reason.params ?? {})
+})
+async function onCheckUpdate(): Promise<void> {
+  if (app.value) await updates.check(app.value.id)
+}
+async function onApplyUpdate(): Promise<void> {
+  if (!app.value) return
+  const ok = await updates.applyUpdate(app.value.id)
+  if (ok) await refresh()
+}
+
 /** 权限按能力域分组；未归类的新权限进「其他」组，保证不会因未归类而消失 */
 const permissionGroups = computed(() =>
   groupPermissions(app.value?.permissions ?? [], 'shell.permission.group.other'),
 )
 
-/**
- * 权限分区说明
- *
- * 系统服务没有逐项开关（权限随包固定），这里说明「为什么没有开关」，
- * 而不是继续报授予计数——否则用户会去别处找本不存在的控制项。
- */
-const permissionsNote = computed(() => {
-  if (isService.value) return t('shell.detail.permissionServiceFixed')
-  const list = app.value?.permissions ?? []
-  const granted = list.filter((p) => p.granted).length
-  const locked = list.filter((p) => p.locked).length
-  return t('shell.detail.permissionsNote', { granted, locked })
-})
-
 /** 权限标题：复用既有本地化文案，未知权限回退原始权限词（不显示为空白） */
 function permissionTitle(key: string): string {
   const i18nKey = permissionTitleKey(key)
   return i18nKey ? t(i18nKey) : key
-}
-
-/** 权限说明：已知权限展示能力边界（如 metrics:read 的侧信道提示）；未知权限不占行 */
-function permissionDesc(key: string): string {
-  const i18nKey = permissionDescKey(key)
-  return i18nKey ? t(i18nKey) : ''
 }
 
 const stateLabel = computed(() => {
@@ -396,16 +448,18 @@ const stateDot = computed(() => {
   }
 })
 
-const toggleError = ref<string | null>(null)
+const actionError = ref<string | null>(null)
 /** 卸载二次确认（复用平台 ConfirmDialog，见模板） */
 const confirmRemove = ref(false)
+/** 卸载时保留应用数据（缺省删除；勾选 = 保留私有库 + 存储） */
+const keepData = ref(false)
 /** 系统服务停止二次确认（复用平台 ConfirmDialog，见模板） */
 const confirmStop = ref(false)
 // 切换应用时清掉上一条的失败提示，避免张冠李戴；顺带读取自启偏好
 watch(
   appId,
   async () => {
-    toggleError.value = null
+    actionError.value = null
     autostart.value = appId.value ? await isAutostart(appId.value) : false
   },
   { immediate: true },
@@ -419,16 +473,6 @@ async function handleAutostart(next: boolean): Promise<void> {
     if (ok) autostart.value = next
   } finally {
     autostartBusy.value = false
-  }
-}
-
-async function handleToggle(key: string, next: boolean): Promise<void> {
-  if (!appId.value) return
-  const ok = await setPermissionGrant(appId.value, key, next)
-  if (!ok) {
-    toggleError.value = t('shell.detail.permissionToggleFailed', {
-      reason: t('shell.detail.permissionUnsupported'),
-    })
   }
 }
 
@@ -459,7 +503,7 @@ async function handleApprove(): Promise<void> {
   if (!app.value) return
   const approved = await approveApp(app.value.id)
   if (!approved) {
-    toggleError.value = t('shell.permissions.approveFailed')
+    actionError.value = t('shell.permissions.approveFailed')
     return
   }
   const started = await launch(app.value.id)
@@ -469,7 +513,7 @@ async function handleApprove(): Promise<void> {
 async function handleRemove(): Promise<void> {
   confirmRemove.value = false
   if (!app.value) return
-  const ok = await removeApp(app.value.id)
+  const ok = await removeApp(app.value.id, keepData.value)
   if (ok) {
     toast.success(t('shell.apps.uninstallSuccess', { name: app.value.name }))
     nav.back()

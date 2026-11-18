@@ -6,14 +6,18 @@
  * 组件，插件开发者在这里能确认自己的 slot 组件在壳的布局里表现如何（而不是自己
  * 搭一个假首页去验）。
  *
- * 卡片内容由应用自持（壳只传 app 上下文，不解释「N 个会话」是什么）；
- * 应用自带的卡片也不负责打开应用——打开由壳的宫格 / 列表承担。
+ * 外观用 SDK 公共 QuickCard（`src/ui/QuickCard.vue`；dev-shell 不装自己的 npm 包，
+ * 故以内联源码路径引用）。点击与跳转归宿主壳——整张卡由壳包成按钮并打开本应用，
+ * 卡片内不再放按钮 / 交互。
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import QuickCard from '../../../../src/ui/QuickCard.vue'
 import { sessions } from '../../mock/session'
 
 /** 壳透传的应用上下文（本卡不消费，留着是为了与 slot 契约一致） */
 defineProps<{ app?: { id: string; name: string } }>()
+
+const ICON = ['M4 5h16v14H4z', 'M8 10l3 2.5-3 2.5', 'M13.5 15H16']
 
 const running = ref(0)
 
@@ -29,23 +33,11 @@ const hint = computed(() => `mock · ${running.value} running`)
 </script>
 
 <template>
-  <div
-    class="w-full text-left rounded-[12px] border border-[var(--mobile-border)] bg-[var(--mobile-bg-card)] p-3.5"
-    :style="{ boxShadow: 'var(--mobile-card-shadow)' }"
-  >
-    <span class="flex items-center gap-1.5 text-[var(--font-size-xs)] text-[var(--mobile-text-secondary)]">
-      <span
-        class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-        style="background: var(--mobile-success)"
-        aria-hidden="true"
-      />
-      mock-terminal
-    </span>
-    <span class="mt-1.5 block text-[var(--font-size-base)] font-semibold text-[var(--mobile-text-primary)]">
-      {{ running }} sessions
-    </span>
-    <span class="mt-1 block text-[var(--font-size-xs)] text-[var(--mobile-text-secondary)]">
-      {{ hint }}
-    </span>
-  </div>
+  <QuickCard
+    label="mock-terminal"
+    :value="running"
+    :hint="hint"
+    :tone="running > 0 ? 'success' : 'neutral'"
+    :icon-path="ICON"
+  />
 </template>

@@ -2,7 +2,7 @@
  * 桌面壳扩展点契约
  *
  * 归属：宿主允许的「通用注册表与寻址」薄壳（docs/architecture.md §1.3 ③）。
- * 这里只定义「可被挂在壳上的通用形状」——状态栏项 / 设置项 / 主题皮肤，
+ * 这里只定义「可被挂在壳上的通用形状」——状态栏项 / 设置项 / 主题，
  * 不携带任何产品词汇，也不替扩展决定业务默认值。
  *
  * 桌面应用是独立构建的挂载包（机制 B），当前没有跨包 UI 贡献通道；本契约先
@@ -65,13 +65,29 @@ export interface ShellSettingsEntry {
 }
 
 /**
- * 主题皮肤
+ * 主题的 glyph 绘制语汇
  *
- * 皮肤只提供 CSS 自定义属性覆盖，作用在壳根（`.shell-root`）——平台外壳跟随
- * 皮肤，应用仍可自持配色（应用根容器自己声明的变量优先）。壳不解释颜色语义，
- * 只做「token 表 → 根样式」的机械应用。
+ * 主题只调整「图标怎么画」（描边粗细 / 填充与否），不改路径语义；容器语汇
+ * （底色 / 圆角 / 光环 / 描边）由 CSS 侧的 `.glyph-box` / `.tone-*` 覆盖承担。
  */
-export interface ShellThemeSkin {
+export interface ShellThemeGlyphStyle {
+  /** 填充模式：路径闭合并填色、不描边（路径必须自带闭合轮廓，否则会糊成一团） */
+  fill?: boolean
+  /** 描边宽度覆盖（描边模式；缺省用图标组件自己的默认） */
+  strokeWidth?: number
+}
+
+/**
+ * 主题
+ *
+ * 主题只提供 CSS 自定义属性覆盖 + 图标绘制语汇，作用于文档根（`<html>`）——
+ * 平台外壳跟随主题，应用仍可自持配色（应用根容器自己声明的变量优先）。壳不
+ * 解释颜色语义，只做「token 表 → 根样式」的机械应用。
+ *
+ * 内置主题的 token 表住在 `src/styles/theme-presets.css`（结构性规则与动效只有
+ * CSS 能表达），本契约面向**扩展**主题：只能换 token 与 glyph，不能加结构性规则。
+ */
+export interface ShellTheme {
   id: string
   label: string
   description?: string
@@ -81,4 +97,10 @@ export interface ShellThemeSkin {
   tokens?: Record<string, string>
   /** 深色主题下覆盖的 token（与 tokens 合并，后者优先） */
   darkTokens?: Record<string, string>
+  /** 逐名 glyph 覆盖：图标名 → path d 数组（缺名回落到组件内置路径表） */
+  glyphs?: Record<string, string[]>
+  /** glyph 绘制语汇 */
+  glyphStyle?: ShellThemeGlyphStyle
+  /** 主题自带缓慢动效；`.anim-disabled` 与 `prefers-reduced-motion` 下自动停 */
+  dynamic?: boolean
 }

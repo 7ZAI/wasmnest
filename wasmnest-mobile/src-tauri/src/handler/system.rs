@@ -1,4 +1,4 @@
-//! System Handler - 系统消息处理器
+//! 系统消息处理器：ServerClosed / Error / Ack
 //!
 //! 处理 ServerClosed、Error、Ack 消息
 

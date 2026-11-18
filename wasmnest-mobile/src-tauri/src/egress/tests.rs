@@ -1,3 +1,5 @@
+//! Egress 策略单元测试：三层判定、授权记忆与弹窗回执
+//!
 // ==================== 单元测试 ====================
 
 use super::policy::GRANT_PLUGIN_HOST;
@@ -21,12 +23,35 @@ fn parse_url_lite_basic() {
     assert_eq!(u.port, Some(4455));
     assert_eq!(u.path, "/api/health");
 
+    // IPv6：带/不带端口（reqwest 解析出的 host 不含方括号）
+    let u = parse_url_lite("http://[::1]/x").unwrap();
+    assert_eq!(u.host, "::1");
+    assert_eq!(u.port, None);
+    assert!(is_loopback_host(&u.host));
+    let u = parse_url_lite("http://[::1]:8080/x").unwrap();
+    assert_eq!(u.host, "::1");
+    assert_eq!(u.port, Some(8080));
+
     // 无 path → 默认 "/"
     let u = parse_url_lite("https://example.com").unwrap();
     assert_eq!(u.path, "/");
     // 非法 → None
     assert!(parse_url_lite("not-a-url").is_none());
     assert!(parse_url_lite("").is_none());
+    // 非数字端口 / userinfo 一律拒绝（后者是策略与 reqwest 解析分叉的入口）
+    assert!(parse_url_lite("http://example.com:abc/x").is_none());
+    assert!(parse_url_lite("http://user:pass@example.com/x").is_none());
+    assert!(parse_url_lite("http://127.0.0.1:80@evil.com/x").is_none());
+}
+
+#[test]
+fn loopback_host_detection() {
+    for host in ["127.0.0.1", "127.0.0.2", "localhost", "LOCALHOST", "[::1]"] {
+        assert!(is_loopback_host(host), "{host} 必须判为环回");
+    }
+    for host in ["192.168.1.5", "10.0.2.2", "example.com", ""] {
+        assert!(!is_loopback_host(host), "{host} 不得判为环回");
+    }
 }
 
 #[test]
@@ -171,21 +196,42 @@ fn plugin_declarations_registered_and_removed() {
         ],
     );
     assert!(matches!(
-        p.decide("https://api.openai.com/v1/chat/completions", "plugin:ai-chatbox"),
+        p.decide(
+            "https://api.openai.com/v1/chat/completions",
+            "plugin:com.wasmnest.ai-chatbox"
+        ),
         EgressDecision::Allow(GrantSource::L2Plugin)
     ));
     assert!(matches!(
-        p.decide("https://api.deepseek.com/chat/completions", "plugin:ai-chatbox"),
+        p.decide(
+            "https://api.deepseek.com/chat/completions",
+            "plugin:com.wasmnest.ai-chatbox"
+        ),
         EgressDecision::Allow(GrantSource::L2Plugin)
     ));
     // 未声明的其它域名 → NeedConsent
     assert!(matches!(
-        p.decide("https://custom.example.com/v1", "plugin:ai-chatbox"),
+        p.decide("https://custom.example.com/v1", "plugin:com.wasmnest.ai-chatbox"),
+        EgressDecision::NeedConsent(_)
+    ));
+    // 声明只属于注册它的插件：另一个插件 / 宿主来源命中同一 URL 不得放行
+    assert!(matches!(
+        p.decide(
+            "https://api.openai.com/v1/chat/completions",
+            "plugin:com.wasmnest.bedcode"
+        ),
+        EgressDecision::NeedConsent(_)
+    ));
+    assert!(matches!(
+        p.decide("https://api.openai.com/v1/chat/completions", "host"),
         EgressDecision::NeedConsent(_)
     ));
     p.unregister_plugin_urls("com.wasmnest.ai-chatbox");
     assert!(matches!(
-        p.decide("https://api.openai.com/v1/chat/completions", "plugin:ai-chatbox"),
+        p.decide(
+            "https://api.openai.com/v1/chat/completions",
+            "plugin:com.wasmnest.ai-chatbox"
+        ),
         EgressDecision::NeedConsent(_)
     ));
 }
@@ -295,7 +341,7 @@ fn malformed_url_denied() {
     }
 }
 
-// ==================== 三档策略（ADR 0022 2026-09-28） ====================
+// ==================== 三档策略 ====================
 
 /// 档位 → 动作映射单点：AlwaysAsk 不读记录；Default 读记录；AutoAllow 必须落账
 #[test]

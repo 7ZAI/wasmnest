@@ -48,11 +48,11 @@ pub struct PluginManifest {
     /// 扩展点声明
     #[serde(default)]
     pub contributes: PluginContributes,
-    /// 插件类型：rust / rust-ts / ts-only
+    /// 插件产物形态：frontend / backend / full（语言无关三档，wasmnest-apps#21）
     #[serde(default = "default_plugin_type")]
     pub plugin_type: PluginType,
     /// WASM 库文件名（不含路径，相对于插件目录）
-    /// 仅 rust-ts 类型插件使用，宿主根据平台自动添加后缀
+    /// 携带 wasm 后端的形态使用（backend / full），宿主根据平台自动添加后缀
     #[serde(default)]
     pub rust_library: String,
     /// WASM 模块内容 SHA-256（小写十六进制；缺省空串 = 不校验）
@@ -156,6 +156,42 @@ pub struct PluginManifest {
     /// 缺省 `false` = 既有行为：界面打开才 acquire，关闭最后一个界面即停播。
     #[serde(default, skip_serializing_if = "is_false")]
     pub background_transport: bool,
+    /// 应用更新源声明（manifest `update`；缺省 = 不参与更新检查）
+    ///
+    /// 宿主按本段解析 GitHub 发布仓 / tag 前缀 / 资产 slug。缺省字段收敛到官方
+    /// 应用仓命名约定；第三方应用可声明自己的 repo / tagPrefix / slug。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update: Option<PluginUpdateDecl>,
+}
+
+/// manifest `update` 段（应用更新源声明）
+///
+/// 与中性 `wasmnest-wasm-core::app_update::PluginUpdateDecl` 逐字段同形；
+/// 本 crate 是 guest 侧镜像，不反向依赖内核。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginUpdateDecl {
+    /// 更新来源类型；当前只支持 `github-release`
+    #[serde(default)]
+    pub provider: UpdateProvider,
+    /// GitHub 仓库 `owner/name`；缺省 = `7ZAI/wasmnest-apps`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+    /// Release tag 前缀（完整形态 `<tagPrefix>v<X.Y.Z>`）；缺省 `<slug>-`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag_prefix: Option<String>,
+    /// Release 资产前缀（`<slug>-<end>-v<version>.zip`）；缺省 = 插件 id 末段
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
+}
+
+/// 更新来源类型（未知取值反序列化即拒）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum UpdateProvider {
+    /// GitHub Release
+    #[default]
+    GithubRelease,
 }
 
 /// `skip_serializing_if` 辅助：布尔 `false` 不写入序列化输出（与中性 manifest 同形）

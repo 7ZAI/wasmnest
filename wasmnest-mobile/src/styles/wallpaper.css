@@ -114,6 +114,7 @@
   padding: 0 16px 12px;
 }
 .wallpaper-picker-btn {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -124,14 +125,31 @@
   border: 1px solid var(--mobile-border);
   background: var(--mobile-bg-card);
   color: var(--mobile-text-primary);
-  transition: border-color 0.2s ease, background-color 0.2s ease, opacity 0.2s ease;
+  transition: border-color 0.2s ease, background-color 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
 }
 .wallpaper-picker-btn:active {
   opacity: 0.75;
 }
+/* 选中 = 色调洗染 + 投影浮起 + 右上角勾标：不用 accent 描边（默认浅色档
+   accent 近黑，描边选中即「黑边框」，2026-10-31 起全宿主禁用） */
 .wallpaper-picker-btn.active {
-  border-color: var(--mobile-accent);
+  border-color: transparent;
   background: var(--mobile-accent-muted);
+  box-shadow: var(--mobile-card-shadow);
+}
+.wallpaper-picker-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--mobile-accent);
+  color: var(--mobile-text-on-accent);
+  box-shadow: 0 0 0 2px var(--mobile-bg-card);
 }
 .wallpaper-swatch {
   flex-shrink: 0;

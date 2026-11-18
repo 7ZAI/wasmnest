@@ -45,6 +45,28 @@ function assetDir(): Promise<string | null> {
 }
 
 /**
+ * 宿主读出 SVG 文本 → data URL（应用图标的主通道）
+ *
+ * 壳前端按 capabilities 没有 fs 权限；且 WebKitGTK 不把自定义 `asset://` 协议下的
+ * SVG 交给 `<img>` 渲染（2026-11-14 实机：URL 解析成功，图标却全部回退通用 glyph）。
+ * data URL 走 CSP 已放行的 `img-src ... data:`，不依赖 asset 协议的图片解码。
+ * 旧宿主没有该命令或资源读不到时，回退到下面的 asset URL 通道。
+ */
+async function inlineIconSvg(appId: string, file: string): Promise<string | undefined> {
+  try {
+    const text = await invoke<string>('plugin_get_asset_text', { appId, file })
+    if (!/^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/i.test(text)) {
+      logger.warn(`[Shell] app icon is not svg: appId=${appId} file=${file}`)
+      return undefined
+    }
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(text)}`
+  } catch (e) {
+    logger.debug(`[Shell] app icon inline failed: appId=${appId} file=${file}`, e)
+    return undefined
+  }
+}
+
+/**
  * 应用图标 URL（appId 维度缓存）；解析不出来 → undefined。
  *
  * 路径用字符串拼接而不是 `@tauri-apps/api/path` 的 join：join 每次都要过一次 IPC，
@@ -61,12 +83,23 @@ export async function appIconUrl(
   const hit = urlCache.get(key)
   if (hit) return hit
 
+  const inlined = await inlineIconSvg(appId, file)
+  if (inlined) {
+    urlCache.set(key, inlined)
+    logger.debug(`[Shell] app icon inlined: appId=${appId} file=${file}`)
+    return inlined
+  }
+
   const dir = await assetDir()
-  if (!dir) return undefined
+  if (!dir) {
+    logger.warn(`[Shell] app icon: asset dir null, appId=${appId} file=${file}`)
+    return undefined
+  }
   try {
     const base = dir.replace(/\\/g, '/').replace(/\/+$/, '')
     const url = convertFileSrc(`${base}/${appId}/${file}`)
     urlCache.set(key, url)
+    logger.debug(`[Shell] app icon resolved: appId=${appId} file=${file} -> ${url}`)
     return url
   } catch (e) {
     // 浏览器预览等无 asset 协议的环境：按降级处理（不缓存，Tauri 环境里还有机会）

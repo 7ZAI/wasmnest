@@ -1,63 +1,50 @@
 <template>
-  <!-- ==================== SYSTEM ==================== -->
-  <section>
-    <h3 class="wb-section-title">{{ t('settings.system.title') }}</h3>
-    <div
-      class="bg-[var(--bg-card)] border border-[var(--border)] rounded-[10px] divide-y divide-[var(--border)]"
-    >
-      <!-- 防止休眠：方角开关 -->
-      <div class="px-5 py-3.5 flex items-center justify-between gap-4">
-        <div>
-          <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
-            t('settings.system.preventSleep')
-          }}</span>
-        </div>
-        <button
-          class="relative w-10 h-5 rounded-[4px] border transition-colors flex-shrink-0"
-          :class="
-            preventSleep
-              ? 'bg-[var(--color-primary)] border-[var(--color-primary)]'
-              : 'bg-[var(--bg-page)] border-[var(--border-strong)]'
-          "
-          role="switch"
-          :aria-checked="preventSleep"
-          @click="preventSleep = !preventSleep"
-        >
-          <span
-            class="absolute top-[3px] w-3 h-3 rounded-[2px] transition-all"
-            :class="
-              preventSleep
-                ? 'left-[22px] bg-[var(--color-primary-contrast)]'
-                : 'left-[3px] bg-[var(--border-strong)]'
-            "
-          />
-        </button>
+  <!-- ==================== SYSTEM ====================
+       卡面走壳共享 ShellCard（图标 + 标题在卡内）、行走 `.row-sw`、开关走 `.shell-sw`，
+       与同页入口卡 / 外观二级页同一套语言。此前标题平铺在卡外（`.wb-section-title`），
+       与入口卡「图标 + 卡内标题」两种头型并存——用户 2026-11-09 裁决统一为图标 + 卡内。 -->
+  <ShellCard :title="t('settings.system.title')" icon="gear" data-testid="settings-system">
+    <!-- 防止休眠：壳开关（胶囊轨道 + 玻璃珠旋钮），与导航开关同形同语义 -->
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.system.preventSleep') }}</b>
       </div>
-
-      <!-- 应用贡献的动态扩展设置项：别的应用对系统设置的动态扩展（用户 2026-10-22
-           裁决——有注册才在「系统设置」内动态渲染，无固定「扩展设置」分组）。
-           宿主不解释 label / hint 的业务含义；动作失败只进日志，不拖垮设置页。 -->
-      <component
-        :is="entry.onSelect ? 'button' : 'div'"
-        v-for="entry in settingsEntries"
-        :key="entry.id"
-        class="ext-row px-5 py-3.5 w-full flex items-center gap-4 text-left"
-        :class="{ action: !!entry.onSelect }"
-        :type="entry.onSelect ? 'button' : undefined"
-        :data-entry-id="entry.id"
-        @click="entry.onSelect ? run(entry) : undefined"
-      >
-        <span class="ext-ico">
-          <ShellIcon :name="entry.icon || 'gear'" :size="13" />
-        </span>
-        <span class="ext-text">
-          <b>{{ entry.label }}</b>
-          <span v-if="entry.hint" class="ext-sub">{{ entry.hint }}</span>
-        </span>
-        <ShellIcon v-if="entry.onSelect" name="back" :size="12" class="ext-go" />
-      </component>
+      <label class="shell-sw">
+        <input
+          type="checkbox"
+          role="switch"
+          :checked="preventSleep"
+          :aria-checked="preventSleep"
+          :aria-label="t('settings.system.preventSleep')"
+          @change="preventSleep = ($event.target as HTMLInputElement).checked"
+        />
+        <span class="track"></span><span class="knob"></span>
+      </label>
     </div>
-  </section>
+
+    <!-- 应用贡献的动态扩展设置项：别的应用对系统设置的动态扩展（用户 2026-10-22
+         裁决——有注册才在「系统设置」内动态渲染，无固定「扩展设置」分组）。
+         宿主不解释 label / hint 的业务含义；动作失败只进日志，不拖垮设置页。 -->
+    <component
+      :is="entry.onSelect ? 'button' : 'div'"
+      v-for="entry in settingsEntries"
+      :key="entry.id"
+      class="ext-row row-sw w-full text-left"
+      :class="{ action: !!entry.onSelect }"
+      :type="entry.onSelect ? 'button' : undefined"
+      :data-entry-id="entry.id"
+      @click="entry.onSelect ? run(entry) : undefined"
+    >
+      <span class="ext-ico">
+        <ShellIcon :name="entry.icon || 'gear'" :size="13" />
+      </span>
+      <span class="ext-text">
+        <b>{{ entry.label }}</b>
+        <span v-if="entry.hint" class="ext-sub">{{ entry.hint }}</span>
+      </span>
+      <ShellIcon v-if="entry.onSelect" name="back" :size="12" class="ext-go" />
+    </component>
+  </ShellCard>
 </template>
 
 <script setup lang="ts">
@@ -80,6 +67,7 @@ import { useShellExtensions } from '../extensions'
 import type { ShellSettingsEntry } from '../extensions/types'
 import { logger } from '@/utils/frontendLogger'
 import ShellIcon from '../components/ShellIcon.vue'
+import ShellCard from '../components/ShellCard.vue'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()

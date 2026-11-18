@@ -45,7 +45,7 @@
         </svg>
         <span
           v-if="badgeCount > 0"
-          class="absolute top-1 right-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-semibold leading-none"
+          class="absolute top-1 right-1 inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full text-[11px] font-semibold leading-none"
           :style="{ background: 'var(--mobile-error)', color: 'var(--mobile-text-on-accent)' }"
           aria-hidden="true"
         >
@@ -57,14 +57,38 @@
     <!-- ==================== 内容 ==================== -->
     <div class="relative z-10 flex-1 min-h-0 overflow-y-auto pb-6 shell-content-cap">
       <!-- ======== 快捷卡片（应用贡献，横向轮播） ========
-           定宽卡片 + 原生 scroll-snap 横向滚动（原型 .slots 同形态）：拍一屏只露一张，
-           滑动切下一张。定宽而非 flex-1 是刻意的——卡片内容由应用自持，等宽拉伸会让
-           单行信息量不同的卡片看起来参差。 -->
+           定宽卡片 + 原生 scroll-snap 横向滚动：拍一屏只露一张，滑动切下一张，
+           多张时自动轮播（触摸 / 聚焦 / 切后台 / 减少动效时停走）。
+           整张卡是宿主按钮：点击启动并打开贡献方应用，卡片内容由应用自持、
+           不得自带交互（SDK QuickCard 是推荐外观）。 -->
       <template v-if="slotCards.length > 0">
-        <ShellSection :title="t('shell.home.slotsTitle')" class="shell-reveal shell-text-over-wall" :style="{ animationDelay: '80ms' }" />
-        <div class="shell-slot-track shell-reveal" role="list" :style="{ animationDelay: '120ms' }">
+        <ShellSection :title="t('shell.home.slotsTitle')" class="shell-text-over-wall" :class="{ 'shell-reveal': reveal }" :style="{ animationDelay: '80ms' }">
+          <template v-if="slotCards.length > 1 && !reducedMotion" #action>
+            <button
+              type="button"
+              class="shell-icon-action"
+              :aria-label="playing ? t('shell.home.slotPause') : t('shell.home.slotPlay')"
+              @click="toggleAutoplay()"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <template v-if="playing">
+                  <path d="M9 5v14M15 5v14" />
+                </template>
+                <template v-else>
+                  <path d="M8 5.5v13l10-6.5Z" />
+                </template>
+              </svg>
+            </button>
+          </template>
+        </ShellSection>
+        <div ref="slotTrack" class="shell-slot-track" :class="{ 'shell-reveal': reveal }" role="list" :style="{ animationDelay: '120ms' }">
           <div v-for="card in slotCards" :key="card.key" class="shell-slot-item" role="listitem">
-            <component :is="card.component" :app="card.app" />
+            <!-- 可访问名 = 隐藏动作前缀「打开 <应用>」+ 卡片内容：不覆盖应用自持的读数。
+                 点击除打开应用外，还把应用现算的入口意图投递给它（卡片可直达会话 / 页）。 -->
+            <button type="button" class="shell-slot-card" @click="openSlotCard(card)">
+              <span class="sr-only">{{ t('shell.home.slotOpen', { name: card.app.name }) }}</span>
+              <component :is="card.component" :app="card.app" />
+            </button>
           </div>
         </div>
       </template>
@@ -75,14 +99,15 @@
            计数文案同为该反馈要求删除的内容，标题行不再承载任何附加信息。 -->
       <ShellSection
         :title="t('shell.home.appsTitle')"
-        class="shell-reveal shell-text-over-wall"
+        class="shell-text-over-wall"
+        :class="{ 'shell-reveal': reveal }"
         :style="{ animationDelay: '160ms' }"
       />
       <div class="px-4">
         <!-- gap-4 = 16px：在相邻触控目标间距 ≥8px（ui-ux-pro-max Touch Spacing）
      门槛之上对齐 Android 启动器的 4/8dp 栅格节奏；与下方服务 / 系统宫格同 gap，
      同屏同层必须同栅格（2026-10-24 用户反馈优化）。 -->
-        <div v-if="businessApps.length > 0" class="grid grid-cols-4 gap-4 shell-reveal" role="list" :style="{ animationDelay: '200ms' }">
+        <div v-if="businessApps.length > 0" class="grid grid-cols-4 gap-4" :class="{ 'shell-reveal': reveal }" role="list" :style="{ animationDelay: '200ms' }">
           <ShellAppCell v-for="app in businessApps" :key="app.id" :app="app" @open="open" />
         </div>
         <!-- 空态给出下一步（安装入口在应用管理页），而不是只留一句「暂无应用」 -->
@@ -96,9 +121,9 @@
 
       <!-- ======== 服务宫格（宿主系统级服务，与应用 / 系统同层） ======== -->
       <template v-if="serviceEntries.length > 0">
-        <ShellSection :title="t('shell.home.servicesTitle')" class="shell-reveal shell-text-over-wall" :style="{ animationDelay: '240ms' }" />
+        <ShellSection :title="t('shell.home.servicesTitle')" class="shell-text-over-wall" :class="{ 'shell-reveal': reveal }" :style="{ animationDelay: '240ms' }" />
         <div class="px-4">
-          <div class="grid grid-cols-4 gap-4 shell-reveal" role="list" :style="{ animationDelay: '280ms' }">
+          <div class="grid grid-cols-4 gap-4" :class="{ 'shell-reveal': reveal }" role="list" :style="{ animationDelay: '280ms' }">
             <button
               v-for="entry in serviceEntries"
               :key="entry.id"
@@ -132,9 +157,9 @@
       </template>
 
       <!-- ======== 系统宫格（平台自有面，与应用同层） ======== -->
-      <ShellSection :title="t('shell.home.sysTitle')" class="shell-reveal shell-text-over-wall" :style="{ animationDelay: '320ms' }" />
+      <ShellSection :title="t('shell.home.sysTitle')" class="shell-text-over-wall" :class="{ 'shell-reveal': reveal }" :style="{ animationDelay: '320ms' }" />
       <div class="px-4">
-        <div class="grid grid-cols-4 gap-4 shell-reveal" role="list" :style="{ animationDelay: '360ms' }">
+        <div class="grid grid-cols-4 gap-4" :class="{ 'shell-reveal': reveal }" role="list" :style="{ animationDelay: '360ms' }">
           <button
             v-for="entry in sysEntries"
             :key="entry.id"
@@ -175,6 +200,15 @@
   </div>
 </template>
 
+<script lang="ts">
+/**
+ * 本次应用会话是否已播过主屏分区入场。
+ * 必须放普通 `<script>`（模块作用域）：`<script setup>` 顶层绑定是每个实例的，
+ * 屏幕栈按 key 重挂后会复位，入场就会在每次「回家」时重播。
+ */
+let homeRevealed = false
+</script>
+
 <script setup lang="ts">
 /**
  * 平台主屏
@@ -189,17 +223,30 @@
  * 正文案纪律（2026-10-14 修订）：分组标题行只留标题与计数，不再写「平台自带」
  * 「由应用提供」「最近使用在前」这类方案期解释——用户看得到事实，不需要旁白。
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { ShellSurfaceIntent } from '@binblink/wasmnest-plugin-sdk-mobile'
+import { logger } from '@/utils/frontendLogger'
 import { useShellApps } from '../../composables/useShellApps'
 import { useShellNavigation } from '../../composables/useShellNavigation'
 import { useShellNotifications } from '../../composables/useShellNotifications'
 import { useShellOpen } from '../../composables/useShellOpen'
 import { useShellOverlays } from '../../composables/useShellOverlays'
+import { useSlotCarousel } from '../../composables/useSlotCarousel'
+import { selectSlotCards, type ShellSlotCard } from '../../slotCards'
 import { isServiceKind } from '../../utils'
 import ShellAppCell from '../ShellAppCell.vue'
 import ShellBrandTile from '../ShellBrandTile.vue'
 import ShellSection from '../ShellSection.vue'
+
+/**
+ * 分区入场只在本次应用会话第一次进主屏时播。
+ * 屏幕栈按 key 重挂（ShellHost 的 `<Transition :key="screenKey">`），若每次回主屏
+ * 都重播，320ms 动画 + 最多 360ms 延迟会成为「回家」的固定等待（主屏几十次/天）。
+ * 模块级标记跨组件重挂保留；reduced-motion 仍由 shell.css 统一压成瞬时。
+ */
+const reveal = !homeRevealed
+homeRevealed = true
 
 const { t } = useI18n()
 const nav = useShellNavigation()
@@ -216,16 +263,32 @@ const badgeCount = computed(
   () => notificationCount.value + apps.value.filter((a) => a.state === 'approval').length,
 )
 
-/** 应用贡献的快捷卡片（按应用顺序展开，排序在 registry 侧完成） */
-const slotCards = computed(() =>
-  apps.value.flatMap((app) =>
-    (app.contributions.slots ?? []).map((slot) => ({
-      key: `${app.id}:${slot.id}`,
-      component: slot.component,
-      app,
-    })),
-  ),
-)
+/** 应用贡献的快捷卡片（注册顺序，超过展示上限的部分不渲染） */
+const slotCards = computed(() => selectSlotCards(apps.value))
+
+/**
+ * 点击快捷卡片：打开应用 + 投递应用现算的入口意图
+ *
+ * `onPress` 是应用自持逻辑（例如「最近一个活跃会话」），抛错不得阻断「打开应用」
+ * 这条主路径——意图算不出来就只打开应用（旧行为），并在宿主日志留痕。
+ */
+function openSlotCard(card: ShellSlotCard): void {
+  let intent: ShellSurfaceIntent | null | undefined
+  try {
+    intent = card.onPress?.()
+  } catch (e) {
+    logger.warn(`[shell] 快捷卡片入口意图计算失败 appId=${card.app.id}`, e)
+  }
+  void open(card.app.id, intent)
+}
+
+/** 轨道轮播：多张时自动播放，触摸 / 聚焦 / 切后台 / 减少动效时停走 */
+const slotTrack = ref<HTMLElement | null>(null)
+const {
+  playing,
+  reducedMotion,
+  toggle: toggleAutoplay,
+} = useSlotCarousel(slotTrack, computed(() => slotCards.value.length))
 
 /**
  * 服务 / 系统宫格图标与桌面壳同源：路径逐字取自桌面 ShellIcon（grid / shield /

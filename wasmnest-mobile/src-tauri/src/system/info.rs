@@ -1,7 +1,6 @@
-//! System Information
+//! 全局系统信息（OS / 设备名 / IP）：启动时采集一次，挂到 `state` 全局单例
 //!
-//! 全局系统基本信息（OS / 设备名称 / IP 地址），启动时采集一次，
-//! 挂载到 state.rs 全局单例供引用（state::try_get_system_info()）
+//! 供各域经 `state::try_get_system_info()` 引用，避免每次现查。
 
 use serde::Serialize;
 

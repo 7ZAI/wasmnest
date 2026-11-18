@@ -9,6 +9,13 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: any[]) => mockInvoke(...args),
 }))
 
+// 宿主面凭证（ADR 0058 方案 A）：`save_app_settings` 已加宿主门，凭证取用单独
+// mock——真实实现会再走一轮 invoke，把本文件的 mock 序列搅乱
+vi.mock('@/utils/appCommands', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/appCommands')>()),
+  ensureHostCredential: vi.fn(async () => 'test-host-credential'),
+}))
+
 // Mock i18n 实例：仅暴露 locale ref，避免引入真实 vue-i18n 全量依赖
 const mocks = vi.hoisted(() => ({
   localeValue: { value: 'zh-CN' },
@@ -72,6 +79,7 @@ describe('I18n Store', () => {
 
       expect(mocks.localeValue.value).toBe('en')
       expect(mockInvoke).toHaveBeenCalledWith('save_app_settings', {
+        credential: 'test-host-credential',
         settings: expect.objectContaining({
           ui: expect.objectContaining({
             language: 'en',

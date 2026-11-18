@@ -29,10 +29,11 @@
                    插件目录（resources/plugins/{id}/ 或安装目录）
 ```
 
-桌面端产物形态（`plugin.json` 的 `pluginType`，词汇真源
-`packages/plugin-sdk-desktop/rust/src/types.rs::PluginType`）：
-`ts-only`（纯前端）、`rust-ts`（前端 + Rust WASM 后端，内置 wasm 应用一律用它）、
-`rust`（纯后端）。`plugin.json` 声明权限与扩展点（permissions / contributes）。
+桌面端产物形态（`plugin.json` 的 `pluginType`，语言无关三档，2026-10-26 重定义，
+词汇真源 `packages/plugin-sdk-desktop/rust/src/types.rs::PluginType`）：
+`frontend`（纯前端）、`full`（前端 + wasm 后端——Rust 或 Go，内置 wasm 应用一律
+用它）、`backend`（纯后端 worker）。旧值 `ts-only` / `rust-ts` / `rust` 已退役。
+`plugin.json` 声明权限与扩展点（permissions / contributes）。
 
 **关键概念**：
 
@@ -54,15 +55,15 @@ cd my-plugin
 pnpm install
 ```
 
-- 默认生成 **ts-only**（纯前端）插件；`--rust` 附带 WASM 后端脚手架（`pluginType: rust-ts`）
+- 默认生成**纯前端**（`pluginType: frontend`）插件；`--rust` 附带 WASM 后端脚手架（`pluginType: full`；形态三档 frontend / backend / full，语言无关，2026-10-26 重定义——旧值 rust / rust-ts / ts-only 已退役）
 - `create` 从 SDK 内置模板生成：`plugin.json` / `vite.config.ts`（vue 等外部化到宿主）/ `src/index.ts` / 可选 `rust/`（WasmPlugin 实现 + `wasm_entry!`）；`--dir <dir>` 指定生成目录，`--registry` 改为引用已发布 SDK 版本（npm + crates.io，默认引用本地 SDK 相对路径）
 
 构建与分发：
 
 ```bash
-pnpm run build    # = wasmnest-plugin-desktop build：vite（+ rust-ts 时 cargo wasm32）
+pnpm run build    # = wasmnest-plugin-desktop build：vite（+ full 形态时 cargo wasm32）
 pnpm run build -- --resources-dir <宿主resources/plugins父目录>   # 复制产物到宿主（内置插件分发方式）
-pnpm run build -- --frontend-only / --rust-only   # 只构建一半（rust-ts 插件）
+pnpm run build -- --frontend-only / --rust-only   # 只构建一半（full 形态插件）
 ```
 
 ## 3. 前端 API（context）
@@ -83,7 +84,7 @@ pnpm run build -- --frontend-only / --rust-only   # 只构建一半（rust-ts �
 
 内置 wasm 应用（住应用仓 `../wasmnest-apps/apps/`）：`ai-chatbox`（侧边栏 AI 面板 + 终端工具栏项）、
 `bedcode`（会话中心：配对信任 / 会话编排 / 任务队列，会话事实真源；插件 id `com.wasmnest.bedcode`）、
-`file-transfer`（局域网文件传输）、`agent-hub`（Agent CLI 管理台）、`monitor`（只读运行指标）。
+`file-transfer`（局域网文件传输）、`monitor`（只读运行指标）。
 
 ## 4. 浏览器开发环境（Dev Shell）
 
@@ -139,7 +140,7 @@ Rust 后端逻辑、真实 HTTP 端点、系统文件选择需在真实宿主验
 | SDK 浏览器开发环境 | `wasmnest-desktop/packages/plugin-sdk-desktop/dev-shell/` |
 | 插件宿主（Rust） | `wasmnest-desktop/src-tauri/src/plugin/`（端差异域的 WIT 绑定 + Host impl：api_call / app / auth / bindings / connection / crypto / fs / guest_events / host_facts / http / mdns / notify / peer / platform / platform_picker / process / pty / task / timer / ws；机制整核在 `../wasmnest-lib/wasmnest-wasm-core`） |
 | 前端插件运行时 | 旧仓 `src/plugin/`（context / registry / loader / contributionKinds 等贡献面）——已随桌面挂载包形态退役，宿主壳经 `src/shell/` 运行时装载（见头部说明） |
-| 内置 wasm 应用 | 应用仓 `../wasmnest-apps/apps/{ai-chatbox,bedcode,file-transfer,agent-hub,monitor}` |
+| 内置 wasm 应用 | 应用仓 `../wasmnest-apps/apps/{ai-chatbox,bedcode,file-transfer,monitor}` |
 | 机制整核与能力域 crate | 能力仓 `../wasmnest-lib/wasmnest-wasm-core`（机制内核）与 `../wasmnest-lib/wasmnest-*`（能力域 / 传输面 / 引擎） |
 | WIT 契约真源 | `../wasmnest-lib/wasmnest-wasm-core/wit/core.wit` + 能力域 `../wasmnest-lib/wasmnest-*/wit/<domain>.wit` + 端 `rust/wit-src/cap-*.wit`；端 `rust/wit/` 是生成物，改契约跑 `pnpm run check:wit`（平台仓根） |
 | 开发约束清单 | [`../../docs/knowledge/wasm-app-development-checklist.md`](../../docs/knowledge/wasm-app-development-checklist.md)（API / 权限 / 存储 / 事件 / 认证中心等红线） |

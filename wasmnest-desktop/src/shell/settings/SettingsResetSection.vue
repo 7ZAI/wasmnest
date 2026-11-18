@@ -1,26 +1,23 @@
 <template>
   <!-- ==================== RESET（恢复初始设置） ==================== -->
-  <section>
-    <h3 class="wb-section-title">{{ t('settings.reset.title') }}</h3>
-    <div class="bg-[var(--bg-card)] border border-[var(--border)] rounded-[10px] px-5 py-4">
-      <div class="flex items-center justify-between gap-4">
-        <span class="text-[calc(13px*var(--ui-scale))] text-[var(--text-primary)]">{{
-          t('settings.reset.desc')
-        }}</span>
-        <!-- 破坏性动作入口不用 ghost（与普通设置动作同形会掩盖风险）：danger tint +
-             回转箭头，与弹窗内确认按钮同一视觉语言 -->
-        <Button
-          variant="danger"
-          size="sm"
-          data-testid="settings-reset-open"
-          @click="confirmOpen = true"
-        >
-          <template #icon>
-            <ShellIcon name="reset" :size="13" />
-          </template>
-          {{ t('settings.reset.action') }}
-        </Button>
+  <ShellCard :title="t('settings.reset.title')" icon="reset" data-testid="settings-reset">
+    <div class="row-sw">
+      <div class="lb">
+        <b>{{ t('settings.reset.desc') }}</b>
       </div>
+      <!-- 破坏性动作入口不用 ghost（与普通设置动作同形会掩盖风险）：danger tint +
+             回转箭头，与弹窗内确认按钮同一视觉语言 -->
+      <Button
+        variant="danger"
+        size="sm"
+        data-testid="settings-reset-open"
+        @click="confirmOpen = true"
+      >
+        <template #icon>
+          <ShellIcon name="reset" :size="13" />
+        </template>
+        {{ t('settings.reset.action') }}
+      </Button>
     </div>
 
     <!-- 二次确认：破坏性操作（清授权记录 + 还原默认配置）必须显式确认 -->
@@ -59,7 +56,7 @@
         </div>
       </template>
     </Modal>
-  </section>
+  </ShellCard>
 </template>
 
 <script setup lang="ts">
@@ -70,7 +67,7 @@
  *   1. 清除所有授权记录：先撤销全部 allow（`plugin_auth_revoke`），再重新读一遍
  *      授权模型移除全部 deny（`plugin_auth_remove_record`），回到「未覆盖」初始态；
  *   2. 还原默认配置：整表回传宿主 AppConfig 默认值（端口 / 主题 / 字号 / 动画 /
- *      终端默认值），重置壳的壁纸 / 遮罩 / 主题皮肤偏好，并删除复制到应用数据目录的
+ *      终端默认值），重置壳的壁纸 / 遮罩 / 主题偏好，并删除复制到应用数据目录的
  *      自定义壁纸文件（只改偏好会把文件留在磁盘上，等于没恢复干净）。
  *
  * **必须两遍**：撤销的语义是「删 allow + 落一条 deny」（spec §8.4），新落的 deny
@@ -87,10 +84,12 @@ import { useSettingsStore } from '@/stores/settings'
 import { authOverview, authRemoveRecord, authRevoke } from '@/utils/appCommands'
 import { useShellSettings } from '@/shell/composables/useShellSettings'
 import { clearCustomWallpaper } from '@/shell/composables/customWallpaper'
-import { WALLPAPER_DEFAULT, WALL_DIM_DEFAULT, SHELL_SKIN_DEFAULT } from '@/shell/composables/state'
+import { WALLPAPER_DEFAULT, WALL_DIM_DEFAULT } from '@/shell/composables/state'
+import { SHELL_THEME_DEFAULT } from '@/shell/composables/themePresets'
 import Button from '@/components/Button.vue'
 import Modal from '@/components/Modal.vue'
 import ShellIcon from '@/shell/components/ShellIcon.vue'
+import ShellCard from '@/shell/components/ShellCard.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -135,7 +134,7 @@ async function runReset(): Promise<void> {
     prefs.value.wallpaper = WALLPAPER_DEFAULT
     prefs.value.wallDim = WALL_DIM_DEFAULT
     prefs.value.wallpaperImage = ''
-    prefs.value.skin = SHELL_SKIN_DEFAULT
+    prefs.value.theme = SHELL_THEME_DEFAULT
     confirmOpen.value = false
     toast.success(t('settings.reset.done'))
   } catch (e) {

@@ -46,7 +46,6 @@ wasmnest/                                   # 平台仓根（本文件所在）
 
 | slug（应用仓目录） | 插件 id | 端 | 前端形态 |
 | --- | --- | --- | --- |
-| agent-hub | `com.wasmnest.agent-hub` | desktop | 桌面挂载包 |
 | ai-chatbox | `com.wasmnest.ai-chatbox` | desktop + mobile | 挂载包 / 壳运行面 |
 | bedcode（显示名 BedCode） | `com.wasmnest.bedcode` | desktop + mobile | 挂载包 / 壳运行面 |
 | file-transfer | `com.wasmnest.file-transfer` | desktop + mobile | 双端单产物（移动经 `desktop-compat` 桩） |
@@ -76,9 +75,10 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 路径 | 职责（头注释为准） |
 | --- | --- |
 | `main.ts` | 宿主入口（壳装配 / 路由 / i18n / 权限配置） |
-| `router/index.ts` | 路由真源之一：`/` 主屏、`/sys/:pageId` 系统页、各 app 路由（指向 `AppMountSlot`）、未匹配显性 not-found |
-| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`appSurfaceRegistry.ts` = 表面实例记账（attach / detach / dispose，表面保活），`AppPreviewTile.vue` = 多任务卡的应用自绘预览面装载 / 3s 超时 / 回退品牌卡）；`sys/`（系统页）；`settings/`；`auth/`；`extensions/`（壳扩展点注册表：状态栏项 / 设置项 / 主题皮肤，只注册排序、不解释业务语义） |
+| `router/index.ts` | 路由真源之一：`/` 主屏、`/sys/:pageId` 系统页（`:sub` 子路由 = 同卡二级页，如 `/sys/settings/appearance` 外观）、各 app 路由（指向 `AppMountSlot`）、未匹配显性 not-found |
+| `shell/` | 宿主壳：`ShellHost.vue` 根组件；`mount/`（`AppMountSlot.vue` + `useAppMount.ts` = 挂载槽 + 装载机制，`appSurfaceRegistry.ts` = 表面实例记账（attach / detach / dispose / 多任务卡 preview 态，表面保活），`AppSurfaceTile.vue` = 多任务卡内的真实实例容器（实例搬运 / 等比缩放 / 回退品牌卡））；`sys/`（系统页）；`settings/`；`auth/`；`extensions/`（壳扩展点注册表：状态栏项 / 设置项 / 主题，只注册排序、不解释业务语义） |
 | `shell/composables/useShellApps.ts` | **应用路由真源**：`SURFACE_ROUTES`（新增桌面应用必须同步，见 §6） |
+| `shell/composables/shortcutsModel.ts` · `useShellShortcuts.ts` | 壳快捷键（ADR 0060）：纯模型（动作表 / `e.code` 组合键规范化 / 标准策略校验 / 应用卡轮换）+ capture 抢占装配与动作执行；配置页 `sys/SysShortcutsView.vue`（`/sys/settings/shortcuts`，存储 = `ShellUiPrefs.shortcuts` 壳偏好轨） |
 | `shell/types.ts` · `state.ts` / `useShellState.ts` | 壳状态面（宿主零业务状态：首次打开创建、切走只藏、停用 / 卸载才销毁） |
 | `components/` · `composables/` · `stores/` | 宿主公共组件 / 逻辑 / 存储 |
 | `i18n/host-{zh-CN,en}.ts` | 宿主消息集（只装宿主壳文案；app 文案归各应用仓，2026-10-27 起无逐字副本锁） |
@@ -92,7 +92,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `lib.rs` | crate 入口：模块声明、整核抽出垫片、bench_channel（`#[cfg(debug_assertions)]`）、PluginDevWatcher（emit `plugin:dev-reload`） |
 | `commands.rs` · `system.rs` · `server.rs` | 宿主命令面 / 系统面（配置 / 日志）/ 服务器（peer 网络命令） |
 | `plugin.rs` | 宿主侧插件能力面总入口（各域实现汇入 Linker，AbiPolicy 注入） |
-| `plugin/*.rs` | ★ **插件域接线解密入口**：每域一个文件（api_call / app / assets / auth / bindings / connection / crypto / fs / guest_events / host_facts / http / lifecycle / mdns / notify / peer / platform / platform_picker / process / pty / task / timer / ws）。**端口 adapter + 白名单条目同处，先读文件头注释** |
+| `plugin/*.rs` | ★ **插件域接线解密入口**：每域一个文件（api_call / app / assets / auth / bindings / connection / crypto / fs / guest_events / host_facts / http / install_picker / lifecycle / mdns / notify / peer / platform / platform_picker / process / pty / task / timer / ws）。**端口 adapter + 白名单条目同处，先读文件头注释** |
 | `assets.rs` | `plugin_get_asset_dir`（启动装配解析的唯一 plugins_dir，含 dev 回退） |
 | `crypto.rs` | 宿主加密引擎（无业务语义的中性原语） |
 | `first_party_dirs.rs` | 第一方免弹窗归属清单 |
@@ -111,7 +111,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 ### 2.4 桌面脚本（`scripts/`）
 
-`dev-run.js`（宿主 dev：端口预检 → WASM/前端缺失预建 → tauri dev → `PLUGIN_WATCH_CMDS` 起前端 watch；bedcode 前端不参与 watch）、`plugin-build.js`（`PLUGINS` 注册表 = 5 个应用名单单一真源）、`plugin-dev.js`（单插件 dev）、`tauri-build.js`（updater 签名 + 安装包重命名，本地/CI 同名）、`package-host.mjs`（`host:pack` 宿主产物分发，见 docs/commands.md §3）、`check-target-size.js`（target 治理）、`generate-*.js`（图标生成）、`install-tauri-deps.sh`。**每个脚本头注释自解释。**插件前端 watch 闭环（`plugin-watch.js`）已随桌面 SDK 发布（`packages/plugin-sdk-desktop/bin/`），`dev-run.js` 反向引 SDK 内同一份实现。
+`dev-run.js`（宿主 dev：端口预检 → 默认删旧产物 + 全量重建插件（`plugin-precheck --fresh`）→ tauri dev；插件前端 watch 默认关闭，`--watch` 开启、`--reuse` 退回 mtime 补齐；bedcode 前端不参与 watch）、`plugin-build.js`（`PLUGINS` 注册表 = 5 个应用名单单一真源）、`plugin-dev.js`（单插件 dev）、`tauri-build.js`（updater 签名 + 安装包重命名，本地/CI 同名）、`package-host.mjs`（`host:pack` 宿主产物分发，见 docs/commands.md §3）、`check-target-size.js`（target 治理）、`generate-*.js`（图标生成）、`install-tauri-deps.sh`。**每个脚本头注释自解释。**插件前端 watch 闭环（`plugin-watch.js`）已随桌面 SDK 发布（`packages/plugin-sdk-desktop/bin/`），`dev-run.js` 反向引 SDK 内同一份实现。
 
 ## 3. 移动端导览（`wasmnest-mobile/`）
 
@@ -119,14 +119,15 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 | 路径 | 职责（头注释为准） |
 | --- | --- |
-| `main.ts` | 宿主入口 |
+| `main.ts` | 宿主入口（含全局 `errorHandler` / `unhandledrejection` → 友好兜底 toast，技术详情只进日志） |
+| `utils/userError.ts` | 错误信封消费层（ADR 0030，与桌面同口径）：`parseInvokeError` / `showUserError` / `userErrorText`，用户面永不渲染 code / request_id / 技术详情 |
 | `shell/` | ★ **移动宿主壳优先（强制）**：新功能 / 重构 / 样式调整默认落这里（docs/frontend.md §3） |
 | `shell/registry.ts` | 运行面注册表（**只注册不决策**；`registerSurface` 等） |
 | `shell/index.ts` · `types.ts` · `permissions.ts` · `utils.ts` | 壳类型面 / 权限面 / 工具 |
 | `shell/adapters/` · `components/` · `composables/` · `views/` | 壳公共组件 / 机制（复制进壳，不 import 旧目录，L7 锁） |
 | `plugin/` | 移动插件系统：`loader.ts`（插件装载）、`registry.ts`（注册表）、`context.ts`（invoke 上下文 + **四点退役扩展点抛错桩**）、`commands.ts`、`permission.ts`、`terminal-stream.ts`、`sessionCommands.ts`、`shared-runtime.ts`（`__WASMNEST_SHARED__` 代理）等 |
-| `utils/` | `frontendLogger.ts`（release 整体空实现，见头注释）、`connectionError.ts`、`clipboard.ts` 等 |
-| `locales/{zh-CN,en}/` | 宿主 i18n（含 `errorCodes.ts`） |
+| `utils/` | `frontendLogger.ts`（release 整体空实现，见头注释）、`userError.ts`（错误信封消费层）、`connectionError.ts`、`clipboard.ts` 等 |
+| `locales/{zh-CN,en}/` | 宿主 i18n（`errors.ts` = 错误信封 `errors.<code>` 文案，与桌面同码表） |
 | `components/` · `views/` · `composables/` · `stores/` · `services/` | 既有旧页面 / 服务（**只接受缺陷修复**，直到被 shell 彻底替换） |
 | `__tests__/` | vitest 测试树（shell 系列锁 22 个，见 §7） |
 
@@ -146,7 +147,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 ### 3.3 移动脚本（`scripts/`）
 
-`dev-run.js`（Android dev：adb 定位 / 插件 watch；插件改动进应用后需**手动重新激活**生效）、`plugin-build.js`（扫描 `../wasmnest-apps/apps/*/mobile` 全量构建，无宿主侧注册表）、`android-dev-log.js`、`build-terminal-font.mjs`、`check-target-size.js`、`adb-fd0-shim.sh`、`lib/`。
+`dev-run.js`（Android dev：adb 定位 / 默认删旧产物 + 全量重建移动插件（`plugin-build --fresh`）→ tauri android dev；插件前端 watch 默认关闭，`--watch` 开启；插件改动进应用后需**手动重新激活**生效）、`plugin-build.js`（扫描 `../wasmnest-apps/apps/*/mobile` 全量构建，无宿主侧注册表）、`android-dev-log.js`、`build-terminal-font.mjs`、`check-target-size.js`、`adb-fd0-shim.sh`、`lib/`。
 
 ## 4. 根工具（`scripts/` 与 `tools/`）
 
@@ -179,19 +180,24 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 任务 | 动手前必读 |
 | --- | --- |
 | 改桌面宿主壳 / 挂载槽 / 系统页 | `wasmnest-desktop/src/main.ts` + `src/shell/**`（`src/shell/composables/useShellApps.ts` = 应用路由真源）+ docs/architecture.md §2；跑桌面 `test:run` + 真实 `tauri:dev` 目验 |
-| 改桌面设置页 / 状态栏 / 壳皮肤 | `src/shell/extensions/**`（注册表契约）+ `src/shell/components/ShellStatusBar.vue` + `src/shell/settings/Settings{ThemeSkin,Extensions}Section.vue` + `src/shell/sys/SysSettingsView.vue`（**关于固定最后**）；机制口径见 docs/frontend.md §6；跑桌面 `test:run`（含 `settingsOrderLock` / `shellExtensions` / `shellStatusBar`） |
-| 改多任务卡片 / 应用预览面（`mountPreview`） | `wasmnest-desktop/src/shell/components/ShellTaskSwitcher.vue` + `src/shell/mount/{useAppMount.ts,AppPreviewTile.vue}`（`mountAppPreview(root, env)` = 装载入口，`PREVIEW_MOUNT_TIMEOUT_MS` = 3s）+ `src/shell/mount/appSession.ts`（`lastRoute`）；契约 = `AppPreviewEnv` / `AppPreviewHandle` / `MountPreview`（宿主与五个 app `entry.ts` 同形，L5 锁钉住）；应用侧内容裁决在 `../wasmnest-apps`；跑桌面 `test:run` + 应用仓各 app `test:run` / `build:frontend` + 真实 `tauri:dev` 目验 |
-| 改移动宿主壳 / 运行面 / 注册表 | `wasmnest-mobile/src/shell/registry.ts`（职责边界：只注册不决策）+ 移动 SDK `src/types.ts`（`UIRegistry`）+ docs/architecture.md §4；优先移动 SDK dev-shell 预览 |
+| 改桌面快捷键 | `src/shell/composables/shortcutsModel.ts`（动作表 / 规范化 / 校验，纯函数）+ `useShellShortcuts.ts`（capture 抢占装配，ADR 0060）+ `sys/SysShortcutsView.vue`（配置页）+ `shell/ShellHost.vue`（装配点）；动键盘让位语义先读 ADR 0060 与 `useHomeSearch` 让位判据；跑桌面 `test:run`（含 `shortcutsModel` / `useShellShortcuts` / `i18nDriftLock`） |
+| 改桌面悬浮导航 | `src/shell/components/ShellFloatingNav.vue`（返回 / 回主屏 / 多任务胶囊，与移动端 ShellFloatingNav 同构；返回的可用判据与动作 = `useShellState` 的 `canGoBack` / `goBack`，与工具栏同一份）+ `ShellHost.vue`（装配点：bareWindow 不渲染、`floatNavBottomReserve` 让位状态栏）+ `src/shell/styles/shell.css` 的 `.shell-floatnav` 段（Liquid Glass 材质与三层降级）+ `useShellSettings` 的 `floatingNav` / `floatingNavPos` 偏好；改动后必须同步 dev-shell 的 `src/styles/shell.css` 副本（visualParity 锁）；跑桌面 `test:run`（含 `shellFloatingNav` / `useShellSettingsFloatingNav`） |
+| 改桌面设置页 / 状态栏 / 主题 | `src/shell/extensions/**`（注册表契约）+ `src/shell/components/ShellStatusBar.vue` + `src/shell/settings/Settings{Theme,Extensions}Section.vue` + `src/shell/sys/SysSettingsView.vue`（**关于固定最后**；样式调整项在外观二级页 `SysAppearanceView.vue`）+ `src/styles/theme-presets.css`（内置主题 token 与结构规则）；机制口径见 docs/frontend.md §6 与 ADR 0059；跑桌面 `test:run`（含 `settingsOrderLock` / `shellExtensions` / `themePresetCoverage` / `shellStatusBar`） |
+| 改多任务卡片（真实实例 / 卡片尺寸） | `wasmnest-desktop/src/shell/components/ShellTaskSwitcher.vue` + `src/shell/mount/{AppSurfaceTile.vue,appSurfaceRegistry.ts,useAppMount.ts}`（`attachPreview` / `fitPreview` / `detachPreview` = 实例搬运与缩放（contain 等比缩小到整幅可见；2026-11-04 取代 cover 裁切；2026-11-06 起 `attachPreview` / `fitPreview` 可传显式盒子尺寸 `PreviewBoxSize`，由 `recentsThumbSize` 解算、首帧即准）；`returnAppSurfaceToSlot` = 普通收起送回挂载槽）+ `src/shell/composables/recentsLayout.ts`（卡片尺寸 = 高度优先（行高 × 0.94 夹 `[300, 620]`）+ 卡宽 = 缩略区宽（由卡高按应用区比例反解）+ 描边；横向放不下按列宽等比收窄。2026-11-07 撤除外框收缩系数：它让缩略区比例变 `0.88 × aspect`、contain 必然留边，与「铺满」互斥；`RecentsCardMetrics` / `recentsThumbSize`）；卡片 = 保活实例本身（2026-10-30 起不再有应用自绘预览面）；应用侧内容裁决在 `../wasmnest-apps`；跑桌面 `test:run` + 真实 `tauri:dev` 目验（多实例实时渲染成本） |
+| 改移动宿主壳 / 运行面 / 注册表 / 多任务卡 / 快捷卡片 | `wasmnest-mobile/src/shell/registry.ts`（职责边界：只注册不决策）+ `surfaceAppRegistry.ts`（每应用独立 Vue 应用；`attach` / `detach` / `attachPreview` / `fitPreview` / `detachPreview` / `dispose`）+ `surfaceRuntime.ts`（注册表单例 + 对账 + 卡片搬运包装）+ `surfaceIntent.ts`（快捷卡片 → 运行面的入口意图通道：按 appId 排队 / 订阅补投 / 停用清空）+ `components/screens/ShellSwitcherScreen.vue` / `components/ShellSurfaceTile.vue`（运行中卡展示真实实例，未运行卡回退图标 + 元信息）+ 快捷卡片面 `slotCards.ts`（展示上限）+ `composables/useSlotCarousel.ts`（自动轮播）+ SDK `src/ui/QuickCard.vue`（公共外观）+ 移动 SDK `src/types.ts`（`UIRegistry`）+ 悬浮导航（App 根装配，`components/ShellFloatingNav.vue`；返回键与系统返回同源：壳内 `composables/useShellSystemBack.ts` 的 `useShellBackAction`，壳外整页路由 `router/standaloneBack.ts`；壳内屏栈见 `composables/useShellNavigation.ts`）+ docs/architecture.md §2；优先移动 SDK dev-shell 预览，真机 `tauri:android:dev` 验证 |
+| 改前端动效 / 过渡 / 手势反馈 | `docs/frontend.md` §4.3（7 个动效 skill 的分工与本仓硬边界：无动效运行时依赖 / 单文件产物 / 禁止常驻动画 / 必须 reduced-motion / detach 不卸载）+ 现有取值真源与锁：桌面 `src/utils/pageTransition.ts` + `src/style.css` 的 `.page-*` / `.page-swap` 段 + `src/__tests__/style/pageTransition.test.ts`（时长 token 单一来源 + reduce 分支）；动效编排先例 `useSlotCarousel`（切后台 / reduced motion 停走）；含动效改动必须显式 `/skill:review-animations` 审；跑该端 `test:run` + 真实 webview 目验（桌面 `tauri:dev` / 移动真机） |
 | 改插件机制 / 生命周期 / 能力接线（Rust） | 该端 `src-tauri/src/plugin/**`（每域一个文件，端口 adapter + 白名单条目同处，**先读文件头注释**）+ 能力仓对应 crate；跑该端 `cargo test` |
 | 改权限 / 授权闸门 | 本端 SDK `rust/src/permission.rs`（词汇真源）+ docs/contracts.md §4 + docs/security.md §1；生成物重出（桌面 SDK 目录 `pnpm run gen:permissions`）；跑相关锁 |
 | 改 WIT / ABI / 契约 | docs/contracts.md §2/§3 全链 + `scripts/compose-wit.mjs`；**不在端生成物里改**；改完重拼、重建受影响 app 产物、同步 manifest |
+| 改 WIT 包划分 / 加能力域包（ADR 0061） | 能力仓 crate 的 `wit/<domain>.wit`（`package` 行 + `WIT_PACKAGE`）→ 端 `compose.json` 的 `caps.<key>.{file,package}` → 端 `wit-src/` 新分片（含 `world cap-<key>`）→ `node scripts/compose-wit.mjs --all` → 宿主 `MODULE_INTERFACES` / SDK import 路径按包改写 → docs/testing.md §3「拆包最小验证集」；顶层 `wit/` 只放 `wasmnest:plugin` 包（其余进 `deps/`） |
 | 改 SDK（TS / Rust 面） | 该端 `packages/plugin-sdk-*/`（README + `src/types.ts` / `rust/src/lib.rs`）；跑 SDK `test:run`；发布走 `package-sdks.mjs`。**桌面 SDK 的 README / template 仍是旧贡献面形态（已知漂移，docs/contracts.md §5.2）——写新代码以应用仓现有 app 为形态基准** |
 | 改桌面 dev-shell（浏览器预览） | `packages/plugin-sdk-desktop/dev-shell/`（`src/shell/types.ts` = 挂载契约声明 + `src/shell/mount/devAppMount.ts` = 装载 + `src/shell/components/**` = 宿主 chrome + `src/mock/**` = 命令 / 事件 mock）；**改宿主 `src/shell/mount/useAppMount.ts` 的契约或 `src/style.css` / `src/shell/styles/shell.css` 的 token 时必须同步 dev-shell 侧**（两道锁：`dev-shell/__tests__/shell/contractDrift.test.ts` + `dev-shell/__tests__/visualParity.test.ts`）；跑 SDK `test:run` |
 | 改构建 / dev 脚本 | 对应脚本头注释（自解释）+ 根 `scripts/app-paths.mjs`；桌面还有 `src/__tests__/scripts/pluginWatchCopy.test.ts` 等脚本锁 |
 | 新增 / 改名 / 停用桌面应用 | 应用仓先按 `../wasmnest-apps/AGENTS.md` §5 清单走；本仓四处注册表 + 一处路由 + 两处锁必须同步：`scripts/plugin-build.js` `PLUGINS`、`scripts/plugin-dev.js` `PLUGINS`、`scripts/dev-run.js` `PLUGIN_WATCH_CMDS`、`src/shell/composables/useShellApps.ts` `SURFACE_ROUTES`（+ `src/router/index.ts` 路由条目）、`hostAppBoundaryLock.test.ts` 的 `APP_ENTRIES` + `release-manifest.json` |
 | 新增 / 停用移动应用 | 移动构建自动扫描 `apps/*/mobile`（无注册表）；只需同步 `release-manifest.json`；机制差异读 docs/architecture.md §4 |
-| 改跨端传输 / 认证 / 配对面 | docs/architecture.md §6（跨端协议）；改完去 `../wasmnest-test/cross-end-tests` 跑真实互连（零 mock） |
+| 改跨端传输 / 认证 / 配对面 | docs/architecture.md §6（跨端协议）；穿透链路（中继预留 / relay 地址 / WAN 放行）另读 docs/nat-traversal.md；改完去 `../wasmnest-test/cross-end-tests` 跑真实互连（零 mock），穿透改动另跑其成员 `relay-transport`（`cargo test -p relay-transport`） |
 | 改 Android 原生（Kotlin / manifest / gradle） | `wasmnest-mobile/src-tauri/gen/android/**`；改 Kotlin 必须 gradlew 验证；`tauri android init` 重建后手工恢复手写面 |
+| 清 target / 磁盘吃紧 | `docs/target-governance.md`（落点全景 + 三级阶梯 + 前置检查；清共享 target 前先查有无并行构建）；产物落点排查见本文末行 |
 | 排查「改了没生效」/ 产物路径 | 桌面 `scripts/{dev-run,plugin-build}.js` 与 `packages/plugin-sdk-desktop/bin/plugin-watch.js`、移动 `scripts/plugin-build.js`、根 `scripts/app-paths.mjs`；先确认产物是否真写进 `src-tauri/resources/plugins/<end>/<id>/`；再确认宿主扫描目录（桌面 dev 是 `target/debug/resources/…` 运行时副本——源目录删除不会自动同步，幽灵目录只在这里活着） |
 | 发布 / 版本 | docs/contracts.md §2.1（manifest 判据）+ `scripts/bump-version.mjs` + `scripts/package-sdks.mjs`；三仓 tag 规则见 docs/git.md §3 |
 | 定位代码 | 本文 §7（代码查找纪律） |
@@ -207,12 +213,15 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 | 锁 | 位置（本仓） | 钉住什么 |
 | --- | --- | --- |
-| `hostAppBoundaryLock.test.ts` | `wasmnest-desktop/src/__tests__/` | 宿主零 app 源码 import、零 `__WASMNEST_SHARED__`、零旧贡献面；逐字校验五个桌面 app `src/entry.ts` 的 `mountApp` 契约；**L5 预览契约锁**：五个 entry 必须导出 `mountPreview` 且带 `appId` / `lastRoute` / `appInvoke` / `appStorageGet` / `locale` / `theme` 关键字段、宿主声明 `AppPreviewEnv` / `AppPreviewHandle` 且 `mountPreview?` 可选、预览路径禁用 `refreshChannelToken` / 写存储（**新增 / 改名桌面应用必须同步其 `APP_ENTRIES`**） |
+| `hostAppBoundaryLock.test.ts` | `wasmnest-desktop/src/__tests__/` | 宿主零 app 源码 import、零 `__WASMNEST_SHARED__`、零旧贡献面；逐字校验五个桌面 app `src/entry.ts` 的 `mountApp` 契约；**L5 自绘预览契约退役锁**：宿主不得再声明 / 装载 `mountPreview`、`AppPreviewTile.vue` 不得回归、app 卡必须挂 `AppSurfaceTile`、卡片搬运路径禁用 `refreshChannelToken` / 写存储（**新增 / 改名桌面应用必须同步其 `APP_ENTRIES`**） |
 | `tailwindContentCoverage.test.ts` | 同上 | 宿主 Tailwind content 不得残留 app 路径 |
 | `appBundlePathLock.test.ts` · `appChromeLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 挂载包路径单一来源（`resources/plugins/desktop` 层级）；壳标题栏常驻、应用不得自绘标题栏/窗口控制/拖拽区 |
 | `appSurfaceKeepAlive.test.ts` · `useAppMountKeepAlive.test.ts` | `wasmnest-desktop/src/__tests__/shell/mount/` | **表面保活**：挂载槽常驻（`v-show`，不得回 `v-if` 分支）、销毁点唯一在 `ShellHost` 运行态 disposer、挂载槽切走只 `detach`、界面租约跟实例生命周期（首次创建 acquire / dispose release）、`setActive?` 是可选契约；装载层行为（复用不重建、detach 不销毁、并发首次 mount 合并为一次） |
-| `shellExtensions.test.ts` · `shellStatusBar.test.ts` · `shellExtensionWiring.test.ts` · `settings/settingsOrderLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 壳扩展点注册语义（排序 / 覆盖 / Disposable / 皮肤 token 校验）、状态栏分区与动作失败隔离、ShellHost 装配接线、设置页顺序（**关于固定最后**） |
-| `pluginWatchCopy.test.ts` · `pluginPrecheck.test.ts` | `wasmnest-desktop/src/__tests__/scripts/` | 插件 watch 复制闭环（`copyIfChanged` / `copyManifestIfChanged` / `copyWatchArtifacts` 三组临时目录行为锁，#23 将复制链提为可注入依赖的导出）；**dev 预检四步行为锁**（`scripts/plugin-precheck.mjs` 陈旧判定 / `--out` 直写 resources / `--rust-only` 快路径 / fail-fast / WASM→前端→清单→退役清理四步顺序，可注入依赖不触发真实构建）+ 接线锁 2 条轻量：`startPluginWatch` 调用共享复制链、`dev-run.js` 的 `runPluginPrecheck()` 先于宿主启动点（issue #12 / #23，内部函数名不再逐个点名）；bedcode `--frontend-only` 由沙箱 fixture 驱动真实 build.js |
+| `shellExtensions.test.ts` · `shellStatusBar.test.ts` · `shellExtensionWiring.test.ts` · `settings/settingsOrderLock.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 壳扩展点注册语义（排序 / 覆盖 / Disposable / 主题 token 与 glyph 校验）、状态栏分区与动作失败隔离、ShellHost 装配接线、设置页顺序（**关于固定最后**） |
+| `shell/composables/shortcutsModel.test.ts` · `useShellShortcuts.test.ts` | `wasmnest-desktop/src/__tests__/shell/composables/` | 快捷键（ADR 0060）：**出厂键位自洽**（九动作默认绑定必须全部通过标准策略——含 Ctrl/Alt、互不冲突、不踩保留键，改默认表即红）、`e.code` 组合键规范化 / sparse 合并 / 应用卡轮换；capture 抢占边界（命中才拦截、未注册组合放行、总闸与 IME 让位、teardown、覆盖生效与清空归还应用） |
+| `shell/shellFloatingNav.test.ts` · `shell/composables/useShellSettingsFloatingNav.test.ts` | `wasmnest-desktop/src/__tests__/shell/` | 悬浮导航：开关默认关不渲染、返回 / 回主屏 / 多任务动作接线（返回与工具栏同用 `canGoBack`，无可退时置灰）、拖拽阈值与归一化位置落盘、拖拽余波 click 吞没（断言 preventDefault——happy-dom 13.10.1 捕获期 stopPropagation 失效，升级后可恢复 spy 口径）、键盘替代路径（WCAG 2.2）、bottomReserve 状态栏让位、ShellHost 装配与 bareWindow 豁免、双语 key 在场；偏好读取默认值 / 单轴 clamp / 写穿 |
+| `style/themePresetCoverage.test.ts`（双端各一）· `shell/composables/useShellTheme.test.ts` | `wasmnest-{desktop,mobile}/src/__tests__/` | 主题目录 ↔ 主题样式表一一对应、决策面不变量（授权/弹窗永不用玻璃、`--bg-card` 不变半透明）、玻璃主题核心表面覆盖（chrome / 卡片 / 控件 / 浮层，防止退化成只改圆角）、动效主题真有 keyframes 且 reduced-motion 守卫在位；主题落到 `<html data-theme>`、切回默认移除属性、扩展主题内联变量被摘除 |
+| `pluginWatchCopy.test.ts` · `pluginPrecheck.test.ts` | `wasmnest-desktop/src/__tests__/scripts/` | 插件 watch 复制闭环（`copyIfChanged` / `copyManifestIfChanged` / `copyWatchArtifacts` 三组临时目录行为锁，#23 将复制链提为可注入依赖的导出）；**dev 预检四步行为锁**（`scripts/plugin-precheck.mjs` 陈旧判定 / `--out` 直写 resources / `--rust-only` 快路径 / fail-fast / WASM→前端→清单→退役清理四步顺序，可注入依赖不触发真实构建）+ **fresh 默认通道锁**（`cleanPluginArtifacts` 删旧产物含幽灵目录 + 删不掉 fail-fast / `rebuildAllPluginArtifacts` 走 `plugin-build --all` / `runPluginPrecheck({ fresh })` 顺序）+ 接线锁：`startPluginWatch` 调用共享复制链、`dev-run.js` 的 `runPluginPrecheck({ fresh })` 先于宿主启动点、默认「不 watch + fresh」开关值（issue #12 / #23，内部函数名不再逐个点名）；bedcode `--frontend-only` 由沙箱 fixture 驱动真实 build.js |
 | 移动壳系列锁：`shellConstraintLocks`（含 **L7 壳内自足**）、`retiredHostUIRetirementLocks`、`shellRegistry` / `shellPermissions` / `shellMechanisms` / `shellHostEvents` / `shellAppSurface` / `shellAppRunScreen` / `appSurfaceKeepAlive` / `useAppSurfaces` / `shellHomeScreen` 等 20+ | `wasmnest-mobile/src/__tests__/shell/` | 壳内自足（不依赖旧界面目录）、退役路由 / 符号不回接、壳迁移面不得缩水、注册表 / 权限 / 机制行为；**运行面保活**（每应用独立 Vue 应用：注册表按「打开过 ∩ 运行中 ∩ 有运行面」对账建实例、停用即 dispose、切走只 detach） |
 | `crate-structure-lock.test.mjs` | 根 `scripts/`（`pnpm run test:run`） | 契约 crate 常量保持 node 正则可解析的字面量形状；能力仓（`../wasmnest-lib`）无逃出 crate 目录的 `include!` / `include_str!` / `bindgen!` 路径；双端 `compose.json` 声明的 WIT 路径存在 |
 | `check-markdown-links.mjs` | 根 `scripts/`（`pnpm run check:links`；husky pre-commit 暂存含 .md 时自动跑，issue #14） | 仓内跟踪 markdown 的**相对链接**（含图片）目标必须存在；外链 URL 与纯锚点不探测（跳过即明说，不做假绿）。挪动 / 改名 .md 或其链接目标时同一提交内过此锁 |
@@ -229,17 +238,17 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 | 锁文件（端） | 锁对象 | 性质 | 处置方向 | 为何不能用行为测试表达 |
 | --- | --- | --- | --- | --- |
-| `hostAppBoundaryLock.test.ts`（桌面） | 宿主零 app 源码 import / 零 `__WASMNEST_SHARED__`；`mountApp` / `mountPreview` 契约逐字同形 | 边界契约 | 保留 | 宿主与独立挂载包是运行时装载关系，无编译期约束；契约漂移只在文本可比对时可见 |
+| `hostAppBoundaryLock.test.ts`（桌面） | 宿主零 app 源码 import / 零 `__WASMNEST_SHARED__`；`mountApp` 契约逐字同形；自绘预览契约退役（不得回接 `mountPreview`） | 边界契约 | 保留 | 宿主与独立挂载包是运行时装载关系，无编译期约束；契约漂移只在文本可比对时可见 |
 | `tailwindContentCoverage.test.ts`（桌面） | Tailwind content 只扫宿主源码 + SDK 组件 | 边界契约 | 保留 | 被测对象就是 `tailwind.config.js` 的扫描范围文本本身 |
 | `appBundlePathLock.test.ts`（桌面） | 挂载包路径单一来源；禁 `plugins/desktop` 落点字面量 | 边界契约 | 保留 | 同一路径约定前后端各写一遍的事故只能靠禁字面量防复发 |
 | `i18nTemplateKeys.test.ts`（桌面） | 全壳 `t('字面量')` key 必须在 zh-CN 与 en 消息集存在 | 边界契约 | 保留（含防空转断言） | 跨全部模板与两套消息集的交叉一致性，无单点行为可测 |
 | `style/pageTransition.test.ts`（桌面） | 过渡统一：退役过渡名零残留、命名唯一、无 out-in、token 单一来源 | 边界契约（行为面已提纯函数） | 保留 | 跨 6 文件的统一性契约；效果切换已行为化（`applyPageTransitionEffect`） |
 | `shell/mount/appSurfaceKeepAlive.test.ts`（桌面） | 销毁点唯一、挂载槽常驻 `v-show`、租约跟实例生命周期 | 源码文本（结构事实） | 保留（头注释已述理由） | 覆盖停用 / 全部关闭 / 卸载 / 错误终态全路径的组件测试不现实；结构性事实是跨组件装配不变量 |
-| `shell/shellExtensionWiring.test.ts`（桌面） | ShellHost 真的挂状态栏 / 皮肤 token 接壳根 | 接线锁 | 保留单条轻量 | 组件测试全绿而装配缺失的场景无运行时覆盖；接线点唯一 |
+| `shell/shellExtensionWiring.test.ts`（桌面） | ShellHost 真的挂状态栏 / 主题接文档根 | 接线锁 | 保留单条轻量 | 组件测试全绿而装配缺失的场景无运行时覆盖；接线点唯一 |
 | `shell/shellStyleWiring.test.ts`（桌面） | 入口接线 shell.css（含顺序）+ 被消费共享类仍在 | 接线锁 | 保留单条轻量 | 零引用死样式静默失效教训：类名照写而 CSS 没进构建，组件测试测不出 |
 | `shell/recentsWiring.test.ts`（桌面） | 多任务四处装配点（主屏无运行区 / 工具栏入口 / 全屏层 / Host 挂载） | 挂载行为 + 接线锁 | 已改造（#23，2026-10-24） | 原 81 处 `toContain` 逐调用点按 #12 样板收敛为挂载行为（主屏无运行区 / 导航顺序 / 开关状态收敛=工具栏↔全屏层联合挂载共享 useShellState 同一 ref / 动作转发 / 卡片装配 DOM / 图标接线）；接线剩 1 条（ShellHost 模板挂 `<ShellTaskSwitcher />`）+ 退役面存在性扫描（ShellRecentsPanel / ShellCommandPalette）；几何纯函数面归 recentsLayout.test.ts |
-| `shell/recentsLayout.test.ts`（桌面） | 卡片尺寸方向 / 几何（纯函数行为测试在场）+ 组件接线 3 条 | 接线锁（混合） | 收敛：接线 3 条 → 1 条 | 方向 / 几何已行为化；接线断言只证 `ShellTaskSwitcher` 真的用了 `recentsLayout` |
-| `shell/settings/settingsOrderLock.test.ts`（桌面） | 设置分组顺序（关于固定最后） | 挂载行为（DOM 顺序） | 已改造（#23，2026-10-24） | 已按预告改法落地：挂载 SysSettingsView 断言分组标题的 DOM 顺序（分组组件以桩替身渲染），关于固定最后；源码顺序正则已删 |
+| `shell/recentsLayout.test.ts`（桌面） | 卡片尺寸方向 / 几何 / 卡高上下限 / 缩略区比例铺满（纯函数行为测试在场）+ 组件接线与样式同源 | 接线锁（混合） | 2026-11-06 按「高度优先 + 缩略区零留边」重写 | 方向 / 几何 / 卡高三重交集 / 缩略区比例恒等 = 行为化；接线断言只证 `ShellTaskSwitcher` 真的用了 `recentsLayout` 且把 `thumbSize` 交给 `AppSurfaceTile`；contain 口径由 `appSurfaceRegistry.ts` 源码锁钉住 |
+| `shell/settings/settingsOrderLock.test.ts`（桌面） | 设置分组顺序（关于固定最后） | 挂载行为（DOM 顺序） | 已改造（#23，2026-10-24） | 已按预告改法落地：挂载 SysSettingsView（主页面序）与 SysAppearanceView（外观二级页序，2026-10-28）断言分组标题的 DOM 顺序（分组组件以桩替身渲染），关于固定最后；源码顺序正则已删 |
 | `shell/selectionStyle.test.ts`（桌面） | 选中态两套语言（勾章 / 黑底白字） | 源码文本（样式裁决） | 保留 | happy-dom 不计算 scoped CSS，选中填充色是样式表事实 |
 | `shell/surfaceLadder.test.ts`（桌面） | 透明度三档阶梯（92% / 96%+blur / 实心） | 源码文本（样式裁决） | 保留 | 同上：透明度 / blur 是 CSS 事实，DOM 断言不可达 |
 | `shell/wallpaperScope.test.ts`（桌面） | 壁纸挂壳根、宿主页面不得自铺底色 | 源码文本（裁决） | 保留 | 挂载层级与背景归属是渲染结构事实；「不得存在」的禁令只能扫描 |
@@ -250,8 +259,8 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | `brandMark.test.ts`（桌面） | 品牌位全仓 2 处、笔画与 icon.svg 逐字同源、旧笔画零残留 | 源码文本（品牌几何） | 保留 | SVG 描边曲线与图标的逐字同源是渲染资产事实，DOM 比对不了 path 数据 |
 | `components/SplashLoading.test.ts`（桌面） | 绘画动画行为 + 品牌位尺寸与描边偏移公式（纯函数真源）+ CSS 动画回退退役扫描 | 挂载行为 + 纯函数 + 退役面 1 条 | 已改造（#23，2026-10-24） | clamp 档位与 offset 公式提纯到 splashTiming.ts（`SPLASH_LOGO_SIZE` / `splashStrokeOffset`，组件内联绑定消费，happy-dom CSSOM 丢 clamp 值 → 组件面以哨兵值注入证明绑定）；rAF 内联样式字符串断言已删（行为由逐帧驱动用例承载）；CSS animation 回退退役禁令 1 条保留（WebKitGTK 退化静态事故，行为测不出「曾经会动」） |
 | `components/SplashLoadingTheme.test.ts`（桌面） | 开屏双主题四条不变量（SFC + 静态首屏 css + index.html 接线） | 源码文本（样式裁决） | 保留 | happy-dom 不解析 scoped CSS 变量；静态首屏在 JS 挂载前，只有文本可断言 |
-| `shell/SplashLoading.test.ts`（移动） | 启动面真源线框与 icon.svg 逐字同源（124 条 / 双色 / 品牌 token）+ rAF 绘画行为 + 测量失败与 reduced-motion 降级 + 尺寸 / 偏移纯函数 | 挂载行为 + 纯函数 + 退役面 1 条 | 新增（2026-10-24） | 与桌面同组件、移动端只做前端展示（Android 原生开屏不动）；壳内禁硬编码色，品牌色走 `shell.css` 的 `:root` token（SplashLoading teleport 到 body，token 由 `main.ts` 提前加载） |
-| `scripts/pluginWatchCopy.test.ts`（桌面） | copyIfChanged / copyManifestIfChanged / copyWatchArtifacts 行为（临时目录 fixture）+ 接线组：watch 1 条、dev-run 1 条、bedcode build.js（fixture 驱动真实脚本） | 行为测试 + 接线锁 | 已改造（#23，2026-10-24） | watch 复制链提为可注入依赖的导出 `copyWatchArtifacts`（plugin-watch.js 最小 diff，命令形态不变）并临时目录行为锁定（幂等 / 摘要感知 / fail-visible 记账）；接线剩 2 条轻量（startPluginWatch 调用共享复制链、dev-run 的 `runPluginPrecheck()` 先于宿主启动点——后者理由成立保留）；bedcode `--frontend-only` 由源码正则改为沙箱 fixture 驱动真实 build.js（假 vite / cargo 记账，不触发真实构建） |
+| `shell/SplashLoading.test.ts`（移动） | 启动面真源线框与 icon.svg 逐字同源（120 条 / 双色 / 品牌 token）+ rAF 绘画行为 + 测量失败与 reduced-motion 降级 + 尺寸 / 偏移纯函数 | 挂载行为 + 纯函数 + 退役面 1 条 | 新增（2026-10-24） | 与桌面同组件、移动端只做前端展示（Android 原生开屏不动）；壳内禁硬编码色，品牌色走 `shell.css` 的 `:root` token（SplashLoading teleport 到 body，token 由 `main.ts` 提前加载） |
+| `scripts/pluginWatchCopy.test.ts`（桌面） | copyIfChanged / copyManifestIfChanged / copyWatchArtifacts 行为（临时目录 fixture）+ 接线组：watch 1 条、dev-run 1 条、bedcode build.js（fixture 驱动真实脚本） | 行为测试 + 接线锁 | 已改造（#23，2026-10-24） | watch 复制链提为可注入依赖的导出 `copyWatchArtifacts`（plugin-watch.js 最小 diff，命令形态不变）并临时目录行为锁定（幂等 / 摘要感知 / fail-visible 记账）；接线剩 2 条轻量（startPluginWatch 调用共享复制链、dev-run 的 `runPluginPrecheck({ fresh })` 先于宿主启动点——后者理由成立保留）；bedcode `--frontend-only` 由源码正则改为沙箱 fixture 驱动真实 build.js（假 vite / cargo 记账，不触发真实构建） |
 | `scripts/runtimeCrateGate.test.ts`（桌面） | runtime crate 打包门禁纯函数行为 + Cargo.toml crate 身份（包名 / 二进制名 / git tag 依赖） | 边界契约（发布面） | 保留（tag 升级同批更新） | crate 身份就是 Cargo.toml 文本事实，`cargo package` / install 契约无行为替身 |
 | `package-contents.test.ts`（桌面 SDK） | SDK 发布内容自足（files / exports / bin / 工具落点） | 边界契约（发布面） | 保留 | 「npm 包里必须有什么」本身就是包清单文本契约 |
 | `composables/useLinkEncryption.test.ts`（移动） | 配置持久化 / 子开关行为 + WS 加密退役零残留扫描 | 边界契约（退役面） | 保留退役面 | 退役面 fail-visible：残留以任何形式回接即违规，只能扫描源码面 |
@@ -284,6 +293,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | --- | --- |
 | 本仓命令全集（根 / 桌面 / 移动 / 应用 / target 治理 / husky） | `docs/commands.md` |
 | 架构硬约束（宿主薄壳六判据 / 桌面挂载形态 / 双端差异 / 权限闸门 / 数据库 / 跨端协议） | `docs/architecture.md` |
+| 内网穿透（中继原理 / 部署与防火墙 / 客户端配置真源 / 排障） | `docs/nat-traversal.md` |
 | 插件与 SDK 契约（plugin.json / 权限 / WIT 链 / 生成物 / 变更流程） | `docs/contracts.md` |
 | 前端规范（零资源访问三层封锁 / 挂载包形态 / 移动壳优先 / i18n） | `docs/frontend.md` |
 | 对外品牌文案（主标 / 副标句 / 技术意象句 / 备选池 / 落地位置） | `docs/brand.md` |
@@ -291,7 +301,9 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 | 安全与日志红线 | `docs/security.md` |
 | 决策记录（ADR 索引；0055–0057 出处登记 / 0058 前端信任边界威胁模型） | `docs/adr/README.md` |
 | 单元测试 / 完成定义与验证 | `docs/testing.md` |
+| 构建资源与 target 清理（四仓落点 / 三级阶梯 / 验证） | `docs/target-governance.md` |
 | wasm 应用开发检查清单（双端红线，迁自旧仓 issue #14） | `docs/knowledge/wasm-app-development-checklist.md` |
+| 本机 agent 技能集（pstack）使用指南 | `docs/pstack-skills-guide.md` |
 | 桌面 wasm 应用开发指南 / API 参考（迁自旧仓 issue #14；SDK README 死链的现去向） | `wasmnest-desktop/docs/wasm-app-dev-desktop.md`、`wasmnest-desktop/docs/knowledge/wasm-app-dev-guide.md` |
 | 移动 wasm 应用开发指南（迁自旧仓 issue #14） | `wasmnest-mobile/docs/wasm-app-dev-mobile.md` |
 | 提交回滚与 Git 规则 | `docs/git.md` |

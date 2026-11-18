@@ -3,36 +3,31 @@
 //! 票 06/07/08 把发送编排、接收编排与任务真源整体下沉 `file-transfer` 插件，
 //! 票 09 摘掉发现投影与连接编排命令面；本票收掉**最后一段宿主前端命令面**——
 //! 传输调度面（取消 / 暂停 / 恢复 / 选源）、接收设置面（读面 / 加密开关 /
-//! 并发上限）与远端浏览拉取面（列共享根 / 浏览 / 拉取）。票 09 + 票 10 之后，
-//! 移动端宿主 `src/peer/` 模块（net / ports / seam / transfer / receive / remote）
-//! 的**前端命令面为零**，真入口只有：
-//! - 插件 activate-deactivate 外壳（节点生命周期）；
-//! - WIT `host-peer` 原语（拨号 / 发送 / 暂停恢复 / 应答 / 策略 / 落点 /
-//!   共享根镜像 / 浏览 / 拉取 / 节点启停）与 `host-platform` 选源原语。
+//! 并发上限）与远端浏览拉取面（列共享根 / 浏览 / 拉取）。
+//!
+//! A 刀（移动端 peer/mdns 脱绑到能力 lib `common-host`）之后，宿主 `src/peer/`
+//! 模块由六个（net / ports / seam / transfer / receive / remote）收为四个
+//! （net / ports / seam / transfer）：`receive.rs` / `remote.rs` 整文件删除，
+//! `transfer.rs` 剥到只剩 `peer_pick_files` 平台选源缝 + 两个私有 relay helper。
+//! 19 条 `host-peer` 原语的 `Host` impl 由能力 lib 直调 crate 域函数，宿主不再
+//! 持任何 peer 中转委托；本锁的判据方向因此从「原语必须在」翻成「退役面不得
+//! 回接」——fail-visible，点名缺失 + 给出路。
 //!
 //! 与前四把锁（发送编排 / 接收编排 / 发现投影）互不重叠：它们锁**构件定义**，
 //! 本锁锁**命令面**（`#[tauri::command]` 属性 + `invoke_handler!` 注册 + 退役
 //! 命令字面量）——构件没删干净由那三把锁负责，构件还在但又被挂回前端由本锁负责。
 //!
-//! 为什么要单独锁命令面：`#[tauri::command]` 挂在 host_impl 仍在调用的引擎
-//! 原语上（`pause_peer_transfer` 等）是**合法**的中间态（先摘注册、后摘属性），
-//! 结构锁无法只靠符号名判断；而一旦有人把注册加回 `invoke_handler!`，前端就又有了
-//! 一条绕过插件命令面的旁路（票 06/07/08 的裁决前提是「任务真源在插件」，
-//! 旁路命令面等于让插件与宿主同时写状态）。
+//! 为什么要单独锁命令面：一旦有人把注册加回 `invoke_handler!` 或给残留函数
+//! 挂回 `#[tauri::command]`，前端就又有一条绕过插件命令面的旁路（票 06/07/08
+//! 的裁决前提是「任务真源在插件」，旁路命令面等于让插件与宿主同时写状态）。
 //!
 //! 只扫非注释行：模块头「为什么删」的记账段落与本锁自身的说明不算回接。
 
 use std::path::{Path, PathBuf};
 
-/// 传输调度面：四个函数必须保留（host_impl / host-platform 在调），但不得
+/// 平台选源原语：必须保留（host-platform `pick-files` 在调），但不得
 /// 重新挂上 `#[tauri::command]` 或被注册进 `invoke_handler!`
-const TRANSFER_SCHEDULING_FACE: [&str; 5] = [
-    "fn cancel_peer_transfer(",
-    "fn pause_peer_transfer(",
-    "fn resume_peer_transfer(",
-    "fn peer_pick_files(",
-    "fn browse_peer_directory(",
-];
+const PLATFORM_PICK_FACE: [&str; 1] = ["fn peer_pick_files("];
 
 /// 已彻底退役的符号（函数定义 + DTO + 命令字面量），出现即回接
 const RETIRED_TRANSFER_SETTINGS_FACE: [&str; 4] = [
@@ -40,6 +35,21 @@ const RETIRED_TRANSFER_SETTINGS_FACE: [&str; 4] = [
     "fn set_peer_transfer_encryption(",
     "fn set_peer_transfer_concurrency(",
     "PeerReceiveSettingsDto",
+];
+
+/// 随 host-peer 脱绑退役的宿主中转委托（19 条原语的 `Host` impl 已在能力 lib
+/// `common-host` 层直调 crate 域函数，宿主再持有同名委托即第二份入口）
+const RETIRED_PEER_DELEGATES: [&str; 10] = [
+    "fn cancel_peer_transfer(",
+    "fn pause_peer_transfer(",
+    "fn resume_peer_transfer(",
+    "fn browse_peer_directory(",
+    "fn send_files_to_peer_with_policy(",
+    "fn collect_outgoing_for_plugin(",
+    "fn active_transfers_json(",
+    "fn respond_peer_transfer(",
+    "fn cancel_peer_receiving(",
+    "fn list_peer_shared_roots(",
 ];
 
 /// `invoke_handler!` 里不得出现的宿主 peer 模块注册路径（含 `crate::peer::`
@@ -74,20 +84,19 @@ fn scan(files: &[&str], needles: &[&str]) -> Vec<String> {
 
 #[test]
 fn peer_host_modules_have_no_tauri_command_attribute() {
-    // 票 09 + 票 10 后这四个模块不得再有任何 Tauri 命令：引擎原语只经
-    // host_impl 调用，投影与业务编排在插件侧。
+    // A 刀后宿主 peer 模块收为四个（net / ports / seam / transfer），皆不得
+    // 有任何 Tauri 命令：引擎原语只经能力 lib 的 host-peer 绑定层调用，投影
+    // 与业务编排在插件侧。
     let files = [
         "src/peer/net.rs",
         "src/peer/ports.rs",
         "src/peer/seam.rs",
         "src/peer/transfer.rs",
-        "src/peer/receive.rs",
-        "src/peer/remote.rs",
     ];
-    let violations = scan(&files, &["tauri::command"]);
+    let violations = scan(&files, &["#[tauri::command]", "tauri::command"]);
     assert!(
         violations.is_empty(),
-        "移动端 peer 宿主模块（票 09/10 起零前端命令面）出现 #[tauri::command] 回接：\n{}",
+        "移动端 peer 宿主模块（A 刀后零前端命令面）出现 #[tauri::command] 回接：\n{}",
         violations.join("\n")
     );
 }
@@ -122,40 +131,55 @@ fn peer_host_modules_are_not_registered_in_invoke_handler() {
     }
     assert!(
         violations.is_empty(),
-        "invoke_handler! 出现已退役的宿主 peer 注册项（票 09/10 起零前端命令面）：\n{}",
+        "invoke_handler! 出现已退役的宿主 peer 注册项（A 刀后零前端命令面）：\n{}",
         violations.join("\n")
     );
 }
 
 #[test]
 fn retired_peer_transfer_settings_command_face_is_not_reintroduced() {
-    // 接收设置真源在插件 settings store（票 06/07 已迁）；宿主副本只服务引擎
+    // 接收设置真源在插件 settings store（票 10 已迁）；宿主副本只服务引擎
     // 闸门（策略 / 落点）与引擎侧拉取编排。加密开关由插件随 `send-files` 载荷
     // 逐项下发，宿主兜底分支恒为 false；拉取并发上限的写入侧消失后读值退化为
     // 磁盘既有值或缺省 3——两者的读面 DTO 一并退役。
-    let files = ["src/peer/receive.rs", "src/peer/transfer.rs", "src/peer/remote.rs"];
+    // A 刀后 `receive.rs` / `remote.rs` 整文件删除，只剩 `transfer.rs` 一个
+    // 平台选源缝（`peer_pick_files`）+ 两个私有 relay helper。
+    let files = ["src/peer/transfer.rs"];
     let violations = scan(&files, &RETIRED_TRANSFER_SETTINGS_FACE);
     assert!(
         violations.is_empty(),
-        "已退役的传输设置命令面（票 10）出现回接痕迹：\n{}",
+        "已退役的传输设置命令面（A 刀）出现回接痕迹：\n{}",
         violations.join("\n")
     );
 }
 
 #[test]
-fn peer_transfer_scheduling_entrypoints_stay_engine_only() {
-    // 这五个函数是引擎原语（host_impl / host-platform 调用），符号保留；本用例
-    // 与 `peer_host_modules_have_no_tauri_command_attribute` 配对，构成
-    // 「定义在、命令面不在」的完整断言——只锁其中一半会漏掉「删了注册又挂回
-    // 属性」或「挂了属性没注册」的中间态漂移。
-    let files = ["src/peer/transfer.rs", "src/peer/remote.rs"];
-    let violations = scan(&files, &TRANSFER_SCHEDULING_FACE);
-    // 反向断言：五个引擎原语必须仍在（防止有人连原语一起删掉，让 host_impl
-    // 编译失败后改走别的旁路）
+fn platform_pick_files_is_the_only_remaining_peer_entry() {
+    // A 刀之后宿主 `src/peer/` 唯一存活的对外入口是 `peer_pick_files`
+    // （host-platform 选源缝，双端差异化实现）。本用例断言它在 `transfer.rs`
+    // 中仍在场——若有人连这条缝一起删掉，插件侧的 `platform_pick_files` WIT
+    // 调用会失去宿主实现方，实例化期 fail-visible。
+    let files = ["src/peer/transfer.rs"];
+    let violations = scan(&files, &PLATFORM_PICK_FACE);
     assert!(
-        violations.len() == TRANSFER_SCHEDULING_FACE.len(),
-        "传输调度面引擎原语缺失或被改名（票 10 只摘命令面，不删原语）：命中 {} / 应为 {}",
+        violations.len() == PLATFORM_PICK_FACE.len(),
+        "平台选源缝 `peer_pick_files` 缺失或被改名（A 刀后宿主唯一保留的 peer 入口）：命中 {} / 应为 {}",
         violations.len(),
-        TRANSFER_SCHEDULING_FACE.len()
+        PLATFORM_PICK_FACE.len()
+    );
+}
+
+#[test]
+fn retired_peer_delegates_do_not_reappear() {
+    // 19 条 `host-peer` 原语的宿主中转委托已随 A 刀整文件删除（`receive.rs` /
+    // `remote.rs`）或剥到只剩选源缝（`transfer.rs`）。能力 lib `common-host`
+    // 层直调 crate 域函数，宿主再持同名委托即第二份入口、违反「lib 能力不
+    // 污染宿主代码」裁决。fail-visible：任何一条回接都应点名。
+    let files = ["src/peer/transfer.rs"];
+    let violations = scan(&files, &RETIRED_PEER_DELEGATES);
+    assert!(
+        violations.is_empty(),
+        "已退役的宿主 peer 中转委托（A 刀）出现回接痕迹：\n{}",
+        violations.join("\n")
     );
 }

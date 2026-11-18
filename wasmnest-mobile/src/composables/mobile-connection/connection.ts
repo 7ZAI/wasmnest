@@ -598,9 +598,20 @@ async function init() {
 init()
 
 /**
+ * 连接行为选项（宿主壳内部面；SDK 类型见 `MobileConnectOptions`）
+ *
+ * `pairingOnly`：只设置目标与 HTTP base，不探测 `/api/health`。首次配对（尤其
+ * 经隧道）必须先走 `/api/auth/*`：探测请求会先把一次性配对票据消费掉，导致真正
+ * 的认证请求被 `ticket-expired` 拒绝。认证成功后调用方再以默认模式建事件通道。
+ */
+export interface ConnectOptions {
+  pairingOnly?: boolean
+}
+
+/**
  * 连接到设备
  */
-export async function connect(device: RemoteDevice): Promise<void> {
+export async function connect(device: RemoteDevice, options: ConnectOptions = {}): Promise<void> {
   logger.log('[MobileConnection] Starting connection to:', device.address, device.port)
 
   // 丢弃上一代连接遗留的重连事件
@@ -645,17 +656,23 @@ export async function connect(device: RemoteDevice): Promise<void> {
     setApiBaseUrl(device.address, device.port)
 
     // HTTP 探测桌面端是否可达（3 秒超时，快速判断网络连通性）
-    logger.log('[MobileConnection] Probing desktop reachability...')
-    const probeResult = await httpProbe(device.address, device.port)
-    if (!probeResult.reachable) {
-      clearConnectionTimeout()
-      logger.warn('[MobileConnection] Desktop unreachable:', probeResult.error)
-      connectionError.value = 'mobile.connection.unreachable'
-      connectionStatus.value = 'error'
-      isConnecting.value = false
-      throw new Error('mobile.connection.unreachable')
+    // 配对模式跳过：配对窗口只放行 `/api/auth/*`，探测既会被 403 拒绝，又会
+    // 先一步消费隧道的一次性票据（C1）。
+    if (!options.pairingOnly) {
+      logger.log('[MobileConnection] Probing desktop reachability...')
+      const probeResult = await httpProbe(device.address, device.port)
+      if (!probeResult.reachable) {
+        clearConnectionTimeout()
+        logger.warn('[MobileConnection] Desktop unreachable:', probeResult.error)
+        connectionError.value = 'mobile.connection.unreachable'
+        connectionStatus.value = 'error'
+        isConnecting.value = false
+        throw new Error('mobile.connection.unreachable')
+      }
+      logger.log('[MobileConnection] Desktop reachable, proceeding to WS connect')
+    } else {
+      logger.log('[MobileConnection] Pairing mode: skip reachability probe')
     }
-    logger.log('[MobileConnection] Desktop reachable, proceeding to WS connect')
 
     // 调用后端连接，状态由后端事件驱动更新
     const result = await wsConnect(device.address, device.port, device.name)

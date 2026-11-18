@@ -15,7 +15,7 @@
       <section
         v-if="open"
         ref="panelEl"
-        class="shell-ui fixed inset-x-0 top-0 z-[60] flex flex-col max-h-[85dvh] rounded-b-[20px] border-b border-[var(--mobile-border)] bg-[var(--mobile-bg-card)]"
+        class="shell-ui shell-shade-panel fixed inset-x-0 top-0 z-[60] flex flex-col max-h-[85dvh] rounded-b-[20px] border-b border-[var(--mobile-border)] bg-[var(--mobile-bg-card)]"
         :style="{ paddingTop: `calc(${topInset}px + 6px)` }"
         role="dialog"
         aria-modal="true"
@@ -24,7 +24,7 @@
         @keydown.esc="close"
       >
         <!-- ==================== 头部 ==================== -->
-        <div class="flex items-center gap-2 px-4 pt-2 pb-2 flex-shrink-0">
+        <header class="flex items-center gap-2 px-4 pt-2 pb-2 flex-shrink-0">
           <div class="flex-1 min-w-0">
             <h2 class="shell-type-title truncate">
               {{ t('shell.notify.title') }}
@@ -33,6 +33,26 @@
               {{ t('shell.notify.count', { count: totalCount }) }}
             </p>
           </div>
+          <!-- 清除全部：面板右上角的扫除图标（2026-11-01 用户裁决，底部整行文字按钮退役）。
+               图标按钮必须有可访问名（ui-ux-pro-max `--domain icons`：无可见文字的控件
+               给控件本身 aria-label）；没有可清条目（含只剩驻留项）时不渲染，避免 no-op 控件。
+               级联飞离动画期间禁用防重入（与底部按钮时代的语义一致）。 -->
+          <button
+            v-if="hasClearable"
+            type="button"
+            class="flex items-center justify-center rounded-[10px] min-w-[var(--mobile-touch-target-min)] min-h-[var(--mobile-touch-target-min)] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)] disabled:opacity-40"
+            :aria-label="t('shell.notify.clearAll')"
+            :disabled="clearingAll"
+            @click="clearAllCascade"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20.5 3.5 13 11" />
+              <path d="M10.9 8.9 15.1 13.1" />
+              <path d="M10.8 9.6 5.6 15.4" />
+              <path d="M12.4 11.2 8.2 17.4" />
+              <path d="M14 12.8 11 18.8" />
+            </svg>
+          </button>
           <button
             type="button"
             class="flex items-center justify-center rounded-[10px] min-w-[var(--mobile-touch-target-min)] min-h-[var(--mobile-touch-target-min)] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)]"
@@ -43,7 +63,7 @@
               <path d="M6 6l12 12M18 6L6 18" />
             </svg>
           </button>
-        </div>
+        </header>
 
         <!-- ==================== 内容 ==================== -->
         <div class="min-h-0 overflow-y-auto pb-4">
@@ -97,10 +117,13 @@
               <!-- 滑动删除指示层：卡片滑开时露出淡色底 + 红色垃圾桶——手势的删除表达，
                    不给驻留项（它们不响应滑动）。底色与图标色落在 .notify-swipe-reveal
                    （shell.css）：破坏色实心整块太抢眼，改用 token 派生的一层薄信号。
-                   跟随卡片圆角被外层裁切。 -->
+                   跟随卡片圆角被外层裁切。
+                   非滑动态必须不可见：玻璃主题的 .notify-card 是半透明体色，指示层
+                   常驻会从卡背透出垃圾桶，与卡片右侧的 X 叠成「两个删除图标」。 -->
               <div
                 v-if="!item.sticky"
                 class="notify-swipe-reveal absolute inset-0 flex items-center justify-end pr-5"
+                :class="cardSwipeActive(item) ? 'visible' : 'invisible'"
                 aria-hidden="true"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -180,11 +203,14 @@
                   </div>
                 </div>
                 <!-- 驻留项没有单条关闭：它表示「需要处理」而不是「看过就算」。
-                     X 是滑动删除的可达性替代（键盘 / 读屏 / 不支持手势时）。 -->
+                     X 是滑动删除的可达性替代（键盘 / 读屏 / 不支持手势时）。
+                     滑动中先隐藏 X：此刻删除表达交给露出的垃圾桶，两个删除图标
+                     同时在场会重叠且语义重复（2026-11-13 用户反馈）。 -->
                 <button
                   v-if="!item.sticky"
                   type="button"
                   class="flex items-center justify-center flex-shrink-0 rounded-[8px] min-w-[var(--mobile-touch-target-min)] min-h-[var(--mobile-touch-target-min)] -mr-1 transition-colors duration-200 active:bg-[var(--mobile-accent-muted)]"
+                  :class="{ invisible: cardSwipeActive(item) }"
                   :aria-label="t('shell.notify.dismissOne', { title: item.title })"
                   @click.stop="dismiss(item.id)"
                 >
@@ -217,22 +243,6 @@
             </p>
           </div>
         </div>
-
-        <!-- 底部动作：清除全部。触发级联飞离动画（等差异步右飞），全部飞出后才真正
-             清空 store——删除要有可见表达，而不是瞬间消失。级联期间按钮禁用防重入。 -->
-        <div
-          v-if="notifications.length > 0"
-          class="flex-shrink-0 border-t border-[var(--mobile-group-divider)] px-4 py-3"
-        >
-          <button
-            type="button"
-            class="shell-btn-danger-outline w-full rounded-[10px] px-4 py-2.5 shell-type-label min-h-[var(--mobile-touch-target-min)]"
-            :disabled="clearingAll"
-            @click="clearAllCascade"
-          >
-            {{ t('shell.notify.clearAll') }}
-          </button>
-        </div>
       </section>
     </Transition>
   </Teleport>
@@ -243,7 +253,8 @@
  * 通知栏（Android 式独立通知面）
  * -----------------------------------------------------------------------------
  * 打开入口在状态条与主屏铃铛（见 ShellStatusbar / ShellHomeScreen），本组件只负责
- * 面板本身：待处理（审批派生）+ 通知（壳动作 / 宿主引擎事件）+ 清除全部。
+ * 面板本身：待处理（审批派生）+ 通知（壳动作 / 宿主引擎事件）；「清除全部」是面板
+ * 右上角的扫除图标按钮（2026-11-01 用户裁决），不再占一条底部动作栏。
  *
  * 为什么不接管「顶部边缘下拉」手势：Android 上从屏幕最顶端下拉属于**系统**手势
  * （拉出系统通知栏），应用层再实现一次会与之冲突（ui-ux-pro-max `--domain ux`
@@ -277,6 +288,11 @@ const { notifications, notificationCount, dismissNotification, clearNotification
 const open = computed(() => overlays.shadeOpen.value)
 const pendingApps = computed(() => apps.value.filter((a) => a.state === 'approval'))
 const totalCount = computed(() => notificationCount.value + pendingApps.value.length)
+/**
+ * 是否有可清条目：只剩驻留项（sticky = 需要处理）时「清除全部」必然是 no-op，
+ * 不渲染该入口（空态 / 全是待处理事项时头部只有收起键）。
+ */
+const hasClearable = computed(() => notifications.value.some((n) => !n.sticky))
 
 /** 相对时间随面板打开而刷新：否则「3 分钟前」会一直停在打开那一刻的读数 */
 const now = ref(Date.now())
@@ -377,6 +393,21 @@ function cardDragState(id: string): { dragging: boolean } {
   return { dragging: dragId.value === id }
 }
 
+/**
+ * 卡片是否处于横向滑动中（拖动位移非 0，或已松手正在滑出）。
+ *
+ * 滑动指示层与卡内 X 是同一删除语义的两条路径，必须互斥出现：
+ * - 非滑动态让指示层不可见——玻璃主题的卡片体色半透明，常驻的指示层会透出
+ *   垃圾桶图案，与右侧 X 重叠成「两个删除图标」；
+ * - 滑动中隐藏 X——露出的垃圾桶已是当前删除表达，再叠一个 X 语义重复。
+ *
+ * 用 visibility（invisible / visible）而不是 opacity：两者随同一个响应式状态
+ * 同帧切换，任何一帧都不会同时出现；X 的布局宽度保留，标题行不会横向跳动。
+ */
+function cardSwipeActive(item: ShellNotification): boolean {
+  return (dragId.value === item.id && dragX.value !== 0) || swipeOut.value?.id === item.id
+}
+
 /** 卡片位移样式：拖动跟手（由 cardDragState 关过渡），滑出动画定格屏外，其余静止 */
 function cardStyle(item: ShellNotification): Record<string, string> {
   const style: Record<string, string> = {
@@ -457,7 +488,7 @@ function clearAll(): void {
 }
 
 // ==================== 全部删除（级联飞离动画） ====================
-// 点「清除全部」：非驻留卡按 index 等差延迟（48ms/张）依次加速右飞，
+// 点头部扫除图标：非驻留卡按 index 等差延迟（48ms/张）依次加速右飞，
 // 最后一张飞出后才清空 store——删除有可见表达而不是瞬间消失（prefers-reduced-motion
 // 下动画被 CSS 禁用，仍以完整时长走 clear 逻辑，行为不受动画影响）。
 const FLEE_STEP_MS = 48

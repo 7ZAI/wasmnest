@@ -3,19 +3,73 @@
 use super::*;
 
 pub(crate) fn default_plugin_type() -> PluginType {
-    PluginType::TsOnly
+    PluginType::Frontend
 }
 
-/// 插件产物形态类型
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+/// 插件产物形态（语言无关三形态，2026-10-26 语义重定义，wasmnest-apps#21）
+///
+/// 词汇只表达**形态**（是否携带 wasm 后端 / 前端产物），不表达后端语言——
+/// 形态是宿主与装配真正消费的判据（是否实例化 wasm、是否有页面产物），语言
+/// 不是。Go 后端（SDK Go 壳）与 Rust 后端共用同一词汇。
+///
+/// 旧值（rust / rust-ts / ts-only）已退役：研发起步期无兼容读入义务，反序列化
+/// **点名拒绝并给出迁移出路**（fail-visible，不静默降级）。本枚举与 lib wasm-core
+/// `manifest.rs`、移动 SDK `types.rs` 的同形定义**逐字对齐**（三处独立 crate，
+/// 无共享依赖，漂移面以文本一致纪律维护）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PluginType {
-    /// 纯 Rust 插件，无前端组件
-    Rust,
-    /// Rust + TypeScript 插件，Rust 提供后端能力，TS 提供 UI
-    RustTs,
-    /// 纯 TypeScript 插件，仅前端组件
-    TsOnly,
+    /// 纯前端（原 ts-only）：仅前端产物，无 wasm 后端
+    Frontend,
+    /// 纯后端（原 rust）：wasm 后端、无页面产物（worker / ephemeral 声明限此形态）
+    Backend,
+    /// 前后端（原 rust-ts）：wasm 后端 + 前端产物
+    Full,
+}
+
+impl PluginType {
+    /// wire 值（错误文案 / 对比用；与 serde rename 同源）
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Frontend => "frontend",
+            Self::Backend => "backend",
+            Self::Full => "full",
+        }
+    }
+
+    /// 是否携带 wasm 后端（授权读模型 / guest 生命周期 / 事件派发共用的
+    /// 「有实例」判据；与 lib 侧 `PluginSource::has_wasm_backend` 语义互补——
+    /// 那边按来源 + rustLibrary 判定，这边按清单声明的形态判定）
+    pub const fn has_backend(&self) -> bool {
+        matches!(self, Self::Backend | Self::Full)
+    }
+}
+
+impl<'de> Deserialize<'de> for PluginType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "frontend" => Ok(Self::Frontend),
+            "backend" => Ok(Self::Backend),
+            "full" => Ok(Self::Full),
+            "ts-only" => Err(retired_plugin_type::<D::Error>("ts-only", "frontend")),
+            "rust" => Err(retired_plugin_type::<D::Error>("rust", "backend")),
+            "rust-ts" => Err(retired_plugin_type::<D::Error>("rust-ts", "full")),
+            other => Err(serde::de::Error::custom(format!(
+                "pluginType '{other}' 不是合法形态值（frontend / backend / full）"
+            ))),
+        }
+    }
+}
+
+/// 退役值 → 迁移出路的错误构造（点名旧值，不静默）
+fn retired_plugin_type<E: serde::de::Error>(old: &str, new: &str) -> E {
+    E::custom(format!(
+        "pluginType '{old}' 已退役（形态三档重定义，2026-10-26，wasmnest-apps#21）：改用 '{new}'——词汇只表达形态，不表达后端语言"
+    ))
 }
 
 /// 缺省产物形态取自 [`default_plugin_type`]，与 manifest `pluginType` 的 serde 缺省共用

@@ -15,8 +15,9 @@
 import { computed, ref, type Component, type ComputedRef, type Ref } from 'vue'
 import i18n from '@/locales'
 import { logger } from '@/utils/frontendLogger'
+import { parseInvokeError, showUserError, userErrorText } from '@/utils/userError'
 import { getShellRegistry } from '../registry'
-import type { ShellApp, ShellAppSource } from '../types'
+import type { ShellApp, ShellAppSource, ShellInstallRestoreDecider } from '../types'
 import { pushRecent } from './useShellRecent'
 import { disposeSurfaceApp, reconcileSurfaceApps } from '../surfaceRuntime'
 import { useAppSurfaces } from './useAppSurfaces'
@@ -30,6 +31,18 @@ const APP_EVENT_ICONS = {
   uninstalled: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
   failed: 'M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01',
 } as const
+
+/**
+ * 动作失败 → 用户可见正文（ADR 0030）
+ *
+ * Tauri/SDK 的 rejection 多为信封对象 `{code, request_id, params?}`（不是 Error），
+ * 直接 `String(e)` 会把通知体打成 `[object Object]`、把信封 JSON 打进 UI。
+ * 统一走错误消费层：用户面只出 `errors.<code>` 友好文案，原文由 showUserError 落日志。
+ */
+function actionErrorText(e: unknown): string {
+  // 纯映射（不落日志）：调用方已在 catch 里记录原始拒绝值 / request_id
+  return userErrorText(parseInvokeError(e))
+}
 
 /**
  * 推送一条应用生命周期通知
@@ -136,7 +149,7 @@ async function refresh(): Promise<void> {
           registry.upsertApps(source.id, list)
         } catch (e) {
           logger.error(`[Shell] app source list failed: source=${source.id}`, e)
-          lastError.value = e instanceof Error ? e.message : String(e)
+          lastError.value = actionErrorText(e)
         }
       }),
     )
@@ -174,11 +187,11 @@ async function launch(appId: string): Promise<boolean> {
     await refresh()
     return true
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
+    const message = actionErrorText(e)
     logger.error(`[Shell] launch failed: appId=${appId}`, e)
     registry.patchApp(appId, { state: 'error', error: message })
     lastError.value = message
-    // 失败原因来自后端，属于「来源方给出的正文」，壳原样呈现不加工
+    // 失败原因归错误消费层：通知栏只出友好文案（技术详情已由 actionErrorText 落日志）
     notifyAppEvent('failed', app, { body: message })
     return false
   }
@@ -207,7 +220,7 @@ async function stop(appId: string): Promise<boolean> {
     useShellNavigation().closeAppRun(appId)
     return true
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
+    const message = actionErrorText(e)
     logger.error(`[Shell] stop failed: appId=${appId}`, e)
     registry.patchApp(appId, { state: 'error', error: message })
     lastError.value = message
@@ -235,7 +248,7 @@ async function approveApp(appId: string): Promise<boolean> {
     notifyAppEvent('approved', app)
     return true
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
+    const message = actionErrorText(e)
     logger.error(`[Shell] approve failed: appId=${appId}`, e)
     lastError.value = message
     return false
@@ -322,10 +335,14 @@ function supportsInstall(): boolean {
 /**
  * 安装本地应用包
  *
+ * @param decideRestore 「旧数据是否恢复」询问回调（数据源在落盘前调用；
+ *        缺省不恢复）。壳层负责弹窗，数据源不碰 UI。
  * @returns 安装后的应用 id；null = 用户取消（调用方不弹错误）。
  *          失败由 catch 抛出，错误已由 lastError 暴露。
  */
-async function installFromLocalPackage(): Promise<string | null> {
+async function installFromLocalPackage(
+  decideRestore?: ShellInstallRestoreDecider,
+): Promise<string | null> {
   const source = registry
     .listSources()
     .find((s): s is ShellAppSource & Required<Pick<ShellAppSource, 'installFromLocalPackage'>> =>
@@ -336,7 +353,7 @@ async function installFromLocalPackage(): Promise<string | null> {
     return null
   }
   try {
-    const installedId = await source.installFromLocalPackage()
+    const installedId = await source.installFromLocalPackage(decideRestore)
     if (installedId !== null) {
       await refresh()
       // 安装成功的新应用名要到刷新后的清单里取（安装前注册表里还没有它）
@@ -345,8 +362,11 @@ async function installFromLocalPackage(): Promise<string | null> {
     }
     return installedId
   } catch (e) {
+    // 安装失败对用户是「一次显式动作失败」：由错误消费层统一弹友好 toast（ADR 0030），
+    // 调用方不再各自拼 e.message（否则信封对象会被拼成 `[object Object]`）。
     logger.error('[Shell] install local package failed', e)
-    lastError.value = e instanceof Error ? e.message : String(e)
+    showUserError(e)
+    lastError.value = actionErrorText(e)
     return null
   }
 }
@@ -385,15 +405,14 @@ async function setAutostart(appId: string, autostart: boolean): Promise<boolean>
     lastError.value = null
     return true
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
     logger.error(`[Shell] set autostart failed: appId=${appId}`, e)
-    lastError.value = message
+    lastError.value = actionErrorText(e)
     return false
   }
 }
 
-/** 卸载应用并删除数据 */
-async function removeApp(appId: string): Promise<boolean> {
+/** 卸载应用（L3）；`keepData` = 保留应用数据（私有库 + KV） */
+async function removeApp(appId: string, keepData = false): Promise<boolean> {
   const source = registry.getSourceOf(appId)
   const app = registry.getApp(appId)
   if (!source?.remove) {
@@ -403,7 +422,7 @@ async function removeApp(appId: string): Promise<boolean> {
   // 同停用的顺序契约：先 dispose UI（含清打开记录），再走插件卸载
   await disposeSurfaceApp(appId)
   try {
-    const ok = await source.remove(appId)
+    const ok = await source.remove(appId, keepData)
     if (ok) {
       registry.clearApp(appId)
       await refresh()
@@ -415,7 +434,7 @@ async function removeApp(appId: string): Promise<boolean> {
     return ok
   } catch (e) {
     logger.error(`[Shell] remove app failed: appId=${appId}`, e)
-    lastError.value = e instanceof Error ? e.message : String(e)
+    lastError.value = actionErrorText(e)
     return false
   }
 }

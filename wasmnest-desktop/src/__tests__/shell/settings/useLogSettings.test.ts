@@ -13,6 +13,10 @@ vi.mock('@/utils/invoke', () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }))
 
+vi.mock('@/utils/appCommands', () => ({
+  ensureHostCredential: vi.fn(async () => 'test-host-credential'),
+}))
+
 import { useLogSettings, type LogSettingsPayload } from '@/shell/settings/useLogSettings'
 
 describe('useLogSettings', () => {
@@ -25,7 +29,10 @@ describe('useLogSettings', () => {
     const { setLogLevel } = useLogSettings()
     await setLogLevel('debug')
     expect(invokeMock).toHaveBeenCalledTimes(1)
-    expect(invokeMock).toHaveBeenCalledWith('set_log_level', { level: 'debug' })
+    expect(invokeMock).toHaveBeenCalledWith('set_log_level', {
+      level: 'debug',
+      credential: 'test-host-credential',
+    })
   })
 
   it('openLogDir 调用 open_log_dir（无参数）', async () => {
@@ -47,7 +54,10 @@ describe('useLogSettings', () => {
       consoleInRelease: false,
     }
     await saveLogSettings(payload)
-    expect(invokeMock).toHaveBeenCalledWith('save_log_settings', { log: payload })
+    expect(invokeMock).toHaveBeenCalledWith('save_log_settings', {
+      log: payload,
+      credential: 'test-host-credential',
+    })
   })
 
   it('命令失败时错误向上传播（不吞异常）', async () => {

@@ -10,24 +10,29 @@
  * - 未匹配路由 → 显性 not-found（退役面 /plugins 等直达时兜底，不白屏）。
  *
  * 应用路由前缀（bedcode 保持既有路径，深链 /terminal-window/:id 语义不变）：
- * - com.wasmnest.bedcode：/pairing /sessions /tasks /settings(.*)?
- *   /server /history /terminal-window/:id
- * - com.wasmnest.agent-hub：/hub
+ * - com.wasmnest.bedcode：/pairing /sessions /projects(.*)? /tasks
+ *   /settings(.*)? /server /history /terminal-window/:id
+ * - com.wasmnest.bedcode 增：/agents（Agent 管理域，并入自 agent-hub）
+ *   /orchestrations（Agent 编排，列表 + /:id 详情）
+ *   /projects（项目容器，issue #23 M2）
  * - com.wasmnest.ai-chatbox：/chat
  * - com.wasmnest.file-transfer：/transfer
  * - com.wasmnest.monitor：/monitor
  * - com.wasmnest.auth-center：/auth（服务型 wasm，应用仓 servers/auth-center）
+ * - com.wasmnest.net-config：/network（服务型 wasm，应用仓 servers/net-config；T18）
+ * - com.wasmnest.lanbitou：/notes（应用仓 apps/lanbitou）
  */
 import { createRouter, createWebHistory } from 'vue-router'
 
 import AppMountSlot from '@/shell/mount/AppMountSlot.vue'
 import {
   TERMINAL_PLUGIN_ID,
-  AGENT_HUB_PLUGIN_ID,
   AI_CHATBOX_PLUGIN_ID,
   FILE_TRANSFER_PLUGIN_ID,
   MONITOR_PLUGIN_ID,
   AUTH_CENTER_PLUGIN_ID,
+  NET_CONFIG_PLUGIN_ID,
+  LANBITOU_PLUGIN_ID,
 } from '@/shell/composables/useShellApps'
 
 const router = createRouter({
@@ -40,7 +45,14 @@ const router = createRouter({
       component: () => import('@/shell/views/ShellView.vue'),
     },
     {
-      // 系统页（宿主自有管理面）：设置 / 应用管理 / 权限与授权，与业务应用同构产卡
+      // 系统页（宿主自有管理面）：设置 / 应用管理 / 权限与授权，与业务应用同构产卡；
+      // :sub = 系统页二级页（如 /sys/settings/appearance 外观）——同一张系统页卡内
+      // 切子路由（faceOfRoute 仍按 [2] 段归到父页卡），不另产卡
+      path: '/sys/:pageId/:sub',
+      name: 'shell-sys-sub',
+      component: () => import('@/shell/components/ShellCardScreen.vue'),
+    },
+    {
       path: '/sys/:pageId',
       name: 'shell-sys',
       component: () => import('@/shell/components/ShellCardScreen.vue'),
@@ -60,10 +72,32 @@ const router = createRouter({
       props: { appId: TERMINAL_PLUGIN_ID, route: '/sessions' },
     },
     {
+      // 项目容器（issue #23 M2，应用仓 bedcode 新增内部路由的宿主镜像）：
+      // 项目列表 + 工作台（:id 深链恢复语义，子段经 fullPath 原样透传）
+      path: '/projects/:sub(.*)?',
+      name: 'app-projects',
+      component: AppMountSlot,
+      props: (route) => ({ appId: TERMINAL_PLUGIN_ID, route: route.fullPath }),
+    },
+    {
       path: '/tasks',
       name: 'tasks',
       component: AppMountSlot,
       props: { appId: TERMINAL_PLUGIN_ID, route: '/tasks' },
+    },
+    {
+      // Agent 管理域（原 agent-hub 并入 bedcode）
+      path: '/agents',
+      name: 'app-agents',
+      component: AppMountSlot,
+      props: { appId: TERMINAL_PLUGIN_ID, route: '/agents' },
+    },
+    {
+      // Agent 编排（bedcode 新增内部路由的宿主镜像）：列表 + /:id 详情
+      path: '/orchestrations/:sub(.*)?',
+      name: 'app-orchestrations',
+      component: AppMountSlot,
+      props: (route) => ({ appId: TERMINAL_PLUGIN_ID, route: route.fullPath }),
     },
     {
       // 连接历史：设备列表「历史」按钮 query 深链直达
@@ -106,12 +140,6 @@ const router = createRouter({
 
     // ==================== 其余 wasm app 应用面（独立界面，挂载整包） ====================
     {
-      path: '/hub',
-      name: 'app-agent-hub',
-      component: AppMountSlot,
-      props: { appId: AGENT_HUB_PLUGIN_ID, route: '/hub' },
-    },
-    {
       path: '/chat',
       name: 'app-ai-chatbox',
       component: AppMountSlot,
@@ -135,6 +163,20 @@ const router = createRouter({
       name: 'app-auth-center',
       component: AppMountSlot,
       props: { appId: AUTH_CENTER_PLUGIN_ID, route: '/auth' },
+    },
+    {
+      // 网络配置中心（服务型 wasm，应用仓 `servers/net-config`）：T18 跨应用共享网络配置
+      path: '/network',
+      name: 'app-net-config',
+      component: AppMountSlot,
+      props: { appId: NET_CONFIG_PLUGIN_ID, route: '/network' },
+    },
+    {
+      // 烂笔头（Markdown 记事本，应用仓 `apps/lanbitou`）：单面应用
+      path: '/notes',
+      name: 'app-lanbitou',
+      component: AppMountSlot,
+      props: { appId: LANBITOU_PLUGIN_ID, route: '/notes' },
     },
 
     // ==================== 兜底 ====================

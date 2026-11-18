@@ -4,6 +4,8 @@
 
 import { invoke, type Channel } from '@tauri-apps/api/core'
 import { logger } from '@/utils/frontendLogger'
+import { ensureHostCredential } from '@/plugin/credentials'
+import { pluginInvoke } from '@/plugin/commands'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 // ==================== Types ====================
@@ -32,14 +34,14 @@ export type {
  * 连接到桌面端
  */
 export async function wsConnect(address: string, port: number, name?: string): Promise<ConnectionInfo> {
-  return await invoke('ws_connect', { address, port, name })
+  return await invoke('ws_connect', { address, port, name, credential: await ensureHostCredential() })
 }
 
 /**
  * 断开连接
  */
 export async function wsDisconnect(): Promise<void> {
-  return await invoke('ws_disconnect')
+  return await invoke('ws_disconnect', { credential: await ensureHostCredential() })
 }
 
 /**
@@ -60,7 +62,10 @@ export async function wsIsConnected(): Promise<boolean> {
  * 重新连接（断线重连）
  */
 export async function wsReconnect(sessionToken?: string): Promise<void> {
-  return await invoke('ws_reconnect', { sessionToken: sessionToken || null })
+  return await invoke('ws_reconnect', {
+    sessionToken: sessionToken || null,
+    credential: await ensureHostCredential(),
+  })
 }
 
 /**
@@ -70,30 +75,33 @@ export async function wsReconnect(sessionToken?: string): Promise<void> {
  * 前端不持有重连循环，只把用户意图递过去。
  */
 export async function setAutoReconnect(enabled: boolean): Promise<void> {
-  return await invoke('set_auto_reconnect', { enabled })
+  return await invoke('set_auto_reconnect', { enabled, credential: await ensureHostCredential() })
 }
 
 // ==================== Token Commands ====================
+//
+// 宿主面门（安全审查 #42）：本组命令读写宿主机密事实（JWT / 配对身份），
+// 必须附宿主 loader 会话凭证——应用前端同 webview 裸 invoke 会被拒绝。
 
 /**
  * 设置全局 Token（前端启动时从 localStorage 读取并调用）
  */
 export async function wsSetToken(token: string): Promise<void> {
-  return await invoke('ws_set_token', { token })
+  return await invoke('ws_set_token', { token, credential: await ensureHostCredential() })
 }
 
 /**
  * 获取当前全局 Token
  */
 export async function wsGetToken(): Promise<string> {
-  return await invoke('ws_get_token')
+  return await invoke('ws_get_token', { credential: await ensureHostCredential() })
 }
 
 /**
  * 清除全局 Token（登出时调用）
  */
 export async function wsClearToken(): Promise<void> {
-  return await invoke('ws_clear_token')
+  return await invoke('ws_clear_token', { credential: await ensureHostCredential() })
 }
 
 // ==================== Auth Commands（票 14 阶段 B：配对 / 认证编排迁插件） ====================
@@ -113,79 +121,87 @@ interface PluginAuthOutcome {
 
 /**
  * 使用 JWT token 认证（重连时使用已存储的 session_token）
+ *
+ * 宿主面门（安全审查 #42）：凭证由宿主封装提供，应用前端不直接调用。
  */
 export async function wsAuthenticate(sessionToken: string): Promise<boolean> {
-  return await invoke('ws_authenticate', { sessionToken })
+  return await invoke('ws_authenticate', {
+    sessionToken,
+    credential: await ensureHostCredential(),
+  })
 }
 
 /**
  * 读取宿主持有的认证凭据（宿主引擎窄读口；未持有 → null）
  *
- * C4：凭据持有与读取都在宿主，前端只拿窄投影做持久化镜像
+ * C4：凭据持有与读取都在宿主，前端只拿窄投影做持久化镜像。
+ * 宿主面门（安全审查 #42）：读到凭据即等价取得已配对身份。
  */
 export async function wsGetAuthCredentials(): Promise<AuthCredentials | null> {
-  return await invoke('ws_get_auth_credentials')
+  return await invoke('ws_get_auth_credentials', { credential: await ensureHostCredential() })
+}
+
+/**
+ * 宿主驱动内置终端插件（`com.wasmnest.bedcode`）的命令
+ *
+ * 身份（ADR 0058 / issue #28）：调用方是宿主壳，传宿主面凭证（loader 会话）——
+ * 宿主可驱动任意插件的命令；插件自身的命令面走各自 context 的通道令牌。
+ */
+async function invokeTerminalPlugin<T = void>(
+  command: string,
+  args: Record<string, unknown> = {},
+): Promise<T> {
+  return (await pluginInvoke(
+    TERMINAL_PLUGIN_ID,
+    command,
+    args,
+    await ensureHostCredential(),
+  )) as T
 }
 
 /**
  * 请求配对（桌面端生成一次性配对码并展示）
  */
 export async function wsRequestPairing(): Promise<void> {
-  await invoke('plugin_invoke', {
-    pluginId: TERMINAL_PLUGIN_ID,
-    command: 'bedcode.request-pairing',
-    args: {},
-  })
+  await invokeTerminalPlugin('bedcode.request-pairing')
 }
 
 /**
  * 验证配对码，成功后返回凭据（含 JWT token，宿主引擎窄读）
  */
 export async function wsVerifyPairingCode(code: string): Promise<AuthCredentials | null> {
-  const outcome = await invoke<PluginAuthOutcome>('plugin_invoke', {
-    pluginId: TERMINAL_PLUGIN_ID,
-    command: 'bedcode.verify-pairing-code',
-    args: { code },
-  })
-  return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
+  const outcome = await invokeTerminalPlugin<PluginAuthOutcome>('bedcode.verify-pairing-code', { code })
+  return outcome.accepted ? await wsGetAuthCredentials() : null
 }
 
 /**
  * 使用 QR token 认证，成功后返回凭据（含 JWT token，宿主引擎窄读）
  */
 export async function wsAuthenticateWithQr(token: string): Promise<AuthCredentials | null> {
-  const outcome = await invoke<PluginAuthOutcome>('plugin_invoke', {
-    pluginId: TERMINAL_PLUGIN_ID,
-    command: 'bedcode.authenticate-with-qr',
-    args: { token },
-  })
-  return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
+  const outcome = await invokeTerminalPlugin<PluginAuthOutcome>('bedcode.authenticate-with-qr', { token })
+  return outcome.accepted ? await wsGetAuthCredentials() : null
 }
 
 /**
  * 生物认证登录（挑战-应答握手，弹系统生物识别），成功后返回凭据（宿主引擎窄读）
  */
 export async function wsAuthenticateWithBiometric(): Promise<AuthCredentials | null> {
-  const outcome = await invoke<PluginAuthOutcome>('plugin_invoke', {
-    pluginId: TERMINAL_PLUGIN_ID,
-    command: 'bedcode.authenticate-with-biometric',
-    args: {},
-  })
-  return outcome.accepted ? await invoke('ws_get_auth_credentials') : null
+  const outcome = await invokeTerminalPlugin<PluginAuthOutcome>('bedcode.authenticate-with-biometric')
+  return outcome.accepted ? await wsGetAuthCredentials() : null
 }
 
 /**
  * 绑定生物凭证：本地生成密钥对并注册公钥到桌面端（需已认证连接）
  */
 export async function wsBindBiometricCredential(): Promise<boolean> {
-  return await invoke('ws_bind_biometric_credential')
+  return await invoke('ws_bind_biometric_credential', { credential: await ensureHostCredential() })
 }
 
 /**
  * 解绑生物凭证：删除本地密钥并通知桌面端清空公钥（需已认证连接）
  */
 export async function wsUnbindBiometricCredential(): Promise<boolean> {
-  return await invoke('ws_unbind_biometric_credential')
+  return await invoke('ws_unbind_biometric_credential', { credential: await ensureHostCredential() })
 }
 
 /**
@@ -199,7 +215,7 @@ export interface BiometricKeyStatus {
 }
 
 export async function wsGetBiometricKeyStatus(): Promise<BiometricKeyStatus> {
-  return await invoke('ws_get_biometric_key_status')
+  return await invoke('ws_get_biometric_key_status', { credential: await ensureHostCredential() })
 }
 
 // ==================== Session Commands ====================
@@ -494,25 +510,33 @@ export function clearAuthCredentials() {
 // 宿主只保留**页面 Channel 传输机制**——`terminal_page_subscribe/unsubscribe`
 // 是 Tauri 传输登记面，由宿主 `plugin/terminal-stream.ts`
 // （mobileApi.openTerminalStream）封装给插件消费。
+//
+// 两条命令只认宿主门（2026-11-02）：Channel 归属是宿主，裸 invoke 若能调，任一
+// 应用前端即可按 session_id 抢登记他人会话输出（后登记覆盖前登记 → 窃听 + 顶掉
+// 正常页面）。凭证由本层补——插件看到的是 `openTerminalStream`，看不到命令。
 
 /** 终端能力所在插件的命令 id（D6 选项 A：与桌面同名，职责不同；票 14 认证编排亦经此插件） */
 const TERMINAL_PLUGIN_ID = 'com.wasmnest.bedcode'
 
 /**
- * 段2：登记页面级 Tauri Channel（输出帧唯一出口，裸字节推送）。
+ * 段2：登记页面级 Tauri Channel（输出帧唯一出口，裸字节推送），返回本代页面令牌。
  *
  * 幂等，且不依赖链路是否已建立（通道与订阅意愿先于链路记录，链路建立后即生效）。
+ * 返回值必须随注销回传：注销是异步 IPC，旧代注销可能晚于新代登记落定，宿主按令牌
+ * 只摘本代通道（旧注销不得摘新通道）。
  * 为什么用 Channel 而非全局事件：per-page 通道没有全局广播与事件名匹配开销，负载走
  * Raw 字节省掉 base64（-33% 体积）与 JSON 序列化/解析（与桌面端终端输出同路径）
  */
 export async function terminalPageSubscribe(
   sessionId: string,
   channel: Channel<ArrayBuffer>,
-): Promise<void> {
-  return invoke('terminal_page_subscribe', { sessionId, channel })
+): Promise<number> {
+  const credential = await ensureHostCredential()
+  return invoke<number>('terminal_page_subscribe', { sessionId, channel, credential })
 }
 
-/** 段2：取消登记（退出终端页）— 清空推送通道 */
-export async function terminalPageUnsubscribe(sessionId: string): Promise<void> {
-  return invoke('terminal_page_unsubscribe', { sessionId })
+/** 段2：取消登记（退出终端页）— 只摘本代通道（令牌不匹配则宿主 no-op） */
+export async function terminalPageUnsubscribe(sessionId: string, pageToken: number): Promise<void> {
+  const credential = await ensureHostCredential()
+  return invoke('terminal_page_unsubscribe', { sessionId, pageToken, credential })
 }

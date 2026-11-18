@@ -1,6 +1,6 @@
-//! 移动 guest 事件派发器（票 05 绑定归位 / ADR 0022「机制留内核、契约面上移」）
+//! 移动 guest 事件派发器（机制留内核、契约面上移）
 //!
-//! 内核对 `events` 导出**零绑定**（票 03 起）：事件循环机制（队列、属主化、背压、
+//! 内核对 `events` 导出**零绑定**：事件循环机制（队列、属主化、背压、
 //! 燃料续费、trap 记账）在 wasm-core，而「调哪个导出、什么签名」是各端 WIT 契约
 //! 事实——移动词汇 = `on-bus-message` / `on-auth-success` / `on-disconnect` /
 //! `on-session-created` / `on-session-stopped`（桌面是 `on-message` /

@@ -35,14 +35,10 @@ const RESOURCES_BASE = resolve(ROOT, 'src-tauri/resources/plugins/desktop')
 const PLUGINS = {
   // 名单单一真源：`--all`（= pnpm `plugins:build`，CI/release/test.yml 走这条）与
   // `--plugin <id>`（docs/commands.md §5.2 的单应用调试命令）都从这里取。
-  // 五个 wasm 应用必须齐全：agent-hub 曾只存在于源码目录而不在本表，
+  // wasm 应用必须齐全：曾有应用只存在于源码目录而不在本表，
   // 于是批量构建漏掉它（CI 全新 checkout 里产物不生成）、单应用命令报
   // Unknown plugin 直接退出，前端只能手工 vite build —— 产物长期停在旧构建，
   // 热力图按旧 CSS 渲染成整块色块（2026-10-06 实测）。新增工程同理必须同步本表。
-  'com.wasmnest.agent-hub': {
-    group: 'apps',
-    slug: 'agent-hub',
-  },
   'com.wasmnest.ai-chatbox': {
     group: 'apps',
     slug: 'ai-chatbox',
@@ -64,6 +60,15 @@ const PLUGINS = {
   'com.wasmnest.auth-center': {
     group: 'servers',
     slug: 'auth-center',
+  },
+  // 服务型 wasm（L2 内部业务）：网络配置中心（T18，跨应用共享 relay 配置与 WAN 注册表）。
+  'com.wasmnest.net-config': {
+    group: 'servers',
+    slug: 'net-config',
+  },
+  'com.wasmnest.lanbitou': {
+    group: 'apps',
+    slug: 'lanbitou',
   },
 }
 

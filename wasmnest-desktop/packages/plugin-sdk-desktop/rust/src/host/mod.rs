@@ -15,6 +15,8 @@
 pub mod app;
 pub mod auth;
 pub mod bus;
+/// 系统剪贴板读写（共享域契约 `host-clipboard`；ADR-0006）
+pub mod clipboard;
 pub mod config;
 pub mod connection;
 pub mod crypto;
@@ -35,6 +37,8 @@ pub mod pty;
 pub mod storage;
 pub mod task;
 pub mod timer;
+/// 内网穿透通道（`host-tunnel`，T06）
+pub mod tunnel;
 pub mod ws;
 
 pub use app::HostApp;
@@ -42,6 +46,7 @@ pub use auth::HostAuth;
 pub use bus::{
     owned_topic, topic_owner, HostBus, API_TOPIC_PREFIX, REPLY_TOPIC_PREFIX, TOPIC_NS_SEP,
 };
+pub use clipboard::HostClipboard;
 pub use config::{ConfigKey, HostConfig};
 pub use connection::HostConnection;
 pub use crypto::{CryptoKeypair, HostCrypto};
@@ -53,13 +58,14 @@ pub use log::HostLog;
 pub use mdns::{mdns_event_topic, HostMdns, MDNS_FOUND, MDNS_LOST};
 pub use metrics::HostMetrics;
 pub use notify::{HostNotify, NotifyOptions};
-pub use peer::HostPeer;
+pub use peer::{HostPeer, PeerNodeConfig, PeerNodeInfo};
 pub use platform::HostPlatform;
 pub use process::{HostProcess, ProcessSyncResult};
 pub use pty::{pty_event_topic, HostPty, PtyRingFetch, PtySpawnConfig, PTY_EXIT, PTY_OUTPUT};
 pub use storage::HostStorage;
 pub use task::{HostTask, TaskPlan, TaskProgress, TaskUnit};
 pub use timer::HostTimer;
+pub use tunnel::{HostTunnel, TunnelConfig, TunnelExposeConfig};
 pub use ws::{ws_event_topic, HostWebsocket, WS_CLIENT_CONNECT, WS_CLIENT_DISCONNECT, WS_CLOSE, WS_ERROR, WS_OPEN};
 
 /// 宿主调用错误
@@ -169,6 +175,7 @@ pub trait HostApi:
     + HostPluginDatabase
     + HostEvents
     + HostNotify
+    + HostClipboard
     + HostHttp
     + HostFs
     + HostLog
@@ -182,6 +189,7 @@ pub trait HostApi:
     + HostApp
     + HostWebsocket
     + HostMetrics
+    + HostTunnel
 {
 }
 
@@ -190,6 +198,7 @@ impl<T> HostApi for T where
         + HostPluginDatabase
         + HostEvents
         + HostNotify
+        + HostClipboard
         + HostHttp
         + HostFs
         + HostLog
@@ -203,5 +212,6 @@ impl<T> HostApi for T where
         + HostApp
         + HostWebsocket
         + HostMetrics
+        + HostTunnel
 {
 }

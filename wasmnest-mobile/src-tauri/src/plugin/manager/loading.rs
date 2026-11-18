@@ -1,7 +1,10 @@
+//! 插件运行时初始化与加载：AOT 缓存 / dispatcher 注入 / 扫描加载 / 审批与预授权
+
 use super::events::PluginManagerDispatcher;
 use super::*;
 
 impl PluginManager {
+    /// 初始化 WASM 运行时：创建 Engine、注入 dispatcher 与 guest 事件实现
     ///
     /// 必须在 Tokio 运行时上下文中调用（Engine 创建需要 Handle）。
     /// async：内部需 await 注入 dispatcher，禁止在运行时内使用 block_on（会 panic）
@@ -33,7 +36,7 @@ impl PluginManager {
         }
         // 统一运行时壳（单形态 2026-10-13）：wasm-core 零端 ABI 知识——
         // 构造注入移动 ABI 规格（20，无 abi-form 导出）；first_party_dirs 移动
-        // 无此概念（桌面 worker 免弹窗通道，ADR 0034）传空表。
+        // 无此概念（桌面 worker 免弹窗通道）传空表。
         // 引擎配置经 `mobile_core_config`（含移动端固定项：关信号式 trap，见其注释）
         let core_config = mobile_core_config(
             self.app_handle
@@ -47,7 +50,7 @@ impl PluginManager {
             crate::plugin::wasm_runtime::EngineSetup::new(core_config)
                 .with_abi(crate::plugin::wasm_runtime::AbiPolicy { form: None }),
         )?);
-        // guest 事件派发器（票 05 绑定归位）：`events` 导出是各端契约事实，内核零绑定
+        // guest 事件派发器：`events` 导出是各端契约事实，内核零绑定
         // ——注入移动实现（词汇：on-bus-message / on-auth-success / on-disconnect /
         // on-session-*），缺省 `UnwiredGuestEvents` 派发即 fail-visible。
         // 装配期注入即可（晚绑定共享槽）：派发时实时读取，早于/晚于实例化均生效；
@@ -130,10 +133,19 @@ impl PluginManager {
             self.fs_auth.clone(),
             self.message_bus.clone(),
             status_reporter,
-            Arc::new(crate::plugin::host_ports::HostPorts::new()), // 批次 2b：宿主引擎端口装配
+            Arc::new(crate::plugin::host_ports::HostPorts::new()), // 宿主引擎端口装配
         ));
         // 运行监控出口（WIT `host-metrics`）：快照源 = 本运行时注册表。
         // 与桌面 `PluginHost::new` 同一条装配路径（两阶段注入，实例化前写入）。
+        //
+        // `process` 段（宿主进程）与 `plugins` 段（wasm 线性内存）**分开**：前者是
+        // OS 账，后者是单实例运行时账。移动端只覆盖本进程——Android WebView 渲染进程
+        // 在 `webview_zygote` 下、不属于本进程树且跨 uid 不可读，故该段以
+        // `webview.present = false` 显式声明「不可归属」（见 system/process_metrics.rs）。
+        runtime.monitor().register_source(
+            "process",
+            Box::new(crate::system::process_metrics::ProcessMetricsSource::new()),
+        );
         host_ctx.set_metrics_snapshot_source(runtime.monitor());
 
         // 宿主端事实（平台标识 = "mobile" / 无入站服务器）：单形态收口后从 wasm-core
@@ -145,7 +157,7 @@ impl PluginManager {
         // 端点注册 / host-peer.start-node 会 acquire）
         host_ctx.set_service_registry(Some(Arc::clone(&self.service_registry)));
 
-        // host-peer 端口（wasm-core-mobile-purity 票 03）：wasm-core bare 面 19 条
+        // host-peer 端口：wasm-core bare 面 19 条
         // 原语的薄转发经 crate `ports::ports()` 取本端口——权限判定 / 引擎上下文 /
         // 同步桥 / 服务注册表四面在此与宿主衔接（幂等，重复 init 首装胜出）
         crate::plugin::peer_ports::install(self.app_handle.as_ref().cloned(), Arc::clone(&self.service_registry));
@@ -153,7 +165,7 @@ impl PluginManager {
         // 组件路径无启动期签名表校验：契约由 WIT 编译期保证；组件形态由
         // instantiate_component 内的 `abi-form` 检查逐实例校验（移动 WIT 无该导出，
         // 故形态要求为 None），wit 包版本由 linker 的 import 名逐字匹配保证
-        // （ADR 0051：整数 ABI 协商已退役）
+        // （整数 ABI 协商已退役）
 
         let _ = self.wasm_runtime.set(runtime);
         let _ = self.wasm_host_ctx.set(host_ctx);
@@ -308,7 +320,7 @@ impl PluginManager {
         let ids: Vec<String> = self.plugins.read().await.keys().cloned().collect();
         let mut candidates = Vec::new();
         for id in ids {
-            // 缺省按角色：L1/L2 默认自启，L3 默认不自启；显式 false 优先。
+            // 缺省按角色：基础服务 / 内部业务默认自启，业务应用默认不自启；显式 false 优先。
             if self.is_autostart(&id).await {
                 candidates.push(id);
             }
@@ -318,7 +330,7 @@ impl PluginManager {
     }
 
     /// 应用启动时：扫描已完成（`scan_and_load`），此处只对「启动时自动激活」的应用
-    /// 做自动激活（`plugin.autostart.{id}`；缺省按角色：L1/L2 默认开、L3 默认关）
+    /// 做自动激活（`plugin.autostart.{id}`；缺省按角色：基础服务 / 内部业务默认开、业务应用默认关）
     ///
     /// 其余应用保持 Loaded 态，等用户在宿主壳里点击启动（`plugin_activate`）。
     pub async fn load_all(&self) {
@@ -339,7 +351,7 @@ impl PluginManager {
         }
 
         // 把名称 / 装配角色写进监控元数据：移动端 monitor 没有宿主插件清单命令，
-        // 服务分类（L1/L2 vs L3）必须由宿主在快照里附带，不能要求目标插件参与。
+        // 服务分类（基础服务 / 内部业务 vs 业务应用）必须由宿主在快照里附带，不能要求目标插件参与。
         self.sync_plugin_meta().await;
 
         // 通知所有插件应用启动完成

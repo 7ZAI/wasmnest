@@ -12,7 +12,7 @@ import { clearAppRoutes, forgetAppRoute, lastRouteOf, rememberAppRoute } from '@
  */
 
 const APP = 'com.wasmnest.bedcode'
-const OTHER = 'com.wasmnest.agent-hub'
+const OTHER = 'com.wasmnest.ai-chatbox'
 
 describe('应用页面记忆（appSession）', () => {
   beforeEach(() => {

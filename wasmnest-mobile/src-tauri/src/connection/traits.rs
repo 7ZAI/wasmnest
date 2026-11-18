@@ -1,12 +1,13 @@
-//! WebSocket Traits Definition
+//! 消息处理契约：移动端**真正在用**的 trait 与消息类型
 //!
-//! 本文件只保留移动端**真正在用**的消息处理契约。
+//! 服务端框架那套泛型契约（客户端表 / 鉴权态 / 重试 / 拦截器）已清理——移动端是
+//! 纯 WS 客户端，那些 trait 没有实现方。
 //!
 //! 历史背景（2026-10-11 清理）：本文件曾携带一整套泛型服务端框架
 //! ——`ClientInfoTrait` / `MessageHandlerWithClientInfo` / `ClientMessageHandler`
 //! / `SendStrategy`（含重试策略）/ `SendInterceptor`（含日志与指标拦截器）/
 //! `ResponseHandler`。这些是为「本端作为 WS 服务端、持有客户端表与鉴权态」设计的。
-//! 移动端是纯 WS 客户端（ADR 0018：客户端与服务端契约各自独立演进，移动端不
+//! 移动端是纯 WS 客户端（客户端与服务端契约各自独立演进，移动端不
 //! 持有入站连接表、不做服务端鉴权），故该框架按设计即无实现方——其中
 //! `MessageHandlerWithClientInfo` 甚至自带 `#[allow(dead_code)]` 与「此 trait
 //! 目前未使用」的注释。它们唯一的引用是 `connection.rs` 的 re-export 行本身，
@@ -30,11 +31,8 @@ pub type HandlerResult = Result<Option<Message>>;
 pub trait MessageHandler: Send + Sync {
     /// 处理接收到的 WebSocket 消息
     ///
-    /// # Arguments
-    /// * `raw_message` - 原始 WebSocket 消息（WsMsg::Text 或 WsMsg::Binary）
-    /// * `addr` - 对端地址（移动端恒为桌面端）
-    /// * `client_id` - 客户端标识（如果已认证）
-    /// * `sender` - 用于发送响应消息的通道
+    /// `raw_message` 是原始帧（Text / Binary）；`addr` 是对端地址（移动端恒为
+    /// 桌面端）；`client_id` 只在已认证时存在；`sender` 用于异步回包。
     fn handle(
         &self,
         raw_message: tokio_tungstenite::tungstenite::protocol::Message,

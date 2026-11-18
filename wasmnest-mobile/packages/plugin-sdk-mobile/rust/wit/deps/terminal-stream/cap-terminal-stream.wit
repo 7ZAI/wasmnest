@@ -1,0 +1,33 @@
+package wasmnest:terminal-stream@0.0.1;
+
+// 移动端能力域分片（WIT 按包拆分，ADR 0061）：一个能力域 = 一个独立包，
+// 版本独立演进——本包 WIT 变更只 bump 本包，不波及未 import 它的应用。
+// 端 `plugin` world 经 `include wasmnest:terminal-stream/cap-terminal-stream@0.0.1;` 并入本接口。
+
+/// 终端输出流窄转发（ABI v15 新增）
+///
+/// 把插件消费到的终端输出**裸字节**交宿主转发到已登记的前端页面通道
+/// （Tauri Channel 由前端创建、经宿主命令 `terminal_page_subscribe` 登记，
+/// 宿主零解析持有会话 → 通道表）。宿主**只按 session-id 寻址投递**：
+/// 不读字节内容、不识别协议、不缓存——ADR 0022 四类薄壳④「零解析窄转发」
+/// （与桌面 `utils/session_gateway.rs` 同款形态）。
+///
+/// **C3 性能红线落点**：输出字节禁止经 JSON 命令通道搬运——本原语是
+/// 「插件 → 前端」唯一的二进制出口；经 host-events.emit 走 JSON（base64）
+/// 是违规路径。字节经 `list<u8>` 进出 WASM 与 Tauri Raw 通道，全程零
+/// base64 / 零 JSON。
+///
+/// 权限位 `terminal:output`（既有词汇复用，fail-closed）。
+/// 插件停用时登记的通道随宿主窄转发层 purge 回收。
+///
+/// 消费者：`com.wasmnest.bedcode`（终端订阅协议客户端）。
+interface host-terminal-stream {
+    /// 转发一段输出字节到 session-id 对应的前端页面通道（裸字节原样投递）。
+    /// 通道未登记（页面未订阅 / 已卸载）→ Err：字节由调用方丢弃（页面重进
+    /// 时经重订阅回放补齐，与退役前宿主门控丢弃语义一致），宿主不缓存
+    forward-output: func(session-id: string, data: list<u8>) -> result<_, string>;
+}
+
+world cap-terminal-stream {
+    import host-terminal-stream;
+}
