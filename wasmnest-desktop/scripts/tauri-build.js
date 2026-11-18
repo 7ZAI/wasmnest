@@ -23,7 +23,7 @@
 
 import { spawnSync } from 'child_process'
 import { existsSync, readFileSync, readdirSync, renameSync } from 'fs'
-import { join, dirname } from 'path'
+import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
 
@@ -99,9 +99,14 @@ if (signingEnv) {
  * 不带 `--target` 时产物在 `target/release/bundle/<kind>`；带 `--target <triple>` 时在
  * `target/<triple>/release/bundle/<kind>`（CI 发布固定带 --target，2026-10-28 实测：
  * 只认无 target 的路径会让重命名静默空转，Release 上的文件名与本地产出不一致）。
+ *
+ * `CARGO_TARGET_DIR` 已设时（Windows 发布构建用短路径规避 CreateProcess 32767 字符
+ * 命令行上限，见 product-release.yml）产物落点随 cargo，base 取该目录。
  */
 function resolveBundleDir(kind) {
-  const base = join(projectRoot, 'src-tauri', 'target')
+  const base = process.env.CARGO_TARGET_DIR
+    ? resolve(process.env.CARGO_TARGET_DIR)
+    : join(projectRoot, 'src-tauri', 'target')
   const direct = join(base, 'release', 'bundle', kind)
   if (existsSync(direct)) return direct
   if (!existsSync(base)) return null

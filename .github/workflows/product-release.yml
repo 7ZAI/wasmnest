@@ -134,6 +134,9 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             bundles: nsis
+            # Windows 短 CARGO_TARGET_DIR：全量 wasmtime 依赖图的 rustc 调用约 35KB，
+            # 超 CreateProcess 32767 字符上限（os error 206）；短路径把命令行压回限内。
+            cargo_target_dir: C:\tw
     steps:
       - name: 检出平台仓
         uses: actions/checkout@v4
@@ -272,12 +275,17 @@ jobs:
           BUNDLES: ${{ matrix.bundles }}
           WIN_THUMBPRINT: ${{ steps.wincert.outputs.thumbprint }}
           UNSIGNED: ${{ inputs.unsigned }}
+          MATRIX_CARGO_TARGET_DIR: ${{ matrix.cargo_target_dir }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           if [ "$UNSIGNED" = "true" ]; then
             echo "::warning::unsigned=true：跳过签名，产物不可用于发布"
+          fi
+          # Windows：注入短 CARGO_TARGET_DIR（见 matrix 注释）；Linux 不设，保持仓内默认布局
+          if [ -n "${MATRIX_CARGO_TARGET_DIR:-}" ]; then
+            export CARGO_TARGET_DIR="$MATRIX_CARGO_TARGET_DIR"
           fi
           cfg="{\"version\":\"${PRODUCT}\""
           if [ -n "${WIN_THUMBPRINT:-}" ]; then
@@ -292,9 +300,12 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           BUNDLES: ${{ matrix.bundles }}
+          MATRIX_CARGO_TARGET_DIR: ${{ matrix.cargo_target_dir }}
         run: |
           set -euo pipefail
-          base="wasmnest-desktop/src-tauri/target/${TARGET}/release/bundle"
+          # cwd = wasmnest（defaults.run.working-directory）；Windows 用短绝对路径，Linux 用仓内默认
+          target_dir="${MATRIX_CARGO_TARGET_DIR:-wasmnest-desktop/src-tauri/target}"
+          base="$target_dir/${TARGET}/release/bundle"
           for kind in ${BUNDLES//,/ }; do
             [ -d "$base/$kind" ] || { echo "::error::缺产物目录 $base/$kind"; exit 1; }
             ls -1 "$base/$kind"
@@ -310,9 +321,9 @@ jobs:
           # WasmNest.AppDir/ 解包树（几十 MB 的 usr/lib 依赖），会把 artifact 吹大且
           # 让后续摊平步骤撞名。.sig 必须一起传：latest.json 的 signature 取自它。
           path: |
-            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe*
-            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb*
-            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage*
+            ${{ matrix.cargo_target_dir || 'wasmnest/wasmnest-desktop/src-tauri/target' }}/${{ matrix.target }}/release/bundle/nsis/*.exe*
+            ${{ matrix.cargo_target_dir || 'wasmnest/wasmnest-desktop/src-tauri/target' }}/${{ matrix.target }}/release/bundle/deb/*.deb*
+            ${{ matrix.cargo_target_dir || 'wasmnest/wasmnest-desktop/src-tauri/target' }}/${{ matrix.target }}/release/bundle/appimage/*.AppImage*
           if-no-files-found: error
 
   # ------------------- 3) Android APK（移动插件随构建现场产出，见文件头注释）
