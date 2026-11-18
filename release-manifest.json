@@ -3,7 +3,7 @@
   "product": "0.0.2",
   "repos": {
     "lib": {
-      "tag": "lib-v0.0.1"
+      "tag": "lib-v0.1.0"
     },
     "apps": {
       "tag": "apps-v0.0.1"
