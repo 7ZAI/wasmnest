@@ -178,7 +178,7 @@ wasmnest-wasm-core = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnes
 # （wasm-core 已不再依赖本 crate，也不再出现它的任何路径）。
 # lib 声明同时满足 crate_boundary_lock 断言③「宿主清单声明全部拆分产物」
 # （pty-engine 已登记 SPLIT_CRATES）。
-wasmnest-pty-engine = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
+wasmnest-pty-engine = { version = "0.0.2", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
 # 组播发现能力域（mDNS，wasm-core-lib-split 票 03）：引擎 + 宿主绑定层 + 自动
 # 注册。票 02 批次 03 起宿主**直接消费**：端口 adapter 在 `src/plugin/mdns.rs`
 # （wasm-core 已不再依赖本 crate，`host_context_registry` 随其退役）。
