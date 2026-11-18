@@ -12,7 +12,7 @@
   "contract": {
     "package": "wasmnest:plugin",
     "version": "0.1.0",
-    "witSha256": "a1212abe217f9a3b5878ef517cdb83df280184316c9c0bdd86c9ec9673c3befc",
+    "witSha256": "aa6a2b1722cf6a84294db086331db4c351be4abaf8d2de951b4167fd10b6a02e",
     "packages": {
       "wasmnest:plugin": "0.1.0",
       "wasmnest:pty": "0.0.1",
@@ -45,7 +45,7 @@
   "hostRuntime": {
     "version": "0.0.2",
     "sourceCommit": "21c84dd57fd4900257db9ecb3a2e7ec8968225bb",
-    "libTag": "lib-v0.0.1",
+    "libTag": "lib-v0.1.0",
     "witVersion": "0.1.0",
     "sdkVersion": "0.0.2",
     "mountContract": "1"
@@ -53,12 +53,12 @@
   "apps": {
     "com.wasmnest.ai-chatbox": {
       "path": "apps/ai-chatbox",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "ends": {
         "desktop": {
           "artifact": "wasmnest_plugin_ai_chatbox.wasm",
-          "package": "ai-chatbox-desktop-v0.0.1.zip",
-          "sha256": "bcc9a14a9a336c06e72ef9f78a46742ecb7a6e9f27714e9203354ec207fe42cc"
+          "package": "ai-chatbox-desktop-v0.0.2.zip",
+          "sha256": "3cb569293f8212ee3e466621034f6af2fdadc028dc7417219e323e3263754169"
         },
         "mobile": {
           "artifact": "wasmnest_plugin_ai_chatbox.wasm"
@@ -67,12 +67,12 @@
     },
     "com.wasmnest.bedcode": {
       "path": "apps/bedcode",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "ends": {
         "desktop": {
           "artifact": "bedcode_plugin_terminal_session.wasm",
-          "package": "bedcode-desktop-v0.0.1.zip",
-          "sha256": "eff9e846ab6f132f77354c09f3ab0b10db293c4f6e9381acab9bf06e45061fb6"
+          "package": "bedcode-desktop-v0.0.2.zip",
+          "sha256": "8af8bf8cb0af0a95cafae8aa89aa6b50a2ac2a19995e0c0158193b24c39bf7e0"
         },
         "mobile": {
           "artifact": "bedcode_plugin_terminal_session.wasm"
@@ -81,12 +81,12 @@
     },
     "com.wasmnest.file-transfer": {
       "path": "apps/file-transfer",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "ends": {
         "desktop": {
           "artifact": "wasmnest_plugin_file_transfer.wasm",
-          "package": "file-transfer-desktop-v0.0.1.zip",
-          "sha256": "0f302a68742edd1934dd9976a540422bf72e702129f1a3ebb5e5792da0d1f183"
+          "package": "file-transfer-desktop-v0.0.2.zip",
+          "sha256": "51d5203a49fc1a959ed95fc5784c687277d9c4a1ce0265412d405ecbd43a4457"
         },
         "mobile": {
           "artifact": "wasmnest_plugin_file_transfer.wasm"
@@ -95,21 +95,23 @@
     },
     "com.wasmnest.lanbitou": {
       "path": "apps/lanbitou",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "ends": {
         "desktop": {
-          "artifact": "wasmnest_plugin_lanbitou.wasm"
+          "artifact": "wasmnest_plugin_lanbitou.wasm",
+          "package": "lanbitou-desktop-v0.0.2.zip",
+          "sha256": "5273b62f2642dc06df55ad55083a93d9852209a11cb287f8f2130dc225ce5ebb"
         }
       }
     },
     "com.wasmnest.monitor": {
       "path": "servers/monitor",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "ends": {
         "desktop": {
           "artifact": "wasmnest_plugin_monitor.wasm",
-          "package": "monitor-desktop-v0.0.1.zip",
-          "sha256": "20b6fcdd4ecafc9a74fe1eee55cf39fe097fb8b8b6b1e61d8be4f44a6fd09ee5"
+          "package": "monitor-desktop-v0.0.2.zip",
+          "sha256": "2863c08a1d7fc0e9e2fc073b6f45d263c5ab7d2518dc4a83293d8cad4917e624"
         },
         "mobile": {
           "artifact": "wasmnest_plugin_monitor.wasm"
@@ -118,23 +120,23 @@
     },
     "com.wasmnest.auth-center": {
       "path": "servers/auth-center",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "ends": {
         "desktop": {
           "artifact": "wasmnest_plugin_auth_center.wasm",
-          "package": "auth-center-desktop-v0.0.1.zip",
-          "sha256": "c77433ebac246319609f4f1cdfd46c28b06f605c6c03754bebd3fd2d53c92e9b"
+          "package": "auth-center-desktop-v0.0.2.zip",
+          "sha256": "c6eb95eef27b64126fa606e0ba15683696ab86001cc6b859bb8b77f9ef430fce"
         }
       }
     },
     "com.wasmnest.net-config": {
       "path": "servers/net-config",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "ends": {
         "desktop": {
           "artifact": "wasmnest_plugin_net_config.wasm",
-          "package": "net-config-desktop-v0.0.1.zip",
-          "sha256": "d6443d0c73c87b2af67cf690bc7c458151cc3326f6436ea7879a14a1aa951892"
+          "package": "net-config-desktop-v0.0.2.zip",
+          "sha256": "00e5030eb442a3b38fe618f7731b8a2212f3b9bc1c8c446d7248ae3c5dab068f"
         }
       }
     }
