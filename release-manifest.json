@@ -6,7 +6,7 @@
       "tag": "lib-v0.1.0"
     },
     "apps": {
-      "tag": "apps-v0.0.1"
+      "tag": "apps-v0.0.2"
     }
   },
   "contract": {
@@ -95,12 +95,12 @@
     },
     "com.wasmnest.lanbitou": {
       "path": "apps/lanbitou",
-      "version": "0.0.2",
+      "version": "0.0.1",
       "ends": {
         "desktop": {
           "artifact": "wasmnest_plugin_lanbitou.wasm",
-          "package": "lanbitou-desktop-v0.0.2.zip",
-          "sha256": "5273b62f2642dc06df55ad55083a93d9852209a11cb287f8f2130dc225ce5ebb"
+          "package": "lanbitou-desktop-v0.0.1.zip",
+          "sha256": "7c0c73ab665f588b670d2c54922a598ca69bf3ead7e5970298c51725b05ded86"
         }
       }
     },
@@ -131,12 +131,12 @@
     },
     "com.wasmnest.net-config": {
       "path": "servers/net-config",
-      "version": "0.0.2",
+      "version": "0.0.1",
       "ends": {
         "desktop": {
           "artifact": "wasmnest_plugin_net_config.wasm",
-          "package": "net-config-desktop-v0.0.2.zip",
-          "sha256": "00e5030eb442a3b38fe618f7731b8a2212f3b9bc1c8c446d7248ae3c5dab068f"
+          "package": "net-config-desktop-v0.0.1.zip",
+          "sha256": "8f4bf48429ad00ac8c82c9500803ca51e8aa0a037d422388cfe83a580f5506ee"
         }
       }
     }
