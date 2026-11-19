@@ -23,8 +23,9 @@ pub mod auth;
 pub mod bindings;
 pub mod commands;
 pub mod connection;
-// 桌面兼容面桩（file-transfer 双端单产物：host-api-call / host-platform-desktop
-// 的 fail-visible unsupported 实现，绑桌面 wit 的 desktop-compat world）
+// 桌面兼容面桩（双端共享产物引用到的桌面独有 interface：api-call /
+// platform-desktop / clipboard / timer 的 fail-visible unsupported 实现，
+// 绑桌面 wit 的 desktop-compat world）
 pub mod desktop_compat;
 pub mod downloader;
 pub mod fs_mobile;

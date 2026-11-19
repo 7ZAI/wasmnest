@@ -135,7 +135,7 @@ wasmnest-mobile/src-tauri/resources/plugins/mobile/<id>/     { 同上 }
 
 | 路径 | 职责（头注释为准） |
 | --- | --- |
-| `plugin/` | 插件系统：`loader.rs` / `manager.rs` / `registry.rs` / `bindings.rs` / `commands.rs` / `approval.rs`（**内容 SHA-256 钉扎审批**）/ `desktop_compat.rs`（file-transfer 双端单产物的 fail-visible 桩）/ `terminal_stream.rs` / `saf_io.rs` / `saf_path.rs` / `fs_mobile.rs` / `downloader.rs` / `host_ports.rs` / `peer_ports.rs` / `android_plugins.rs` / `types.rs` 等 |
+| `plugin/` | 插件系统：`loader.rs` / `manager.rs` / `registry.rs` / `bindings.rs` / `commands.rs` / `approval.rs`（**内容 SHA-256 钉扎审批**）/ `desktop_compat.rs`（双端共享产物的桌面独有 import fail-visible 桩）/ `terminal_stream.rs` / `saf_io.rs` / `saf_path.rs` / `fs_mobile.rs` / `downloader.rs` / `host_ports.rs` / `peer_ports.rs` / `android_plugins.rs` / `types.rs` 等 |
 | `auth/` · `connection/` · `peer/` | 认证 / 连接 / 配对面 |
 | `file_service/` | SAF 文件服务 |
 | `router.rs` · `handler.rs` · `commands.rs` | 路由 / 处理 / 命令注册（`command_registration_completeness_lock` 钉住） |

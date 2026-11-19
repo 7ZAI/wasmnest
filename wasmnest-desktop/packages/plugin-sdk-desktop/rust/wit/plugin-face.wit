@@ -341,15 +341,22 @@ world plugin-system {
     export host-storage;
 }
 
-/// 桌面兼容面 binding-only world（2026-10-13，file-transfer 单产物）
+/// 桌面兼容面 binding-only world（2026-10-13 起，双端共享产物）
 ///
 /// **宿主绑定用，插件不实例化它**（同 `plugin-binary` 先例）：移动宿主 bindgen 本
-/// world 取得 `host-api-call` / `host-platform-desktop` 的 `Host` trait，为双端共享
-/// wasm 产物（按桌面 `world plugin` 构建、import 这两个 interface）提供 **fail-visible
-/// 桩**——全部函数显性 `Err("unsupported on mobile")`。桌面分支在移动端不可达
-/// （共享产物经 `host-platform.platform()` 探测后不选桌面实现），桩的存在只为满足
-/// 组件实例化的 import 闭合，不是「移动端实现桌面能力」。
+/// world 取得下列桌面独有 interface 的 `Host` trait，为双端共享 wasm 产物
+/// （按桌面 `world plugin` 构建）提供 **fail-visible 桩**——全部函数显性
+/// `Err("unsupported on mobile")`。共享产物经 `host-platform.platform()` 探测后
+/// 不选桌面实现，桩的存在只为满足组件实例化的 import 闭合，不是「移动端实现桌面
+/// 能力」。
+///
+/// 成员 = 共享产物实际引用过的桌面独有域，按产物逐个登记：
+/// - `host-api-call` / `host-platform-desktop`：file-transfer 单产物；
+/// - `host-clipboard` / `host-timer`：news 单产物（移动分支不调用：复制走前端
+///   `navigator.clipboard`、刷新由前台事件驱动）。
 world desktop-compat {
     import wasmnest:api-call/host-api-call@0.0.1;
     import wasmnest:platform-desktop/host-platform-desktop@0.0.1;
+    import wasmnest:clipboard/host-clipboard@0.0.1;
+    import wasmnest:timer/host-timer@0.0.1;
 }

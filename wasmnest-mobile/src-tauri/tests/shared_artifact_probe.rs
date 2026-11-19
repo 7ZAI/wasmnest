@@ -1,5 +1,7 @@
-//! T3 探针：移动宿主加载**桌面构建**的共享 file-transfer 产物（规格
-//! `.scratch/2026-10-13-file-transfer-single-wasm/spec.md` §3 T3 / §4 R1·R2）
+//! 共享产物探针：移动宿主加载**桌面构建**的双端共享产物（file-transfer / news），
+//! 以及全部随包移动产物的 import 闭合（file-transfer 单产物规格 §3 T3 / §4 R1·R2；
+//! news 引入 `host-clipboard` / `host-timer` 后由 `every_bundled_mobile_artifact_*`
+//! 承担通用回归）
 //!
 //! ## 为什么需要它
 //!
@@ -131,6 +133,63 @@ fn mobile_runtime(aot_cache_dir: Option<PathBuf>) -> WasmRuntime {
             .expect("create wasm runtime");
     runtime.set_guest_events(Arc::new(wasmnest_mobile_lib::plugin::guest_events::MobileGuestEvents));
     runtime
+}
+
+/// 全部随包移动产物都在移动宿主上**实例化成功** = 每个产物的 import 面都闭合。
+///
+/// 共享产物（按桌面 `world plugin` 构建）会带它实际引用过的桌面独有 import，
+/// 由 `desktop_compat.rs` 的 fail-visible 桩闭合；纯移动产物只引用移动 world
+/// 提供的接口。任何一侧漏了桩 / 接口，这里就会在实例化期点名缺失的 interface
+/// ——比 dev 启动后才发现更早（news 的 `host-clipboard` / `host-timer` 即此类）。
+#[test]
+fn every_bundled_mobile_artifact_instantiates_on_mobile_host() {
+    let plugins_dir = mobile_root().join("resources/plugins/mobile");
+    if !plugins_dir.exists() {
+        eprintln!("skip: 移动插件产物目录不存在（{}）", plugins_dir.display());
+        return;
+    }
+
+    let mut artifacts: Vec<(String, PathBuf)> = Vec::new();
+    for entry in std::fs::read_dir(&plugins_dir).expect("read plugins dir") {
+        let entry = entry.expect("dir entry");
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let plugin_id = entry.file_name().to_string_lossy().to_string();
+        for file in std::fs::read_dir(entry.path()).expect("read plugin dir") {
+            let path = file.expect("file entry").path();
+            if path.extension().and_then(|e| e.to_str()) == Some("wasm") {
+                artifacts.push((plugin_id.clone(), path));
+            }
+        }
+    }
+    artifacts.sort();
+    assert!(
+        !artifacts.is_empty(),
+        "移动插件产物目录为空——探针会空转（先跑 `pnpm run plugins:build`）"
+    );
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async move {
+        let runtime = mobile_runtime(None);
+        for (plugin_id, path) in artifacts {
+            let bytes = read_artifact(&path);
+            let component = Component::from_binary(runtime_engine(&runtime), &bytes)
+                .unwrap_or_else(|e| panic!("compile {} as component: {e}", path.display()));
+            let host_ctx = build_host_ctx();
+            runtime
+                .instantiate_component(&component, &plugin_id, host_ctx, &[], None)
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "instantiate {} on mobile host (imports must close): {e}\n\
+                         缺失桌面独有 interface 时：在桌面 plugin-face.wit 的 \
+                         `world desktop-compat` 登记 import，并在 \
+                         `plugin/desktop_compat.rs` 补 `Host` impl + 自报登记",
+                        path.display()
+                    )
+                });
+        }
+    });
 }
 
 /// 桩的完备性 = import 闭合：移动宿主实例化**桌面构建**的共享产物。

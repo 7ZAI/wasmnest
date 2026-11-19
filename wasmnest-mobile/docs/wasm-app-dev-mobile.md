@@ -317,7 +317,7 @@ wasm 构建开启 `--features wasm`（`wasm_entry!` / `WasmHost` / `WasmPlugin` 
 | 宿主导入接口 | 29 组 | 20 组 | 真源 = 两端 `rust/wit/` 生成物（`grep 'interface host-'` 即得） |
 | 插件导出接口 | 5 组 | 4 组 | `core.wit` 的 `command` / `lifecycle` / `manifest` + `plugin-face.wit` 的 `events`（桌面另有 `abi-form`） |
 | 核心机制面 | 10 import | 10 import | `host-storage` / `host-plugin-database` / `host-log` / `host-config` / `host-events` / `host-bus` / `host-fs` / `host-platform` / `host-metrics` / `host-worker`（ADR 0052 D1） |
-| 桌面独有 | `host-pty` / `host-clipboard` / `host-process` / `host-task` / `host-api-call` / `host-app` / `host-crypto` / `host-auth-center` / `host-connection-registry` / `host-timer` / `host-websocket-server` / `host-http-endpoint` / `host-fs-desktop` / `host-platform-desktop` | — | 端扩展的声明与实现均住桌面宿主（ADR 0052 D4） |
+| 桌面独有 | `host-pty` / `host-clipboard` / `host-process` / `host-task` / `host-api-call` / `host-app` / `host-crypto` / `host-auth-center` / `host-connection-registry` / `host-timer` / `host-websocket-server` / `host-http-endpoint` / `host-fs-desktop` / `host-platform-desktop` | — | 端扩展的声明与实现均住桌面宿主（ADR 0052 D4）；双端共享产物实际引用到的域（file-transfer 的 api-call / platform-desktop、news 的 clipboard / timer）由移动 `plugin/desktop_compat.rs` 的 fail-visible 桩闭合 import，移动分支不调用它们 |
 | 移动独有 | — | `host-terminal-stream` / `host-fs-mobile` / `host-notify-mobile` / `host-auth-client` / `host-connection-target` | 端独有域整面落移动宿主 |
 | 通知 | `host-notify`（共享契约房） | `host-notify` + `host-notify-mobile`（4 函数） | 2026-10-13 通知功能级统一；移动端附加震动 / 声音 / 权限查询面 |
 | 认证 | `host-auth-center`（v32 四函数 + 组合式原语） | `host-auth-client` | 入场签发密钥与生物公钥托管均归认证中心自持（ADR 0031 / 0033） |
