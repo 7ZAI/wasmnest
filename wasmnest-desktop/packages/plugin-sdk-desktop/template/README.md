@@ -18,15 +18,26 @@ pnpm run manifest   # 按源码自动填充 plugin.json 的 contributes/permissi
 ```
 ├── plugin.json        # 应用清单（id/name/权限/扩展点声明）
 ├── package.json       # 工程脚本：dev / build / manifest
-├── vite.config.ts     # 前端构建配置（产物 dist/index.js，vue 等外部化到宿主）
+├── vite.config.ts     # 前端构建配置（产物 dist/index.js，自带依赖不外部化）
 ├── tsconfig.json
 ├── src/
-│   ├── index.ts       # 前端入口：activate(context) / deactivate()
-│   └── env.d.ts       # 环境类型声明
+│   └── entry.ts       # 前端入口：导出 mountApp(root, env)（挂载包契约）
 └── rust/              # WASM 后端（--rust 创建；纯前端应用无此目录）
     ├── Cargo.toml
     └── src/lib.rs     # WasmPlugin 实现（含 manifest 声明）
 ```
+
+## 入口形态（挂载包）
+
+桌面应用是**独立构建的挂载包**，入口固定为 `src/entry.ts`：
+
+- 必须导出 `mountApp(root, env): Promise<AppMountHandle>`——宿主把 `root` 交给应用，应用在其上挂载自己的界面；
+- `env` 提供 `appInvoke`（本应用插件命令）/ `appStorage*`（本应用 KV）/ `invoke`（宿主面白名单）/ `locale` / `theme` / `initialRoute` / `onEvent`；
+- 返回 `{ unmount }`；可选 `setRoute` / `setActive` / `setLocale` / `setTheme` 接收宿主通知；
+- `mountContract` 与宿主同值（当前 `'1'`），不匹配时宿主显性报错；
+- **自带全部依赖**（vue 等正常 `import` 打包），不读 `window.__WASMNEST_SHARED__`。
+
+旧贡献面形态（`src/index.ts` + `activate(context)` + `registerSidebarPanel` 等）已随桌面 UI 宿主修正（ADR 0057）退役，新工程不要使用。
 
 ## 安装到 WasmNest Desktop
 

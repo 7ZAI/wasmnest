@@ -82,86 +82,91 @@ wasmnest-plugin-desktop doctor             # 环境自检（Node / Rust / wasm32
 > `sandbox` 已从 manifest 退役（审计票 06 裁决 2：前端不做隔离）——Rust 端类型会
 > 直接忽略并丢弃该字段，写进清单无效，请勿再声明。
 
-**`src/index.ts`** — 插件入口（必须导出 `activate`）：
+**`src/entry.ts`** — 应用入口（必须导出 `mountApp`，挂载包形态）：
 
 ```ts
-import { defineComponent, h } from 'vue'
-import type { PluginContext } from '@binblink/wasmnest-plugin-sdk-desktop'
+import { createApp, h, type App as VueApp } from 'vue'
 
-export async function activate(context: PluginContext): Promise<void> {
-  // 注册侧边栏面板（组件内可通过 inject('pluginContext') 再次获取 context）
-  context.ui.registerSidebarPanel({
-    id: 'my-plugin.sidebar',
-    title: 'My Plugin',
-    order: 600,
-    component: defineComponent({
-      render: () => h('div', 'Hello WasmNest!'),
-    }),
-  })
+/** 与宿主 MOUNT_CONTRACT 同值；不匹配时宿主显性报错 */
+export const mountContract = '1'
+
+interface AppMountEnv {
+  appId: string
+  mountContract: string
+  appInvoke: <T = unknown>(command: string, ...args: unknown[]) => Promise<T>
+  appStorageGet: <T = unknown>(key: string) => Promise<T | undefined>
+  appStorageSet: (key: string, value: unknown) => Promise<void>
+  appStorageDelete: (key: string) => Promise<void>
+  locale: string
+  theme: string
+  platform?: string
+  initialRoute: string
+  onEvent?: (type: string, payload: unknown) => void
 }
 
-export async function deactivate(): Promise<void> {
-  // 清理资源（context 注册的所有 Disposable 宿主会自动回收）
+let app: VueApp | null = null
+
+export async function mountApp(root: HTMLElement, env: AppMountEnv) {
+  app = createApp({ render: () => h('div', `Hello WasmNest! (${env.appId})`) })
+  app.mount(root)
+  return {
+    async unmount() {
+      app?.unmount()
+      app = null
+    },
+  }
 }
 ```
 
-## PluginContext API
+契约全字段（`invoke` / `appUpdate` / `appLinkCrypto*` / `mountMonitorPanel` 等）见 SDK `dev-shell/src/shell/types.ts`，与宿主 `useAppMount.ts` 逐字段同形（破坏性变更才 bump `mountContract`）。
 
-`activate(context)` 接收的 `PluginContext` 是插件访问宿主能力的**唯一通道**，各 API 按权限分组：
+## 挂载环境 API（AppMountEnv）
 
-| API | 说明 | 所需权限 |
-|-----|------|----------|
-| `context.commands` | 注册 / 执行命令 | 默认授予 |
-| `context.terminal` | 向会话发送输入、订阅输出 / 输入 | `terminal:input` / `terminal:output` / `terminal:observe` |
-| `context.session` | 会话列表、状态变更订阅 | `session:read` / `session:write` |
-| `context.ui` | 注册侧边栏 / 工具箱 / 状态栏 / 设置分组 / 输入扩展 / 终端工具栏 / 标题栏 / 文件处理器（`registerFileHandler`） | `ui:sidebar` / `ui:toolbox` / `ui:statusbar` / `ui:pageToolbar` / `ui:settings` / `ui:input` / `ui:fileHandler` |
-| `context.events` | 宿主事件订阅与发布（`on` / `emit`） | 订阅默认授予；发布需 `broadcast` |
-| `context.storage` | 键值存储（`get` / `set` / `delete` / `flush`） | `storage`（**桌面端无默认授予，必须显式声明**） |
-| `context.http` | 注册 HTTP 端点（`registerEndpoint`，供 Agent CLI hooks 等调用） | `network:http` |
-| `context.i18n` | 宿主 i18n：注册应用翻译、`t()` 快捷翻译、`getI18n()` 取实例 | 默认授予 |
-| `context._disposables` | 宿主在注销时统一回收的 Disposable 列表（内部使用） | — |
-| `context.id` / `context.extensionPath` | 应用 id / 安装目录路径（只读） | — |
+宿主装载应用时注入的 `env` 是应用访问宿主能力的**唯一通道**（权限仍写入 `plugin.json` 的 `permissions`，由宿主能力层门禁）：
 
+| 能力 | 说明 | 所需权限 |
+|------|------|----------|
+| `env.appInvoke` | 本应用插件面命令（通道令牌已绑定本 app） | 由插件命令自身声明 |
+| `env.appStorageGet/Set/Delete` | 本应用插件 KV | `storage`（**桌面端无默认授予，必须显式声明**） |
+| `env.invoke` | 宿主面命令白名单代理（`plugin_list_loaded` / `get_app_settings` 等） | 无（宿主面命令自身有门禁） |
+| `env.onEvent` | 宿主面事件出口（`navigate` 请求壳跳转 / `route` 自报内部当前页） | — |
+| `env.appUpdate` | 统一更新检查（可选能力；旧宿主不注入） | — |
+| `env.appLinkCryptoGet/Set` | 本应用链路加密策略（可选能力） | — |
 
-权限声明示例：`"permissions": ["storage", "ui:sidebar", "terminal:output", "network:http"]`。
+权限声明示例：`"permissions": ["storage", "network:http"]`。
 
-所有 `register*` / `on*` 调用返回 `Disposable`；插件注销时宿主自动回收，无需手动 `dispose()`。
+> 旧贡献面 `PluginContext`（`context.commands` / `context.terminal` / `context.session` / `context.ui` / `context.events` / `context.http` / `context.i18n`）是 `src/index.ts` + `activate()` 形态的能力面，已随 ADR 0057 退役；SDK 仍导出这些类型仅供老工程编译，新工程不要使用。
 
-## 共享模块（避免重复打包 vue 等）
+## 依赖与共享运行时
 
-插件构建时 `vue` / `vue-i18n` / `pinia` / `vue-sonner` 会被外部化，运行时从宿主全局 `window.__WASMNEST_SHARED__` 读取。**请通过 SDK 代理函数访问，不要直接操作全局变量**：
+挂载包**自带全部依赖**：`import { createApp } from 'vue'` 正常打包进 `dist/index.js`，不读宿主全局，也不做外部化。
 
-> 收录标准：模块内部持有进程级单例状态，自带第二份实例会导致状态错位。`vue-sonner` 是宿主 toast 队列本体——插件 `import { toast } from 'vue-sonner'` 会被改写成读宿主实例，因此 `toast.success(...)` 与宿主提示同队列、同外观（自带第二份则提示不显示）。
-
-```ts
-import { getVue, getI18n, getPinia, getRouter, getPluginContext } from '@binblink/wasmnest-plugin-sdk-desktop'
-
-const { ref, computed } = getVue()      // 宿主 Vue 实例（组件内直接 import 即可，构建期已外部化）
-const i18n = getI18n()                  // 宿主 vue-i18n 实例（模块级代码用；组件内用 useI18n()）
-const context = getPluginContext()      // 组件 setup 内从 inject 获取 PluginContext
-```
+旧贡献面工程（`src/index.ts` + `activate()`）构建时才把 `vue` / `vue-i18n` / `pinia` / `vue-sonner` 外部化为 `window.__WASMNEST_SHARED__`，SDK 为此保留代理函数 `getVue` / `getI18n` / `getPinia` / `getRouter` / `getPluginContext`。新工程不要走这条路径——宿主只为旧形态保留共享运行时。
 
 ## Vite 构建集成
 
-在插件 `vite.config.ts` 中引入 `wasmnestPlugin()`，负责将共享模块标记为 external 并改写为全局变量读取：
+挂载包只需 `vue()`，入口指向 `src/entry.ts`：
 
 ```ts
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { wasmnestPlugin } from '@binblink/wasmnest-plugin-sdk-desktop/vite'
+import { resolve } from 'node:path'
 
 export default defineConfig({
-  plugins: [vue(), wasmnestPlugin()],
+  plugins: [vue()],
   build: {
     lib: {
-      entry: 'src/index.ts',
+      entry: resolve(__dirname, 'src/entry.ts'),
       formats: ['es'],
       fileName: () => 'index.js',
     },
-    outDir: 'dist',
+    outDir: resolve(__dirname, 'dist'),
+    rollupOptions: { output: { inlineDynamicImports: true } },
   },
 })
 ```
+
+`wasmnestPlugin()`（共享模块外部化到 `window.__WASMNEST_SHARED__`）只用于**旧贡献面工程**；挂载包不要启用——否则 `vue` 被改写成读宿主全局，运行期取不到。
 
 产物文件名必须为 `index.js`（与 `plugin.json` 的 `main` 对应）。
 

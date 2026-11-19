@@ -76,89 +76,95 @@ A minimal plugin needs just two files:
 
 Required fields: `name` / `version` / `platform` / `main` / `pluginType` / `permissions` / `contributes`
 (validation source of truth `bin/manifest-validate.js`; the host deserializes with no defaults, so a missing field rejects the install).
-`pluginType` accepts `rust` / `rust-ts` / `ts-only`; `rust-ts` requires `rustLibrary` (must match the Cargo.toml package name).
+`pluginType` accepts `frontend` / `backend` / `full` (language-agnostic three forms, redefined 2026-10-26; the old values `rust` / `rust-ts` / `ts-only` are retired); `full` requires `rustLibrary` (must match the Cargo.toml package name).
 
 > `sandbox` has been retired from the manifest (audit ticket 06 ruling 2: the frontend is not sandboxed) — the Rust types ignore and drop the field, so declaring it has no effect. Do not declare it.
 
-**`src/index.ts`** — plugin entry (must export `activate`):
+**`src/entry.ts`** — app entry (must export `mountApp`; mount-bundle form):
 
 ```ts
-import { defineComponent, h } from 'vue'
-import type { PluginContext } from '@binblink/wasmnest-plugin-sdk-desktop'
+import { createApp, h, type App as VueApp } from 'vue'
 
-export async function activate(context: PluginContext): Promise<void> {
-  // Register a sidebar panel (components can re-fetch context via inject('pluginContext'))
-  context.ui.registerSidebarPanel({
-    id: 'my-plugin.sidebar',
-    title: 'My Plugin',
-    order: 600,
-    component: defineComponent({
-      render: () => h('div', 'Hello WasmNest!'),
-    }),
-  })
+/** Same value as the host MOUNT_CONTRACT; a mismatch is a visible host error */
+export const mountContract = '1'
+
+interface AppMountEnv {
+  appId: string
+  mountContract: string
+  appInvoke: <T = unknown>(command: string, ...args: unknown[]) => Promise<T>
+  appStorageGet: <T = unknown>(key: string) => Promise<T | undefined>
+  appStorageSet: (key: string, value: unknown) => Promise<void>
+  appStorageDelete: (key: string) => Promise<void>
+  locale: string
+  theme: string
+  platform?: string
+  initialRoute: string
+  onEvent?: (type: string, payload: unknown) => void
 }
 
-export async function deactivate(): Promise<void> {
-  // Clean up (all Disposables registered via context are collected by the host automatically)
+let app: VueApp | null = null
+
+export async function mountApp(root: HTMLElement, env: AppMountEnv) {
+  app = createApp({ render: () => h('div', `Hello WasmNest! (${env.appId})`) })
+  app.mount(root)
+  return {
+    async unmount() {
+      app?.unmount()
+      app = null
+    },
+  }
 }
 ```
 
-## PluginContext API
+The full contract (`invoke` / `appUpdate` / `appLinkCrypto*` / `mountMonitorPanel`, …) lives in the SDK's `dev-shell/src/shell/types.ts` and mirrors the host `useAppMount.ts` field by field (bump `mountContract` only on breaking changes).
 
-The `PluginContext` received by `activate(context)` is the **single channel** through which a plugin accesses host capabilities, grouped by permission:
+## Mount Environment API (AppMountEnv)
 
-| API | Description | Required permission |
-|-----|-------------|---------------------|
-| `context.commands` | Register / execute commands | granted by default |
-| `context.terminal` | Send input to sessions, subscribe to output | `terminal:input` / `terminal:output` / `terminal:observe` |
-| `context.session` | Session list, status change subscription | `session:read` / `session:write` |
-| `context.ui` | Sidebar / toolbox / statusbar / settings section / input extensions / terminal toolbar / titlebar / file handlers (`registerFileHandler`) | `ui:sidebar` / `ui:toolbox` / `ui:statusbar` / `ui:pageToolbar` / `ui:settings` / `ui:input` / `ui:fileHandler` |
-| `context.events` | Host event subscription & publishing (`on` / `emit`) | subscribe: default; publish: `broadcast` |
-| `context.storage` | Key-value storage (`get` / `set` / `delete` / `flush`) | `storage` (**no default grant on desktop — must be declared explicitly**) |
-| `context.http` | Register HTTP endpoints (`registerEndpoint`, e.g. for Agent CLI hooks) | `network:http` |
-| `context.i18n` | Host i18n: register app translations, `t()` helper, `getI18n()` for the instance | granted by default |
-| `context._disposables` | List of Disposables collected by the host on deactivation (internal) | — |
-| `context.id` / `context.extensionPath` | App id / install directory path (read-only) | — |
+The `env` injected by the host at mount time is the **single channel** through which an app accesses host capabilities (permissions are still declared in `plugin.json` `permissions` and enforced by the capability layer):
 
-Permission example: `"permissions": ["storage", "ui:sidebar", "terminal:output", "network:http"]`.
+| Capability | Description | Required permission |
+|-----------|-------------|---------------------|
+| `env.appInvoke` | This app's plugin-side commands (channel token bound to this app) | declared by the plugin command itself |
+| `env.appStorageGet/Set/Delete` | This app's plugin KV | `storage` (**no default grant on desktop — must be declared explicitly**) |
+| `env.invoke` | Host-side command whitelist proxy (`plugin_list_loaded` / `get_app_settings`, …) | none (host-side commands are gated themselves) |
+| `env.onEvent` | Host-side event outlet (`navigate` requests shell navigation / `route` reports the app's internal page) | — |
+| `env.appUpdate` | Unified update check (optional; older hosts do not inject) | — |
+| `env.appLinkCryptoGet/Set` | This app's link-encryption policy (optional) | — |
 
-All `register*` / `on*` calls return a `Disposable`; the host collects them automatically on plugin deactivation — no manual `dispose()` needed.
+Permission example: `"permissions": ["storage", "network:http"]`.
 
-## Shared Modules (avoid bundling vue etc.)
+> The legacy contribution surface `PluginContext` (`context.commands` / `context.terminal` / `context.session` / `context.ui` / `context.events` / `context.http` / `context.i18n`) belongs to the `src/index.ts` + `activate()` form retired by ADR 0057. The SDK still exports those types so old projects keep compiling — do not use them in new projects.
 
-During plugin builds, `vue` / `vue-i18n` / `pinia` / `vue-sonner` are externalized and read at runtime from the host global `window.__WASMNEST_SHARED__`. **Always access them via the SDK proxy functions — never touch the global directly**:
+## Dependencies and shared runtime
 
-> Inclusion rule: modules holding process-wide singleton state — a second instance desynchronizes state. `vue-sonner` is the host toast queue itself, so a plugin's `import { toast } from 'vue-sonner'` is rewritten to the host instance (identical queue and look; a bundled second copy would render nothing).
+Mount bundles are **self-contained**: `import { createApp } from 'vue'` is bundled into `dist/index.js` (no host global, no externalization).
 
-```ts
-import { getVue, getI18n, getPinia, getRouter, getPluginContext } from '@binblink/wasmnest-plugin-sdk-desktop'
-
-const { ref, computed } = getVue()      // Host Vue instance (components can import vue directly — externalized at build time)
-const i18n = getI18n()                  // Host vue-i18n instance (module-level code; components use useI18n())
-const context = getPluginContext()      // PluginContext via inject inside component setup
-```
+Only legacy contribution-surface projects (`src/index.ts` + `activate()`) externalize `vue` / `vue-i18n` / `pinia` / `vue-sonner` into `window.__WASMNEST_SHARED__`; the SDK keeps `getVue` / `getI18n` / `getPinia` / `getRouter` / `getPluginContext` for those. New projects must not use that path — the host keeps the shared runtime for the old form only.
 
 ## Vite Build Integration
 
-Add `wasmnestPlugin()` to the plugin's `vite.config.ts`; it marks shared modules as external and rewrites them to read from the host global:
+A mount bundle only needs `vue()`, with the entry pointing at `src/entry.ts`:
 
 ```ts
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { wasmnestPlugin } from '@binblink/wasmnest-plugin-sdk-desktop/vite'
+import { resolve } from 'node:path'
 
 export default defineConfig({
-  plugins: [vue(), wasmnestPlugin()],
+  plugins: [vue()],
   build: {
     lib: {
-      entry: 'src/index.ts',
+      entry: resolve(__dirname, 'src/entry.ts'),
       formats: ['es'],
       fileName: () => 'index.js',
     },
-    outDir: 'dist',
+    outDir: resolve(__dirname, 'dist'),
+    rollupOptions: { output: { inlineDynamicImports: true } },
   },
 })
 ```
+
+`wasmnestPlugin()` (externalizing shared modules to `window.__WASMNEST_SHARED__`) is for **legacy contribution-surface projects** only; do not enable it in mount bundles — it rewrites `vue` to the host global, which is unavailable at runtime.
 
 The output filename must be `index.js` (matching `main` in `plugin.json`).
 
