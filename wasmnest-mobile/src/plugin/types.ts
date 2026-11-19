@@ -53,6 +53,7 @@ export type {
   AppUpdateAPI,
   AppUpdateCheckResult,
   AppUpdateReason,
+  AppControlAPI,
 } from '@binblink/wasmnest-plugin-sdk-mobile'
 
 /** 插件信息（从后端获取，含 source 字段） */

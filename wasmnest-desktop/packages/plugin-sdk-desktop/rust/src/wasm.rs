@@ -222,7 +222,10 @@ mod tests {
             Ok(())
         }
 
-        fn invoke_command(_name: &str, _args: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+        fn invoke_command(
+            _name: &str,
+            _args: serde_json::Value,
+        ) -> anyhow::Result<serde_json::Value> {
             Ok(serde_json::Value::Null)
         }
     }
@@ -243,7 +246,6 @@ mod tests {
         assert!(TestWasmPlugin::on_message(&msg).is_ok());
     }
 }
-
 
 /// 生成组件 world（`wasmnest:plugin`）的全部导出实现
 ///

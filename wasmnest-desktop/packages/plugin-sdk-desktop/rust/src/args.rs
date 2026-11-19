@@ -18,7 +18,11 @@ pub struct CommandArgs(pub serde_json::Value);
 impl CommandArgs {
     /// 包装参数；`Null` 归一化为空对象，后续提取一律返回默认值
     pub fn new(args: serde_json::Value) -> Self {
-        Self(if args.is_null() { serde_json::json!({}) } else { args })
+        Self(if args.is_null() {
+            serde_json::json!({})
+        } else {
+            args
+        })
     }
 
     /// 取字符串字段；缺失或非字符串返回 default

@@ -24,7 +24,10 @@ use super::HostError;
 /// 自行按格式解析（如 ai-chatbox 前端 adapters 按 apiStyle 分派）。
 pub trait HostHttp {
     /// 发起 HTTP 请求
-    fn http_fetch(&self, request: &serde_json::Value) -> Result<Option<serde_json::Value>, HostError>;
+    fn http_fetch(
+        &self,
+        request: &serde_json::Value,
+    ) -> Result<Option<serde_json::Value>, HostError>;
 
     // ==================== 服务端域（ABI v29：动态路由注册） ====================
 

@@ -79,7 +79,10 @@ mod tests {
         assert!(json.get("started_at").is_some() && json["started_at"].is_null());
         assert!(json.get("session_type").is_some() && json["session_type"].is_null());
         for key in ["config_id", "task_status", "task_reason"] {
-            assert!(json.get(key).is_none(), "{key} 应被 skip_serializing_if 省略: {json}");
+            assert!(
+                json.get(key).is_none(),
+                "{key} 应被 skip_serializing_if 省略: {json}"
+            );
         }
     }
 

@@ -62,6 +62,14 @@
               <p class="note">
                 {{ t('shell.dialog.approval.desc', { perms: permsCount, risks: risksCount }) }}
               </p>
+              <!-- 逐权限描述（spec §4.1：审批文案必须写明 apps:control 的语义，
+                   不能只写计数。未知权限回退原始权限词，不显示为空白） -->
+              <div v-if="permDescriptions.length > 0" class="perm-list">
+                <div v-for="pd in permDescriptions" :key="pd.key" class="perm-item">
+                  <span class="perm-key mono">{{ pd.key }}</span>
+                  <span class="perm-desc">{{ pd.desc }}</span>
+                </div>
+              </div>
               <p class="note">{{ t('shell.dialog.approval.afterHint') }}</p>
               <div class="perm-line mono">{{ app?.pluginId }}</div>
             </div>
@@ -230,6 +238,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { ensureHostCredential } from '@/utils/appCommands'
 import { logger } from '@/utils/frontendLogger'
 import { isHighRisk } from '../composables/state'
+import { permissionDescKey } from '../permissions'
 import { useShellState } from '../composables/useShellState'
 import { isServiceKind, useShellApps } from '../composables/useShellApps'
 import ShellIcon from './ShellIcon.vue'
@@ -300,6 +309,14 @@ const runningApps = computed(() =>
 
 const permsCount = computed(() => app.value?.permissions.length ?? 0)
 const risksCount = computed(() => app.value?.permissions.filter((p) => isHighRisk(p)).length ?? 0)
+/** 逐权限描述（审批弹窗展示；未知权限回退原始权限词，不显示为空白） */
+const permDescriptions = computed(() => {
+  const perms = app.value?.permissions ?? []
+  return perms.map((key) => {
+    const descKey = permissionDescKey(key)
+    return { key, desc: descKey ? t(descKey) : key }
+  })
+})
 const busy = computed(() =>
   state.dialogAppId.value ? appsStore.busyId.value === state.dialogAppId.value : false,
 )
@@ -472,6 +489,34 @@ function confirmInstallUpgrade() {
 .perm-line {
   font-size: calc(11.5px * var(--ui-scale));
   color: var(--text-tertiary);
+}
+/* 逐权限描述列表（审批弹窗）：权限词 mono + 描述正文，两列布局 */
+.perm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-button);
+  background: var(--bg-hover);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.perm-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: calc(12px * var(--ui-scale));
+  line-height: 1.5;
+}
+.perm-key {
+  flex-shrink: 0;
+  min-width: 120px;
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--text-tertiary);
+}
+.perm-desc {
+  color: var(--text-secondary);
 }
 /* 保留数据勾选：与弹窗内记录行同一块状语言（可点整行，不只点 checkbox） */
 .keep-data {

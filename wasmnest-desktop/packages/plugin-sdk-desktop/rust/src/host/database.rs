@@ -21,10 +21,18 @@ pub trait HostPluginDatabase {
     /// 执行 SQL（参数绑定版）
     ///
     /// SQL 中用 `?1`、`?2` …（或 `?`）占位，`params` 按序绑定
-    fn plugin_db_execute_params(&self, sql: &str, params: &[serde_json::Value]) -> Result<i32, HostError>;
+    fn plugin_db_execute_params(
+        &self,
+        sql: &str,
+        params: &[serde_json::Value],
+    ) -> Result<i32, HostError>;
 
     /// 查询 SQL（参数绑定版），返回行数组 JSON；无结果返回 `Ok(None)`
-    fn plugin_db_query_params(&self, sql: &str, params: &[serde_json::Value]) -> Result<Option<serde_json::Value>, HostError>;
+    fn plugin_db_query_params(
+        &self,
+        sql: &str,
+        params: &[serde_json::Value],
+    ) -> Result<Option<serde_json::Value>, HostError>;
 
     /// 事务内顺序执行多语句（execute-batch，插件独立库）
     ///

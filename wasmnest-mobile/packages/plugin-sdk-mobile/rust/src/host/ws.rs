@@ -210,12 +210,21 @@ mod tests {
     #[test]
     fn event_topics_are_owner_private() {
         // topic 必须是属主私有（他人订阅被宿主总线按plugin_id 过滤）
-        assert_eq!(ws_event_topic(WS_OPEN, "com.wasmnest.x"), "com.wasmnest.x:ws:open");
-        assert_eq!(ws_event_topic(WS_CLOSE, "com.wasmnest.x"), "com.wasmnest.x:ws:close");
+        assert_eq!(
+            ws_event_topic(WS_OPEN, "com.wasmnest.x"),
+            "com.wasmnest.x:ws:open"
+        );
+        assert_eq!(
+            ws_event_topic(WS_CLOSE, "com.wasmnest.x"),
+            "com.wasmnest.x:ws:close"
+        );
         assert_eq!(
             ws_event_topic(WS_RECONNECT_SCHEDULED, "com.wasmnest.x"),
             "com.wasmnest.x:ws:reconnect-scheduled"
         );
-        assert_eq!(ws_message_topic("com.wasmnest.x"), "com.wasmnest.x:ws:message");
+        assert_eq!(
+            ws_message_topic("com.wasmnest.x"),
+            "com.wasmnest.x:ws:message"
+        );
     }
 }

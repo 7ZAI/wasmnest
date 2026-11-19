@@ -89,7 +89,10 @@ mod tests {
             x: i32,
             y: i32,
         }
-        assert_eq!(to_param(&Point { x: 1, y: 2 }), serde_json::json!({ "x": 1, "y": 2 }));
+        assert_eq!(
+            to_param(&Point { x: 1, y: 2 }),
+            serde_json::json!({ "x": 1, "y": 2 })
+        );
     }
 
     #[test]

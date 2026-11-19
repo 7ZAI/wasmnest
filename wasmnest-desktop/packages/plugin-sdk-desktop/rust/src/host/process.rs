@@ -8,8 +8,8 @@
 //!
 //! 需要 `process:run` 权限（manifest `permissions` 声明，安装即信任）。
 
-use serde::{Deserialize, Serialize};
 use super::HostError;
+use serde::{Deserialize, Serialize};
 
 /// 宿主进程执行
 pub trait HostProcess {

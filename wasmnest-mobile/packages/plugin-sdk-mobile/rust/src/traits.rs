@@ -16,13 +16,23 @@ use std::pin::Pin;
 pub trait WasmNestPlugin: Send + Sync + 'static {
     const ID: &'static str;
     fn manifest() -> PluginManifest;
-    fn activate(context: RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>;
-    fn deactivate(_context: RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
+    fn activate(
+        context: RustPluginContext,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>;
+    fn deactivate(
+        _context: RustPluginContext,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
         Box::pin(async { Ok(()) })
     }
-    fn register_commands() -> Vec<PluginCommand> { vec![] }
-    fn on_startup() -> Pin<Box<dyn Future<Output = ()> + Send>> { Box::pin(async {}) }
-    fn on_shutdown() -> Pin<Box<dyn Future<Output = ()> + Send>> { Box::pin(async {}) }
+    fn register_commands() -> Vec<PluginCommand> {
+        vec![]
+    }
+    fn on_startup() -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        Box::pin(async {})
+    }
+    fn on_shutdown() -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        Box::pin(async {})
+    }
 }
 
 /// inventory 提交类型
@@ -30,7 +40,8 @@ pub struct WasmNestPluginEntry {
     pub id: &'static str,
     pub create_manifest: fn() -> PluginManifest,
     pub activate: fn(RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>,
-    pub deactivate: fn(RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>,
+    pub deactivate:
+        fn(RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>,
     pub register_commands: fn() -> Vec<PluginCommand>,
     pub on_startup: fn() -> Pin<Box<dyn Future<Output = ()> + Send>>,
     pub on_shutdown: fn() -> Pin<Box<dyn Future<Output = ()> + Send>>,
@@ -63,7 +74,9 @@ mod tests {
     extern crate self as wasmnest_plugin_api_mobile;
 
     use super::*;
-    use crate::test_utils::{block_on, MockBusAccess, MockEventEmitter, MockFileAccess, MockSessionQuery, MockStorage};
+    use crate::test_utils::{
+        block_on, MockBusAccess, MockEventEmitter, MockFileAccess, MockSessionQuery, MockStorage,
+    };
     use crate::types::{PluginContributes, PluginPlatform, PluginType};
     use crate::PermissionManager;
     use std::sync::Arc;
@@ -95,7 +108,9 @@ mod tests {
             }
         }
 
-        fn activate(_context: RustPluginContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
+        fn activate(
+            _context: RustPluginContext,
+        ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
             Box::pin(async { Ok(()) })
         }
     }
@@ -106,8 +121,9 @@ mod tests {
     #[test]
     fn test_inventory_collects_registered_plugin() {
         // 宿主通过 inventory::iter 收集全部静态注册插件 —— 注册即契约
-        let ids: Vec<&str> =
-            inventory::iter::<WasmNestPluginEntry>().map(|e| e.id).collect();
+        let ids: Vec<&str> = inventory::iter::<WasmNestPluginEntry>()
+            .map(|e| e.id)
+            .collect();
         assert!(
             ids.contains(&"com.wasmnest.test-plugin"),
             "registered plugin not found in inventory: {:?}",

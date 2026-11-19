@@ -14,32 +14,31 @@
 //! trait 签名（`host/*` 定义）保持不变，插件业务代码零改动。
 
 use crate::host::{
-    ConfigKey, HostAuth, HostBus, HostConfig, HostConnection, HostError, HostEvents,
-    HostFs, HostHttp, HostLog, HostMdns, HostMetrics, HostNotify, HostNotifyMobile, HostPeer,
-    HostPlatform, HostPluginDatabase, HostStorage, HostTerminalStream, HostTunnel, HostWs,
-    NotifyOptions, PeerNodeConfig, TunnelConfig, TunnelExposeConfig,
+    ConfigKey, HostAuth, HostBus, HostConfig, HostConnection, HostError, HostEvents, HostFs,
+    HostHttp, HostLog, HostMdns, HostMetrics, HostNotify, HostNotifyMobile, HostPeer, HostPlatform,
+    HostPluginDatabase, HostStorage, HostTerminalStream, HostTunnel, HostWs, NotifyOptions,
+    PeerNodeConfig, TunnelConfig, TunnelExposeConfig,
 };
 use crate::wasm::wasmnest::auth_client::host_auth_client;
-use crate::wasm::wasmnest::plugin::host_bus;
-use crate::wasm::wasmnest::plugin::host_config;
 use crate::wasm::wasmnest::connection_target::host_connection_target;
-use crate::wasm::wasmnest::plugin::host_events;
-use crate::wasm::wasmnest::plugin::host_fs;
 use crate::wasm::wasmnest::fs_mobile::host_fs_mobile;
 use crate::wasm::wasmnest::http::host_http;
-use crate::wasm::wasmnest::plugin::host_log;
 use crate::wasm::wasmnest::mdns::host_mdns;
-use crate::wasm::wasmnest::plugin::host_metrics;
 use crate::wasm::wasmnest::notify::host_notify;
 use crate::wasm::wasmnest::notify_mobile::host_notify_mobile;
 use crate::wasm::wasmnest::peer::host_peer;
+use crate::wasm::wasmnest::plugin::host_bus;
+use crate::wasm::wasmnest::plugin::host_config;
+use crate::wasm::wasmnest::plugin::host_events;
+use crate::wasm::wasmnest::plugin::host_fs;
+use crate::wasm::wasmnest::plugin::host_log;
+use crate::wasm::wasmnest::plugin::host_metrics;
 use crate::wasm::wasmnest::plugin::host_platform;
 use crate::wasm::wasmnest::plugin::host_plugin_database;
 use crate::wasm::wasmnest::plugin::host_storage;
 use crate::wasm::wasmnest::terminal_stream::host_terminal_stream;
 use crate::wasm::wasmnest::tunnel::host_tunnel;
 use crate::wasm::wasmnest::ws::host_websocket;
-
 
 /// 宿主 API 绑定（WASM 插件侧）
 ///
@@ -129,7 +128,10 @@ impl HostPluginDatabase for WasmHost {
         sql: &str,
         params: &[serde_json::Value],
     ) -> Result<i32, HostError> {
-        let params_json = to_json_string("plugin_db_execute_params", &serde_json::to_value(params).unwrap_or_default())?;
+        let params_json = to_json_string(
+            "plugin_db_execute_params",
+            &serde_json::to_value(params).unwrap_or_default(),
+        )?;
         host_plugin_database::execute_params(sql, &params_json)
             .map(|n| n as i32)
             .map_err(|e| host_err("plugin_db_execute_params", e))
@@ -140,7 +142,10 @@ impl HostPluginDatabase for WasmHost {
         sql: &str,
         params: &[serde_json::Value],
     ) -> Result<Option<serde_json::Value>, HostError> {
-        let params_json = to_json_string("plugin_db_query_params", &serde_json::to_value(params).unwrap_or_default())?;
+        let params_json = to_json_string(
+            "plugin_db_query_params",
+            &serde_json::to_value(params).unwrap_or_default(),
+        )?;
         match host_plugin_database::query_params(sql, &params_json)
             .map_err(|e| host_err("plugin_db_query_params", e))?
         {
@@ -161,7 +166,11 @@ impl HostPluginDatabase for WasmHost {
 // ==================== HostTerminalStream（ABI v15，票 12） ====================
 
 impl HostTerminalStream for WasmHost {
-    fn terminal_stream_forward_output(&self, session_id: &str, data: &[u8]) -> Result<(), HostError> {
+    fn terminal_stream_forward_output(
+        &self,
+        session_id: &str,
+        data: &[u8],
+    ) -> Result<(), HostError> {
         host_terminal_stream::forward_output(session_id, data)
             .map_err(|e| host_err("terminal_stream_forward_output", e))
     }
@@ -171,7 +180,8 @@ impl HostTerminalStream for WasmHost {
 
 impl HostConnection for WasmHost {
     fn connection_primary_target(&self) -> Result<String, HostError> {
-        host_connection_target::primary_target().map_err(|e| host_err("connection_primary_target", e))
+        host_connection_target::primary_target()
+            .map_err(|e| host_err("connection_primary_target", e))
     }
 }
 
@@ -183,7 +193,8 @@ impl HostAuth for WasmHost {
     }
 
     fn auth_verify_pairing_code(&self, code: &str) -> Result<bool, HostError> {
-        host_auth_client::verify_pairing_code(code).map_err(|e| host_err("auth_verify_pairing_code", e))
+        host_auth_client::verify_pairing_code(code)
+            .map_err(|e| host_err("auth_verify_pairing_code", e))
     }
 
     fn auth_qr_connect(&self, token: &str) -> Result<bool, HostError> {
@@ -191,7 +202,8 @@ impl HostAuth for WasmHost {
     }
 
     fn auth_biometric_authenticate(&self) -> Result<bool, HostError> {
-        host_auth_client::biometric_authenticate().map_err(|e| host_err("auth_biometric_authenticate", e))
+        host_auth_client::biometric_authenticate()
+            .map_err(|e| host_err("auth_biometric_authenticate", e))
     }
 
     fn auth_has_credentials(&self) -> Result<bool, HostError> {
@@ -226,7 +238,8 @@ impl HostNotifyMobile for WasmHost {
     }
 
     fn notify_request_permission(&self) -> Result<bool, HostError> {
-        host_notify_mobile::request_permission().map_err(|e| host_err("notify_request_permission", e))
+        host_notify_mobile::request_permission()
+            .map_err(|e| host_err("notify_request_permission", e))
     }
 
     fn notify_vibrate(&self, duration_ms: u32) -> Result<(), HostError> {
@@ -360,8 +373,9 @@ impl HostBus for WasmHost {
 impl HostMetrics for WasmHost {
     fn metrics_snapshot(&self) -> Result<serde_json::Value, HostError> {
         let raw = host_metrics::snapshot().map_err(|e| host_err("metrics_snapshot", e))?;
-        serde_json::from_str(&raw)
-            .map_err(|e| HostError::custom(-1, format!("metrics_snapshot: invalid JSON from host: {e}")))
+        serde_json::from_str(&raw).map_err(|e| {
+            HostError::custom(-1, format!("metrics_snapshot: invalid JSON from host: {e}"))
+        })
     }
 }
 
@@ -401,11 +415,15 @@ impl HostPeer for WasmHost {
     }
 
     fn peer_respond_consent(&self, request_id: &str, accepted: bool) -> Result<bool, HostError> {
-        host_peer::respond_consent(request_id, accepted).map_err(|e| host_err("peer_respond_consent", e))
+        host_peer::respond_consent(request_id, accepted)
+            .map_err(|e| host_err("peer_respond_consent", e))
     }
 
     fn peer_list_trusted(&self) -> Result<serde_json::Value, HostError> {
-        peer_json("peer_list_trusted", host_peer::list_trusted().map_err(|e| host_err("peer_list_trusted", e))?)
+        peer_json(
+            "peer_list_trusted",
+            host_peer::list_trusted().map_err(|e| host_err("peer_list_trusted", e))?,
+        )
     }
 
     fn peer_revoke_trusted(&self, node_id: &str) -> Result<bool, HostError> {
@@ -425,8 +443,10 @@ impl HostPeer for WasmHost {
         session: &str,
         paths: &[serde_json::Value],
     ) -> Result<String, HostError> {
-        let paths_json =
-            to_json_string("peer_send_files", &serde_json::to_value(paths).unwrap_or_default())?;
+        let paths_json = to_json_string(
+            "peer_send_files",
+            &serde_json::to_value(paths).unwrap_or_default(),
+        )?;
         // 返回值已收窄为传输句柄字符串（Phase 4），不再包一层 JSON
         host_peer::send_files(session, &paths_json).map_err(|e| host_err("peer_send_files", e))
     }
@@ -450,8 +470,10 @@ impl HostPeer for WasmHost {
     }
 
     fn peer_set_shared_roots(&self, dirs: &[serde_json::Value]) -> Result<(), HostError> {
-        let dirs_json =
-            to_json_string("peer_set_shared_roots", &serde_json::to_value(dirs).unwrap_or_default())?;
+        let dirs_json = to_json_string(
+            "peer_set_shared_roots",
+            &serde_json::to_value(dirs).unwrap_or_default(),
+        )?;
         host_peer::set_shared_roots(&dirs_json).map_err(|e| host_err("peer_set_shared_roots", e))
     }
 
@@ -465,7 +487,11 @@ impl HostPeer for WasmHost {
     }
 
     fn peer_list_shared_roots(&self, session: &str) -> Result<serde_json::Value, HostError> {
-        peer_json("peer_list_shared_roots", host_peer::list_shared_roots(session).map_err(|e| host_err("peer_list_shared_roots", e))?)
+        peer_json(
+            "peer_list_shared_roots",
+            host_peer::list_shared_roots(session)
+                .map_err(|e| host_err("peer_list_shared_roots", e))?,
+        )
     }
 
     fn peer_browse_directory(
@@ -487,9 +513,12 @@ impl HostPeer for WasmHost {
         dir_id: &str,
         files: &[serde_json::Value],
     ) -> Result<u32, HostError> {
-        let files_json =
-            to_json_string("peer_pull_files", &serde_json::to_value(files).unwrap_or_default())?;
-        host_peer::pull_files(session, dir_id, &files_json).map_err(|e| host_err("peer_pull_files", e))
+        let files_json = to_json_string(
+            "peer_pull_files",
+            &serde_json::to_value(files).unwrap_or_default(),
+        )?;
+        host_peer::pull_files(session, dir_id, &files_json)
+            .map_err(|e| host_err("peer_pull_files", e))
     }
 
     fn peer_set_download_dir(&self, path: &str) -> Result<(), HostError> {
@@ -570,8 +599,12 @@ impl HostPlatform for WasmHost {
             "platform_pick_files",
             host_platform::pick_files().map_err(|e| host_err("platform_pick_files", e))?,
         )?;
-        serde_json::from_value(v)
-            .map_err(|e| HostError::custom(-1, format!("platform_pick_files: invalid JSON from host: {e}")))
+        serde_json::from_value(v).map_err(|e| {
+            HostError::custom(
+                -1,
+                format!("platform_pick_files: invalid JSON from host: {e}"),
+            )
+        })
     }
 
     fn platform_pick_folders(&self) -> Result<Vec<String>, HostError> {
@@ -581,8 +614,12 @@ impl HostPlatform for WasmHost {
             // （SAF 单选语义由宿主返回 0/1 个树 URI）
             host_platform::pick_folders().map_err(|e| host_err("platform_pick_folders", e))?,
         )?;
-        serde_json::from_value(v)
-            .map_err(|e| HostError::custom(-1, format!("platform_pick_folders: invalid JSON from host: {e}")))
+        serde_json::from_value(v).map_err(|e| {
+            HostError::custom(
+                -1,
+                format!("platform_pick_folders: invalid JSON from host: {e}"),
+            )
+        })
     }
 }
 

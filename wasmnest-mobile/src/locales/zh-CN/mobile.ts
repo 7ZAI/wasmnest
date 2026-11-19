@@ -80,6 +80,8 @@ export default {
         uiRoute: { title: '页面路由', desc: '注册并跳转插件自有页面' },
         uiDialog: { title: '弹窗', desc: '使用宿主统一弹窗与遮罩' },
         uiBack: { title: '返回键接管', desc: '接管 Android 系统返回键' },
+        appsControl: { title: '应用调用桥', desc: '可代表你调用其他应用已声明给助手的命令（列应用 / 调声明工具 / 打开应用）；目标应用须已声明并授权，宿主逐次审计。' },
+        uiGlobalEntry: { title: '全局入口', desc: '在本机壳的全局入口区登记一个快捷入口，点击直接打开本应用；入口可随时关闭。' },
       },
       dialog: {
         confirm: '确定',

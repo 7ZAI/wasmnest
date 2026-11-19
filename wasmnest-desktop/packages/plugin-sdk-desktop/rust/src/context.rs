@@ -8,15 +8,39 @@ use std::sync::Arc;
 
 /// 插件存储 trait（由主应用实现，解耦对 Database 的直接依赖）
 pub trait PluginStorageAccess: Send + Sync + 'static {
-    fn get(&self, plugin_id: &str, key: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Option<serde_json::Value>>> + Send>>;
-    fn set(&self, plugin_id: &str, key: &str, value: serde_json::Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
-    fn delete(&self, plugin_id: &str, key: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
+    fn get(
+        &self,
+        plugin_id: &str,
+        key: &str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<Option<serde_json::Value>>> + Send>,
+    >;
+    fn set(
+        &self,
+        plugin_id: &str,
+        key: &str,
+        value: serde_json::Value,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
+    fn delete(
+        &self,
+        plugin_id: &str,
+        key: &str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>;
 }
 
 /// 会话查询 trait（由主应用实现，提供只读会话信息）
 pub trait SessionQuery: Send + Sync + 'static {
-    fn list_sessions(&self) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Vec<serde_json::Value>>> + Send>>;
-    fn get_session(&self, session_id: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<Option<serde_json::Value>>> + Send>>;
+    fn list_sessions(
+        &self,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<Vec<serde_json::Value>>> + Send>,
+    >;
+    fn get_session(
+        &self,
+        session_id: &str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<Option<serde_json::Value>>> + Send>,
+    >;
 }
 
 /// 事件发射 trait（由主应用实现，向前端发送事件）
@@ -125,11 +149,16 @@ mod tests {
     use crate::PermissionManager;
 
     /// 构造带指定权限的测试上下文
-    fn make_context(permissions: &[&str]) -> (RustPluginContext, Arc<MockStorage>, Arc<MockEventEmitter>) {
+    fn make_context(
+        permissions: &[&str],
+    ) -> (RustPluginContext, Arc<MockStorage>, Arc<MockEventEmitter>) {
         let pm = Arc::new(PermissionManager::new());
         pm.grant_permissions(
             "test.plugin",
-            &permissions.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+            &permissions
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
         );
         let storage = Arc::new(MockStorage::default());
         let emitter = Arc::new(MockEventEmitter::default());
@@ -172,7 +201,10 @@ mod tests {
         // mock 返回 { "stored": key }，验证调用链上 plugin_id 与 key 均透传
         assert_eq!(value, Some(serde_json::json!({ "stored": "my_key" })));
         let calls = storage.calls.lock().unwrap().clone();
-        assert_eq!(calls, vec![("test.plugin".to_string(), "my_key".to_string())]);
+        assert_eq!(
+            calls,
+            vec![("test.plugin".to_string(), "my_key".to_string())]
+        );
     }
 
     #[test]
@@ -229,7 +261,10 @@ mod tests {
         let (ctx, _, emitter) = make_context(&[]);
         let payload = serde_json::json!({ "status": "done" });
         ctx.emit_event("plugin:event", payload.clone());
-        assert_eq!(emitter.emit_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            emitter.emit_count.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
         let emitted = emitter.emitted.lock().unwrap().clone();
         assert_eq!(emitted, vec![("plugin:event".to_string(), payload)]);
     }

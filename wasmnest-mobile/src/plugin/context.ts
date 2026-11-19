@@ -32,6 +32,7 @@ import type {
   MonitorPanelHandle,
   AppUpdateAPI,
   AppUpdateCheckResult,
+  AppControlAPI,
 } from './types'
 import { hasPermissionForApi } from './permission'
 import * as pluginCmds from './commands'
@@ -50,6 +51,8 @@ import { invoke } from '@tauri-apps/api/core'
 // openGlobalDialog 的广播到不了组件（弹窗静默不渲染）；包说明符保证同一拷贝文件。
 import { openGlobalDialog } from '@binblink/wasmnest-plugin-sdk-mobile/global-dialog'
 import { subscribeAppBackPressed } from './back-button'
+import { createAppControlBridge } from './appControlBridge'
+import { openShellApp } from '@/shell/composables/useShellOpen'
 
 // ==================== Android 系统返回键（跨插件共享单例） ====================
 // 原生 listener 与分发顺序（应用层 → 平台层兜底）收敛在 `./back-button`：多消费者
@@ -570,6 +573,21 @@ export function createPluginContext(
     status,
     appUpdate,
     _disposables: disposables,
+  }
+  // 通用应用调用桥（票 03 / spec §4.2）：仅 manifest 声明 `apps:control` 时注入。
+  // 未声明 = 字段缺省（不注入空壳对象），应用必须显性提示「未授权」并给出去哪里开启。
+  // 新增可选字段属兼容变更，不 bump 任何契约。
+  //
+  // openShellApp 返回 false = 壳启动失败（未安装 / 已停用 / 启动被拒）：包装成
+  // 显性抛错，助手侧收到明确错误而不是静默成功。
+  if (permissions.includes('apps:control')) {
+    context.apps = createAppControlBridge(info.id, (targetId) =>
+      openShellApp(targetId).then((ok) => {
+        if (!ok) {
+          throw new Error(`open app failed: ${targetId}`)
+        }
+      }),
+    )
   }
   return context!
 }

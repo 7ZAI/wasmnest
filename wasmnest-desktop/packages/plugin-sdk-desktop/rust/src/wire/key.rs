@@ -549,13 +549,25 @@ mod tests {
     #[test]
     fn test_ctrl_letters() {
         // Ctrl+A = 0x01
-        assert_eq!(KeyCombo::parse("ctrl+a").unwrap().to_pty_bytes(), Some(vec![0x01]));
+        assert_eq!(
+            KeyCombo::parse("ctrl+a").unwrap().to_pty_bytes(),
+            Some(vec![0x01])
+        );
         // Ctrl+C = 0x03
-        assert_eq!(KeyCombo::parse("ctrl+c").unwrap().to_pty_bytes(), Some(vec![0x03]));
+        assert_eq!(
+            KeyCombo::parse("ctrl+c").unwrap().to_pty_bytes(),
+            Some(vec![0x03])
+        );
         // Ctrl+D = 0x04
-        assert_eq!(KeyCombo::parse("ctrl+d").unwrap().to_pty_bytes(), Some(vec![0x04]));
+        assert_eq!(
+            KeyCombo::parse("ctrl+d").unwrap().to_pty_bytes(),
+            Some(vec![0x04])
+        );
         // Ctrl+Z = 0x1A
-        assert_eq!(KeyCombo::parse("ctrl+z").unwrap().to_pty_bytes(), Some(vec![0x1a]));
+        assert_eq!(
+            KeyCombo::parse("ctrl+z").unwrap().to_pty_bytes(),
+            Some(vec![0x1a])
+        );
     }
 
     #[test]
@@ -575,7 +587,10 @@ mod tests {
             Some("\x1b[Z".as_bytes().to_vec())
         );
         // 确认普通 Tab 不受影响
-        assert_eq!(KeyCombo::parse("tab").unwrap().to_pty_bytes(), Some(vec![0x09]));
+        assert_eq!(
+            KeyCombo::parse("tab").unwrap().to_pty_bytes(),
+            Some(vec![0x09])
+        );
     }
 
     #[test]
@@ -671,10 +686,22 @@ mod tests {
 
     #[test]
     fn test_bare_keys() {
-        assert_eq!(KeyCombo::parse("enter").unwrap().to_pty_bytes(), Some(vec![0x0d]));
-        assert_eq!(KeyCombo::parse("tab").unwrap().to_pty_bytes(), Some(vec![0x09]));
-        assert_eq!(KeyCombo::parse("escape").unwrap().to_pty_bytes(), Some(vec![0x1b]));
-        assert_eq!(KeyCombo::parse("backspace").unwrap().to_pty_bytes(), Some(vec![0x7f]));
+        assert_eq!(
+            KeyCombo::parse("enter").unwrap().to_pty_bytes(),
+            Some(vec![0x0d])
+        );
+        assert_eq!(
+            KeyCombo::parse("tab").unwrap().to_pty_bytes(),
+            Some(vec![0x09])
+        );
+        assert_eq!(
+            KeyCombo::parse("escape").unwrap().to_pty_bytes(),
+            Some(vec![0x1b])
+        );
+        assert_eq!(
+            KeyCombo::parse("backspace").unwrap().to_pty_bytes(),
+            Some(vec![0x7f])
+        );
     }
 
     #[test]
@@ -719,7 +746,10 @@ mod tests {
     #[test]
     fn test_alt_letter() {
         // Alt+F = ESC + 'f'
-        assert_eq!(KeyCombo::parse("alt+f").unwrap().to_pty_bytes(), Some(vec![0x1b, b'f']));
+        assert_eq!(
+            KeyCombo::parse("alt+f").unwrap().to_pty_bytes(),
+            Some(vec![0x1b, b'f'])
+        );
     }
 
     #[test]
@@ -744,13 +774,22 @@ mod tests {
 
     #[test]
     fn test_ctrl_digits() {
-        assert_eq!(KeyCombo::parse("ctrl+2").unwrap().to_pty_bytes(), Some(vec![0x00]));
-        assert_eq!(KeyCombo::parse("ctrl+8").unwrap().to_pty_bytes(), Some(vec![0x7f]));
+        assert_eq!(
+            KeyCombo::parse("ctrl+2").unwrap().to_pty_bytes(),
+            Some(vec![0x00])
+        );
+        assert_eq!(
+            KeyCombo::parse("ctrl+8").unwrap().to_pty_bytes(),
+            Some(vec![0x7f])
+        );
     }
 
     #[test]
     fn test_ctrl_space() {
-        assert_eq!(KeyCombo::parse("ctrl+space").unwrap().to_pty_bytes(), Some(vec![0x00]));
+        assert_eq!(
+            KeyCombo::parse("ctrl+space").unwrap().to_pty_bytes(),
+            Some(vec![0x00])
+        );
     }
 
     // ==================== Serde 测试 ====================

@@ -9,7 +9,9 @@ use std::sync::Arc;
 
 /// 命令处理函数类型
 pub type CommandHandlerFn = Arc<
-    dyn Fn(serde_json::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<serde_json::Value>> + Send>>
+    dyn Fn(
+            serde_json::Value,
+        ) -> Pin<Box<dyn Future<Output = anyhow::Result<serde_json::Value>> + Send>>
         + Send
         + Sync,
 >;

@@ -5,6 +5,7 @@ import { copyFileSync, existsSync, mkdirSync, watch } from "node:fs"
 import { join, resolve } from "node:path"
 import { spawn } from "node:child_process"
 import { generateManifest } from "./manifest-gen.js"
+import { validateContributions } from "./contribute-validate.js"
 import { resolveComponentizeManifest, resolveCargoTargetDir, resolveWasmPath, resolveDevShellDir, copyDirContents, readJson, run, toPosix, DEV_SHELL_VITE, findViteBin } from "./lib.js"
 
 // ==================== 命令：dev（浏览器开发环境） ====================
@@ -177,6 +178,17 @@ function cmdBuild(flags) {
     }
   } catch (e) {
     console.error(`[wasmnest-plugin] manifest 自动填充失败: ${e.message}`)
+    process.exit(1)
+  }
+
+  // 0.1 声明契约校验（票 01 / spec §4.2、§4.3）：assistantTools / globalEntries
+  // 非法条目构建期判死（与 `wasmnest-plugin validate` 同一份规则：contribute-validate.js）
+  const contractErrors = validateContributions(readJson(manifestPath, 'plugin.json'))
+  if (contractErrors.length > 0) {
+    for (const e of contractErrors) console.error(`[wasmnest-plugin]   ✗ ${e}`)
+    console.error(
+      `[wasmnest-plugin] plugin.json 声明契约校验失败: ${contractErrors.length} 个错误`,
+    )
     process.exit(1)
   }
 

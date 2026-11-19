@@ -4,6 +4,7 @@
 import { cpSync, existsSync, readFileSync, rmSync } from "node:fs"
 import { join, relative, resolve } from "node:path"
 import { generateManifest } from "./manifest-gen.js"
+import { validateContributions } from "./contribute-validate.js"
 import { SDK_ROOT, TEMPLATE_DIR, readJson, walk, fillPlaceholders, toPosix } from "./lib.js"
 
 // ==================== 命令：create ====================
@@ -136,6 +137,9 @@ const VALID_PERMISSIONS = new Set([
   'tunnel:connect',
   'tunnel:probe',
   'tunnel:serve',
+  // 通用应用调用桥 / 全局入口（票 01，前端贡献面，与 permission.rs 真源同集）
+  'apps:control',
+  'ui:globalEntry',
 ])
 
 const VALID_PLUGIN_TYPES = new Set(['frontend', 'backend', 'full'])
@@ -282,6 +286,10 @@ function cmdValidate(flags) {
     }
   }
 
+
+  // 声明契约：assistantTools / globalEntries（票 01 / spec §4.2、§4.3）
+  // 规则单点维护在 contribute-validate.js，构建期（build.js）与本命令共用同一份。
+  errors.push(...validateContributions(manifest))
 
   for (const w of warnings) console.log(`  ⚠ ${w}`)
   for (const e of errors) console.error(`  ✗ ${e}`)

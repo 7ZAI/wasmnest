@@ -75,6 +75,13 @@ const PLUGINS = {
     group: 'servers',
     slug: 'net-config',
   },
+  // 服务型 wasm（L2 内部业务）：Nest 助手（系统级个人助手）。工程住应用仓
+  // `servers/assistant`；双端单产物（共享 rust crate，wasm32-unknown-unknown +
+  // 组件化，同 file-transfer 口径）。
+  'com.wasmnest.assistant': {
+    group: 'servers',
+    slug: 'assistant',
+  },
   'com.wasmnest.lanbitou': {
     group: 'apps',
     slug: 'lanbitou',

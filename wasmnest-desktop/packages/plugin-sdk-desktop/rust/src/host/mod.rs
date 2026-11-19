@@ -66,7 +66,10 @@ pub use storage::HostStorage;
 pub use task::{HostTask, TaskPlan, TaskProgress, TaskUnit};
 pub use timer::HostTimer;
 pub use tunnel::{HostTunnel, TunnelConfig, TunnelExposeConfig};
-pub use ws::{ws_event_topic, HostWebsocket, WS_CLIENT_CONNECT, WS_CLIENT_DISCONNECT, WS_CLOSE, WS_ERROR, WS_OPEN};
+pub use ws::{
+    ws_event_topic, HostWebsocket, WS_CLIENT_CONNECT, WS_CLIENT_DISCONNECT, WS_CLOSE, WS_ERROR,
+    WS_OPEN,
+};
 
 /// 宿主调用错误
 ///

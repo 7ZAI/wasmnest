@@ -42,22 +42,38 @@ pub trait WasmPlugin: Send + Sync + 'static {
     fn deactivate() -> anyhow::Result<()>;
     fn invoke_command(name: &str, args: serde_json::Value) -> anyhow::Result<serde_json::Value>;
 
-    fn on_startup() -> anyhow::Result<()> { Ok(()) }
-    fn on_shutdown() -> anyhow::Result<()> { Ok(()) }
-    fn on_auth_success() -> anyhow::Result<()> { Ok(()) }
-    fn on_disconnect(_reason: &str) -> anyhow::Result<()> { Ok(()) }
-    fn on_session_created(_session_id: &str) -> anyhow::Result<()> { Ok(()) }
-    fn on_session_stopped(_session_id: &str) -> anyhow::Result<()> { Ok(()) }
+    fn on_startup() -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn on_shutdown() -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn on_auth_success() -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn on_disconnect(_reason: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn on_session_created(_session_id: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn on_session_stopped(_session_id: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
 
     /// 收到总线消息回调（可选，默认忽略）
-    fn on_bus_message(_msg: &crate::BusMessage) -> anyhow::Result<()> { Ok(()) }
+    fn on_bus_message(_msg: &crate::BusMessage) -> anyhow::Result<()> {
+        Ok(())
+    }
 
     /// 收到总线二进制消息回调（v9，可选，默认忽略）
     ///
     /// 订阅方须以 `host-bus.subscribe-binary` 声明二进制格式偏好，宿主才把
     /// `publish-binary` 载荷投递到本回调；否则按格式不匹配拒绝。
     /// `msg.payload` 为 Null、`msg.payload_binary` 携带原始字节
-    fn on_message_binary(_msg: &crate::BusMessage) -> anyhow::Result<()> { Ok(()) }
+    fn on_message_binary(_msg: &crate::BusMessage) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(all(test, feature = "wasm"))]
@@ -101,7 +117,10 @@ mod tests {
             Ok(())
         }
 
-        fn invoke_command(_name: &str, _args: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+        fn invoke_command(
+            _name: &str,
+            _args: serde_json::Value,
+        ) -> anyhow::Result<serde_json::Value> {
             Ok(serde_json::Value::Null)
         }
     }

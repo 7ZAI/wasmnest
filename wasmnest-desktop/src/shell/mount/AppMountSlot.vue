@@ -57,7 +57,7 @@ import {
   type AppMountEnv,
   type MonitorPanelEnv,
 } from '@/shell/mount/useAppMount'
-import { MONITOR_PLUGIN_ID } from '@/shell/composables/useShellApps'
+import { MONITOR_PLUGIN_ID, useShellApps } from '@/shell/composables/useShellApps'
 import { useAppUpdates } from '@/shell/composables/useAppUpdates'
 import { rememberAppRoute } from '@/shell/mount/appSession'
 import { useSettingsStore } from '@/stores/settings'
@@ -72,6 +72,8 @@ import {
   refreshChannelToken,
 } from '@/utils/appCommands'
 import { whitelistedHostInvoke } from '@/shell/mount/invokeWhitelist'
+import { createAppControlBridge } from '@/shell/mount/appControlBridge'
+import { useShellState } from '@/shell/composables/useShellState'
 import { logger } from '@/utils/frontendLogger'
 
 const props = defineProps<{
@@ -101,7 +103,7 @@ async function buildEnv(initialRoute: string, appId: string): Promise<AppMountEn
   // 插件停用再启用后旧令牌已被宿主回收，复用会让进入应用的第一批命令全被拒）；
   // app 未运行 / 未授权时取不到 → 显性报错，不静默降级
   await refreshChannelToken(appId)
-  return {
+  const env: AppMountEnv = {
     appId,
     mountContract: MOUNT_CONTRACT,
     invoke: (command, args) => whitelistedHostInvoke(command, args),
@@ -173,6 +175,14 @@ async function buildEnv(initialRoute: string, appId: string): Promise<AppMountEn
       }
     },
   }
+  // 通用应用调用桥（票 02 / spec §4.2）：仅 manifest 声明 apps:control 时注入。
+  // 未声明 = 字段缺省（不注入空壳对象），应用必须显性提示「未授权」。
+  // 新增可选字段不 bump MOUNT_CONTRACT。
+  const appEntry = useShellApps().appOf(appId)
+  if (appEntry?.permissions.includes('apps:control')) {
+    env.apps = createAppControlBridge(appId, (targetId) => useShellState().openApp(targetId))
+  }
+  return env
 }
 
 async function mount(initialRoute: string): Promise<void> {

@@ -136,6 +136,16 @@ export const PLUGIN_WATCH_CMDS = [
     wasmFile: 'rust/target/wasm32-wasip3/release/wasmnest_plugin_net_config.wasm',
   },
   {
+    // Nest 助手（系统级个人助手，L2 内部业务）：工程住应用仓 `servers/assistant`。
+    // 双端单产物（共享 rust crate + 组件化），产物落应用仓的 wasm 应用共享 target
+    // （与 file-transfer 同口径）；本字段只被 `ensurePluginWasm` 取 basename 定位。
+    group: 'servers',
+    slug: 'assistant',
+    id: 'com.wasmnest.assistant',
+    args: ['scripts/build.js', '--watch'],
+    wasmFile: 'target/wasm-apps/wasm32-unknown-unknown/release/wasmnest_plugin_assistant.wasm',
+  },
+  {
     // Lanbitou（Markdown 记事本）：业务应用，工程住应用仓 `apps/lanbitou`。
     // 数据根在 `$HOME/.wasmnest/lanbitou`（host-fs），前端与 Rust 都轻。
     slug: 'lanbitou',

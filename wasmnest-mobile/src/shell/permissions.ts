@@ -53,6 +53,8 @@ const PERMISSION_I18N_KEY: Record<string, string> = {
   auth: 'auth',
   notify: 'notify',
   'metrics:read': 'metricsRead',
+  'apps:control': 'appsControl',
+  'ui:globalEntry': 'uiGlobalEntry',
 }
 
 /** 能力域分组：与移动端权限词汇的能力域划分一致 */
@@ -75,7 +77,7 @@ export const SHELL_PERMISSION_GROUPS: ShellPermissionGroup[] = [
   {
     id: 'system',
     titleKey: 'shell.permission.group.system',
-    keys: ['metrics:read'],
+    keys: ['metrics:read', 'apps:control'],
   },
   {
     id: 'interface',
@@ -88,6 +90,7 @@ export const SHELL_PERMISSION_GROUPS: ShellPermissionGroup[] = [
       'ui:route',
       'ui:dialog',
       'ui:back',
+      'ui:globalEntry',
       'bus',
       'broadcast',
       'system:open',

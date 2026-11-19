@@ -46,7 +46,10 @@ pub mod wasm_host;
 pub use args::CommandArgs;
 pub use command::{PluginCommand, PluginCommandEntry};
 pub use context::RustPluginContext;
-pub use host::{ConfigKey, HostApi, HostBus, HostConfig, HostError, HostEvents, HostFs, HostHttp, HostLog, HostStorage};
+pub use host::{
+    ConfigKey, HostApi, HostBus, HostConfig, HostError, HostEvents, HostFs, HostHttp, HostLog,
+    HostStorage,
+};
 pub use permission::PermissionManager;
 pub use traits::{WasmNestPlugin, WasmNestPluginEntry};
 pub use types::*;
