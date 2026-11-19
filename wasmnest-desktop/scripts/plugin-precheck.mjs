@@ -92,6 +92,14 @@ export const PLUGIN_WATCH_CMDS = [
     wasmFile: 'target/wasm-apps/wasm32-unknown-unknown/release/wasmnest_plugin_file_transfer.wasm',
   },
   {
+    // news：双端单产物（与 file-transfer 同形态，Rust 全在应用级 `apps/news/rust`），
+    // 本端同样走 wasm32-unknown-unknown + componentize。
+    slug: 'news',
+    id: 'com.wasmnest.news',
+    args: ['scripts/build.js', '--watch'],
+    wasmFile: 'target/wasm-apps/wasm32-unknown-unknown/release/wasmnest_plugin_news.wasm',
+  },
+  {
     // Monitor：系统服务（L2），工程住应用仓 `servers/` 分组；只读指标看板，
     // 前端与 Rust 都轻，走与其他应用同一条 watch 闭环。
     group: 'servers',
