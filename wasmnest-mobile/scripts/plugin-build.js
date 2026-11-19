@@ -89,6 +89,11 @@ if (selected.length === 0) {
   process.exit(1)
 }
 
+// 清场前先确认依赖齐备：CLI 用 npx --no-install 从插件工程解析，vite 由 SDK CLI
+// 在该目录查找；缺失时 npx 会退回 registry 拉 wasmnest-plugin@* 报 404，且 --fresh
+// 已删光旧产物（fail-visible：点名缺什么、去哪装）。
+checkPluginDeps(selected, rustOnly)
+
 const builtIds = []
 // fresh：删旧产物后再建（构建前清场，确保产物目录里不存在任何旧文件）
 if (fresh) cleanPluginArtifacts()
@@ -152,6 +157,35 @@ function cleanPluginArtifacts() {
   }
   // 传空 active 集 = 生成资源里的插件目录全删（含 Gradle 中间产物）
   pruneStaleAndroidPluginAssets(ROOT, { active: new Set() })
+}
+
+/**
+ * 插件工程本地依赖预检（SDK CLI shim + vite）
+ *
+ * 与 CI「安装应用仓 mobile 工程依赖」步骤同一前提：每个 app 工程各自 pnpm install。
+ * 缺依赖时在 fresh 清场前终止，避免旧产物被删后才暴露 npm 404 的误导性报错。
+ * --rust-only 不跑前端，CLI 不会查 vite，故跳过该项。
+ */
+function checkPluginDeps(plugins, skipVite) {
+  const missing = []
+  for (const { group, name } of plugins) {
+    const cwd = join(appsRootDir, group, name, 'mobile')
+    const binNames = IS_WIN ? ['wasmnest-plugin.cmd', 'wasmnest-plugin.ps1'] : ['wasmnest-plugin']
+    if (!binNames.some((bin) => existsSync(join(cwd, 'node_modules', '.bin', bin)))) {
+      missing.push({ cwd, dep: 'SDK CLI（@binblink/wasmnest-plugin-sdk-mobile）' })
+    }
+    if (!skipVite && !existsSync(join(cwd, 'node_modules', 'vite', 'bin', 'vite.js'))) {
+      missing.push({ cwd, dep: 'vite' })
+    }
+  }
+  if (missing.length === 0) return
+  console.error('[plugin-build] 插件工程本地依赖缺失，构建前终止（旧产物未清理）：')
+  for (const { cwd, dep } of missing) console.error(`  ✗ ${dep}: ${cwd}`)
+  console.error('[plugin-build] 请逐工程安装依赖后重试：')
+  for (const cwd of [...new Set(missing.map((m) => m.cwd))]) {
+    console.error(`  cd ${cwd} && pnpm install --frozen-lockfile`)
+  }
+  process.exit(1)
 }
 
 /**

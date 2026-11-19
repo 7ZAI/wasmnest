@@ -16,6 +16,7 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
+    "typecheck:dev-shell": "vue-tsc -p packages/plugin-sdk-mobile/dev-shell/tsconfig.json --noEmit",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:android:init": "tauri android init",

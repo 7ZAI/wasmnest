@@ -271,6 +271,12 @@ jobs:
         working-directory: wasmnest/wasmnest-mobile
         run: pnpm exec vue-tsc --noEmit
 
+      # dev-shell 预览壳不在移动主 tsconfig 的 include 内（独立 tsconfig）——
+      # 缺这一步时 mock 少实现一个 SDK 接口也不会红（issue #7 的暴露路径）。
+      - name: vue-tsc --noEmit（dev-shell 预览壳）
+        working-directory: wasmnest/wasmnest-mobile
+        run: pnpm run typecheck:dev-shell
+
       - name: vitest（宿主测试树）
         working-directory: wasmnest/wasmnest-mobile
         run: pnpm run test:run
