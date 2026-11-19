@@ -46,6 +46,9 @@ import net from 'node:net'
 import { resolve, basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { appDir, hasAppDir } from '../../scripts/app-paths.mjs'
+// Linux 原生依赖（ALSA / libclang / cmake）进程内自举：不依赖 shell profile，
+// IDE 内置终端 / 非交互调用同样生效（见模块头注释）
+import { ensureLinuxSysdeps } from './linux-sysdeps.js'
 // 插件产物预检（wasm/前端陈旧补建 + 清单基线 + 退役清理）抽为共享模块：
 // 裸 `tauri dev` 经 tauri.conf.json beforeDevCommand 同样执行（幂等，双路径相遇秒过）
 import { PLUGIN_WATCH_CMDS, PRECHECK_DONE_ENV, runPluginPrecheck } from './plugin-precheck.mjs'
@@ -54,6 +57,10 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const ROOT = resolve(__dirname, '..')
 const IS_WIN = process.platform === 'win32'
+
+// 系统依赖注入必须先于任何子进程（插件预检 / 宿主 cargo）启动；
+// 系统已装开发包时本调用是空操作（pkg-config 判据先行）
+ensureLinuxSysdeps()
 
 // ==================== 端口预检 ====================
 

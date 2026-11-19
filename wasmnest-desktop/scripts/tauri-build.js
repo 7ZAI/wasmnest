@@ -26,8 +26,15 @@ import { existsSync, readFileSync, readdirSync, renameSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
+// Linux 原生依赖（ALSA / libclang / cmake）进程内自举：build 与 dev 同一约束，
+// 不依赖 shell profile（见模块头注释）
+import { ensureLinuxSysdeps } from './linux-sysdeps.js'
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+// 系统依赖注入必须先于 tauri CLI（内部 spawn cargo）启动；
+// 系统已装开发包时本调用是空操作（pkg-config 判据先行）
+ensureLinuxSysdeps()
 // 直接调用本地 tauri CLI 入口，避免经 shell 转发导致参数引号丢失（Windows cmd 会吞掉 JSON 中的双引号）
 const require = createRequire(import.meta.url)
 const tauriCli = require.resolve('@tauri-apps/cli/tauri.js')
