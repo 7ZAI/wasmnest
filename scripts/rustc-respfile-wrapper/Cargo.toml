@@ -1,0 +1,10 @@
+[package]
+name = "rustc-respfile-wrapper"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Windows 发布构建的 rustc 响应文件包装器（规避 CreateProcess 命令行上限）"
+
+[profile.release]
+opt-level = "z"
+lto = true

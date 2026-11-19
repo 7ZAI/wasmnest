@@ -276,9 +276,6 @@ jobs:
           WIN_THUMBPRINT: ${{ steps.wincert.outputs.thumbprint }}
           UNSIGNED: ${{ inputs.unsigned }}
           MATRIX_CARGO_TARGET_DIR: ${{ matrix.cargo_target_dir }}
-          # Windows 大依赖 crate 的 rustc 命令行超 CreateProcess 上限（os error 206）：
-          # 超限时包装器转响应文件拉起（见脚本头注）；Linux 命令行远低于阈值，透传行为不变
-          RUSTC_WRAPPER: ${{ github.workspace }}/wasmnest/scripts/rustc-respfile-wrapper.mjs
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
@@ -289,6 +286,13 @@ jobs:
           # Windows：注入短 CARGO_TARGET_DIR（见 matrix 注释）；Linux 不设，保持仓内默认布局
           if [ -n "${MATRIX_CARGO_TARGET_DIR:-}" ]; then
             export CARGO_TARGET_DIR="$MATRIX_CARGO_TARGET_DIR"
+          fi
+          # Windows：构建 rustc 响应文件包装器（大依赖 crate 命令行超 CreateProcess 上限，
+          # os error 206；包装器超阈值时转 @响应文件 拉起，见 crate 头注。.mjs 无法被
+          # Windows CreateProcess 直接执行，必须 exe 形态，故现场 cargo build）
+          if [ "$TARGET" = "x86_64-pc-windows-msvc" ]; then
+            cargo build --release --manifest-path "$GITHUB_WORKSPACE/wasmnest/scripts/rustc-respfile-wrapper/Cargo.toml"
+            export RUSTC_WRAPPER="$GITHUB_WORKSPACE/wasmnest/scripts/rustc-respfile-wrapper/target/release/rustc-respfile-wrapper.exe"
           fi
           cfg="{\"version\":\"${PRODUCT}\""
           if [ -n "${WIN_THUMBPRINT:-}" ]; then
