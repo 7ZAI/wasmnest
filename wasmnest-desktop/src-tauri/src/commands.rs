@@ -165,48 +165,101 @@ pub fn set_log_level(
 
 // ==================== 终端背景图 ====================
 
-/// 设置终端背景图片
+/// 设置终端背景图片（原生对话框取图；前端不传路径）
 ///
-/// 传入源图片路径时，将图片复制到应用数据目录（统一命名为 `terminal_bg.<ext>`）并返回文件名；
-/// 传入 `None` 时移除已有背景图片文件。选择复制而非直接引用源路径，
-/// 避免用户移动/删除原图后背景失效。
+/// issue #44（2026-11-19）：本命令原先接受前端传入的任意绝对路径，只校验扩展名
+/// 与大小就 `std::fs::copy` 进 `app_data_dir` —— 任一应用前端可在不声明 `fs:read`、
+/// 不触发 fs 授权弹窗的前提下搬运本机图片（asset 协议放行后即可渲染）。
+/// 现改为与 `pick_custom_wallpaper` 同款：源路径由**宿主侧原生对话框**产生，
+/// IPC 面上不存在「任意路径」参数。
+///
+/// 语义：选中 → 复制为 `terminal_bg.<ext>` 并返回文件名；取消 → `Ok(None)`
+/// （保留现有背景）。移除背景走 [`clear_terminal_bg_image`]。
 #[tauri::command]
-pub fn set_terminal_bg_image(app_handle: tauri::AppHandle, source_path: Option<String>) -> Result<Option<String>> {
+pub async fn set_terminal_bg_image(app_handle: tauri::AppHandle) -> Result<Option<String>> {
+    let Some(source) = pick_terminal_bg_file(&app_handle).await? else {
+        return Ok(None);
+    };
     let data_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|e: tauri::Error| crate::AppError::Config(e.to_string()))?;
 
+    let source_str = source
+        .to_str()
+        .ok_or_else(|| crate::AppError::InvalidInput("背景图片路径不是有效 UTF-8".to_string()))?;
+    // 校验对话框结果（扩展名 / 存在性 / 大小）；路径来源已可信，校验保留作防御
+    let (src, ext) = validate_terminal_bg_source(source_str)?;
+
     // 清理已有背景图片（每次选择扩展名可能不同，避免残留旧文件）
-    if data_dir.exists() {
-        let entries = std::fs::read_dir(&data_dir)
-            .map_err(|e| crate::AppError::Config(format!("读取应用数据目录失败 {}: {e}", data_dir.display())))?;
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if let Some(ext) = name.strip_prefix(&format!("{TERMINAL_BG_FILE_PREFIX}.")) {
-                if TERMINAL_BG_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()) {
-                    if let Err(e) = std::fs::remove_file(entry.path()) {
-                        tracing::warn!("删除旧终端背景图片失败 {}: {e}", entry.path().display());
-                    }
+    remove_terminal_bg_files(&data_dir)?;
+
+    let file_name = format!("{TERMINAL_BG_FILE_PREFIX}.{ext}");
+    let dest = data_dir.join(&file_name);
+    std::fs::copy(src, &dest)
+        .map_err(|e| crate::AppError::Config(format!("复制背景图片 {source_str} 到 {} 失败: {e}", dest.display())))?;
+
+    tracing::info!("终端背景图片已更新: {}", dest.display());
+    Ok(Some(file_name))
+}
+
+/// 移除终端背景图片（前端只能清自己的背景槽位，不传路径）
+#[tauri::command]
+pub fn clear_terminal_bg_image(app_handle: tauri::AppHandle) -> Result<()> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e: tauri::Error| crate::AppError::Config(e.to_string()))?;
+    remove_terminal_bg_files(&data_dir)?;
+    tracing::info!("终端背景图片已清理");
+    Ok(())
+}
+
+/// 原生取图对话框（Rust 侧发起：前端不持有 fs 权限，也不传任意路径给命令）
+async fn pick_terminal_bg_file(app_handle: &tauri::AppHandle) -> Result<Option<PathBuf>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app_handle
+        .dialog()
+        .file()
+        .add_filter("Images", TERMINAL_BG_EXTENSIONS)
+        .pick_file(move |selection| {
+            if tx.send(selection).is_err() {
+                tracing::debug!("set_terminal_bg_image: receiver dropped before dialog completed");
+            }
+        });
+    match rx.await {
+        Ok(Some(file_path)) => file_path
+            .into_path()
+            .map(Some)
+            .map_err(|e| crate::AppError::InvalidInput(format!("背景图片路径转换失败: {e}"))),
+        // 用户取消（与失败可区分：None，不回错误）
+        Ok(None) => Ok(None),
+        Err(e) => Err(crate::AppError::Internal(format!(
+            "set_terminal_bg_image: dialog channel closed: {e}"
+        ))),
+    }
+}
+
+/// 删除 `app_data_dir` 下所有 `terminal_bg.<白名单扩展名>` 文件。
+///
+/// 只认自己的文件名前缀 + 白名单扩展名，目录里其他内容不动；目录不存在视为已清理。
+fn remove_terminal_bg_files(data_dir: &Path) -> Result<()> {
+    if !data_dir.exists() {
+        return Ok(());
+    }
+    let entries = std::fs::read_dir(data_dir)
+        .map_err(|e| crate::AppError::Config(format!("读取应用数据目录失败 {}: {e}", data_dir.display())))?;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if let Some(ext) = name.strip_prefix(&format!("{TERMINAL_BG_FILE_PREFIX}.")) {
+            if TERMINAL_BG_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()) {
+                if let Err(e) = std::fs::remove_file(entry.path()) {
+                    tracing::warn!("删除旧终端背景图片失败 {}: {e}", entry.path().display());
                 }
             }
         }
     }
-
-    let Some(source) = source_path.filter(|p| !p.is_empty()) else {
-        // 仅移除背景图片
-        return Ok(None);
-    };
-
-    // 校验源路径：绝对路径 + 扩展名（输入校验在 Rust 端；相对路径可越界复制）
-    let (src, ext) = validate_terminal_bg_source(&source)?;
-    let file_name = format!("{TERMINAL_BG_FILE_PREFIX}.{ext}");
-    let dest = data_dir.join(&file_name);
-    std::fs::copy(src, &dest)
-        .map_err(|e| crate::AppError::Config(format!("复制背景图片 {source} 到 {} 失败: {e}", dest.display())))?;
-
-    tracing::info!("终端背景图片已更新: {}", dest.display());
-    Ok(Some(file_name))
+    Ok(())
 }
 
 /// 校验终端背景图片来源路径（纯函数，可单测）

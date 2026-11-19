@@ -40,7 +40,12 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["$RESOURCE/**/*", "$APPCONFIG/**/*", "$APPDATA/**/*"]
+          "allow": [
+            "$RESOURCE/**/*",
+            "$APPCONFIG/**/*",
+            "$APPDATA/wallpapers/**",
+            "$APPDATA/terminal_bg.*"
+          ]
         }
       }
     }

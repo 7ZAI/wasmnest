@@ -55,6 +55,64 @@ fn resolved_plugins_dir_is_allowed_in_asset_protocol_scope() {
     );
 }
 
+/// #44（2026-11-19）：`$APPDATA` 不得再整目录放行给 asset 协议。
+///
+/// 收窄前 `$APPDATA/**/*` = 「应用数据目录整目录可渲染」——任一应用前端只要能把
+/// 任意图片搬进 appdata（当时 `set_terminal_bg_image` 还接受前端传入的绝对路径），
+/// 就能经 asset 协议读回，绕过 `fs:read` 与授权弹窗。作用域现在只保留两个真实
+/// 消费面：自定义壁纸目录与终端背景图。
+#[test]
+fn appdata_asset_scope_is_narrowed_to_wallpaper_and_terminal_bg() {
+    let conf: serde_json::Value =
+        serde_json::from_str(&read_file("tauri.conf.json")).expect("tauri.conf.json 必须是合法 JSON");
+    let allow = conf["app"]["security"]["assetProtocol"]["scope"]["allow"]
+        .as_array()
+        .expect("assetProtocol.scope.allow 必须是数组")
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(
+        !allow.iter().any(|s| *s == "$APPDATA/**/*" || *s == "$APPDATA/**"),
+        "asset 作用域不得再整目录放行 $APPDATA（#44）：{allow:?}"
+    );
+    assert!(
+        allow.iter().any(|s| s.starts_with("$APPDATA/wallpapers")),
+        "自定义壁纸目录必须仍在作用域内，否则壁纸渲染 403：{allow:?}"
+    );
+    assert!(
+        allow.iter().any(|s| s.contains("terminal_bg")),
+        "终端背景图必须仍在作用域内，否则背景渲染 403：{allow:?}"
+    );
+}
+
+/// #44（2026-11-19）：终端背景图命令不得再接受前端传入的路径。
+///
+/// 改回 `source_path: Option<String>`（无论是否再做扩展名校验）= 路径即权限，
+/// 单测不会红、运行期也不报错，只会让任意应用前端重新获得「复制本机图片进
+/// appdata」的能力——正是 #44 的问题形态。
+#[test]
+fn terminal_bg_command_takes_no_frontend_path() {
+    let commands = read_file("src/commands.rs");
+    let sig_at = commands
+        .find("pub async fn set_terminal_bg_image")
+        .expect("set_terminal_bg_image 必须是 async 命令（内部走原生对话框）");
+    let head = &commands[sig_at..];
+    let sig_end = head
+        .find('{')
+        .map(|i| sig_at + i)
+        .expect("找不到 set_terminal_bg_image 函数体起点");
+    let signature = &commands[sig_at..sig_end];
+    assert!(
+        !signature.contains("source_path") && !signature.contains("String"),
+        "set_terminal_bg_image 不得接受前端路径参数（#44）：{signature}"
+    );
+    assert!(
+        commands.contains("fn clear_terminal_bg_image"),
+        "清除背景图必须是独立命令（不接受路径），移除语义不能退回 set(None)"
+    );
+}
+
 #[test]
 fn assets_command_doc_does_not_claim_static_scope_guarantees_serving() {
     // `plugin_get_asset_dir` 的模块注释曾断言「落点在 asset protocol 允许范围内由

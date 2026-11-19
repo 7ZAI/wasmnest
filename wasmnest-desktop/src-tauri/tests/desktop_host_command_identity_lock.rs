@@ -14,10 +14,13 @@
 //! - `plugin_mark_error` 已按 #48 收口：桌面版本改为 `src/plugin/lifecycle.rs`
 //!   的插件自报面（插件令牌只能标自己），归 `PLUGIN_GATED` 表锁形状；
 //!   `api_bridge` 的无凭证同名命令仍被 glob 再导出，但**不再注册**；
-//! - `set_terminal_bg_image` / `update_server_{port,network_config}` /
-//!   `reset_server_network_config`——前者应改为原生对话框（#44），后三条当前由
+//! - `update_server_{port,network_config}` / `reset_server_network_config`——当前由
 //!   bedcode 应用前端直接调用（#45），改宿主门会破坏应用，需先裁决归属
 //!   （宿主门 vs 应用令牌 + 权限位）。
+//!   `set_terminal_bg_image` 已按 #44 收口（2026-11-19）：改为宿主侧原生对话框取图，
+//!   并新增 `clear_terminal_bg_image`；签名不再接受前端路径，故无需进本锁的 GATED 表
+//!   （形状由 `tests/app_bundle_asset_scope_lock.rs` 的
+//!   `terminal_bg_command_takes_no_frontend_path` 钉住）。
 //! - 链路加密策略属于应用（2026-11-04 裁决）：写命令 `set_app_link_crypto_policy`
 //!   归 `PLUGIN_GATED`（own-token，只能改自己）；宿主设置页只读审计，没有整机下限。
 
