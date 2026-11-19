@@ -24,6 +24,7 @@
  * - com.wasmnest.speech：/speech（服务型 wasm，应用仓 servers/speech）
  */
 import { createRouter, createWebHistory } from 'vue-router'
+import { setRouter } from './instance'
 
 import AppMountSlot from '@/shell/mount/AppMountSlot.vue'
 import {
@@ -206,5 +207,9 @@ const router = createRouter({
     },
   ],
 })
+
+// 注册到零依赖持有者：useShellState 等模块经 getRouter() 延迟取，避免顶层
+// `import router from '@/router'` 与 AppMountSlot 构成 ESM 环（TDZ 崩溃）。
+setRouter(router)
 
 export default router

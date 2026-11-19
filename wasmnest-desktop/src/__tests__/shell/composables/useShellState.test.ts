@@ -66,6 +66,12 @@ vi.mock('@/i18n', () => ({
 }))
 
 vi.mock('@/router', () => ({ default: { push: vi.fn() } }))
+// useShellState 经 `@/router/instance` 的 getRouter() 延迟取 router（打断 AppMountSlot
+// 的 ESM 环）。测试里让 getRouter 返回同一个 mock router，保持下方 push 断言不变。
+vi.mock('@/router/instance', async () => {
+  const router = (await import('@/router')).default
+  return { getRouter: () => router }
+})
 
 import router from '@/router'
 import { clearAppRoutes, lastRouteOf, rememberAppRoute } from '@/shell/mount/appSession'

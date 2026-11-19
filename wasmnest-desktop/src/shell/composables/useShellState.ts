@@ -17,7 +17,7 @@ import { useToast } from '@/composables/useToast'
 import { invoke } from '@/utils/invoke'
 import { showUserError } from '@/utils/userError'
 import i18n from '@/i18n'
-import router from '@/router'
+import { getRouter } from '@/router/instance'
 import { forgetAppRoute, lastRouteOf } from '../mount/appSession'
 import { appCardKey, cardId, cardKind, isHighRisk, mruActivate, mruRemove, notifCount, sysCardKey, sysPageOf } from './state'
 import { isServiceKind, pluginIdOfAppRoute, useShellApps } from './useShellApps'
@@ -267,7 +267,7 @@ async function openApp(appId: string): Promise<boolean> {
   } else {
     enterFace(appCardKey(appId))
   }
-  void router.push(lastRouteOf(appId) ?? app.route)
+  void getRouter().push(lastRouteOf(appId) ?? app.route)
   return true
 }
 
@@ -276,7 +276,7 @@ function openSys(pageId: string, sub?: string): void {
   const sys = sysPageOf(pageId)
   if (!sys) return
   enterFace(sysCardKey(pageId))
-  void router.push(sub ? `/sys/${pageId}/${sub}` : `/sys/${pageId}`)
+  void getRouter().push(sub ? `/sys/${pageId}/${sub}` : `/sys/${pageId}`)
 }
 
 /**
@@ -309,7 +309,7 @@ function toggleQuickSettings(open = !quickSettingsOpen.value): void {
 /** 激活卡片（多任务面板点行）：MRU 置顶 + 切到对应路由（应用续接上次页面） */
 function activateCard(key: CardKey): void {
   enterFace(key)
-  void router.push(routeOf(key))
+  void getRouter().push(routeOf(key))
 }
 
 /**
@@ -354,7 +354,7 @@ function goHome(): void {
   recentsOpen.value = false
   ctxMenu.value = null
   homeQ.value = ''
-  void router.push('/')
+  void getRouter().push('/')
 }
 
 /** 返回：覆层按 z 序先收，耗尽后全屏 → 主屏 */
