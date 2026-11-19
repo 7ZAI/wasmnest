@@ -56,6 +56,21 @@ describe('ensureHostCredential 宿主面凭证缓存', () => {
     expect(second).toBe(first)
     expect(invokeCalls('plugin_frontend_loader_session')).toHaveLength(1)
   })
+
+  it('并发首取 single-flight：多个调用只 invoke 一次（宿主拒重复签发）', async () => {
+    vi.resetModules()
+    const { ensureHostCredential } = await import('@/plugin/credentials')
+
+    const [a, b, c] = await Promise.all([
+      ensureHostCredential(),
+      ensureHostCredential(),
+      ensureHostCredential(),
+    ])
+
+    expect(new Set([a, b, c]).size).toBe(1)
+    expect(a).toBe(FAKE_CREDENTIAL)
+    expect(invokeCalls('plugin_frontend_loader_session')).toHaveLength(1)
+  })
 })
 
 describe('ensureChannelToken 插件通道令牌', () => {

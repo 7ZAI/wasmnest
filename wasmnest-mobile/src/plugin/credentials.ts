@@ -23,11 +23,32 @@ import { invoke } from '@tauri-apps/api/core'
 /** 宿主面凭证缓存（null = 尚未取得） */
 let hostCredentialCache: string | null = null
 
+/**
+ * 宿主面凭证签发在途（single-flight）
+ *
+ * 启动期「设置恢复 / 自动重连 / 插件系统初始化」会在同一轮并发首取：仅靠
+ * `hostCredentialCache` 挡不住——各自都看到 null 就各发一次 IPC，而宿主对同页
+ * **重复签发显性拒绝**（`frontend loader session already issued for this page
+ * load`），后到者把设计护栏变成启动期随机失败（症状：`Plugin system init
+ * failed` + `host.internal`）。在途共享后并发调用拿同一个 promise。
+ */
+let hostCredentialInFlight: Promise<string> | null = null
+
 /** 取得宿主面凭证（幂等）：管理类命令（插件面 invoke 之外的宿主职权操作）的凭证来源 */
 export async function ensureHostCredential(): Promise<string> {
   if (hostCredentialCache) return hostCredentialCache
-  hostCredentialCache = await invoke<string>('plugin_frontend_loader_session')
-  return hostCredentialCache
+  if (!hostCredentialInFlight) {
+    hostCredentialInFlight = invoke<string>('plugin_frontend_loader_session')
+      .then((credential) => {
+        hostCredentialCache = credential
+        return credential
+      })
+      .finally(() => {
+        // 失败不缓存凭证（下次重新签发）；成功时缓存已写入，在途位清空即可
+        hostCredentialInFlight = null
+      })
+  }
+  return hostCredentialInFlight
 }
 
 /** 插件通道令牌缓存（pluginId → token） */
