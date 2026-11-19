@@ -283,16 +283,22 @@ jobs:
           if [ "$UNSIGNED" = "true" ]; then
             echo "::warning::unsigned=true：跳过签名，产物不可用于发布"
           fi
+          # Windows：先构建 rustc 响应文件包装器（大依赖 crate 命令行超 CreateProcess 上限，
+          # os error 206；包装器超阈值时转 @响应文件 拉起，见 crate 头注。.mjs 无法被
+          # Windows CreateProcess 直接执行，必须 exe 形态，故现场 cargo build。
+          # 顺序要紧：须在导出 CARGO_TARGET_DIR 之前构建，否则产物落进短 target 目录
+          if [ "$TARGET" = "x86_64-pc-windows-msvc" ]; then
+            cargo build --release --manifest-path "$GITHUB_WORKSPACE/wasmnest/scripts/rustc-respfile-wrapper/Cargo.toml"
+            WRAPPER_EXE="$GITHUB_WORKSPACE/wasmnest/scripts/rustc-respfile-wrapper/target/release/rustc-respfile-wrapper.exe"
+            [ -f "$WRAPPER_EXE" ] || { echo "::error::包装器构建产物缺失: $WRAPPER_EXE"; exit 1; }
+          fi
           # Windows：注入短 CARGO_TARGET_DIR（见 matrix 注释）；Linux 不设，保持仓内默认布局
           if [ -n "${MATRIX_CARGO_TARGET_DIR:-}" ]; then
             export CARGO_TARGET_DIR="$MATRIX_CARGO_TARGET_DIR"
           fi
-          # Windows：构建 rustc 响应文件包装器（大依赖 crate 命令行超 CreateProcess 上限，
-          # os error 206；包装器超阈值时转 @响应文件 拉起，见 crate 头注。.mjs 无法被
-          # Windows CreateProcess 直接执行，必须 exe 形态，故现场 cargo build）
-          if [ "$TARGET" = "x86_64-pc-windows-msvc" ]; then
-            cargo build --release --manifest-path "$GITHUB_WORKSPACE/wasmnest/scripts/rustc-respfile-wrapper/Cargo.toml"
-            export RUSTC_WRAPPER="$GITHUB_WORKSPACE/wasmnest/scripts/rustc-respfile-wrapper/target/release/rustc-respfile-wrapper.exe"
+          # Windows：包装器就位后设 RUSTC_WRAPPER（须在 CARGO_TARGET_DIR 之后，避免被其干扰）
+          if [ -n "${WRAPPER_EXE:-}" ]; then
+            export RUSTC_WRAPPER="$WRAPPER_EXE"
           fi
           cfg="{\"version\":\"${PRODUCT}\""
           if [ -n "${WIN_THUMBPRINT:-}" ]; then
