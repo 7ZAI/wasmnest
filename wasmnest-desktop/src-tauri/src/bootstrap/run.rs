@@ -545,9 +545,9 @@ pub fn run() {
             // 2026-10-20 裁决）。
             let lifecycle = Arc::new(plugin::lifecycle::PluginLifecycleManager::new(plugin_host.clone()));
             app.manage(lifecycle.clone());
-            // 已卸载覆盖表先于 autostart 生效：随包内置应用被用户卸载后，宿主更新
-            // 不能把它重新拉起；boot 只摘运行时记录（资源目录 / 数据保留）。
-            tauri::async_runtime::block_on(lifecycle.apply_uninstalled_tombstones());
+            // 卸载是**完全卸载**（删安装目录 + 按 keepData 处理数据），没有持久
+            // 「已卸载」状态需要重放：目录不存在的应用 boot 扫描自然装不进列表；
+            // 随包内置应用资源目录只读时卸载会失败（fail-visible，不静默复活）。
             tauri::async_runtime::block_on(lifecycle.apply_autostart());
             app.manage(plugin_host.wasm_runtime().fs_auth().clone());
             // 网络出站授权应答通道：与 fs 应答同一形态——前端弹窗经
@@ -755,9 +755,8 @@ pub fn run() {
             commands::plugin_frontend_loader_session,
             commands::plugin_channel_token,
             commands::plugin_install_from_file,
-            // 卸载覆盖 api_bridge 裸臂：带 keepData 数据保留策略 + 内置应用 tombstone
+            // 卸载覆盖 api_bridge 裸臂：带 keepData 数据保留策略
             plugin::lifecycle::plugin_uninstall,
-            plugin::lifecycle::plugin_clear_uninstalled,
             // 应用更新链路（plugin_updates.rs：GitHub Release 检查 + 校验下载；
             // 安装复用 plugin_install_from_file 升级模式，兼容判断在壳前端）
             plugin_updates::plugin_check_app_update,

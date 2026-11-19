@@ -463,19 +463,12 @@ async function installFromZip(
   installing.value = true
   try {
     const credential = await ensureHostCredential()
-    const installedId = await invoke<string>('plugin_install_from_file', {
+    await invoke<string>('plugin_install_from_file', {
       path,
       credential,
       upgrade,
       restoreData,
     })
-    // 重装 / 恢复内置应用：清掉「已卸载」覆盖，避免下次 boot 又把它摘掉。
-    // 清除失败不把安装判失败（包已落地），但必须留痕。
-    try {
-      await invoke('plugin_clear_uninstalled', { pluginId: installedId, credential })
-    } catch (e) {
-      logger.warn(`[Shell] clear uninstall override failed: appId=${installedId}`, e)
-    }
     lastError.value = null
     await refresh()
     return true

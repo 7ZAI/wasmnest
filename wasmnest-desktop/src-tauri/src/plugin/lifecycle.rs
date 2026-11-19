@@ -29,8 +29,11 @@
 //!   不触发当前进程启停，与移动端 `plugin_set_autostart` 语义逐字一致）；
 //! - **审批** = `preauthorize`（预授权/高权限位提示）→ 未授权落 `NeedsApproval`
 //!   → `approve`（人工整单批准 + 目录内容哈希钉扎）→ 重新激活；
-//! - **卸载** = `uninstall`（仅未启用插件可卸；停用 → 丢私有库 → 删目录 → 清存储
-//!   → 撤销审批与激活持久化）。
+//! - **卸载** = `uninstall`（仅未启用插件可卸；停用 → 按 `keep_data` 保留或删除私有库 /
+//!   KV → 撤销审批与激活持久化）。随包内置应用的资源目录只读、不删目录，**卸载只
+//!   影响当前会话**：下次 boot 由 `PluginHost::new` 重新扫描资源目录自动装载（自动
+//!   安装），`keep_data=true` 时旧数据随应用恢复；用户安装应用真正删安装目录，不会
+//!   自动回来。
 //!
 //! **boot 装配**：wasm-core `PluginHost::new` 内部仍会跑
 //! `auto_activate_from_persisted_state`（能力仓机制，桌面不删）；平台在创建
@@ -45,7 +48,7 @@ use std::sync::Arc;
 
 use tauri::State;
 use wasmnest_wasm_core::manager::host::{PluginHost, UninstallOptions};
-use wasmnest_wasm_core::manager::types::{HostPluginInfo, PluginSource};
+use wasmnest_wasm_core::manager::types::HostPluginInfo;
 use wasmnest_wasm_core::storage::PluginStorage;
 
 use crate::Result;
@@ -70,14 +73,6 @@ pub const ENABLED_KEY_PREFIX: &str = "plugin.enabled.";
 /// 自启偏好 key 前缀（移动端 `PLUGIN_AUTOSTART_KEY_PREFIX` 同款语义与字面：
 /// `plugin.autostart.{plugin_id}`；缺省即关——只有显式打开的才在 boot 自动激活）
 pub const AUTOSTART_KEY_PREFIX: &str = "plugin.autostart.";
-
-/// 已卸载覆盖表 key（系统分区 JSON map：`plugin_id -> keep_data`）
-///
-/// **只服务随包内置应用**：资源目录随宿主更新、且可能只读，不能靠删目录表达
-/// 「已卸载」。宿主把 id 记入本表后，boot 在 `apply_autostart` 之前把该插件从
-/// 运行时注册表摘除（wasm-core `keep_install_dir` 卸载）；用户安装副本重装成功
-/// 时清表项。用户安装应用不需要本表（目录删除即卸载）。
-pub const UNINSTALLED_KEY: &str = "plugin.uninstalled";
 
 /// 清空 wasm-core 的「上次激活快照」（系统分区 `activation_state`）。
 ///
@@ -118,16 +113,11 @@ pub struct HostShellPluginInfo {
 /// 的单一落点；全部动作委托 wasm-core `PluginHost`，本层不重复机制。
 pub struct PluginLifecycleManager {
     host: Arc<PluginHost>,
-    /// 已卸载覆盖表读改写串行化（同一进程内并发卸载 / 重装不丢表项）
-    uninstalled_lock: tokio::sync::Mutex<()>,
 }
 
 impl PluginLifecycleManager {
     pub fn new(host: Arc<PluginHost>) -> Self {
-        Self {
-            host,
-            uninstalled_lock: tokio::sync::Mutex::new(()),
-        }
+        Self { host }
     }
 
     /// wasm-core 宿主句柄（供命令面 / 测试取用；编排层对外动作一律经本层方法）
@@ -253,11 +243,17 @@ impl PluginLifecycleManager {
 
     // ==================== 卸载（业务应用；服务拒绝；可选保留应用数据） ====================
 
-    /// 卸载业务应用。`keep_data` = 保留应用数据（私有库 + KV），重装后可用。
+    /// 卸载业务应用。`keep_data` = 保留应用数据（私有库 + KV），重新安装后可用。
     ///
-    /// 随包内置应用不删资源目录（只读 / 随宿主更新），改为写 [`UNINSTALLED_KEY`]
-    /// 覆盖表并在 boot 重放；用户安装应用真正删安装目录。审批 / 授权记录始终撤销
-    /// ——数据可留，信任不随重装继承。
+    /// **完全卸载**（2026-11-19 用户裁决）：删除安装目录 + 按 `keep_data` 处理数据，
+    /// 不写任何持久「已卸载」记录——文件系统即状态。重启平台时目录不在就不会装载，
+    /// 不会自动恢复；`keep_data=true` 只保留数据，重新安装应用包时由 fresh install
+    /// 的 `restoreData` 流程恢复。
+    ///
+    /// 随包内置应用的安装目录在系统资源目录（deb / AppImage / Program Files 只读）：
+    /// 删除失败时整个卸载失败（fail-visible），不静默降级成「记一笔待卸载」或
+    /// 「重启又回来」。用户安装应用（`app_data/plugins`）可直接删除。
+    /// 审批 / 授权记录始终撤销——数据可留，信任不随重装继承。
     pub async fn uninstall(&self, plugin_id: &str, keep_data: bool) -> Result<()> {
         let info = self
             .host
@@ -269,151 +265,27 @@ impl PluginLifecycleManager {
                 "System service cannot be uninstalled: {plugin_id}"
             )));
         }
-        // 判据用枚举序列化字面量的单一来源：裸字符串一旦漂移，卸载会静默退化成
-        // 「保留目录 + 走 tombstone」，代码留在磁盘上而无人察觉。
-        let keep_install_dir = info.source != PluginSource::UserInstalled.as_str();
-        // 内置应用先落覆盖再摘运行时记录：写表失败时不得出现「记录已删、boot 又复活」
-        // 的半卸载态；core 卸载失败则把覆盖恢复原值（不是清空——原值可能是既有表项）。
-        let previous_override = if keep_install_dir {
-            Some(self.set_uninstalled(plugin_id, keep_data).await?)
-        } else {
-            None
-        };
-        let uninstall_result = self
-            .host
+        // 完全卸载：安装目录一律删（内置应用资源目录只读时由 core 报错，不静默保留）。
+        self.host
             .uninstall_plugin_with_options(
                 plugin_id,
                 UninstallOptions {
                     keep_data,
-                    keep_install_dir,
+                    keep_install_dir: false,
                 },
             )
-            .await;
-        if let Err(e) = uninstall_result {
-            if let Some(previous) = previous_override {
-                if let Err(restore_err) = self.restore_uninstalled(plugin_id, previous).await {
-                    tracing::warn!(
-                        plugin_id = %plugin_id,
-                        error = %restore_err,
-                        "[PluginLifecycle] failed to roll back uninstall override"
-                    );
-                }
-            }
-            return Err(e);
-        }
+            .await?;
 
-        // 启用 / 自启偏好属于「安装态配置」，不随应用数据保留：重装后从默认态开始，
-        // 避免已卸载应用的旧自启偏好把新装实例静默拉起。
+        // 启用 / 自启偏好属于「安装态配置」，不随应用数据保留：重新安装后从默认态
+        // 开始，避免已卸载应用的旧自启偏好把新装实例静默拉起。
         self.remove_install_pref(ENABLED_KEY_PREFIX, plugin_id).await;
         self.remove_install_pref(AUTOSTART_KEY_PREFIX, plugin_id).await;
         tracing::info!(
             plugin_id = %plugin_id,
             keep_data,
-            keep_install_dir,
-            "[PluginLifecycle] app uninstalled"
+            "[PluginLifecycle] app uninstalled (full uninstall: install dir removed; data kept={keep_data})"
         );
         Ok(())
-    }
-
-    /// 重装成功后清除「已卸载」覆盖（内置应用从 zip 重装 / 恢复时调用）
-    pub async fn clear_uninstalled(&self, plugin_id: &str) -> Result<()> {
-        let _guard = self.uninstalled_lock.lock().await;
-        let mut map = read_uninstalled(self.host.storage()).await;
-        if map.remove(plugin_id).is_some() {
-            write_uninstalled(self.host.storage(), &map).await?;
-            tracing::info!(plugin_id = %plugin_id, "[PluginLifecycle] uninstall override cleared");
-        }
-        Ok(())
-    }
-
-    /// boot 重放「已卸载」覆盖：把随包内置应用从运行时注册表摘除
-    ///
-    /// **必须在 `apply_autostart` 之前**：否则旧的自启偏好会把已卸载应用拉起。
-    /// 只摘运行时记录，不删资源目录；数据策略按覆盖表记录的原值重放（`keep_data`
-    /// 为 false 时顺带再清一次数据目录，卸载当时清失败也能在此收敛）。用户安装
-    /// 副本已存在时跳过（不误删用户重装的版本）。返回本次摘除数。
-    pub async fn apply_uninstalled_tombstones(&self) -> usize {
-        let map = read_uninstalled(self.host.storage()).await;
-        let mut removed = 0usize;
-        for (plugin_id, keep_data) in map.iter() {
-            let Some(info) = self.host.get_plugin(plugin_id).await else {
-                continue;
-            };
-            if info.source == PluginSource::UserInstalled.as_str() {
-                tracing::warn!(
-                    plugin_id = %plugin_id,
-                    "[PluginLifecycle] uninstall override ignored: user-installed copy exists"
-                );
-                continue;
-            }
-            if info.kind.is_role_driven() {
-                tracing::warn!(
-                    plugin_id = %plugin_id,
-                    "[PluginLifecycle] uninstall override ignored: system service"
-                );
-                continue;
-            }
-            // boot 重放不假设状态：历史会话 / 外部激活可能留下运行实例，
-            // core 卸载对运行中插件 fail-visible 拒绝，这里先停再摘。
-            if self.host.is_running(plugin_id).await {
-                if let Err(e) = self.host.deactivate_plugin(plugin_id, true).await {
-                    tracing::warn!(
-                        plugin_id = %plugin_id,
-                        error = %e,
-                        "[PluginLifecycle] uninstall override deactivate failed at boot"
-                    );
-                }
-            }
-            match self
-                .host
-                .uninstall_plugin_with_options(
-                    plugin_id,
-                    UninstallOptions {
-                        keep_data: *keep_data,
-                        keep_install_dir: true,
-                    },
-                )
-                .await
-            {
-                Ok(()) => {
-                    removed += 1;
-                    tracing::info!(
-                        plugin_id = %plugin_id,
-                        "[PluginLifecycle] uninstall override reapplied at boot"
-                    );
-                }
-                Err(e) => tracing::warn!(
-                    plugin_id = %plugin_id,
-                    error = %e,
-                    "[PluginLifecycle] uninstall override failed at boot"
-                ),
-            }
-        }
-        removed
-    }
-
-    /// 写入 / 合并已卸载覆盖；返回该 id 的**原值**（供失败回滚恢复原状）
-    async fn set_uninstalled(&self, plugin_id: &str, keep_data: bool) -> Result<Option<bool>> {
-        let _guard = self.uninstalled_lock.lock().await;
-        let mut map = read_uninstalled(self.host.storage()).await;
-        let previous = map.insert(plugin_id.to_string(), keep_data);
-        write_uninstalled(self.host.storage(), &map).await?;
-        Ok(previous)
-    }
-
-    /// 回滚覆盖：`Some` 恢复原值，`None` 删除表项（卸载前本来没有这条）
-    async fn restore_uninstalled(&self, plugin_id: &str, previous: Option<bool>) -> Result<()> {
-        let _guard = self.uninstalled_lock.lock().await;
-        let mut map = read_uninstalled(self.host.storage()).await;
-        match previous {
-            Some(value) => {
-                map.insert(plugin_id.to_string(), value);
-            }
-            None => {
-                map.remove(plugin_id);
-            }
-        }
-        write_uninstalled(self.host.storage(), &map).await
     }
 
     /// 删除单个安装态偏好（失败只 warn，不阻断卸载主流程）
@@ -538,30 +410,6 @@ async fn write_bool_pref(storage: &PluginStorage, prefix: &str, plugin_id: &str,
         .map_err(|e| crate::AppError::Plugin(format!("写插件偏好 '{key}' 失败: {e}")))
 }
 
-/// 读取已卸载覆盖表（缺省 / 损坏 / 读取失败一律空表 + warn——boot 不因坏行
-/// 拒绝启动；下一次卸载会重写该行）
-async fn read_uninstalled(storage: &PluginStorage) -> HashMap<String, bool> {
-    match storage.get(SYSTEM_PLUGIN_ID, UNINSTALLED_KEY).await {
-        Ok(Some(value)) => serde_json::from_value(value).unwrap_or_else(|e| {
-            tracing::warn!(error = %e, "[PluginLifecycle] uninstall override table corrupted, reset");
-            HashMap::new()
-        }),
-        Ok(None) => HashMap::new(),
-        Err(e) => {
-            tracing::warn!(error = %e, "[PluginLifecycle] failed to read uninstall override table");
-            HashMap::new()
-        }
-    }
-}
-
-/// 写入已卸载覆盖表（系统分区；JSON map `plugin_id -> keep_data`）
-async fn write_uninstalled(storage: &PluginStorage, map: &HashMap<String, bool>) -> Result<()> {
-    storage
-        .set(SYSTEM_PLUGIN_ID, UNINSTALLED_KEY, serde_json::json!(map))
-        .await
-        .map_err(|e| crate::AppError::Plugin(format!("写已卸载覆盖表失败: {e}")))
-}
-
 // ==================== 卸载命令面（覆盖 api_bridge 裸卸载，带数据保留策略） ====================
 
 /// 卸载已安装应用（业务应用；系统服务拒绝），`keepData` 缺省 = 删除应用数据
@@ -584,23 +432,6 @@ pub async fn plugin_uninstall(
         "plugin_uninstall",
     )?;
     manager.uninstall(&plugin_id, keep_data.unwrap_or(false)).await
-}
-
-/// 清除「已卸载」覆盖（内置应用从 zip 重装 / 恢复成功后调用）
-#[tauri::command]
-pub async fn plugin_clear_uninstalled(
-    webview: tauri::Webview,
-    plugin_id: String,
-    credential: String,
-    manager: State<'_, Arc<PluginLifecycleManager>>,
-) -> Result<()> {
-    super::require_host_frontend(
-        manager.host().as_ref(),
-        webview.label(),
-        &credential,
-        "plugin_clear_uninstalled",
-    )?;
-    manager.clear_uninstalled(&plugin_id).await
 }
 
 // ==================== 命令面（桌面补移动端同款缺失臂，语义逐字一致） ====================
@@ -902,23 +733,5 @@ mod tests {
         assert_eq!(ENABLED_KEY_PREFIX, "plugin.enabled.");
         assert_eq!(AUTOSTART_KEY_PREFIX, "plugin.autostart.");
         assert_eq!(SYSTEM_PLUGIN_ID, "__system__");
-    }
-
-    #[tokio::test]
-    async fn uninstalled_override_roundtrip_and_corrupt_fallback() {
-        let storage = storage();
-        assert!(read_uninstalled(&storage).await.is_empty(), "缺省空表");
-
-        let mut map = HashMap::new();
-        map.insert("com.wasmnest.test.removed".to_string(), true);
-        write_uninstalled(&storage, &map).await.expect("write override");
-        assert_eq!(read_uninstalled(&storage).await, map);
-
-        // 坏行：boot 不得因覆盖表损坏拒绝启动（空表 + warn，下一个卸载重写）
-        storage
-            .set(SYSTEM_PLUGIN_ID, UNINSTALLED_KEY, serde_json::json!("not-a-map"))
-            .await
-            .expect("seed corrupt override");
-        assert!(read_uninstalled(&storage).await.is_empty());
     }
 }
