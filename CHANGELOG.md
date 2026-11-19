@@ -25,7 +25,7 @@
 
 #### 变更
 
-- 契约升级：`wasmnest:plugin` 由 `0.0.1` 升至 `0.1.0`，WIT 改为按包版本化（[ADR 0061](docs/adr/0061-wit-package-split.md)）；`release-manifest.json` 成为跨仓版本唯一表达，钉 `lib-v0.1.0` / `apps-v0.0.3` 并更新 WIT 指纹。
+- 契约升级：`wasmnest:plugin` 由 `0.0.1` 升至 `0.1.0`，WIT 改为按包版本化（[ADR 0061](docs/adr/0061-wit-package-split.md)）；`release-manifest.json` 成为跨仓版本唯一表达，钉 `lib-v0.1.0` / `apps-v0.0.2` 并更新 WIT 指纹。
 - 双端外观：品牌标记重绘并更新图标与双语 README；皮肤并入主题预设，glass 合并为整屏玻璃材质（[ADR 0059](docs/adr/0059-theme-presets-absorb-skins-and-glass-boundary.md)）。
 - 桌面多任务卡改为展示真实实例页面，新增悬浮导航磁贴与快捷卡片轮播。
 - 状态栏第三方扩展渲染隔离，注册 `id` / `label` 增加非空校验，异常不再冒泡到全局错误弹窗。
@@ -59,7 +59,7 @@
 
 #### Changed
 
-- Contract upgrade: `wasmnest:plugin` moved from `0.0.1` to `0.1.0` and WIT is now versioned per package ([ADR 0061](docs/adr/0061-wit-package-split.md)); `release-manifest.json` is the single cross-repository version expression, pinned to `lib-v0.1.0` / `apps-v0.0.3` with an updated WIT fingerprint.
+- Contract upgrade: `wasmnest:plugin` moved from `0.0.1` to `0.1.0` and WIT is now versioned per package ([ADR 0061](docs/adr/0061-wit-package-split.md)); `release-manifest.json` is the single cross-repository version expression, pinned to `lib-v0.1.0` / `apps-v0.0.2` with an updated WIT fingerprint.
 - Both hosts restyled: redrawn brand mark with refreshed icons and bilingual READMEs; skins folded into theme presets, and glass merged into a full-screen glass material ([ADR 0059](docs/adr/0059-theme-presets-absorb-skins-and-glass-boundary.md)).
 - Desktop task cards now show the real instance page; added a floating navigation tile and a quick-card carousel.
 - Third-party status-bar extensions render in isolation, registration `id` / `label` are validated as non-empty, and render errors no longer bubble up to the global error dialog.
