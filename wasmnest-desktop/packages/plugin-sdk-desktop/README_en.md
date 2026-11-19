@@ -130,6 +130,7 @@ The `env` injected by the host at mount time is the **single channel** through w
 | `env.onEvent` | Host-side event outlet (`navigate` requests shell navigation / `route` reports the app's internal page) | — |
 | `env.appUpdate` | Unified update check (optional; older hosts do not inject) | — |
 | `env.appLinkCryptoGet/Set` | This app's link-encryption policy (optional) | — |
+| `env.apps` | Generic app-call bridge (optional; injected only with `apps:control`) | `apps:control` |
 
 Permission example: `"permissions": ["storage", "network:http"]`.
 

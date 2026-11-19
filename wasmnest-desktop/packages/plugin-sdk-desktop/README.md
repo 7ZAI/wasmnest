@@ -132,6 +132,7 @@ export async function mountApp(root: HTMLElement, env: AppMountEnv) {
 | `env.onEvent` | 宿主面事件出口（`navigate` 请求壳跳转 / `route` 自报内部当前页） | — |
 | `env.appUpdate` | 统一更新检查（可选能力；旧宿主不注入） | — |
 | `env.appLinkCryptoGet/Set` | 本应用链路加密策略（可选能力） | — |
+| `env.apps` | 通用应用调用桥（可选能力；仅声明 `apps:control` 时注入） | `apps:control` |
 
 权限声明示例：`"permissions": ["storage", "network:http"]`。
 

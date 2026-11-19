@@ -14,6 +14,7 @@
  * 漂移门禁：`dev-shell/__tests__/shell/contractDrift.test.ts` 逐字段比对本文件
  * 与宿主 `useAppMount.ts`；宿主改了契约而本文件没跟上时该锁直接测红。
  */
+import type { AppControlAPI } from '../../../src/types'
 
 /** app 前端挂载环境（宿主注入；令牌/凭证已绑定本 app） */
 export interface AppMountEnv {
@@ -34,6 +35,11 @@ export interface AppMountEnv {
   }
   /** 插件面命令（plugin_invoke，本 app 通道令牌已绑定） */
   appInvoke: <T = unknown>(command: string, ...args: unknown[]) => Promise<T>
+  /**
+   * 通用应用调用桥（`apps:control` 权限门控；仅声明该权限的应用被注入）。
+   * dev-shell 单应用预览不注入本字段，声明只为与宿主契约字段对齐。
+   */
+  apps?: AppControlAPI
   /** 本 app 插件 KV 存储（plugin_storage_*，宿主面凭证已绑定） */
   appStorageGet: <T = unknown>(key: string) => Promise<T | undefined>
   appStorageSet: (key: string, value: unknown) => Promise<void>
