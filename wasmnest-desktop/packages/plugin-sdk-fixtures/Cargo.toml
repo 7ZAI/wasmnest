@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 wasmnest-plugin-api = { path = "../plugin-sdk-desktop/rust", features = ["wasm"] }
 serde_json = "1"
 anyhow = "1"
+
 # 夹具按需拉取：getrandom 只被 wasip3 的 wasi:random async 熵源探针用，
 # 设成可选避免无关 feature 也进依赖图。
 # （原各夹具 Cargo.toml 里列的 `serde` 经逐模块核对确认**无人使用**——pty/sdk/ws
@@ -33,7 +34,8 @@ pty = []
 sdk = []
 ws = []
 wasip3 = ["dep:getrandom"]
-# host-crypto 端到端探针（票 02 批次 04 自 wasip3 夹具拆出：host-crypto WIT 实现迁宿主后，
+
+# host-crypto 端到端探针（自 wasip3 夹具拆出：host-crypto WIT 实现迁宿主后，
 # 内核测试二进制不再注册该 interface，探针夹具随域走宿主 e2e）
 crypto = []
 

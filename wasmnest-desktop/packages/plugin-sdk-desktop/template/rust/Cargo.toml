@@ -8,6 +8,7 @@ edition = "2021"
 
 [features]
 default = []
+
 # wasm：启用 WasmPlugin trait / wasm_entry! 宏（WASM 插件必开）
 wasm = []
 

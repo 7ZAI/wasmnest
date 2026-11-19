@@ -370,7 +370,7 @@ version = "0.0.1"
 
 [[patch.unused]]
 name = "wasmnest-host-kit"
-version = "0.0.1"
+version = "0.1.0"
 
 [[patch.unused]]
 name = "wasmnest-link-crypto"

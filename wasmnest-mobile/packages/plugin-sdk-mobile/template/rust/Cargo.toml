@@ -12,6 +12,7 @@ anyhow = "1"
 
 [features]
 default = []
+
 # WASM 插件必开：启用 WasmPlugin trait / wasm_entry! 宏 / WasmHost 绑定
 wasm = ["wasmnest-plugin-api-mobile/wasm"]
 
