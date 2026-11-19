@@ -23,4 +23,6 @@ world plugin {
     include wasmnest:task/cap-task@0.0.1;
     include wasmnest:timer/cap-timer@0.0.1;
     include wasmnest:tunnel/cap-tunnel@0.0.1;
+    include wasmnest:audio/cap-audio@0.0.1;
+    include wasmnest:stt/cap-stt@0.0.1;
 }

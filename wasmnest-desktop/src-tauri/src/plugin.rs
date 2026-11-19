@@ -26,6 +26,8 @@
 
 pub mod api_call;
 pub mod app;
+/// 音频采集（host-audio）能力域端口 adapter 与装配自报
+pub mod audio;
 /// 应用前端挂载包目录的宿主事实（壳装载 app 整包的路径真源）
 pub mod assets;
 pub mod auth;
@@ -58,6 +60,8 @@ pub mod process;
 pub mod pty;
 /// 应用作用域服务租约的宿主侧 acquire 薄壳（endpoint 注册 → net.transport）
 pub mod services;
+/// 本地语音识别（host-stt）能力域端口 adapter 与装配自报
+pub mod stt;
 pub mod task;
 pub mod timer;
 /// 内网穿透（`host-tunnel`）：端口 adapter + 对等面启动器 + 装配自报

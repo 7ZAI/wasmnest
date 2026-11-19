@@ -209,12 +209,14 @@ type ServiceEntry = {
 const SERVICE_ICONS: Record<string, string> = {
   'com.wasmnest.auth-center': 'lock',
   'com.wasmnest.monitor': 'pulse',
+  'com.wasmnest.speech': 'mic',
 }
 
-/** 服务显示名：已知两个服务走宿主 i18n（认证中心 / 运行监控）；未知服务显示插件名 */
+/** 服务显示名：已知服务走宿主 i18n（认证中心 / 运行监控 / 语音识别）；未知服务显示插件名 */
 const SERVICE_NAME_KEYS: Record<string, string> = {
   'com.wasmnest.auth-center': 'shell.home.serviceAuthCenter',
   'com.wasmnest.monitor': 'shell.home.serviceMonitor',
+  'com.wasmnest.speech': 'shell.home.serviceSpeech',
 }
 
 function serviceEntryOf(app: ShellAppEntry): ServiceEntry {

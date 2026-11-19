@@ -39,9 +39,9 @@ function hostSources(): string[] {
 /**
  * 桌面 wasm app 的 entry.ts（契约 drift 检查对象；三仓拆分 §5-E7 住应用仓）
  *
- * L3 产品应用（当前 ai-chatbox / file-transfer / bedcode / lanbitou）住 `apps/`；
- * 认证中心 / 网络配置中心 / monitor（服务型 wasm：L1 基础服务 / L2 内部业务，随宿主
- * 分发）住 `servers/`。
+ * L3 产品应用（当前 ai-chatbox / file-transfer / bedcode / lanbitou / news）住 `apps/`；
+ * 认证中心 / 网络配置中心 / monitor / speech（服务型 wasm：L1 基础服务 / L2 内部业务，
+ * 随宿主分发）住 `servers/`。
  */
 const APP_ENTRIES = [
   ...['ai-chatbox', 'file-transfer', 'bedcode', 'lanbitou', 'news'].map((slug) =>
@@ -50,6 +50,7 @@ const APP_ENTRIES = [
   projectPath('servers', 'auth-center', 'desktop', 'src/entry.ts'),
   projectPath('servers', 'net-config', 'desktop', 'src/entry.ts'),
   projectPath('servers', 'monitor', 'desktop', 'src/entry.ts'),
+  projectPath('servers', 'speech', 'desktop', 'src/entry.ts'),
 ]
 
 /** 剔除注释（needle 只约束可执行代码） */
@@ -85,7 +86,7 @@ describe('宿主 / 应用边界锁', () => {
   })
 
   it('L3 各 app entry.ts 导出 mountApp 契约（宿主 useAppMount 装载面）', () => {
-    expect(APP_ENTRIES.length, 'app 清单不得为空（否则本锁空转）').toBe(8)
+    expect(APP_ENTRIES.length, 'app 清单不得为空（否则本锁空转）').toBe(9)
     for (const entry of APP_ENTRIES) {
       expect(existsSync(entry), `${entry} 缺失（app 前端必须可装载）`).toBe(true)
       const code = stripComments(readFileSync(entry, 'utf-8'))

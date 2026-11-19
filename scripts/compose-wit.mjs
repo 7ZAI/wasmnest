@@ -44,6 +44,10 @@ import { libPath } from "./lib-paths.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+/** 能力仓 cap 分片的仓库相对前缀：解析到 `WASMNEST_LIB_ROOT` / 兄弟目录，
+ * 让 worktree 里的平台分支能读同一份能力仓分支（默认布局行为不变）。 */
+const LIB_CAP_PREFIX = "../wasmnest-lib/";
+
 const ENDS = {
   desktop: "wasmnest-desktop/packages/plugin-sdk-desktop/compose.json",
   mobile: "wasmnest-mobile/packages/plugin-sdk-mobile/compose.json",
@@ -100,7 +104,9 @@ function readManifest(end) {
         `[${end}] caps.${key}.package "${spec.package}" 不得含版本——版本真源是分片 .wit 的 package 行`,
       );
     }
-    spec.file = resolve(ROOT, spec.file);
+    spec.file = spec.file.startsWith(LIB_CAP_PREFIX)
+      ? libPath(spec.file.slice(LIB_CAP_PREFIX.length))
+      : resolve(ROOT, spec.file);
   }
   return m;
 }

@@ -24,10 +24,11 @@ export default {
       servicesTitle: '服务',
       sysTitle: '系统',
       sysHint: '全局管理页面（从后台应用面板打开）',
-      /* 宿主系统级服务在「服务」区的条目（auth-center / monitor）：
+      /* 宿主系统级服务在「服务」区的条目（auth-center / monitor / speech）：
          主屏应用网格与系统区都不显示服务，它们住在应用下方的“服务”区。 */
       serviceAuthCenter: '认证中心',
       serviceMonitor: '运行监控',
+      serviceSpeech: '语音识别',
       matches: '个匹配',
     },
     // 多任务面板（工具栏入口）：打开过 / 后台运行的面在此切换与关闭

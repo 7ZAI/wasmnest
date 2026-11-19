@@ -28,11 +28,12 @@ export default {
       servicesTitle: 'Services',
       sysTitle: 'System',
       sysHint: 'Global management pages (open from Background apps)',
-      /* Host-level system services in the Services section (auth-center / monitor):
+      /* Host-level system services in the Services section (auth-center / monitor / speech):
          neither the app grid nor the System section lists services; they sit in
          their own Services section below Apps. */
       serviceAuthCenter: 'Auth Center',
       serviceMonitor: 'Monitor',
+      serviceSpeech: 'Speech',
       matches: 'matches',
     },
     // Recent-tasks panel (toolbar entry): opened / background faces switch and close here

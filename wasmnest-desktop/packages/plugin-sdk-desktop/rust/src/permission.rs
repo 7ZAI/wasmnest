@@ -174,6 +174,16 @@ pub const PERMISSION_TUNNEL_CONNECT: &str = "tunnel:connect";
 /// 个诊断按钮，不应获得端口映射能力。本位不蕴含任何写面。
 pub const PERMISSION_TUNNEL_PROBE: &str = "tunnel:probe";
 
+
+/// 音频采集（WIT `host-audio` 的 open/start/stop/close）：占用麦克风的高风险面
+pub const PERMISSION_AUDIO_CAPTURE: &str = "audio:capture";
+/// 音频数据面 / 元数据面（WIT `host-audio` 的 list-devices/status/ring-fetch/level）
+pub const PERMISSION_AUDIO_IO: &str = "audio:io";
+/// 本地语音识别推理（WIT `host-stt` 的会话 / 任务 / 模型清单）
+pub const PERMISSION_STT_INFER: &str = "stt:infer";
+/// 本地语音识别模型管理（WIT `host-stt` 的下载 / 删除 / 导入）
+pub const PERMISSION_STT_MODEL: &str = "stt:model";
+
 /// 权限词汇反射表：`(常量标识符, 权限串)`
 ///
 /// 标识符由 `stringify!` 取自常量本身，与值同源、不可能漂移。有了这一列，宿主测试
@@ -222,6 +232,10 @@ pub const PERMISSION_VOCABULARY: &[(&str, &str)] = &[
     (stringify!(PERMISSION_TUNNEL_SERVE), PERMISSION_TUNNEL_SERVE),
     (stringify!(PERMISSION_TUNNEL_CONNECT), PERMISSION_TUNNEL_CONNECT),
     (stringify!(PERMISSION_TUNNEL_PROBE), PERMISSION_TUNNEL_PROBE),
+    (stringify!(PERMISSION_AUDIO_CAPTURE), PERMISSION_AUDIO_CAPTURE),
+    (stringify!(PERMISSION_AUDIO_IO), PERMISSION_AUDIO_IO),
+    (stringify!(PERMISSION_STT_INFER), PERMISSION_STT_INFER),
+    (stringify!(PERMISSION_STT_MODEL), PERMISSION_STT_MODEL),
 ];
 
 /// 合法权限集合 — 桌面端权限词汇的**唯一真源**（由 [`PERMISSION_VOCABULARY`] 派生）
