@@ -5,7 +5,7 @@ world plugin {
     include plugin-face;
     include wasmnest:mdns/cap-mdns@0.0.1;
     include wasmnest:peer/cap-peer@0.0.1;
-    include wasmnest:http/cap-http@0.0.1;
+    include wasmnest:http/cap-http@0.0.2;
     include wasmnest:ws/cap-ws@0.0.1;
     include wasmnest:notify/cap-notify@0.0.1;
     include wasmnest:notify-mobile/cap-notify-mobile@0.0.1;

@@ -385,6 +385,11 @@ impl HostHttp for WasmHost {
         }
     }
 
+    fn request_egress_consent(&self, request_json: &str) -> Result<String, HostError> {
+        host_http::request_egress_consent(request_json)
+            .map_err(|e| host_err("request_egress_consent", e))
+    }
+
     /// v29 服务端域：注册插件 HTTP 端点（config-json 原样透传宿主）
     fn http_register_endpoint(&self, config_json: &str) -> Result<String, HostError> {
         host_http_endpoint::register_endpoint(config_json)

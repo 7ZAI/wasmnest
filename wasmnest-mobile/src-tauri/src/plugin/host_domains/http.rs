@@ -23,6 +23,7 @@ use super::support::guarded_host_call;
 use super::{current_handle, host_ctx};
 use tauri::Emitter;
 use wasmnest_host_kit::WasmPluginState;
+use wasmnest_server_http::plugin_binding::consent::request_egress_consent as core_request_egress_consent;
 use wasmnest_server_http::plugin_binding::egress::http_fetch as core_http_fetch;
 use wasmnest_server_http::plugin_binding::ports::{
     BoxedBlocked, HttpEventSink, HttpPorts, OutboundAuth, OutboundEnvelope,
@@ -33,6 +34,10 @@ use crate::plugin::bindings::wasmnest;
 impl wasmnest::http::host_http::Host for WasmPluginState {
     fn fetch(&mut self, request_json: String) -> Result<Option<String>, String> {
         http_fetch(self, &request_json)
+    }
+
+    fn request_egress_consent(&mut self, request_json: String) -> Result<String, String> {
+        request_egress_consent(self, &request_json)
     }
 }
 
@@ -337,21 +342,37 @@ fn normalize_origin(url: &str) -> String {
 /// 流式分支：能力域注册 streamId 后立即返回（后台推流经 [`HttpPorts::event_sink`]
 /// 广播），非流式由能力域同步返回响应 JSON。
 pub(crate) fn http_fetch(state: &WasmPluginState, request_json: &str) -> Result<Option<String>, String> {
-    // 端口快照（能力域端口要求 `'static`，故在此一次性取句柄而非借 state）
-    let ctx = host_ctx(state);
-    let ports: Arc<dyn HttpPorts> = Arc::new(StateHttpPorts {
-        // 权限快照向内核真源结算（端口要求 `'static`；判定口径与
-        // `WasmHostContext::has_permission` 同一份）
-        granted: ctx.granted_permissions(&state.plugin_id),
-        ports: ctx.ports.clone(),
-        app_handle: ctx.app_handle.clone(),
-    });
+    let ports = state_ports(state);
     guarded_host_call(
         &state.plugin_id,
         "host_http_fetch",
         Err("host_http_fetch panicked".to_string()),
         || core_http_fetch(&ports, &state.plugin_id, request_json, true),
     )
+}
+
+/// 批量出站授权询问：移动端 v1 没有批量弹窗面，能力域端口默认实现返回
+/// 「本端不支持」，入口据此显性返回 `consent.unsupported`（不伪造批量成功）。
+pub(crate) fn request_egress_consent(state: &WasmPluginState, request_json: &str) -> Result<String, String> {
+    let ports = state_ports(state);
+    guarded_host_call(
+        &state.plugin_id,
+        "host_http_request_egress_consent",
+        Err("host_http_request_egress_consent panicked".to_string()),
+        || core_request_egress_consent(&ports, &state.plugin_id, request_json),
+    )
+}
+
+/// 端口快照（能力域端口要求 `'static`，故在入口处一次性取句柄而非借 state）
+fn state_ports(state: &WasmPluginState) -> Arc<dyn HttpPorts> {
+    let ctx = host_ctx(state);
+    Arc::new(StateHttpPorts {
+        // 权限快照向内核真源结算（端口要求 `'static`；判定口径与
+        // `WasmHostContext::has_permission` 同一份）
+        granted: ctx.granted_permissions(&state.plugin_id),
+        ports: ctx.ports.clone(),
+        app_handle: ctx.app_handle.clone(),
+    })
 }
 
 // ==================== 单元测试 ====================
@@ -703,6 +724,24 @@ mod tests {
             err.contains("egress denied") && err.contains("app_handle unavailable"),
             "无 app_handle 的无头上下文必须 fail-closed，got: {err}"
         );
+    }
+
+    /// 批量授权：移动端 v1 无批量弹窗面，显性返回稳定错误码（不伪造逐项成功）
+    #[test]
+    fn request_egress_consent_reports_unsupported_for_granted_plugin() {
+        let st = granted_state("com.wasmnest.demo");
+        let request = serde_json::json!({ "urls": ["https://registry.npmjs.org/x"] }).to_string();
+        let err = request_egress_consent(&st, &request).unwrap_err();
+        assert_eq!(err, "consent.unsupported");
+    }
+
+    /// 批量授权仍受 `network:http` 声明门约束
+    #[test]
+    fn request_egress_consent_requires_network_http() {
+        let st = wasmnest_wasm_core::test_support::build_component_state("com.wasmnest.demo", &[]);
+        let request = serde_json::json!({ "urls": ["https://registry.npmjs.org/x"] }).to_string();
+        let err = request_egress_consent(&st, &request).unwrap_err();
+        assert_eq!(err, "consent.permission-denied");
     }
 
     /// 错误串只带归一化 origin（不带 path / query —— 凭据红线）

@@ -265,6 +265,11 @@ impl HostHttp for WasmHost {
             None => Ok(None),
         }
     }
+
+    fn request_egress_consent(&self, request_json: &str) -> Result<String, HostError> {
+        host_http::request_egress_consent(request_json)
+            .map_err(|e| host_err("request_egress_consent", e))
+    }
 }
 
 // ==================== HostFs ====================

@@ -29,6 +29,17 @@ pub trait HostHttp {
         request: &serde_json::Value,
     ) -> Result<Option<serde_json::Value>, HostError>;
 
+    /// 出站批量授权提前询问（只询问、不发请求）
+    ///
+    /// 请求：`{ "urls": ["https://...", ...] }`（空数组成功；上限 50）。
+    /// 响应：`{ "results": [{ index, origin?, decision, source? }], "droppedRecords": n }`；
+    /// `decision` = `allow | deny | invalid`，`source` 见宿主契约文档。
+    ///
+    /// 实际出站仍走 [`HostHttp::http_fetch`] 的完整判定链——本入口不发放越过闸门的
+    /// 通行证。当前端不支持批量询问时返回稳定错误码 `consent.unsupported`，调用方
+    /// 应回退到逐个 `http_fetch`；不给出逐项结果时不伪造成功。需要 `network:http` 权限。
+    fn request_egress_consent(&self, request_json: &str) -> Result<String, HostError>;
+
     // ==================== 服务端域（ABI v29：动态路由注册） ====================
 
     /// 注册插件 HTTP 端点（WIT `host-http.register-endpoint`，ABI v29）。

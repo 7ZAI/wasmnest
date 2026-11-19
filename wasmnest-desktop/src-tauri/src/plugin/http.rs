@@ -33,7 +33,10 @@ use std::sync::Arc;
 
 use wasmnest_host_kit::ports::{downcast_host, HostPorts};
 use wasmnest_host_kit::{HostModule, HostModuleDesc, ModuleEntry, WasmPluginState};
-use wasmnest_server_http::plugin_binding::ports::{BoxedBlocked, HttpEventSink, HttpPorts, OutboundAuth};
+use wasmnest_server_http::plugin_binding::ports::{
+    BatchAuthSource, BatchOutboundAuth, BatchOutboundVerdict, BoxedBlocked, HttpEventSink, HttpPorts, OutboundAuth,
+};
+use wasmnest_wasm_core::security::network_auth::{BatchAuth, OutboundVerdict};
 
 use wasmnest_wasm_core::host_api::check_permission;
 use wasmnest_wasm_core::host_api::context::WasmHostContext;
@@ -100,6 +103,32 @@ impl HttpPorts for HostHttpPorts {
         }
     }
 
+    fn authorize_outbound_batch(&self, plugin_id: &str, urls: &[String]) -> BatchOutboundAuth {
+        // 批量入口只提前询问、不发请求；归一化 / 记录过滤 / 一次弹窗 / 逐 origin
+        // 落账全部复用同一份 NetworkAuthChecker 判定链。
+        let checker = self.ctx().net_auth();
+        let result =
+            wasmnest_wasm_core::runtime_util::block_on_async(async { checker.authorize_batch(plugin_id, urls).await });
+        match result {
+            BatchAuth::Verdicts {
+                verdicts,
+                dropped_records,
+            } => {
+                let Some(verdicts) = verdicts.into_iter().map(map_batch_verdict).collect::<Option<Vec<_>>>() else {
+                    return BatchOutboundAuth::Internal("unknown batch verdict source".to_string());
+                };
+                BatchOutboundAuth::Verdicts {
+                    verdicts,
+                    dropped_records,
+                }
+            }
+            BatchAuth::AlwaysAsk => BatchOutboundAuth::AlwaysAsk,
+            BatchAuth::Unavailable(reason) => BatchOutboundAuth::Unavailable(reason),
+            BatchAuth::StoreFailed(reason) => BatchOutboundAuth::StoreFailed(reason),
+            BatchAuth::Internal(reason) => BatchOutboundAuth::Internal(reason),
+        }
+    }
+
     fn event_sink(&self) -> Option<Arc<dyn HttpEventSink>> {
         // 「缺席」与「投递失败」是两件事（能力域据此对无头流式请求显性报错），
         // 故这里返回 `None` 而不是给一个静默丢弃的 sink。
@@ -113,6 +142,33 @@ impl HttpPorts for HostHttpPorts {
         // 复用宿主那份唯一的同步↔异步桥（ambient runtime + actix current_thread
         // 自锁规避都是实测产物，能力域不得复制第二份）
         wasmnest_wasm_core::runtime_util::block_on_async(fut)
+    }
+}
+
+/// 批量裁决来源 → 能力域端口词汇（两处取值逐字一致，未知值显性失败）
+fn map_batch_source(raw: &str) -> Option<BatchAuthSource> {
+    match raw {
+        "record" => Some(BatchAuthSource::Record),
+        "always-allow" => Some(BatchAuthSource::AlwaysAllow),
+        "user" => Some(BatchAuthSource::User),
+        "deny-record" => Some(BatchAuthSource::DenyRecord),
+        "user-denied" => Some(BatchAuthSource::UserDenied),
+        "user-denied-always" => Some(BatchAuthSource::UserDeniedAlways),
+        _ => None,
+    }
+}
+
+/// 单个批量裁决 → 能力域端口逐项结果
+fn map_batch_verdict(verdict: OutboundVerdict) -> Option<BatchOutboundVerdict> {
+    match verdict {
+        OutboundVerdict::Allow { origin, layer } => Some(BatchOutboundVerdict::Allowed {
+            origin,
+            source: map_batch_source(layer)?,
+        }),
+        OutboundVerdict::Deny { origin, reason } => Some(BatchOutboundVerdict::Denied {
+            origin,
+            source: map_batch_source(reason)?,
+        }),
     }
 }
 
@@ -253,7 +309,7 @@ mod tests {
         assert_eq!(module_name, "http", "白名单键即装载期日志与错误文案里的模块名");
         assert_eq!(
             wasmnest_server_http::plugin_binding::MODULE_INTERFACES,
-            &["wasmnest:http@0.0.1/host-http"],
+            &["wasmnest:http@0.0.2/host-http"],
             "接口路径必须与 WIT 契约逐字一致（改错即 guest import 失配；ADR 0052 D4 后服务端域归宿主路径 B 模块）"
         );
         assert_eq!(
