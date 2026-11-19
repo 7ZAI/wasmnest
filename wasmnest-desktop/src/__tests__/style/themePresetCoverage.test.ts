@@ -57,6 +57,7 @@ describe('主题预设覆盖', () => {
       'AuthorizationView',
       'FsAuthDialog',
       'NetworkAuthDialog',
+      'NetworkAuthBatchDialog',
       'ShellDialogLayer',
       'auth-',
     ]) {

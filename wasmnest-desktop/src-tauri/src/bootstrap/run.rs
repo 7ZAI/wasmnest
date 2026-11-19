@@ -789,6 +789,7 @@ pub fn run() {
             commands::plugin_invoke,
             commands::plugin_fs_auth_respond,
             commands::plugin_network_auth_respond,
+            commands::plugin_network_auth_batch_respond,
             commands::plugin_auth_overview,
             commands::plugin_auth_set_strategy,
             commands::plugin_auth_revoke,

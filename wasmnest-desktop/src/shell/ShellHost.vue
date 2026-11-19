@@ -54,6 +54,7 @@
          两者均自监听、无请求时不渲染，放在全局覆层里与具体面无关。 -->
     <FsAuthDialog />
     <NetworkAuthDialog />
+    <NetworkAuthBatchDialog />
 
     <!-- ============ 悬浮导航（设置开启后常驻；主屏 / 系统页 / 应用面都可见） ============
          Liquid Glass 胶囊（回主屏 / 多任务），与移动端 ShellFloatingNav 同构。挂在
@@ -141,6 +142,7 @@ import ShellContextMenu from './components/ShellContextMenu.vue'
 import ShellDialogLayer from './components/ShellDialogLayer.vue'
 import FsAuthDialog from '@/shell/auth/FsAuthDialog.vue'
 import NetworkAuthDialog from '@/shell/auth/NetworkAuthDialog.vue'
+import NetworkAuthBatchDialog from '@/shell/auth/NetworkAuthBatchDialog.vue'
 import ShellFloatingNav from '@/shell/components/ShellFloatingNav.vue'
 import { useHomeSearch } from './composables/useHomeSearch'
 import { useShellShortcuts } from './composables/useShellShortcuts'

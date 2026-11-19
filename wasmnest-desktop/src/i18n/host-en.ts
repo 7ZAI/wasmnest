@@ -576,6 +576,14 @@ export default {
       netAuthAllow: 'Allow',
       netAuthDeny: 'Deny',
       netAuthDenyAlways: 'Always deny',
+      netAuthBatchTitle: 'Network Access Authorization ({count} addresses)',
+      netAuthBatchRequest: 'App {plugin} requests access to these {count} network addresses',
+      netAuthBatchOriginList: 'Network addresses awaiting authorization',
+      netAuthBatchScope:
+        'Once allowed, these addresses (host and port) will not be asked again; you can revoke them in Settings → App Authorization',
+      netAuthBatchAllow: 'Allow these {count} addresses',
+      netAuthBatchDeny: 'Deny this time',
+      netAuthBatchDenyAlways: 'Always deny',
     },
   },
   settings: {

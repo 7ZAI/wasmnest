@@ -548,6 +548,14 @@ export default {
       netAuthAllow: '允许',
       netAuthDeny: '拒绝',
       netAuthDenyAlways: '以后都拒绝',
+      netAuthBatchTitle: '网络访问授权（{count} 个地址）',
+      netAuthBatchRequest: '应用 {plugin} 请求访问以下 {count} 个网络地址',
+      netAuthBatchOriginList: '待授权的网络地址',
+      netAuthBatchScope:
+        '同意后，这些地址（主机与端口）以后不再询问；拒绝可在「设置 → 应用授权」里撤销',
+      netAuthBatchAllow: '允许这 {count} 个地址',
+      netAuthBatchDeny: '本次拒绝',
+      netAuthBatchDenyAlways: '以后都拒绝',
     },
   },
   settings: {

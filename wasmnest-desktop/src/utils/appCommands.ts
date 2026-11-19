@@ -276,6 +276,24 @@ export async function networkAuthRespond(
   return invoke('plugin_network_auth_respond', { requestId, decision, credential })
 }
 
+/**
+ * 批量出站授权询问的三态决定（宿主 `network_auth::NetworkBatchDecision` 的 wire 值）
+ *
+ * - `allow`：允许本批全部未决 origin，并按 origin 落 allow 记录
+ * - `deny`：拒绝本次，不落账
+ * - `deny_always`：拒绝本次并逐 origin 落 deny 记录
+ */
+export type NetworkAuthBatchDecision = 'allow' | 'deny' | 'deny_always'
+
+/** 回复批量网络出站授权请求（宿主面命令：需宿主凭证，防应用替用户批准） */
+export async function networkAuthBatchRespond(
+  requestId: string,
+  decision: NetworkAuthBatchDecision,
+): Promise<void> {
+  const credential = await ensureHostCredential()
+  return invoke('plugin_network_auth_batch_respond', { requestId, decision, credential })
+}
+
 // ==================== 应用授权读模型与策略面（宿主面命令，需宿主凭证）====================
 
 import { type AuthStrategy, type PluginAuthOverview } from '@/shell/auth/authPolicy'

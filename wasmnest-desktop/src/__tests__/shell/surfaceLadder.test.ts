@@ -35,6 +35,7 @@ const CTX = 'src/shell/components/ShellContextMenu.vue'
 const AUTH_VIEW = 'src/shell/auth/AuthorizationView.vue'
 const FS_AUTH = 'src/shell/auth/FsAuthDialog.vue'
 const NET_AUTH = 'src/shell/auth/NetworkAuthDialog.vue'
+const NET_AUTH_BATCH = 'src/shell/auth/NetworkAuthBatchDialog.vue'
 const MODAL = 'src/components/Modal.vue'
 const DIALOG_LAYER = 'src/shell/components/ShellDialogLayer.vue'
 
@@ -96,6 +97,7 @@ describe('决策面 / 密集数据面：保持实心，不接玻璃 token', () =
     ['授权列表', AUTH_VIEW],
     ['文件授权弹窗', FS_AUTH],
     ['网络授权弹窗', NET_AUTH],
+    ['网络批量授权弹窗', NET_AUTH_BATCH],
     ['通用弹窗', MODAL],
     ['壳弹窗层', DIALOG_LAYER],
   ])('%s 不得使用玻璃表面', (_name, file) => {
