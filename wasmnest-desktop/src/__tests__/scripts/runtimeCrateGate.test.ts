@@ -4,10 +4,13 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 // 门禁脚本不是 TS 工程的一部分，这里直接引真实实现（只导出纯函数，无副作用）
 import {
+  EXPECTED_LIB_CRATES,
   REQUIRED_PACKAGE_ENTRIES,
+  manifestPublishabilityIssues,
   missingRequiredEntries,
   parseCargoPackageList,
   parseCrateIdentity,
+  projectReleaseManifest,
 } from '../../../scripts/check-runtime-crate.mjs'
 
 /**
@@ -102,16 +105,20 @@ describe('crate 身份（发布名与二进制名解耦）', () => {
     expect(identity.libName).toBe('wasmnest_desktop_lib')
   })
 
-  it('能力仓依赖全部是 git tag（可发布）；宿主不直接依赖 SDK', () => {
-    expect(manifest).not.toMatch(/path\s*=\s*"[^"]*wasmnest-lib/)
-    expect(manifest).toMatch(/git\s*=\s*"https:\/\/github\.com\/7ZAI\/wasmnest-lib"/)
+  it('dev 能力仓依赖走本地路径，发布形态以注释保留且投影后可发布；宿主不直接依赖 SDK', () => {
+    const activePaths =
+      manifest.match(/^wasmnest-[\w-]+\s*=\s*\{[^}]*\bpath\s*=\s*"[^"]*wasmnest-lib[^"]*"[^}]*\}\s*$/gm) ?? []
+    const commentedGit =
+      manifest.match(
+        /^#\s*wasmnest-[\w-]+\s*=\s*\{[^}]*\bgit\s*=\s*"https:\/\/github\.com\/7ZAI\/wasmnest-lib"[^}]*\}\s*$/gm,
+      ) ?? []
+    expect(activePaths).toHaveLength(EXPECTED_LIB_CRATES.length)
+    expect(commentedGit).toHaveLength(EXPECTED_LIB_CRATES.length)
     // 钉版真源 = release-manifest.json 的 repos.lib.tag（动态读取，随发布线演进）
     const escapedTag = LIB_TAG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    expect(manifest).toMatch(new RegExp(`tag\\s*=\\s*"${escapedTag}"`))
-    // 2026-10-25 契约依赖收口（db81007）：宿主不再直接依赖 SDK（发布不再前置 SDK 上
-    // crates.io），权限 / FORM_COMPONENT / 事件 topic 词汇改读 wasm-core 真源。锁随该
-    // 决策改口径——断言「桌面宿主 manifest 里没有 SDK 直接依赖」，而不是断言它以
-    // crates.io 精确版本存在（旧断言在依赖摘除当天就红了，与发布形态无关）。
+    expect(manifest).toMatch(new RegExp(`^#\\s*wasmnest-[\\w-]+\\s*=\\s*\\{[^}]*tag\\s*=\\s*"${escapedTag}"`, 'm'))
+    expect(manifestPublishabilityIssues(projectReleaseManifest(manifest), { tag: LIB_TAG })).toEqual([])
+    // 宿主不再直接依赖 SDK：权限 / FORM_COMPONENT / 事件 topic 词汇改读 wasm-core 真源。
     expect(manifest).not.toMatch(/^\s*wasmnest-plugin-api\s*=/m)
     expect(manifest).not.toMatch(/wasmnest-plugin-api\s*=\s*\{\s*path/)
   })

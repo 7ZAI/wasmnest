@@ -1,14 +1,13 @@
 [package]
-# ==================== L2：通用宿主 runtime crate（可分发形态） ====================
-# 本 crate 从「宿主 bin crate」升为**唯一**通用 runtime crate（票据
-# .scratch/2026-10-21-host-runtime-distribution/spec.md D4 / CONTRACT §5）：
-# - 包名带 `-runtime`，供外部工程作为编译期依赖 / `cargo install` 消费；
+# ==================== 通用宿主 runtime crate（可分发形态） ====================
+# 本 crate 是唯一的通用 runtime crate，包名带 `-runtime`，供外部工程作为编译期依赖 /
+# `cargo install` 消费：
 # - 二进制名经显式 `[[bin]]` 保持 `wasmnest-desktop`（安装入口、host:pack 产物名不变）；
 # - 壳前端随包分发（`shell-dist/`，签入），`tauri.conf.json` 的 frontendDist 指向它；
-# - 能力仓依赖全部固定为 git tag，桌面 SDK 固定为 crates.io 精确版本，
-#   本地开发经平台仓根 `.cargo/config.toml` 的 [patch] 指回兄弟目录（不进发布包）。
-# 安装通道 = crates.io（平台仓刻意无根 workspace，`cargo install --git` 不能定位本 crate，
-# 见票据「关键裁决」）。批 2（issue #36）起宿主不再依赖桌面 SDK，发布无 SDK 前置。
+# - 能力仓依赖 dev 直接引用本地兄弟目录，发布切到 git tag 钉版（两种形态见依赖段）；
+#   平台仓根 `.cargo/config.toml` 的 [patch] 供切回发布形态后使用，不进发布包。
+# 安装通道 = crates.io：平台仓刻意无根 workspace，`cargo install --git` 无法定位本 crate。
+# 宿主不再依赖桌面 SDK，发布无 SDK 前置。
 name = "wasmnest-desktop-runtime"
 version = "0.0.2"
 license = "MIT"
@@ -50,6 +49,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon", "test"] }
+
 # tauri-plugin-shell 已移除（前端零资源访问红线）：它给前端提供 open/spawn/execute 的
 # 直接调用面，而 shell:allow-open 正是靠一条 capability 就放开的。宿主侧打开外部链接改用
 # tauri-plugin-opener（与移动端同一口径），见 commands.rs::open_external_url。
@@ -58,6 +58,7 @@ tauri-plugin-notification = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-os = "2"
 tauri-plugin-updater = "2"
+
 # WDIO E2E 测试插件：注册仍由 lib.rs 的 cfg(debug_assertions) 门控（release 只编译不注册）。
 # 不置于 [target.'cfg(debug_assertions)'.dependencies]：cargo 不支持用 debug_assertions
 # 选择依赖（会产生 manifest warning 且不按预期工作），故放普通依赖 + 代码层门控。
@@ -74,11 +75,12 @@ tauri-plugin-clipboard-manager = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "process", "test-util"] }
 
 # Database
-# hooks feature：SQLite progress handler（宿主侧硬中断慢查询，DB 执行护栏票据 05）
+# hooks feature：开启 SQLite progress handler，供宿主在 DB 层硬中断慢查询
 rusqlite = { version = "0.32", features = ["bundled", "hooks"] }
 
 # Security
 jsonwebtoken = "9"
+
 # 生物凭证验签（EC P-256 / ECDSA-SHA256，与移动端 Keystore 生成的密钥配套）
 p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }
 
@@ -107,6 +109,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2"
 tracing-error = "0.2"
 tracing-log = "0.2"
+
 # ANSI 样式（控制台日志格式化器使用；与 tracing-subscriber 传递依赖同版本）
 nu-ansi-term = "0.50"
 
@@ -117,8 +120,8 @@ notify = "6"
 regex = "1"
 
 # WASM runtime for plugin system
-# 48（LTS，2026-08-24）：47 非 LTS 支持期将尽（48 发布后 ~2026-10）；48 为 12 倍数 LTS（支持 24 个月）。
-# 升级范围：48 起双端同步（此前桌面单端先行、移动端滞后一版为临时分叉，收口评估见 .scratch/2026-09-26-mobile-wasmtime-48-wasip3/spec.md）
+# 固定 48（LTS，2026-08-24）：47 非 LTS 支持期将尽（48 发布后 ~2026-10）；
+# 48 为 12 倍数 LTS（支持 24 个月），双端同步升级，避免桌面先行、移动端滞后形成分叉。
 wasmtime = "48"
 
 # HTTP client (WASM plugin HTTP proxy)
@@ -136,69 +139,91 @@ local-ip-address = "0.6"
 sysinfo = "0.33"
 
 
-# Plugin API 依赖已摘除（批 2，issue #36）：权限词汇 / FORM_COMPONENT / 事件 topic
-# 词汇真源已上提 wasm-core（permission / manager::runtime / host_api::topics），
-# 宿主生产源码与测试全部经 wasm_core 垫片消费 core 真源。core 的 desktop-assembly
-# feature 对桌面 SDK 的传递依赖（原生插件体系 / intercall 词汇）由票 10（E2a-A）
-# 整体迁桌面宿主时清偿——本 crate 不再直接依赖 SDK，发布不再前置 SDK 上 crates.io。
-# ==================== 能力仓依赖（git tag 固定，可发布） ====================
-# L2：11 条 wasmnest-lib 依赖从 path 改为 git tag。理由：`cargo package` / 外部工程
-# 消费时不存在 `../../../wasmnest-lib` 兄弟目录，path 依赖会让 crate 不可发布；
-# git tag 提供同样的编译期固定版本（tag 不可移动，发布线 = lib-v0.1.0）。
-# 本地同场开发由平台仓根 `.cargo/config.toml` 的
-# `[patch."https://github.com/7ZAI/wasmnest-lib"]` 指回兄弟目录（patch 不进发布包）。
-# `version` 与 tag 内各 crate 的 manifest 对齐（不匹配时 cargo fail-visible）。
-# 对等网络共享基础设施（节点身份 + 自签证书，issue peer-network/01）
-# 2026-10-22 peer-net-dissolve：底座拆分并入 wasmnest-server-peer-net（base/），本依赖删除
-# 链路报文加密协议核心（issue 09 共享 crate，与移动端 event WS 共同消费）
-wasmnest-link-crypto = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0" }
-# server-lib-split：桌面 server 基础层（错误/常量/错误边界/系统信息/网络配置/
-# 连接身份/端口 traits）与加密引擎（算法实现 + 注册表）
-# 三个 feature **显式开启**（不靠传递 feature 合并）：base 自 2026-11-08（能力仓 P0）
-# 起默认关 `tauri-compat` / `mdns` / `system-info`——桌面宿主是全量消费方，缺任一个
-# 都表现为「impl 不存在 / 端口类型不存在 / 采集函数不存在」的编译错。
+# Plugin API 依赖已摘除：权限词汇 / FORM_COMPONENT / 事件 topic 词汇真源已上提
+# wasm_core（permission / manager::runtime / host_api::topics），宿主生产源码与测试
+# 全部经 wasm_core 垫片消费 core 真源。core 的 desktop-assembly feature 曾传递依赖
+# 桌面 SDK（原生插件体系 / intercall 词汇），现已整体迁入宿主，本 crate 不再直接依赖
+# SDK，发布不再前置 SDK 上 crates.io。
+# ==================== 能力仓依赖（dev 路径引用 / 发布 tag 钉版双形态） ====================
+# dev / 本地同场：下列依赖直接引用 `../../../wasmnest-lib/<crate>` 兄弟目录，
+#   能力仓改动即时生效，无需推 tag，也不依赖根 `.cargo/config.toml` 的 [patch]。
+# main / uat 发布：把每条 path 行注释掉、取消其上方 git tag 行的注释（版本与该 tag
+#   对齐），并确认 `release-manifest.json` 的 repos.lib.tag 与 tag 一致；发布包不得带 path。
+# 两种形态成对保留，切换只动注释，不改内容；audio / stt 尚未进 lib-v0.1.0，
+#   发布前需先把它们纳入发布 tag 并同步版本号。
+
+# 链路报文加密协议核心，与移动端 event WS 共同消费。
+# 节点身份与自签证书底座已并入 wasmnest-server-peer-net，不再单独声明依赖。
+# wasmnest-link-crypto = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0" }
+wasmnest-link-crypto = { path = "../../../wasmnest-lib/link-crypto" }
+
+# 桌面 server 基础层（错误/常量/错误边界/系统信息/网络配置/连接身份/端口 traits）
+# 与加密引擎（算法实现 + 注册表）。
+# 三个 feature 显式开启（不依赖传递 feature 合并）：base 默认关闭 tauri-compat /
+# mdns / system-info，桌面宿主是全量消费方，缺任一个都会编译失败：
 #   tauri-compat → From<tauri::Error> for AppError
 #   mdns         → MdnsPort / MdnsTypeSubscription / ServerPorts.mdns
 #   system-info  → SystemInfo::collect() / local_ipv4_addresses()
-wasmnest-server-base = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["tauri-compat", "mdns", "system-info"] }
-# 插件宿主机制内核（能力仓 `../wasmnest-lib`，双端共享锚点，wasm-core-lib-split 票 03）：
-# 插件实例状态 `WasmPluginState` + 能力模块契约 + 自动注册表 + Store 上限与指标值对象。
+# wasmnest-server-base = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["tauri-compat", "mdns", "system-info"] }
+wasmnest-server-base = { path = "../../../wasmnest-lib/wasmnest-server-base", features = ["tauri-compat", "mdns", "system-info"] }
+
+# 插件宿主机制内核（能力仓 `../wasmnest-lib`，双端共享锚点）：插件实例状态
+# `WasmPluginState` + 能力模块契约 + 自动注册表 + Store 上限与指标值对象。
 # 它必须独立于宿主 bin crate —— 否则能力 crate 无法命名 `WasmPluginState`
-# （`add_to_linker::<S,D>` 是单态）⇒ 与宿主构成 Cargo 环。本期为**零行为变更的搬迁**：
-# StoreLimits / PluginMetrics / WasmPluginState 原位从 wasm_core 搬入，宿主留转发。
-wasmnest-host-kit = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0" }
-# 插件机制整核（wasm-core-whole-crate，.scratch/2026-10-06）：wasm_core 整目录 +
-# 引擎面（db/pty/enums/system 部分）+ 宿主胶水迁入本 crate；lib.rs 经 `pub use
-# wasmnest_wasm_core as wasm_core` 垫片保持既有 `crate::wasm_core::*` 路径零改动。
-# 2026-10-08 迁根：整核本体与能力域同落能力仓（发布形态经 git tag 消费）。
-wasmnest-wasm-core = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0" }
-# PTY 能力域（wasm-core 纯净性收口票 02/06 → pty-capability-domain 票 D1/D3）：
-# 引擎面 + host-pty WIT 接线整面迁入能力 crate（ADR 0039）。票 02 批次 02 起宿主
-# **直接消费**：端口 adapter + 强制引用行 + 白名单条目同落 `src/plugin/pty.rs`
-# （wasm-core 已不再依赖本 crate，也不再出现它的任何路径）。
-# lib 声明同时满足 crate_boundary_lock 断言③「宿主清单声明全部拆分产物」
-# （pty-engine 已登记 SPLIT_CRATES）。
-wasmnest-pty-engine = { version = "0.0.2", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
-# 组播发现能力域（mDNS，wasm-core-lib-split 票 03）：引擎 + 宿主绑定层 + 自动
-# 注册。票 02 批次 03 起宿主**直接消费**：端口 adapter 在 `src/plugin/mdns.rs`
-# （wasm-core 已不再依赖本 crate，`host_context_registry` 随其退役）。
-wasmnest-discovery-engine = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
-wasmnest-crypto-engine = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0" }
-# server-lib-split 票 03：传输无关内核（supervisor/filter/link_crypto/metrics + TransportFace 组合）
-wasmnest-server-core = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0" }
-# server-lib-split 票 04：HTTP 传输面（registry/gateway/controllers/middleware/dtos + HttpTransportFace）
-wasmnest-server-http = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
-# server-lib-split 票 05：WebSocket 传输面（conn/channel/registry/endpoint/routes/manager）
-wasmnest-server-websocket = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
-# server-lib-split 票 06：对等网络引擎域（节点身份/节点与发现守护生命周期/host-peer 引擎转发）
-wasmnest-server-peer-net = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host", "relay"] }
+# （`add_to_linker::<S,D>` 是单态）⇒ 与宿主构成 Cargo 环。
+# StoreLimits / PluginMetrics / WasmPluginState 由 wasm_core 迁入，宿主留转发。
+# wasmnest-host-kit = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0" }
+wasmnest-host-kit = { path = "../../../wasmnest-lib/wasmnest-host-kit" }
+
+# 插件机制整核：wasm_core 整目录 + 引擎面（db/pty/enums/system 部分）+ 宿主胶水。
+# lib.rs 经 `pub use wasmnest_wasm_core as wasm_core` 垫片保持既有
+# `crate::wasm_core::*` 路径零改动；整核本体与能力域同落能力仓，经 git tag 消费。
+# wasmnest-wasm-core = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0" }
+wasmnest-wasm-core = { path = "../../../wasmnest-lib/wasmnest-wasm-core" }
+
+# PTY 能力域：引擎面 + host-pty WIT 接线整面迁入能力 crate，宿主直接消费，
+# 端口 adapter + 强制引用行 + 白名单条目同落 `src/plugin/pty.rs`（wasm_core 已不再
+# 依赖本 crate，也不再出现它的任何路径）。
+# lib 声明使宿主清单覆盖全部拆分产物（pty-engine 已登记在 SPLIT_CRATES）。
+# wasmnest-pty-engine = { version = "0.0.2", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
+wasmnest-pty-engine = { path = "../../../wasmnest-lib/wasmnest-pty-engine", features = ["common-host"] }
+
+# 组播发现能力域（mDNS）：引擎 + 宿主绑定层 + 自动注册，宿主直接消费，
+# 端口 adapter 在 `src/plugin/mdns.rs`；wasm_core 已不再依赖本 crate，
+# `host_context_registry` 随其退役。
+# wasmnest-discovery-engine = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
+wasmnest-discovery-engine = { path = "../../../wasmnest-lib/wasmnest-discovery-engine", features = ["common-host"] }
+
+# wasmnest-crypto-engine = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0" }
+wasmnest-crypto-engine = { path = "../../../wasmnest-lib/wasmnest-crypto-engine" }
+
+# 传输无关内核（supervisor/filter/link_crypto/metrics + TransportFace 组合）
+# wasmnest-server-core = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0" }
+wasmnest-server-core = { path = "../../../wasmnest-lib/wasmnest-server-core" }
+
+# HTTP 传输面（registry/gateway/controllers/middleware/dtos + HttpTransportFace）
+# wasmnest-server-http = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
+wasmnest-server-http = { path = "../../../wasmnest-lib/wasmnest-server-http", features = ["common-host"] }
+
+# WebSocket 传输面（conn/channel/registry/endpoint/routes/manager）
+# wasmnest-server-websocket = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
+wasmnest-server-websocket = { path = "../../../wasmnest-lib/wasmnest-server-websocket", features = ["common-host"] }
+
+# 对等网络引擎域（节点身份/节点与发现守护生命周期/host-peer 引擎转发）
+# wasmnest-server-peer-net = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host", "relay"] }
+wasmnest-server-peer-net = { path = "../../../wasmnest-lib/wasmnest-server-peer-net", features = ["common-host", "relay"] }
+
 # 音频采集能力域（host-audio）：设备枚举 / 会话 / PCM 归一 / 帧环 / 电平。
 # backend-cpal 是 native 后端（Linux 需 libasound2-dev），由宿主显式开启。
-wasmnest-audio-engine = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host", "backend-cpal"] }
+# wasmnest-audio-engine = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host", "backend-cpal"] }
+wasmnest-audio-engine = { path = "../../../wasmnest-lib/wasmnest-audio-engine", features = ["common-host", "backend-cpal"] }
+
 # 本地语音识别能力域（host-stt）：模型目录 / PCM 会话 / 异步任务。
 # backend-whisper 是 native 后端（whisper.cpp，构建需 cmake + C++ 工具链）；
 # model-download 装配 HTTP 模型下载与 SHA-256 校验。
-wasmnest-stt-engine = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host", "backend-whisper", "model-download"] }
+# wasmnest-stt-engine = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host", "backend-whisper", "model-download"] }
+wasmnest-stt-engine = { path = "../../../wasmnest-lib/wasmnest-stt-engine", features = ["common-host", "backend-whisper", "model-download"] }
+
 inventory = "0.3"
 
 # Power management (prevent system sleep)
@@ -228,6 +253,7 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_UI_Wi
 # 相比 nosleep 只支持 GNOME SessionManager，logind 与桌面环境无关（见 system/power.rs）
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = "0.9"
+
 # 正式版禁用右键原生菜单（WebKitGTK context-menu 信号）所需；版本与 wry 锁定
 # 的 =2.0.2 一致（tauri-runtime-wry → wry 传递依赖，声明为直接依赖不改变解析）
 webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
@@ -236,9 +262,11 @@ webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
 # 伪随机（测试 nonce/密钥生成；运行依赖的随机在 wasm-core/crypto-engine）
 rand = "0.8"
 tempfile = "3"
+
 # 集成测试 HTTP 配对（POST /api/auth/* 换取 JWT）：已为运行依赖，dev 复用同版本
 reqwest = { version = "0.12", features = ["json"] }
 serde_json = "1"
+
 # 集成测试直连插件私有库（认证记录下沉后 pairing/历史真源在私有库，白盒断言用）
 rusqlite = { version = "0.32", features = ["bundled"] }
 
@@ -246,6 +274,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # unwind：panic 可被 catch_unwind（错误边界/插件宿主）捕获，插件业务 panic
 # 不再拖垮整个应用（abort 会让一切 panic 处理机制失效，任何 panic 直接闪退）
 panic = "unwind"
+
 # fat LTO + 单 codegen unit 会在最终链接阶段合并全部 bitcode，峰值内存 8GB+（含 wasmtime/cranelift 时更甚），
 # 在 16GB 内存机器上触发 OOM；改用 thin LTO + 并行 codegen，性能损失 ~2-5%，峰值内存大幅下降
 codegen-units = 16
@@ -269,9 +298,9 @@ opt-level = 2
 debug-assertions = false
 
 # ==================== [patch] 已迁往平台仓根 `.cargo/config.toml` ====================
-# L2 起本 crate 的依赖图必须是**可发布形态**（SDK 走 crates.io、能力仓走 git tag），
-# 而 `cargo package` 会拒绝带 `[patch]` 的 manifest（发布包不得内嵌本地路径重定向）。
-# 同场本地开发的 patch 统一放平台仓根 `.cargo/config.toml`：
+# dev 形态已在上方依赖段直接引用本地兄弟目录，[patch] 不再参与本 crate 的依赖解析；
+# 切换到发布形态（取消注释 git tag 行）后，patch 会重新把 git 源指回同场目录，
+# 因此保留平台仓根的 patch 配置。manifest 本身始终不放 `[patch]`：`cargo package`
+# 会拒绝带 `[patch]` 的 manifest（发布包不得内嵌本地重定向）。
 #   - `[patch."https://github.com/7ZAI/wasmnest-lib"]` → `../wasmnest-lib/<crate>`
 #   - `[patch.crates-io]` → `wasmnest-desktop/packages/plugin-sdk-desktop/rust{,-macros}`
-# cargo config 不进发布包，`cargo package --list` / 外部工程消费仍按 registry / git tag 解析。

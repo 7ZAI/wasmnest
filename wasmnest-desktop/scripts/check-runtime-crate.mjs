@@ -19,10 +19,11 @@
  * 2. `cargo package --list` 包含 `src/**` / `tauri.conf.json` / `capabilities/**` /
  *    `icons/**` / `resources/config.properties` / `shell-dist/**`；
  * 3. `cargo metadata --no-deps` 成功（manifest 可被外部工程解析）；
- * 4. 依赖图可发布：不得有任何 path 依赖；能力仓依赖逐条对账（11 条 git 依赖，
- *    `tag` 必须等于 `release-manifest.json` 的 `repos.lib.tag`，`version` 与 tag
- *    对齐）；`[patch]` 只允许留在 `.cargo/config.toml`（发布包不带配置，写进
- *    manifest 会让包不可发布）。桌面 SDK 已不是本 crate 的直接依赖（批 2 / issue #36），
+ * 4. 依赖图可发布：manifest 同时保存 dev path 行与注释掉的发布 git tag 行；门禁先把
+ *    dev 形态投影成发布形态（丢弃 lib path 行、取消注释 git tag 行），再逐条对账
+ *    （13 条 git 依赖，`tag` 必须等于 `release-manifest.json` 的 `repos.lib.tag`，
+ *    `version` 与 tag 对齐）；`[patch]` 只允许留在 `.cargo/config.toml`（发布包不带
+ *    配置，写进 manifest 会让包不可发布）。桌面 SDK 已不是本 crate 的直接依赖，
  *    它只作为 `wasmnest-wasm-core` 的 `desktop-assembly` 传递依赖由能力仓声明；
  * 5. 壳前端漂移：`dist/` 在场时跑 `sync-shell-dist.mjs --check`；干净 checkout
  *    （没有 `dist/`）允许跳过并打印提示，不伪装成通过。
@@ -54,8 +55,8 @@ const RELEASE_MANIFEST = resolve(DESKTOP_ROOT, '..', 'release-manifest.json')
 export const EXPECTED_LIB_TAG = 'lib-v0.0.1'
 
 /**
- * 宿主直接消费的能力仓 crate 清单（2026-10-22 peer-net-dissolve 后 11 条：
- * `wasmnest-server-peer-net-base` 已并入 `wasmnest-server-peer-net`）。
+ * 宿主直接消费的能力仓 crate 清单（13 条；`wasmnest-server-peer-net-base` 已并入
+ * `wasmnest-server-peer-net`，音频 / 语音识别为新增能力域）。
  * 增删拆分 crate 时同步本清单——清单外/缺失都会转红。
  */
 export const EXPECTED_LIB_CRATES = [
@@ -70,6 +71,8 @@ export const EXPECTED_LIB_CRATES = [
   'wasmnest-server-http',
   'wasmnest-server-websocket',
   'wasmnest-server-peer-net',
+  'wasmnest-audio-engine',
+  'wasmnest-stt-engine',
 ]
 
 const LIB_GIT_URL = 'https://github.com/7ZAI/wasmnest-lib'
@@ -77,13 +80,32 @@ const LIB_GIT_URL = 'https://github.com/7ZAI/wasmnest-lib'
 /**
  * 按 crate 的预期版本覆盖（发布线事实，非默认推导）。
  *
- * lib-v0.1.0 发布提交（能力仓 45746df）里 `wasmnest-pty-engine` 走独立版本线
- * 0.0.2（其余 10 个 crate 同步到 0.1.0）——「tag 去掉 `lib-v` 前缀」的推导对
- * 它不成立。Cargo.toml 的 git 钉必须与 tag 处的真实版本一致，否则 cargo 无法
- * 解析；故此处按 crate 覆盖，空对象 = 无例外。
+ * `wasmnest-pty-engine` 在 lib-v0.1.0 走独立版本线 0.0.2；音频 / 语音识别尚未
+ * 纳入该 tag，按能力仓当前 0.0.1 对齐。tag 去掉 `lib-v` 前缀的推导对它们不成立，
+ * 故按 crate 覆盖；发布前须把它们纳入发布 tag 并同步这里与 Cargo.toml 的注释行。
  */
 export const LIB_CRATE_VERSION_OVERRIDES = {
   'wasmnest-pty-engine': '0.0.2',
+  'wasmnest-audio-engine': '0.0.1',
+  'wasmnest-stt-engine': '0.0.1',
+}
+
+/**
+ * 把 dev manifest 投影为发布 manifest：丢弃指向兄弟目录的活跃 lib 依赖行，
+ * 取消注释对应的 git tag 依赖行。发布门禁只校验投影结果，dev 形态不参与发布判定；
+ * 两行必须成对存在，缺任一侧都会在投影后转红。
+ */
+export function projectReleaseManifest(manifestText) {
+  return manifestText
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*[\w-]+\s*=\s*\{[^}]*\bpath\s*=\s*"[^"]*wasmnest-lib[^"]*"[^}]*\}\s*$/.test(line))
+    .map((line) =>
+      line.replace(
+        /^\s*#\s*([\w-]+\s*=\s*\{[^}]*\bgit\s*=\s*"https:\/\/github\.com\/7ZAI\/wasmnest-lib"[^}]*\})\s*$/,
+        '$1',
+      ),
+    )
+    .join('\n')
 }
 /** TOML 1.0 要求 inline table 单行，故逐行解析依赖声明即可 */
 const INLINE_DEP_RE = /^([A-Za-z0-9_-]+)\s*=\s*\{([^}]*)\}\s*$/gm
@@ -157,6 +179,7 @@ export function parseCrateIdentity(manifestText) {
  * manifest 的可发布性检查（返回问题列表；空数组 = 合规）。
  *
  * - 任何 path 依赖都不允许（`cargo package` / 外部工程消费时不存在本地路径）；
+ *   调用方应先用 {@link projectReleaseManifest} 把 dev 形态投影成发布形态；
  * - 能力仓依赖逐条对账：git 源 + tag（默认等于 release-manifest 的 repos.lib.tag）+
  *   version 与 tag 对齐；清单外 / 缺失同样报错（拆分合并后不留下悬空条目）；
  * - 桌面 SDK 不是本 crate 的直接依赖（批 2 / issue #36），故不在这里声明/断言；
@@ -261,6 +284,7 @@ function main() {
   if (!existsSync(MANIFEST)) fail(`缺 src-tauri/Cargo.toml：${MANIFEST}`)
 
   const manifestText = readFileSync(MANIFEST, 'utf-8')
+  const releaseManifestText = projectReleaseManifest(manifestText)
   const identity = parseCrateIdentity(manifestText)
   if (identity.packageName !== 'wasmnest-desktop-runtime') {
     fail(`[package].name 应为 wasmnest-desktop-runtime，实际 "${identity.packageName}"`)
@@ -273,7 +297,7 @@ function main() {
   }
 
   const releaseTag = readReleaseLibTag()
-  const publishIssues = manifestPublishabilityIssues(manifestText, { tag: releaseTag })
+  const publishIssues = manifestPublishabilityIssues(releaseManifestText, { tag: releaseTag })
   if (publishIssues.length > 0) {
     fail(`依赖图不可发布：\n  - ${publishIssues.join('\n  - ')}`)
   }
