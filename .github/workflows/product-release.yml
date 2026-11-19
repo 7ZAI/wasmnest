@@ -297,8 +297,11 @@ jobs:
             export CARGO_TARGET_DIR="$MATRIX_CARGO_TARGET_DIR"
           fi
           # Windows：包装器就位后设 RUSTC_WRAPPER（须在 CARGO_TARGET_DIR 之后，避免被其干扰）
+          # RUSTC_WRAPPER_INNER=none：sccache 收到 @响应文件后会展开参数再拼长命令行，
+          # 仍撞 CreateProcess 上限（v0.0.2 发布实测 os error 206），故直调 rustc。
           if [ -n "${WRAPPER_EXE:-}" ]; then
             export RUSTC_WRAPPER="$WRAPPER_EXE"
+            export RUSTC_WRAPPER_INNER=none
           fi
           cfg="{\"version\":\"${PRODUCT}\""
           if [ -n "${WIN_THUMBPRINT:-}" ]; then
