@@ -21,10 +21,18 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url))
 const srcTauri = join(here, '..', '..', '..', 'src-tauri')
+const repoRoot = join(here, '..', '..', '..', '..')
 
 function readJson(rel: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(srcTauri, rel), 'utf-8'))
 }
+
+/** 钉版真源：能力仓 tag 随发布线演进，锁从 release-manifest 动态读取，避免硬编码过期 */
+const LIB_TAG = (
+  JSON.parse(readFileSync(join(repoRoot, 'release-manifest.json'), 'utf-8')) as {
+    repos: { lib: { tag: string } }
+  }
+).repos.lib.tag
 
 /** 真实 `cargo package --list` 的形态（含 Cargo 自动追加的 Cargo.toml / 换行差异） */
 const PACKAGE_LIST = [
@@ -97,8 +105,9 @@ describe('crate 身份（发布名与二进制名解耦）', () => {
   it('能力仓依赖全部是 git tag（可发布）；宿主不直接依赖 SDK', () => {
     expect(manifest).not.toMatch(/path\s*=\s*"[^"]*wasmnest-lib/)
     expect(manifest).toMatch(/git\s*=\s*"https:\/\/github\.com\/7ZAI\/wasmnest-lib"/)
-    // 钉版真源 = release-manifest.json 的 repos.lib.tag（当前 lib-v0.0.1）
-    expect(manifest).toMatch(/tag\s*=\s*"lib-v0\.0\.1"/)
+    // 钉版真源 = release-manifest.json 的 repos.lib.tag（动态读取，随发布线演进）
+    const escapedTag = LIB_TAG.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    expect(manifest).toMatch(new RegExp(`tag\\s*=\\s*"${escapedTag}"`))
     // 2026-10-25 契约依赖收口（db81007）：宿主不再直接依赖 SDK（发布不再前置 SDK 上
     // crates.io），权限 / FORM_COMPONENT / 事件 topic 词汇改读 wasm-core 真源。锁随该
     // 决策改口径——断言「桌面宿主 manifest 里没有 SDK 直接依赖」，而不是断言它以
