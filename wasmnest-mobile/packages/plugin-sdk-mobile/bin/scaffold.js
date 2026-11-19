@@ -113,7 +113,7 @@ function cmdManifest(flags) {
 
 // ==================== 命令：validate（清单校验） ====================
 
-/** 合法权限列表（与宿主 src/plugin/permission.ts 权限映射键同步） */
+/** 合法权限列表（真源 = SDK `rust/src/permission.rs` 的 VALID_PERMISSIONS） */
 const VALID_PERMISSIONS = new Set([
   'terminal:output',
   'session:read',
@@ -133,6 +133,9 @@ const VALID_PERMISSIONS = new Set([
   'auth',
   'notify',
   'metrics:read',
+  'tunnel:connect',
+  'tunnel:probe',
+  'tunnel:serve',
 ])
 
 const VALID_PLUGIN_TYPES = new Set(['frontend', 'backend', 'full'])

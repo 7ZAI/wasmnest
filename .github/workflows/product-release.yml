@@ -633,6 +633,8 @@ jobs:
             --out ../release-assets/latest.json
           cat ../release-assets/latest.json
 
+      # 更新日志以 CHANGELOG.md 对应版本段落为真源（同一文件含中英双语），随 Release 一起发布。
+      # 段落缺失即红（fail-visible），禁止发空更新日志。
       - name: 写发布说明
         shell: bash
         env:
@@ -640,7 +642,28 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ../release-notes
-          cat > ../release-notes/notes.md <<'EOF'
+
+          section() {
+            awk -v ver="${PRODUCT}" '
+              index($0, "## [" ver "]") == 1 { found = 1; next }
+              found && /^## \[/ { exit }
+              found { print }
+            ' CHANGELOG.md
+          }
+
+          release_notes="$(section)"
+          if [ -z "${release_notes}" ]; then
+            echo "::error::CHANGELOG.md 缺少 [${PRODUCT}] 版本段落，拒绝发布空更新日志"
+            exit 1
+          fi
+
+          {
+            printf '## 更新日志 / Changelog\n\n'
+            printf '%s\n\n' "${release_notes}"
+            printf -- '---\n\n'
+          } > ../release-notes/notes.md
+
+          cat >> ../release-notes/notes.md <<'EOF'
           ## 安装
 
           | 平台 | 下载 | 说明 |

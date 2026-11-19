@@ -227,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "wasmnest-plugin-api-mobile"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "inventory",
@@ -346,14 +346,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[patch.unused]]
-name = "wasmnest-plugin-api"
-version = "0.0.1"
-
-[[patch.unused]]
-name = "wasmnest-plugin-api-macros"
-version = "0.0.1"
-
-[[patch.unused]]
 name = "wasmnest-crypto-engine"
 version = "0.0.1"
 
@@ -396,3 +388,11 @@ version = "0.0.1"
 [[patch.unused]]
 name = "wasmnest-wasm-core"
 version = "0.0.1"
+
+[[patch.unused]]
+name = "wasmnest-plugin-api"
+version = "0.0.2"
+
+[[patch.unused]]
+name = "wasmnest-plugin-api-macros"
+version = "0.0.2"

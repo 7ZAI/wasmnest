@@ -73,6 +73,18 @@ export const EXPECTED_LIB_CRATES = [
 ]
 
 const LIB_GIT_URL = 'https://github.com/7ZAI/wasmnest-lib'
+
+/**
+ * 按 crate 的预期版本覆盖（发布线事实，非默认推导）。
+ *
+ * lib-v0.1.0 发布提交（能力仓 45746df）里 `wasmnest-pty-engine` 走独立版本线
+ * 0.0.2（其余 10 个 crate 同步到 0.1.0）——「tag 去掉 `lib-v` 前缀」的推导对
+ * 它不成立。Cargo.toml 的 git 钉必须与 tag 处的真实版本一致，否则 cargo 无法
+ * 解析；故此处按 crate 覆盖，空对象 = 无例外。
+ */
+export const LIB_CRATE_VERSION_OVERRIDES = {
+  'wasmnest-pty-engine': '0.0.2',
+}
 /** TOML 1.0 要求 inline table 单行，故逐行解析依赖声明即可 */
 const INLINE_DEP_RE = /^([A-Za-z0-9_-]+)\s*=\s*\{([^}]*)\}\s*$/gm
 
@@ -151,11 +163,15 @@ export function parseCrateIdentity(manifestText) {
  * - `[patch]` 不得留在这个 manifest（发布包会带它，cargo 拒绝 patch 进包）。
  *
  * @param {string} manifestText
- * @param {{ tag?: string, crates?: string[] }} [options]
+ * @param {{ tag?: string, crates?: string[], crateVersions?: Record<string, string> }} [options]
+ *   `crateVersions` 缺省取 {@link LIB_CRATE_VERSION_OVERRIDES}（tag 推导版本之外
+ *   的按 crate 例外，如 pty-engine 在 lib-v0.1.0 的独立 0.0.2 线）
  */
 export function manifestPublishabilityIssues(manifestText, options = {}) {
   const expectedTag = options.tag ?? EXPECTED_LIB_TAG
   const expectedCrates = options.crates ?? EXPECTED_LIB_CRATES
+  const crateVersions = options.crateVersions ?? LIB_CRATE_VERSION_OVERRIDES
+  const expectedVersionFor = (crate) => crateVersions[crate] ?? expectedTag.replace(/^lib-v/, '')
   const issues = []
   const deps = [...manifestText.matchAll(INLINE_DEP_RE)].map((m) => ({ name: m[1], body: m[2] }))
 
@@ -191,7 +207,7 @@ export function manifestPublishabilityIssues(manifestText, options = {}) {
         issues.push(`${crate} 的 tag 应为 "${expectedTag}"，实际 "${tag ?? '缺失'}"（真源 = release-manifest.json）`)
       }
       const version = body.match(/\bversion\s*=\s*"([^"]+)"/)?.[1]
-      if (version !== expectedVersion) {
+      if (version !== expectedVersionFor(crate)) {
         issues.push(`${crate} 的 version 应为 "${expectedVersion}"（与 tag 对齐），实际 "${version ?? '缺失'}"`)
       }
     }
