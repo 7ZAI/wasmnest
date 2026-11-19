@@ -142,6 +142,8 @@ export const AUTH_CENTER_PLUGIN_ID = 'com.wasmnest.auth-center'
 export const NET_CONFIG_PLUGIN_ID = 'com.wasmnest.net-config'
 /** 烂笔头（Markdown 记事本；应用仓 `apps/lanbitou`） */
 export const LANBITOU_PLUGIN_ID = 'com.wasmnest.lanbitou'
+/** 新闻聚合（今日 / 圈子 / 实时；应用仓 `apps/news`） */
+export const NEWS_PLUGIN_ID = 'com.wasmnest.news'
 
 /**
  * 宿主挂载运行面路由表（桌面 UI 宿主修正 2026-10-17）：每个有前端界面的 wasm
@@ -163,6 +165,7 @@ export const SURFACE_ROUTES: Readonly<Record<string, string>> = {
   [AUTH_CENTER_PLUGIN_ID]: '/auth',
   [NET_CONFIG_PLUGIN_ID]: '/network',
   [LANBITOU_PLUGIN_ID]: '/notes',
+  [NEWS_PLUGIN_ID]: '/news',
 }
 
 /** 每 app 的路由前缀集（pluginIdOfAppRoute 反向映射用） */
@@ -185,6 +188,7 @@ const APP_ROUTE_PREFIXES: Readonly<Record<string, string[]>> = {
   [AUTH_CENTER_PLUGIN_ID]: ['/auth'],
   [NET_CONFIG_PLUGIN_ID]: ['/network'],
   [LANBITOU_PLUGIN_ID]: ['/notes'],
+  [NEWS_PLUGIN_ID]: ['/news'],
 }
 
 /** 应用 id（= pluginId）→ 挂载路由（landing）；无运行面的应用返回 undefined */

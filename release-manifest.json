@@ -93,6 +93,18 @@
         }
       }
     },
+    "com.wasmnest.news": {
+      "path": "apps/news",
+      "version": "0.0.1",
+      "ends": {
+        "desktop": {
+          "artifact": "wasmnest_plugin_news.wasm"
+        },
+        "mobile": {
+          "artifact": "wasmnest_plugin_news.wasm"
+        }
+      }
+    },
     "com.wasmnest.lanbitou": {
       "path": "apps/lanbitou",
       "version": "0.0.1",

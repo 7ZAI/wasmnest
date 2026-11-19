@@ -47,6 +47,10 @@ const PLUGINS = {
     group: 'apps',
     slug: 'file-transfer',
   },
+  'com.wasmnest.news': {
+    group: 'apps',
+    slug: 'news',
+  },
   'com.wasmnest.monitor': {
     // 系统服务（L2 内部业务）：工程迁入应用仓 `servers/` 分组
     group: 'servers',

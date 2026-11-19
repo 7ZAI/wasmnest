@@ -33,6 +33,7 @@ import {
   AUTH_CENTER_PLUGIN_ID,
   NET_CONFIG_PLUGIN_ID,
   LANBITOU_PLUGIN_ID,
+  NEWS_PLUGIN_ID,
 } from '@/shell/composables/useShellApps'
 
 const router = createRouter({
@@ -177,6 +178,13 @@ const router = createRouter({
       name: 'app-lanbitou',
       component: AppMountSlot,
       props: { appId: LANBITOU_PLUGIN_ID, route: '/notes' },
+    },
+    {
+      // 新闻聚合（今日 / 圈子 / 实时，应用仓 `apps/news`）：单面应用
+      path: '/news',
+      name: 'app-news',
+      component: AppMountSlot,
+      props: { appId: NEWS_PLUGIN_ID, route: '/news' },
     },
 
     // ==================== 兜底 ====================
