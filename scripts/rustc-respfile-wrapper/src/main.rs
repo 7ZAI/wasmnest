@@ -6,10 +6,11 @@
 //! 改以 `rustc @<file>` 拉起——rustc 响应文件格式 = 每行一个参数，行内空格/
 //! 反斜杠原样保留（已实测验证）。
 //!
-//! **不能经 sccache 转发**：v0.0.2 发布实测，sccache 收到 `@file` 后会先展开参数、
-//! 再拼完整命令行拉起 rustc，展开后的 ~40KB 命令行仍撞 CreateProcess 上限
-//! （`os error 206`）。故发布流水线设 `RUSTC_WRAPPER_INNER=none` 走直调模式：
-//! 不经过任何内层包装器，无条件写响应文件后直调 rustc。
+//! **不能经 sccache 转发**：v0.0.2 发布实测，cargo 已用 `@cargo-argfile` 承载超长
+//! 参数，sccache 收到后会先展开、再拼完整命令行拉起 rustc，展开后的 ~40KB 命令行
+//! 仍撞 CreateProcess 上限（`os error 206`）。故发布流水线设
+//! `RUSTC_WRAPPER_INNER=none` 走直调模式：不经过任何内层包装器；参数里已有
+//! `@argfile` 时原样透传，否则自行写响应文件后直调 rustc。
 //!
 //! 仅发布流水线使用（product-release.yml build job 现场 cargo build 本 crate 后设
 //! RUSTC_WRAPPER）；仓内默认包装器仍是 sccache（.cargo/config.toml），本地开发不受影响。
@@ -68,8 +69,17 @@ fn main() {
     };
 
     // 直调模式：不经内层包装器（sccache 会展开 @file 重新拼接长命令行，仍撞 206）。
-    // 无条件写响应文件，避免长度判断与实际 CreateProcess 预算之间的误差。
     if matches!(inner.as_str(), "" | "none" | "rustc") {
+        // cargo 对超长参数已生成 `@cargo-argfile.xxx`，此时命令行本身很短，直接透传
+        // 给 rustc 展开。**不能再包一层响应文件**：rustc 不递归展开响应文件内的
+        // `@...`，会把它当输入文件读并报 os error 123。
+        if args.iter().any(|a| a.starts_with('@')) {
+            let mut cmd = vec![rustc.clone()];
+            cmd.extend(args.iter().map(|s| s.to_string()));
+            std::process::exit(run(&inner, &cmd, &args));
+        }
+
+        // 无 argfile 且参数较长时自行写响应文件，同样绕开 CreateProcess 上限。
         let dir = env::temp_dir().join(format!("rustc-resp-{}", std::process::id()));
         if let Err(e) = fs::create_dir_all(&dir) {
             eprintln!("[rustc-wrapper] 响应文件目录创建失败: {e}");
