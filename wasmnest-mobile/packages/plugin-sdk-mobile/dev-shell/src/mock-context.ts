@@ -20,6 +20,7 @@ import type {
   I18nAPI,
   LifecycleAPI,
   LoggerAPI,
+  MonitorPanelHandle,
   NotificationAPI,
   PluginContext,
   PluginDialogHandle,
@@ -131,6 +132,20 @@ export function createMockContext(pluginId: string): PluginContext {
   const shellRegistry = getShellRegistry()
 
   const ui: UIRegistry = {
+    /**
+     * dev-shell 不装载其他应用注册的监控面板：宿主侧该能力由 loader 中介
+     * （`plugin/context.ts` 的 hooks.mountMonitorPanel），浏览器内没有跨应用模块装载链。
+     * 与宿主未注入 hooks 时同口径 **fail-visible**，不静默返回空句柄。
+     */
+    async mountMonitorPanel(
+      _container: HTMLElement,
+      _appId: string,
+      _panelId: string,
+    ): Promise<MonitorPanelHandle> {
+      throw new Error(
+        'dev-shell: monitor panels are not mounted (host-mediated mount is unavailable in browser preview)',
+      )
+    },
     registerSurface(surface) {
       const wrapped = defineComponent({
         name: `DevShellSurface-${pluginId}`,

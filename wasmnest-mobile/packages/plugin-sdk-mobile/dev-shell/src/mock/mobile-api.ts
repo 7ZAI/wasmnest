@@ -267,6 +267,37 @@ const isDark = ref(false)
 /** dev-shell 本地设置投影（vibrate 无意义置 false；档位与宿主 MobileSettings 同形） */
 const mobileSettings = ref({ vibrate: false, maxOpenTerminals: 5 })
 
+/**
+ * 宿主设置 KV（`MobileHostApi.readAllSettings` / `writeSetting` 的浏览器实现）
+ *
+ * 与宿主同形：扁平 `{ key: value }` string 表。dev-shell 落 localStorage（刷新不丢），
+ * 不可用时退化为纯内存；已知键（vibrate / maxOpenTerminals）写穿上面的响应式单例。
+ */
+const SETTINGS_STORAGE_KEY = 'wasmnest-dev-shell:settings'
+
+function loadDevSettings(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') return parsed as Record<string, string>
+    }
+  } catch {
+    // localStorage 不可用 → 纯内存
+  }
+  return {}
+}
+
+const devSettings: Record<string, string> = loadDevSettings()
+
+function persistDevSettings(): void {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(devSettings))
+  } catch {
+    // 纯内存模式
+  }
+}
+
 /** 暴露到 window.__WASMNEST_SHARED__.mobileApi */
 export const mobileApi: MobileHostApi = {
   activeSessionId,
@@ -305,6 +336,19 @@ export const mobileApi: MobileHostApi = {
   },
   isDark,
   mobileSettings,
+  async readAllSettings(): Promise<Record<string, string>> {
+    return { ...devSettings }
+  },
+  async writeSetting(key: string, value: string): Promise<void> {
+    devSettings[key] = value
+    // 宿主已知键写穿响应式单例；其余直落 KV（机制面：插件自持哪些键是自己的设置项）
+    if (key === 'vibrate') mobileSettings.value.vibrate = value === 'true'
+    if (key === 'maxOpenTerminals') {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) mobileSettings.value.maxOpenTerminals = parsed
+    }
+    persistDevSettings()
+  },
   onSessionEvent(handler) {
     // dev-shell：桥接 mock 会话生命周期（断线 / 会话停止）；像素级状态流不在浏览器模拟
     const d1 = onDevEvent('plugin:lifecycle:disconnect', () => handler({ type: 'disconnected' }))

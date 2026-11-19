@@ -233,7 +233,7 @@ import { useShellRecent } from '../../composables/useShellRecent'
 import { useSlotCarousel } from '../../composables/useSlotCarousel'
 import { selectSlotCards, type ShellSlotCard } from '../../slotCards'
 import { logger } from '../../logger'
-import type { ShellSurfaceIntent } from '../../../../src/types'
+import type { ShellSurfaceIntent } from '../../../../../src/types'
 // dev-shell 无 asset protocol：自定义壁纸图恒不可达（wallpaperImage 恒 null），该导入宿主独有
 import type { ShellApp } from '../../types'
 import ShellAppCell from '../ShellAppCell.vue'
