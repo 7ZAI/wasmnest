@@ -134,9 +134,6 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             bundles: nsis
-            # Windows 短 CARGO_TARGET_DIR：全量 wasmtime 依赖图的 rustc 调用约 35KB，
-            # 超 CreateProcess 32767 字符上限（os error 206）；短路径把命令行压回限内。
-            cargo_target_dir: C:\tw
     steps:
       - name: 检出平台仓
         uses: actions/checkout@v4
@@ -275,30 +272,12 @@ jobs:
           BUNDLES: ${{ matrix.bundles }}
           WIN_THUMBPRINT: ${{ steps.wincert.outputs.thumbprint }}
           UNSIGNED: ${{ inputs.unsigned }}
-          MATRIX_CARGO_TARGET_DIR: ${{ matrix.cargo_target_dir }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           if [ "$UNSIGNED" = "true" ]; then
             echo "::warning::unsigned=true：跳过签名，产物不可用于发布"
-          fi
-          # Windows：先构建 rustc 响应文件包装器（大依赖 crate 命令行超 CreateProcess 上限，
-          # os error 206；包装器超阈值时转 @响应文件 拉起，见 crate 头注。.mjs 无法被
-          # Windows CreateProcess 直接执行，必须 exe 形态，故现场 cargo build。
-          # 顺序要紧：须在导出 CARGO_TARGET_DIR 之前构建，否则产物落进短 target 目录
-          if [ "$TARGET" = "x86_64-pc-windows-msvc" ]; then
-            cargo build --release --manifest-path "$GITHUB_WORKSPACE/wasmnest/scripts/rustc-respfile-wrapper/Cargo.toml"
-            WRAPPER_EXE="$GITHUB_WORKSPACE/wasmnest/scripts/rustc-respfile-wrapper/target/release/rustc-respfile-wrapper.exe"
-            [ -f "$WRAPPER_EXE" ] || { echo "::error::包装器构建产物缺失: $WRAPPER_EXE"; exit 1; }
-          fi
-          # Windows：注入短 CARGO_TARGET_DIR（见 matrix 注释）；Linux 不设，保持仓内默认布局
-          if [ -n "${MATRIX_CARGO_TARGET_DIR:-}" ]; then
-            export CARGO_TARGET_DIR="$MATRIX_CARGO_TARGET_DIR"
-          fi
-          # Windows：包装器就位后设 RUSTC_WRAPPER（须在 CARGO_TARGET_DIR 之后，避免被其干扰）
-          if [ -n "${WRAPPER_EXE:-}" ]; then
-            export RUSTC_WRAPPER="$WRAPPER_EXE"
           fi
           cfg="{\"version\":\"${PRODUCT}\""
           if [ -n "${WIN_THUMBPRINT:-}" ]; then
@@ -313,12 +292,9 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           BUNDLES: ${{ matrix.bundles }}
-          MATRIX_CARGO_TARGET_DIR: ${{ matrix.cargo_target_dir }}
         run: |
           set -euo pipefail
-          # cwd = wasmnest（defaults.run.working-directory）；Windows 用短绝对路径，Linux 用仓内默认
-          target_dir="${MATRIX_CARGO_TARGET_DIR:-wasmnest-desktop/src-tauri/target}"
-          base="$target_dir/${TARGET}/release/bundle"
+          base="wasmnest-desktop/src-tauri/target/${TARGET}/release/bundle"
           for kind in ${BUNDLES//,/ }; do
             [ -d "$base/$kind" ] || { echo "::error::缺产物目录 $base/$kind"; exit 1; }
             ls -1 "$base/$kind"
@@ -334,9 +310,9 @@ jobs:
           # WasmNest.AppDir/ 解包树（几十 MB 的 usr/lib 依赖），会把 artifact 吹大且
           # 让后续摊平步骤撞名。.sig 必须一起传：latest.json 的 signature 取自它。
           path: |
-            ${{ matrix.cargo_target_dir || 'wasmnest/wasmnest-desktop/src-tauri/target' }}/${{ matrix.target }}/release/bundle/nsis/*.exe*
-            ${{ matrix.cargo_target_dir || 'wasmnest/wasmnest-desktop/src-tauri/target' }}/${{ matrix.target }}/release/bundle/deb/*.deb*
-            ${{ matrix.cargo_target_dir || 'wasmnest/wasmnest-desktop/src-tauri/target' }}/${{ matrix.target }}/release/bundle/appimage/*.AppImage*
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe*
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb*
+            wasmnest/wasmnest-desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage*
           if-no-files-found: error
 
   # ------------------- 3) Android APK（移动插件随构建现场产出，见文件头注释）
@@ -657,6 +633,8 @@ jobs:
             --out ../release-assets/latest.json
           cat ../release-assets/latest.json
 
+      # 更新日志以 CHANGELOG.md 对应版本段落为真源（同一文件含中英双语），随 Release 一起发布。
+      # 段落缺失即红（fail-visible），禁止发空更新日志。
       - name: 写发布说明
         shell: bash
         env:
@@ -664,7 +642,28 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ../release-notes
-          cat > ../release-notes/notes.md <<'EOF'
+
+          section() {
+            awk -v ver="${PRODUCT}" '
+              index($0, "## [" ver "]") == 1 { found = 1; next }
+              found && /^## \[/ { exit }
+              found { print }
+            ' CHANGELOG.md
+          }
+
+          release_notes="$(section)"
+          if [ -z "${release_notes}" ]; then
+            echo "::error::CHANGELOG.md 缺少 [${PRODUCT}] 版本段落，拒绝发布空更新日志"
+            exit 1
+          fi
+
+          {
+            printf '## 更新日志 / Changelog\n\n'
+            printf '%s\n\n' "${release_notes}"
+            printf -- '---\n\n'
+          } > ../release-notes/notes.md
+
+          cat >> ../release-notes/notes.md <<'EOF'
           ## 安装
 
           | 平台 | 下载 | 说明 |
