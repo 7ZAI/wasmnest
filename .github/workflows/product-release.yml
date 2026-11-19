@@ -276,6 +276,9 @@ jobs:
           WIN_THUMBPRINT: ${{ steps.wincert.outputs.thumbprint }}
           UNSIGNED: ${{ inputs.unsigned }}
           MATRIX_CARGO_TARGET_DIR: ${{ matrix.cargo_target_dir }}
+          # Windows 大依赖 crate 的 rustc 命令行超 CreateProcess 上限（os error 206）：
+          # 超限时包装器转响应文件拉起（见脚本头注）；Linux 命令行远低于阈值，透传行为不变
+          RUSTC_WRAPPER: ${{ github.workspace }}/wasmnest/scripts/rustc-respfile-wrapper.mjs
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
