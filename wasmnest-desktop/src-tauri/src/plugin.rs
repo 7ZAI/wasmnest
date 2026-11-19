@@ -26,10 +26,10 @@
 
 pub mod api_call;
 pub mod app;
-/// 音频采集（host-audio）能力域端口 adapter 与装配自报
-pub mod audio;
 /// 应用前端挂载包目录的宿主事实（壳装载 app 整包的路径真源）
 pub mod assets;
+/// 音频采集（host-audio）能力域端口 adapter 与装配自报
+pub mod audio;
 pub mod auth;
 pub mod bindings;
 

@@ -70,10 +70,7 @@ impl PluginLoader {
             let uninstalled_marker = plugins_data_dir.join(PLUGIN_UNINSTALLED_DIR).join(&id);
             if uninstalled_marker.exists() {
                 match fs::remove_file(&uninstalled_marker) {
-                    Ok(()) => tracing::info!(
-                        "[PluginLoader] Ignored stale uninstall marker in dev: {}",
-                        id
-                    ),
+                    Ok(()) => tracing::info!("[PluginLoader] Ignored stale uninstall marker in dev: {}", id),
                     Err(e) => tracing::warn!(
                         "[PluginLoader] Failed to clear stale uninstall marker for {}: {}",
                         id,
