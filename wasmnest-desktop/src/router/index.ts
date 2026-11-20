@@ -22,6 +22,7 @@
  * - com.wasmnest.net-config：/network（服务型 wasm，应用仓 servers/net-config；T18）
  * - com.wasmnest.lanbitou：/notes（应用仓 apps/lanbitou）
  * - com.wasmnest.speech：/speech（服务型 wasm，应用仓 servers/speech）
+ * - com.wasmnest.assistant：/nest（服务型 wasm，应用仓 servers/assistant）
  */
 import { createRouter, createWebHistory } from 'vue-router'
 import { setRouter } from './instance'
@@ -37,6 +38,7 @@ import {
   LANBITOU_PLUGIN_ID,
   NEWS_PLUGIN_ID,
   SPEECH_PLUGIN_ID,
+  ASSISTANT_PLUGIN_ID,
 } from '@/shell/composables/useShellApps'
 
 const router = createRouter({
@@ -195,6 +197,13 @@ const router = createRouter({
       name: 'app-speech',
       component: AppMountSlot,
       props: { appId: SPEECH_PLUGIN_ID, route: '/speech' },
+    },
+    {
+      // Nest 助手（服务型 wasm，应用仓 `servers/assistant`）：对话 / 记忆 / 应用调度面
+      path: '/nest',
+      name: 'app-assistant',
+      component: AppMountSlot,
+      props: { appId: ASSISTANT_PLUGIN_ID, route: '/nest' },
     },
 
     // ==================== 兜底 ====================

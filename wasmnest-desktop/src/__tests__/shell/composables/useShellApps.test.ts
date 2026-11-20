@@ -34,8 +34,10 @@ vi.mock('@/utils/appCommands', async (importOriginal) => ({
 import { invoke } from '@tauri-apps/api/core'
 import {
   TERMINAL_PLUGIN_ID,
+  ASSISTANT_PLUGIN_ID,
   mapDisplayState,
   pluginIdOfAppRoute,
+  routeOfApp,
   useShellApps,
   type HostShellPluginInfo,
 } from '@/shell/composables/useShellApps'
@@ -179,6 +181,10 @@ describe('PluginState 归并（展示态五档）', () => {
 })
 
 describe('应用路由 → 属主 pluginId（faceOfRoute 反向映射）', () => {
+  it('Nest 有桌面运行面路由（全局入口点击后进入 /nest）', () => {
+    expect(routeOfApp(ASSISTANT_PLUGIN_ID)).toBe('/nest')
+  })
+
   it('挂载路由与深链同归 bedcode 应用面；未知路径无属主', () => {
     expect(pluginIdOfAppRoute('/sessions')).toBe(TERMINAL_PLUGIN_ID)
     expect(pluginIdOfAppRoute('/sessions/123')).toBe(TERMINAL_PLUGIN_ID)
@@ -190,6 +196,8 @@ describe('应用路由 → 属主 pluginId（faceOfRoute 反向映射）', () =>
     expect(pluginIdOfAppRoute('/orchestrations/abc')).toBe(TERMINAL_PLUGIN_ID)
     expect(pluginIdOfAppRoute('/settings/authorization')).toBe(TERMINAL_PLUGIN_ID)
     expect(pluginIdOfAppRoute('/terminal-window/x')).toBe(TERMINAL_PLUGIN_ID)
+    expect(pluginIdOfAppRoute('/nest')).toBe(ASSISTANT_PLUGIN_ID)
+    expect(pluginIdOfAppRoute('/nest/settings')).toBe(ASSISTANT_PLUGIN_ID)
     expect(pluginIdOfAppRoute('/unknown-page')).toBeUndefined()
   })
 })
