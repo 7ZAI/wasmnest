@@ -66,6 +66,78 @@ impl SttPorts for HostSttPorts {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn gsettings_get(schema_key: &str) -> Option<String> {
+    let (schema, key) = schema_key.split_once(' ')?;
+    let output = std::process::Command::new("gsettings")
+        .args(["get", schema, key])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8(output.stdout).ok()?;
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn unquote(value: String) -> String {
+    value.trim().trim_matches('\'').trim_matches('"').trim().to_string()
+}
+
+fn proxy_from_env(get: impl Fn(&str) -> Option<String>) -> Option<String> {
+    [
+        "WASMNEST_STT_PROXY",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+    ]
+    .into_iter()
+    .filter_map(get)
+    .map(|value| value.trim().to_string())
+    .find(|value| !value.is_empty())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn gnome_proxy_from(get: impl Fn(&str) -> Option<String>) -> Option<String> {
+    let mode = get("org.gnome.system.proxy mode").map(unquote)?;
+    if mode != "manual" {
+        return None;
+    }
+    let endpoint = |scheme: &str| -> Option<(String, Option<String>)> {
+        let host = unquote(get(&format!("org.gnome.system.proxy.{scheme} host"))?);
+        if host.is_empty() {
+            return None;
+        }
+        let port = get(&format!("org.gnome.system.proxy.{scheme} port"))
+            .map(unquote)
+            .filter(|port| !port.is_empty() && port != "0");
+        Some((host, port))
+    };
+    let (host, port) = endpoint("https").or_else(|| endpoint("http"))?;
+    Some(match port {
+        Some(port) => format!("http://{host}:{port}"),
+        None => format!("http://{host}"),
+    })
+}
+
+/// 模型下载代理：显式环境变量 > 标准代理环境变量 > Linux 桌面系统代理。
+fn resolve_download_proxy() -> Option<String> {
+    if let Some(proxy) = proxy_from_env(|key| std::env::var(key).ok()) {
+        return Some(proxy);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        gnome_proxy_from(gsettings_get)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
 /// 装配回调：端口（实例级 + 进程级）与 whisper 引擎
 fn install(host: Arc<dyn HostPorts>) {
     let ctx = downcast_host::<WasmHostContext>(host.as_ref());
@@ -84,7 +156,16 @@ fn install(host: Arc<dyn HostPorts>) {
     let mirror = std::env::var("WASMNEST_STT_MIRROR")
         .ok()
         .filter(|value| !value.trim().is_empty());
-    let store = match ModelStore::new(models_dir.clone(), Some(Arc::new(HttpFetcher::new())), mirror) {
+    let proxy = resolve_download_proxy();
+    let fetcher = HttpFetcher::with_proxy(proxy.as_deref());
+    if let Some(err) = fetcher.configuration_error() {
+        tracing::error!(
+            error = %err,
+            "host-stt: model download proxy configuration invalid"
+        );
+    }
+    let proxy_active = proxy.is_some() && fetcher.configuration_error().is_none();
+    let store = match ModelStore::new(models_dir.clone(), Some(Arc::new(fetcher)), mirror) {
         Ok(store) => store,
         Err(err) => {
             tracing::error!(
@@ -101,7 +182,11 @@ fn install(host: Arc<dyn HostPorts>) {
         SessionLimits::default(),
     );
     wasmnest_stt_engine::plugin_binding::install_hub(Arc::new(hub));
-    tracing::info!(dir = %models_dir.display(), "host-stt: engine installed");
+    tracing::info!(
+        dir = %models_dir.display(),
+        proxy = proxy_active,
+        "host-stt: engine installed"
+    );
 }
 
 /// 端口装配器静态（与白名单条目 / 强制引用行同处）
@@ -133,5 +218,36 @@ mod tests {
             &["stt:infer", "stt:model"],
             "权限位必须与权限词汇表逐字一致"
         );
+    }
+
+    #[test]
+    fn proxy_env_skips_blank_and_prefers_explicit() {
+        let get = |key: &str| match key {
+            "WASMNEST_STT_PROXY" => Some("   ".to_string()),
+            "HTTPS_PROXY" => Some(" http://127.0.0.1:10811 ".to_string()),
+            _ => None,
+        };
+        assert_eq!(proxy_from_env(get).as_deref(), Some("http://127.0.0.1:10811"));
+    }
+
+    #[test]
+    fn gnome_proxy_requires_manual_mode() {
+        let get = |key: &str| match key {
+            "org.gnome.system.proxy mode" => Some("'none'".to_string()),
+            _ => Some("'127.0.0.1'".to_string()),
+        };
+        assert_eq!(gnome_proxy_from(get), None);
+    }
+
+    #[test]
+    fn gnome_proxy_falls_back_to_http_host() {
+        let get = |key: &str| match key {
+            "org.gnome.system.proxy mode" => Some("'manual'".to_string()),
+            "org.gnome.system.proxy.https host" => Some("''".to_string()),
+            "org.gnome.system.proxy.http host" => Some("'127.0.0.1'".to_string()),
+            "org.gnome.system.proxy.http port" => Some("10811".to_string()),
+            _ => None,
+        };
+        assert_eq!(gnome_proxy_from(get).as_deref(), Some("http://127.0.0.1:10811"));
     }
 }
