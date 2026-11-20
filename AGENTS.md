@@ -71,7 +71,7 @@
 
 **表面生命周期（双端同一口径，2026-10-23；移动承载 2026-10-24）**：应用没被停用就继续运行——切走只是藏起来（DOM / 组件实例保留、容器脱文档不渲染），停用 / 卸载才是唯一销毁点；后台渲染 / 动画不做。双端同为 `detach` 不得退化成卸载；移动停用路径显式「先 dispose UI 再拆插件上下文」。
 
-**服务型应用不进多任务（双端同一口径，2026-10-23）**：装配角色为 `basic-service` / `internal-business`（`isServiceKind`）的应用不产多任务卡——桌面 `openApp` / `syncFromRoute` 走服务面（进全屏但不入 `cards`）、右键菜单隐藏「停用」；移动多任务两个来源（运行中 / 最近使用）都过滤。关闭唯一入口 = 应用管理页（桌面）/ 应用详情页（移动）的「停用」。
+**服务型应用不进多任务（双端同一口径，2026-10-23）**：装配角色为 `basic-service` / `internal-business`（`isServiceKind`）的应用不产多任务卡——桌面 `openApp` / `syncFromRoute` 走服务面（进全屏但不入 `cards`）、右键菜单隐藏「停用」；移动多任务两个来源（运行中 / 最近使用）都过滤。**2026-11-20 用户裁决**：主屏「服务」宫格撤除，服务从应用管理全量迁出，入口统一收敛到「服务管理」系统页（桌面 `src/shell/sys/SysServicesView.vue` / 移动 `src/shell/components/screens/ShellServicesScreen.vue`），点服务卡片进入对应运行入口（移动详情入口在服务卡右侧箭头）。关闭入口 = 服务管理页（桌面「停止服务」）/ 应用详情页（移动）的「停用」。
 
 宿主允许存在的四类薄壳、fail-visible 三形态、桌面挂载形态、双端差异、权限与安全闸门总览 → `docs/architecture.md`；安全红线 → `docs/security.md`；禁行清单速查 → `docs/boundaries.md` §3。
 

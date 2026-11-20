@@ -50,9 +50,10 @@
         </div>
       </div>
 
-      <!-- ==================== 已安装列表（按 manifest kind 分组：应用在前、系统服务在后） ==================== -->
+      <!-- ==================== 已安装应用列表（服务型 wasm 已迁往「服务管理」屏） ==================== -->
       <template v-for="group in appGroups" :key="group.id">
         <ShellSection
+          v-if="group.title"
           :title="group.title"
           :data-testid="`mobile-shell-apps-group-${group.id}`"
         />
@@ -97,7 +98,7 @@
           </ShellGroupCard>
         </div>
       </template>
-      <div v-if="appGroups.length === 0" class="px-4 pb-1">
+      <div v-if="!hasApps" class="px-4 pb-1">
         <p
           class="rounded-[12px] border border-dashed border-[var(--mobile-border-hover)] px-3 py-5 text-center shell-type-caption text-[var(--mobile-text-secondary)]"
         >
@@ -184,26 +185,17 @@ import ConfirmDialog from '../ui/ConfirmDialog.vue'
 const { t } = useI18n()
 const toast = useToast()
 const nav = useShellNavigation()
-const { sortedApps, stats, supportsInstall, installFromLocalPackage, refresh } = useShellApps()
+const { sortedApps, supportsInstall, installFromLocalPackage, refresh } = useShellApps()
 
 /**
- * 业务应用 / 系统服务分组（唯一判据 = manifest kind；不在 UI 里硬编码 id）。
- * 业务应用在前、系统服务在后（2026-10-23 用户裁决）；服务按 L1 → L2 → 名称，
- * 应用按名称排序（sortedApps 同序，2026-10-24 起不再运行中优先）。
+ * 业务应用清单（唯一判据 = manifest kind，不硬编码 id）：服务型 wasm 已全部迁往
+ * 「服务管理」屏，这里按 sortedApps 原序只投影非服务应用；标题恒空 = 不再渲染
+ * 分组标题（保留分组壳以维持本页既有卡片结构，最小 diff）。
  */
-const appGroups = computed(() => {
-  const apps = sortedApps.value.filter((app) => !isServiceKind(app.kind))
-  const services = sortedApps.value
-    .filter((app) => isServiceKind(app.kind))
-    .sort((a, b) => {
-      const rank = (kind?: string) => (kind === 'basic-service' ? 0 : 1)
-      return rank(a.kind) - rank(b.kind) || a.name.localeCompare(b.name, 'zh-Hans-CN')
-    })
-  return [
-    { id: 'apps', title: t('shell.apps.businessApps'), apps },
-    { id: 'services', title: t('shell.apps.systemServices'), apps: services },
-  ].filter((group) => group.apps.length > 0)
-})
+const appGroups = computed(() => [
+  { id: 'apps', title: '', apps: sortedApps.value.filter((app) => !isServiceKind(app.kind)) },
+])
+const hasApps = computed(() => appGroups.value.some((group) => group.apps.length > 0))
 
 const installing = ref(false)
 
@@ -213,15 +205,29 @@ const installing = ref(false)
  */
 const canInstall = computed(() => supportsInstall())
 
-/** 总占用：任一应用未统计时显示「—」，不把缺失值当 0 累加成假数字 */
-const totalSizeLabel = computed(() =>
-  stats.value.totalBytes === undefined ? t('shell.common.na') : formatBytes(stats.value.totalBytes),
-)
+/** 指标只数本页列出的业务应用：服务已迁往服务管理页，不能把它们的数量算进「已安装」 */
+const businessApps = computed(() => appGroups.value[0].apps)
+const appStats = computed(() => ({
+  installed: businessApps.value.length,
+  running: businessApps.value.filter((app) => app.state === 'running').length,
+}))
+
+/** 总占用：任一应用未统计时显示「—」，不把缺失值当 0 累加成假数字（同样只数业务应用） */
+const totalSizeLabel = computed(() => {
+  const measured = businessApps.value.every((app) => typeof app.sizeBytes === 'number')
+  return measured
+    ? formatBytes(businessApps.value.reduce((sum, app) => sum + (app.sizeBytes ?? 0), 0))
+    : t('shell.common.na')
+})
 
 /** 指标条数据项（单行展示，与顶部副标题不再重复计数——副标题只说“本机共几个”） */
 const metrics = computed(() => [
-  { value: String(stats.value.installed), label: t('shell.apps.statInstalled'), highlight: false },
-  { value: String(stats.value.running), label: t('shell.apps.statRunning'), highlight: stats.value.running > 0 },
+  { value: String(appStats.value.installed), label: t('shell.apps.statInstalled'), highlight: false },
+  {
+    value: String(appStats.value.running),
+    label: t('shell.apps.statRunning'),
+    highlight: appStats.value.running > 0,
+  },
   { value: totalSizeLabel.value, label: t('shell.apps.statSize'), highlight: false },
 ])
 

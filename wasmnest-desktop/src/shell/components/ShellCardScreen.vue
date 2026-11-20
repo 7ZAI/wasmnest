@@ -28,6 +28,7 @@
       <div class="sys-body">
         <div class="sys-wrap">
           <SysAppsView v-if="sysPageId === 'apps'" />
+          <SysServicesView v-else-if="sysPageId === 'services'" />
           <SysPermsView v-else-if="sysPageId === 'perms'" />
           <SysShortcutsView v-else-if="subId === 'shortcuts'" />
           <SysAppearanceView v-else-if="sub" />
@@ -57,6 +58,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { SYS_PAGES, SYS_SUB_PAGES } from '../composables/state'
 import ShellIcon from './ShellIcon.vue'
 import SysAppsView from '../sys/SysAppsView.vue'
+import SysServicesView from '../sys/SysServicesView.vue'
 import SysPermsView from '../sys/SysPermsView.vue'
 import SysAppearanceView from '../sys/SysAppearanceView.vue'
 import SysShortcutsView from '../sys/SysShortcutsView.vue'

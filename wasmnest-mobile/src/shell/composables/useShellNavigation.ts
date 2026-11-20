@@ -21,6 +21,8 @@ export type ShellScreenId =
   | 'home'
   /** WASM 应用管理 */
   | 'apps'
+  /** 服务管理（系统服务的唯一管理与入口面） */
+  | 'services'
   /** 应用详情与权限 */
   | 'app-detail'
   /** 应用运行面 */

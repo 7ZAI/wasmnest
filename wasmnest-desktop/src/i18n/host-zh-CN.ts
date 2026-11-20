@@ -21,14 +21,8 @@ export default {
       installed: '已安装',
       noApps: '没有匹配「{q}」的应用',
       noneEnabled: '没有已启用的应用（在应用管理中重新启用）',
-      servicesTitle: '服务',
       sysTitle: '系统',
       sysHint: '全局管理页面（从后台应用面板打开）',
-      /* 宿主系统级服务在「服务」区的条目（auth-center / monitor / speech）：
-         主屏应用网格与系统区都不显示服务，它们住在应用下方的“服务”区。 */
-      serviceAuthCenter: '认证中心',
-      serviceMonitor: '运行监控',
-      serviceSpeech: '语音识别',
       matches: '个匹配',
     },
     // 多任务面板（工具栏入口）：打开过 / 后台运行的面在此切换与关闭
@@ -89,6 +83,10 @@ export default {
       apps: {
         name: '应用管理',
         desc: '安装 · 启停 · 卸载 · 配置',
+      },
+      services: {
+        name: '服务管理',
+        desc: '系统服务 · 启停 · 自启 · 运行入口',
       },
       perms: {
         name: '权限与授权',
@@ -236,7 +234,7 @@ export default {
       },
       stopService: {
         title: '停止服务「{name}」？',
-        body: '将停止服务「{name}」。服务停止后将不再对外提供能力，可在应用管理中重新启动。',
+        body: '将停止服务「{name}」。服务停止后将不再对外提供能力，可在服务管理中重新启动。',
         confirm: '停止服务',
       },
       exit: {
@@ -322,6 +320,12 @@ export default {
         dynamic: '动态',
         hint: '主题覆盖平台外壳与图标语汇；应用根容器自己声明的配色优先。',
       },
+    },
+    /** 服务管理（系统服务常驻能力）：卡内动作 = 服务详情 / 运行态切换 */
+    services: {
+      detail: '服务详情',
+      start: '运行服务',
+      empty: '暂无系统服务',
     },
     apps: {
       sortHint:

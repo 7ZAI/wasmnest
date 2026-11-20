@@ -160,8 +160,8 @@ describe('应用图标色调（机制级哈希，spec-c §4：零产品映射）
 })
 
 describe('系统页清单与壁纸常量', () => {
-  it('系统页三页齐全：apps / perms / settings', () => {
-    expect(SYS_PAGES.map((s) => s.id)).toEqual(['apps', 'perms', 'settings'])
+  it('系统页四页齐全：apps / services / perms / settings', () => {
+    expect(SYS_PAGES.map((s) => s.id)).toEqual(['apps', 'services', 'perms', 'settings'])
   })
   it('壁纸清单含 none + 三张 token 派生渐变，默认 aurora', () => {
     expect(WALLPAPER_DEFAULT).toBe('aurora')

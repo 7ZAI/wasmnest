@@ -7,7 +7,7 @@
  * |---|---|---|---|
  * | C-H2 | 头部快捷入口 | 铃铛左侧是多任务图标，不是运行中应用图标；入口不随运行态变化 | 多任务紧邻铃铛左侧；无 switchTo 图标 |
  * | C-H3 | 应用宫格 | 全部应用在场；待审批有「!」角标与可访问状态 | 未运行也在格内；approval 角标可见 |
- * | C-H4 | 系统宫格 | 三个平台自有面进栈（可返回） | navigate('apps') / openPermissions / navigate('settings') |
+ * | C-H4 | 系统宫格 | 四个平台自有面进栈（可返回） | navigate('apps') / navigate('services') / openPermissions / navigate('settings') |
  * | C-H5 | 铃铛 | 角标 = 通知 + 待审批；点击开通知栏 | 计数与 toggleShade |
  * | C-H6 | 空态 | 无应用时给出下一步说明 | 渲染 emptyAppsHint |
  * | C-H7 | 快捷卡片轨道 | 横向 scroll-snap 轨道（原型形态），不定宽竖排 | 轨道内 listitem 数 = 卡片数 |
@@ -206,20 +206,26 @@ describe('C-H4 系统宫格', () => {
     const wrapper = mount(ShellHomeScreen)
 
     await wrapper.find('button[aria-label="shell.home.sysApps"]').trigger('click')
+    await wrapper.find('button[aria-label="shell.home.sysServices"]').trigger('click')
     await wrapper.find('button[aria-label="shell.home.sysPermissions"]').trigger('click')
     await wrapper.find('button[aria-label="shell.home.sysSettings"]').trigger('click')
 
     // 平台面进栈而不是重置栈：系统屏要有可返回的上一级
-    expect(mockNavigate.mock.calls.map((c) => c[0])).toEqual(['apps', 'settings'])
+    expect(mockNavigate.mock.calls.map((c) => c[0])).toEqual(['apps', 'services', 'settings'])
     expect(mockOpenPermissions).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('C-H12 系统宫格图标（与桌面 ShellIcon 一致）', () => {
-  /** 系统宫格按钮（可访问名即入口文案，三个入口三种 key） */
-  const SYS_KEYS = ['shell.home.sysApps', 'shell.home.sysPermissions', 'shell.home.sysSettings']
+  /** 系统宫格按钮（可访问名即入口文案） */
+  const SYS_KEYS = [
+    'shell.home.sysApps',
+    'shell.home.sysServices',
+    'shell.home.sysPermissions',
+    'shell.home.sysSettings',
+  ]
   /** entry.id → data-tile（测试锚点；样式不再按 id 上色） */
-  const EXPECTED_TILES = ['apps', 'permissions', 'settings']
+  const EXPECTED_TILES = ['apps', 'services', 'permissions', 'settings']
 
   const css = () => readFileSync(join(process.cwd(), 'src/shell/styles/shell.css'), 'utf8')
 
@@ -267,7 +273,7 @@ describe('C-H12 系统宫格图标（与桌面 ShellIcon 一致）', () => {
 
     expect(
       paths.length,
-      '至少覆盖 grid / shield / gear / lock / pulse / layers',
+      '至少覆盖 grid / shield / gear / server',
     ).toBeGreaterThanOrEqual(6)
     for (const d of paths) {
       expect(desktop.includes(d), `系统图标路径未在桌面 ShellIcon 中找到：${d}`).toBe(true)
@@ -287,13 +293,13 @@ describe('C-H12 系统宫格图标（与桌面 ShellIcon 一致）', () => {
   })
 })
 
-describe('宿主系统级服务（L1/L2 = 服务宫格，不进应用 / 系统宫格）', () => {
+describe('主屏不再铺服务宫格（2026-11-20 入口收敛到服务管理）', () => {
   function service(id: string, kind: string, name = id): ShellApp {
     const s = app(id, 'running', name)
     return { ...s, kind }
   }
 
-  it('系统服务不出现在应用宫格，住在独立的服务宫格（本地化名 + 专属瓦片）', () => {
+  it('系统服务不在主屏任何宫格出现（应用 / 系统都不显示）', () => {
     apps.value = [
       service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
       service('com.wasmnest.monitor', 'internal-business', 'MonitoringService'),
@@ -301,22 +307,13 @@ describe('宿主系统级服务（L1/L2 = 服务宫格，不进应用 / 系统�
     ]
     const wrapper = mount(ShellHomeScreen)
 
-    // 业务应用在应用宫格；两个系统服务不在（也不以插件名出现）
     expect(wrapper.text()).toContain('AI Chatbox')
     expect(wrapper.text()).not.toContain('Auth Center')
     expect(wrapper.text()).not.toContain('MonitoringService')
-
-    // 服务宫格：标题 + 两个服务瓦片（本地化 key 回显 + data-tile 锚点）
-    expect(wrapper.text()).toContain('shell.home.servicesTitle')
-    const auth = wrapper.find('button[aria-label="shell.home.serviceAuthCenter"]')
-    const monitor = wrapper.find('button[aria-label="shell.home.serviceMonitor"]')
-    expect(auth.exists()).toBe(true)
-    expect(monitor.exists()).toBe(true)
-    expect(auth.find('.shell-sys-tile').attributes('data-tile')).toBe('auth-center')
-    expect(monitor.find('.shell-sys-tile').attributes('data-tile')).toBe('monitor')
+    expect(wrapper.text()).not.toContain('shell.home.servicesTitle')
   })
 
-  it('分区顺序固定为 应用 → 服务 → 系统', () => {
+  it('分区顺序固定为 应用 → 系统（服务分区已撤除）', () => {
     apps.value = [
       service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
       app('com.wasmnest.ai-chatbox', 'running', 'AI Chatbox'),
@@ -329,31 +326,19 @@ describe('宿主系统级服务（L1/L2 = 服务宫格，不进应用 / 系统�
       .filter((text) =>
         ['shell.home.appsTitle', 'shell.home.servicesTitle', 'shell.home.sysTitle'].includes(text),
       )
-    expect(titles).toEqual([
-      'shell.home.appsTitle',
-      'shell.home.servicesTitle',
-      'shell.home.sysTitle',
-    ])
+    expect(titles).toEqual(['shell.home.appsTitle', 'shell.home.sysTitle'])
   })
 
-  it('点击服务瓦片打开应用面（open），不是系统页导航', async () => {
-    apps.value = [
-      service('com.wasmnest.auth-center', 'internal-business', 'Auth Center'),
-    ]
+  it('系统宫格里有服务管理入口（navigate(services)），不是逐个服务瓦片', async () => {
+    apps.value = [service('com.wasmnest.auth-center', 'internal-business', 'Auth Center')]
     const wrapper = mount(ShellHomeScreen)
 
-    await wrapper.find('button[aria-label="shell.home.serviceAuthCenter"]').trigger('click')
-    expect(mockOpen).toHaveBeenCalledWith('com.wasmnest.auth-center')
-    expect(mockNavigate).not.toHaveBeenCalledWith('apps')
-  })
-
-  it('未知系统服务回退插件名 + 通用瓦片（不硬编码新 id）', () => {
-    apps.value = [service('com.wasmnest.unknown-svc', 'basic-service', 'UnknownSvc')]
-    const wrapper = mount(ShellHomeScreen)
-
-    expect(wrapper.text()).toContain('UnknownSvc')
-    const tile = wrapper.find('button[aria-label="UnknownSvc"] .shell-sys-tile')
-    expect(tile.attributes('data-tile')).toBe('com.wasmnest.unknown-svc')
+    const tile = wrapper.find('button[aria-label="shell.home.sysServices"]')
+    expect(tile.exists(), '服务管理必须常驻系统宫格').toBe(true)
+    expect(tile.find('.shell-sys-tile').attributes('data-tile')).toBe('services')
+    await tile.trigger('click')
+    expect(mockNavigate).toHaveBeenCalledWith('services')
+    expect(mockOpen).not.toHaveBeenCalled()
   })
 
   it('只有系统服务、没有业务应用 → 应用宫格空态（不误报“全部停用”）', () => {
@@ -361,11 +346,9 @@ describe('宿主系统级服务（L1/L2 = 服务宫格，不进应用 / 系统�
     const wrapper = mount(ShellHomeScreen)
 
     expect(wrapper.text()).toContain('shell.home.emptyAppsHint')
-    // 服务仍在服务宫格
-    expect(wrapper.find('button[aria-label="shell.home.serviceMonitor"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('MonitoringService')
   })
 })
-
 describe('C-H5 通知入口', () => {
   it('should_countNotificationsPlusPending_when_badgeRendered', () => {
     useShellNotifications().pushNotification({ kind: 'info', icon: 'i', source: 's', title: 'n1' })

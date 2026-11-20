@@ -31,15 +31,20 @@ export default {
       appAria: '{name}，{state}',
       emptyApps: '尚未安装 WASM 应用',
       emptyAppsHint: '在「应用管理」里安装或启用后，入口会出现在这里',
-      servicesTitle: '服务',
       sysTitle: '系统',
       sysApps: '应用管理',
+      sysServices: '服务管理',
       sysPermissions: '权限管理',
       sysSettings: '设置',
-      /* 宿主系统级服务在「服务」宫格的条目（auth-center / monitor）：
-         主屏应用宫格与系统宫格都不显示服务，它们住在应用下方的“服务”宫格。 */
-      serviceAuthCenter: '认证中心',
-      serviceMonitor: '运行监控',
+    },
+    services: {
+      title: '服务管理',
+      subtitle: '系统服务 · 点卡片进入运行入口',
+      statTotal: '个服务',
+      open: '打开 {name}',
+      openHint: '点击进入服务',
+      detail: '管理 {name}',
+      empty: '暂无系统服务',
     },
     apps: {
       title: 'WASM 应用',

@@ -52,6 +52,7 @@ import ShellStatusbar from './ShellStatusbar.vue'
 import ShellAppRunScreen from './screens/ShellAppRunScreen.vue'
 import ShellAppDetailScreen from './screens/ShellAppDetailScreen.vue'
 import ShellAppsScreen from './screens/ShellAppsScreen.vue'
+import ShellServicesScreen from './screens/ShellServicesScreen.vue'
 import ShellHomeScreen from './screens/ShellHomeScreen.vue'
 import ShellPermissionsScreen from './screens/ShellPermissionsScreen.vue'
 import ShellSettingsScreen from './screens/ShellSettingsScreen.vue'
@@ -61,6 +62,7 @@ import ShellSwitcherScreen from './screens/ShellSwitcherScreen.vue'
 const SCREENS: Record<ShellScreenId, Component> = {
   home: ShellHomeScreen,
   apps: ShellAppsScreen,
+  services: ShellServicesScreen,
   'app-detail': ShellAppDetailScreen,
   'app-run': ShellAppRunScreen,
   switcher: ShellSwitcherScreen,

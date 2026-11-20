@@ -42,8 +42,19 @@ export const zhCNShell = {
       emptyAppsHint: '在「应用管理」里安装或启用后，入口会出现在这里',
       sysTitle: '系统',
       sysApps: '应用管理',
+      sysServices: '服务管理',
       sysPermissions: '权限管理',
       sysSettings: '设置'
+    },
+    services: {
+      title: '服务管理',
+      subtitle: '系统服务 · 点卡片进入运行入口',
+      systemServices: '系统服务',
+      statTotal: '个服务',
+      open: '打开 {name}',
+      openHint: '点击进入服务',
+      detail: '管理 {name}',
+      empty: '暂无系统服务'
     },
     apps: {
       title: 'WASM 应用',

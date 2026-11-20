@@ -228,6 +228,48 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
       expect(s.cards.value).toEqual([`app:${TERMINAL_PLUGIN_ID}`])
     })
 
+    it('从服务管理页进入服务：返回回到服务管理页（不落主屏）', async () => {
+      const s = useShellState()
+      seedApp(MONITOR_ID, 'Monitor', '/monitor', 'internal-business')
+      s.openSys('services')
+      await s.openApp(MONITOR_ID)
+      expect(s.activeCard.value).toBe(`app:${MONITOR_ID}`)
+
+      s.goBack()
+      expect(s.screen.value, '返回后仍是全屏面（服务管理页）').toBe('card')
+      expect(s.activeCard.value).toBe('sys:services')
+      expect(router.push).toHaveBeenLastCalledWith('/sys/services')
+    })
+
+    it('从主屏进入服务：返回仍回主屏（旧系统页卡不算来处）', async () => {
+      const s = useShellState()
+      seedApp(MONITOR_ID, 'Monitor', '/monitor', 'internal-business')
+      // 先开过服务管理页再回主屏：来处必须已作废，不能下次从主屏进服务时误回旧面
+      s.openSys('services')
+      s.goHome()
+      await s.openApp(MONITOR_ID)
+
+      s.goBack()
+      expect(s.screen.value).toBe('home')
+      expect(router.push).toHaveBeenLastCalledWith('/')
+    })
+
+    it('服务 → 服务：返回回到上一个服务面（不叠出往返栈）', async () => {
+      const s = useShellState()
+      const AUTH_ID = 'com.wasmnest.auth-center'
+      apps.plugins.value = [
+        { id: MONITOR_ID, name: 'Monitor', route: '/monitor', state: 'running', kind: 'internal-business' },
+        { id: AUTH_ID, name: 'Auth Center', route: '/auth', state: 'running', kind: 'basic-service' },
+      ]
+      s.openSys('services')
+      await s.openApp(MONITOR_ID)
+      await s.openApp(AUTH_ID)
+
+      s.goBack()
+      expect(s.activeCard.value).toBe(`app:${MONITOR_ID}`)
+      expect(router.push).toHaveBeenLastCalledWith('/monitor')
+    })
+
     it('「全部关闭」只触达有卡应用，不误杀运行中的服务型应用', async () => {
       const s = useShellState()
       seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')

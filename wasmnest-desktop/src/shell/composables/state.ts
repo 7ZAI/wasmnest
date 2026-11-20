@@ -14,6 +14,12 @@ export const SYS_PAGES: ReadonlyArray<{
   icon: string
 }> = [
   { id: 'apps', nameKey: 'shell.sys.apps.name', descKey: 'shell.sys.apps.desc', icon: 'grid' },
+  {
+    id: 'services',
+    nameKey: 'shell.sys.services.name',
+    descKey: 'shell.sys.services.desc',
+    icon: 'server',
+  },
   { id: 'perms', nameKey: 'shell.sys.perms.name', descKey: 'shell.sys.perms.desc', icon: 'shield' },
   {
     id: 'settings',

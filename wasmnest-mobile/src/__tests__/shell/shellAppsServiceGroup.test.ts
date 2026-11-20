@@ -1,10 +1,9 @@
 /**
- * 移动壳「应用管理」系统服务区（manifest kind 分组）行为锁
+ * 移动壳「应用管理」服务迁移锁
  *
- * 需求（spec `.scratch/2026-10-22-monitor-system-service` §3 + 2026-10-23 排序裁决）：
- * 系统服务区由 **manifest kind** 判定（L1 basic-service / L2 internal-business），
- * 不硬编码 id；业务应用在前、服务在后（服务内部按 L1 → L2 → 名称）；
- * 没有服务 / 没有应用时不渲染空分区；点行仍进详情页（详情页负责隐藏卸载入口）。
+ * 2026-11-20：服务型 wasm（basic-service / internal-business）从应用管理全量迁往
+ * 「服务管理」屏，主屏服务宫格同步撤除。本锁守住应用管理只投影业务应用：
+ * 不出现服务、不出现服务分组标题；服务自身行为由 shellServicesScreen.test.ts 覆盖。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -24,7 +23,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/shell/composables/useShellApps', () => ({
   useShellApps: () => ({
     sortedApps: mocks.apps as never,
-    stats: ref({ installed: 0, running: 0, totalBytes: undefined }),
     supportsInstall: () => mocks.installSupported,
     installFromLocalPackage: mocks.installFromLocalPackage,
     refresh: mocks.refresh,
@@ -62,7 +60,7 @@ function mountScreen() {
   return mount(ShellAppsScreen, { global: { stubs: { ShellAppIcon: true } } })
 }
 
-/** 分组标题（testid 由分组 id 拼出；空分区不渲染） */
+/** 残留的分组标题（服务迁出后应为 0 个） */
 function groupTitles(wrapper: ReturnType<typeof mountScreen>): string[] {
   return wrapper.findAll('[data-testid^="mobile-shell-apps-group-"]').map((n) => n.text())
 }
@@ -85,8 +83,8 @@ describe('添加应用', () => {
   })
 })
 
-describe('移动壳应用管理的系统服务区', () => {
-  it('应用区在前；服务区在后、按 L1 → L2 → 名称（不依赖数据源顺序）', () => {
+describe('移动壳应用管理只列业务应用（服务已迁入服务管理）', () => {
+  it('服务不出现在应用管理（判据是 kind，不硬编码 id）', () => {
     mocks.apps.value = [
       app({ id: 'com.wasmnest.bedcode', name: 'Zed App' }),
       app({ id: 'com.wasmnest.monitor', name: 'Monitor', kind: 'internal-business' }),
@@ -94,30 +92,22 @@ describe('移动壳应用管理的系统服务区', () => {
     ]
 
     const wrapper = mountScreen()
-    expect(groupTitles(wrapper)).toEqual([
-      'shell.apps.businessApps',
-      'shell.apps.systemServices',
-    ])
-
     const text = wrapper.text()
-    expect(text.indexOf('Zed App')).toBeLessThan(text.indexOf('Auth Center'))
-    expect(text.indexOf('Auth Center')).toBeLessThan(text.indexOf('Monitor'))
+    expect(text).toContain('Zed App')
+    expect(text).not.toContain('Monitor')
+    expect(text).not.toContain('Auth Center')
+    expect(groupTitles(wrapper)).toEqual([])
   })
 
-  it('没有系统服务时不渲染服务分区（不留空标题）', () => {
-    mocks.apps.value = [app({ id: 'com.wasmnest.app-a', name: 'App A' })]
-
-    const wrapper = mountScreen()
-    expect(groupTitles(wrapper)).toEqual(['shell.apps.businessApps'])
-  })
-
-  it('全部是系统服务时不渲染业务应用分区', () => {
+  it('只有服务时应用管理为空态（不渲染服务行）', () => {
     mocks.apps.value = [
       app({ id: 'com.wasmnest.auth-center', name: 'Auth Center', kind: 'basic-service' }),
     ]
 
     const wrapper = mountScreen()
-    expect(groupTitles(wrapper)).toEqual(['shell.apps.systemServices'])
+    expect(wrapper.text()).not.toContain('Auth Center')
+    expect(groupTitles(wrapper)).toEqual([])
+    expect(wrapper.text()).toContain('shell.apps.empty')
   })
 
   it('空清单 → 只有空态，不渲染任何分区', () => {
@@ -126,18 +116,31 @@ describe('移动壳应用管理的系统服务区', () => {
     expect(wrapper.text()).toContain('shell.apps.empty')
   })
 
-  it('点服务行仍进详情页（卸载入口由详情页按 kind 隐藏）', async () => {
+  it('指标只数业务应用：服务的数量与占用不进「已安装 / 运行中 / 占用」', () => {
     mocks.apps.value = [
-      app({ id: 'com.wasmnest.monitor', name: 'Monitor', kind: 'internal-business' }),
+      app({ id: 'com.wasmnest.bedcode', name: 'BedCode', state: 'running', sizeBytes: 2048 }),
+      app({
+        id: 'com.wasmnest.monitor',
+        name: 'Monitor',
+        kind: 'internal-business',
+        state: 'running',
+        sizeBytes: 4096,
+      }),
     ]
 
     const wrapper = mountScreen()
-    const row = wrapper
-      .findAll('button')
-      .find((b) => b.text().includes('Monitor'))
+    const nums = wrapper.findAll('b.tabular-nums').map((n) => n.text())
+    // 1 个业务应用 / 1 个运行中 / 2.0 KB（只算 BedCode；服务 Monitor 不计入）
+    expect(nums).toEqual(['1', '1', '2.0 KB'])
+  })
 
-    expect(row).toBeTruthy()
-    await row!.trigger('click')
-    expect(mocks.openDetail).toHaveBeenCalledWith('com.wasmnest.monitor')
+  it('任一业务应用未统计占用时显示「—」，不把缺失值当 0 累加', () => {
+    mocks.apps.value = [
+      app({ id: 'com.wasmnest.bedcode', name: 'BedCode', sizeBytes: 2048 }),
+      app({ id: 'com.wasmnest.ai-chatbox', name: 'AI Chatbox' }),
+    ]
+
+    const wrapper = mountScreen()
+    expect(wrapper.findAll('b.tabular-nums').map((n) => n.text())).toEqual(['2', '0', 'shell.common.na'])
   })
 })

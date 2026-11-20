@@ -99,11 +99,11 @@ describe('应用管理页卡头图标', () => {
     mocks.plugins.value = [
       entry({ id: 'com.wasmnest.bedcode', pluginId: 'com.wasmnest.bedcode', name: 'BedCode' }),
       entry({
-        id: 'com.wasmnest.monitor',
-        pluginId: 'com.wasmnest.monitor',
-        name: 'Monitor',
+        id: 'com.wasmnest.file-transfer',
+        pluginId: 'com.wasmnest.file-transfer',
+        name: 'File Transfer',
         iconFile: 'logo.svg',
-        kind: 'internal-business',
+        kind: 'business-app',
       }),
     ]
 
@@ -114,7 +114,7 @@ describe('应用管理页卡头图标', () => {
     expect(headers).toHaveLength(2)
     const srcs = headers.map((img) => img.attributes('src'))
     expect(srcs).toContain('asset://localhost/plugins/com.wasmnest.bedcode/icon.svg')
-    expect(srcs).toContain('asset://localhost/plugins/com.wasmnest.monitor/logo.svg')
+    expect(srcs).toContain('asset://localhost/plugins/com.wasmnest.file-transfer/logo.svg')
     // 图标落在卡头标题里（不是正文里另起一块）
     expect(wrapper.find('.shell-card-title .glyph-box.has-logo').exists()).toBe(true)
   })
@@ -139,10 +139,10 @@ describe('应用管理页不显示应用 id', () => {
     mocks.plugins.value = [
       entry({ id: 'com.wasmnest.bedcode', pluginId: 'com.wasmnest.bedcode', name: 'BedCode' }),
       entry({
-        id: 'com.wasmnest.monitor',
-        pluginId: 'com.wasmnest.monitor',
-        name: 'Monitor',
-        kind: 'internal-business',
+        id: 'com.wasmnest.file-transfer',
+        pluginId: 'com.wasmnest.file-transfer',
+        name: 'File Transfer',
+        kind: 'business-app',
       }),
     ]
 
@@ -151,7 +151,7 @@ describe('应用管理页不显示应用 id', () => {
 
     const text = wrapper.text()
     expect(text).not.toContain('com.wasmnest.bedcode')
-    expect(text).not.toContain('com.wasmnest.monitor')
+    expect(text).not.toContain('com.wasmnest.file-transfer')
     // 去掉的只是装配 id，副行的可读信息不能被一起带走
     expect(text).toContain('BedCode')
     expect(text).toContain('shell.apps.source.builtin')

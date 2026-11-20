@@ -169,7 +169,7 @@ WasmNest 由四个平级仓库组成，默认按同场（sibling）布局摆放�
 | [**File Transfer**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/file-transfer) | `com.wasmnest.file-transfer` | 桌面 + 移动 | 内网对端发现与双向文件传输：队列、暂停 / 恢复、断点续传、共享目录 |
 | [**烂笔头**](https://github.com/7ZAI/wasmnest-apps/tree/dev/apps/lanbitou) | `com.wasmnest.lanbitou` | 桌面 | 轻量级 Markdown 记事本：纯文本编辑 + 实时预览、自动保存、时间分隔符、系统剪贴板集成 |
 
-**系统服务**不进多任务卡，关闭的唯一入口是应用管理页（桌面）/ 应用详情页（移动）的「停用」。
+**系统服务**不进多任务卡，入口已收敛到「服务管理」页（桌面 / 移动），关闭入口为服务管理页（桌面「停止服务」）/ 应用详情页（移动）的「停用」。
 
 | 系统服务 | 插件 id | 端 | 能力 |
 | --- | --- | --- | --- |

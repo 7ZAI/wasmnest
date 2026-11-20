@@ -42,8 +42,19 @@ export const enShell = {
       emptyAppsHint: 'Install or enable an app in "App manager" and its entry shows up here',
       sysTitle: 'System',
       sysApps: 'App manager',
+      sysServices: 'Service manager',
       sysPermissions: 'Permissions',
       sysSettings: 'Settings'
+    },
+    services: {
+      title: 'Service manager',
+      subtitle: 'System services · tap a card to open its run face',
+      systemServices: 'System services',
+      statTotal: 'services',
+      open: 'Open {name}',
+      openHint: 'Tap to open the service',
+      detail: 'Manage {name}',
+      empty: 'No system services'
     },
     apps: {
       title: 'WASM apps',

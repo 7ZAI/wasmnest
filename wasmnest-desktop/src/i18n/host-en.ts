@@ -25,15 +25,8 @@ export default {
       installed: 'installed',
       noApps: 'No apps match "{q}"',
       noneEnabled: 'No enabled apps (re-enable them in App management)',
-      servicesTitle: 'Services',
       sysTitle: 'System',
       sysHint: 'Global management pages (open from Background apps)',
-      /* Host-level system services in the Services section (auth-center / monitor / speech):
-         neither the app grid nor the System section lists services; they sit in
-         their own Services section below Apps. */
-      serviceAuthCenter: 'Auth Center',
-      serviceMonitor: 'Monitor',
-      serviceSpeech: 'Speech',
       matches: 'matches',
     },
     // Recent-tasks panel (toolbar entry): opened / background faces switch and close here
@@ -94,6 +87,10 @@ export default {
       apps: {
         name: 'App Manager',
         desc: 'Install · start/stop · uninstall · configure',
+      },
+      services: {
+        name: 'Service Manager',
+        desc: 'System services · start/stop · autostart · run entry',
       },
       perms: {
         name: 'Permissions & Authorization',
@@ -243,7 +240,7 @@ export default {
       },
       stopService: {
         title: 'Stop service "{name}"?',
-        body: 'Stop service "{name}"? It will stop providing its capability; restart it from App management.',
+        body: 'Stop service "{name}"? It will stop providing its capability; restart it from Service management.',
         confirm: 'Stop service',
       },
       exit: {
@@ -332,6 +329,12 @@ export default {
         dynamic: 'Animated',
         hint: 'Themes cover the platform shell and icon language; palettes declared by an app root take precedence.',
       },
+    },
+    /** Service Manager (resident system capabilities): card actions = details / run toggle */
+    services: {
+      detail: 'Service details',
+      start: 'Run service',
+      empty: 'No system services',
     },
     apps: {
       sortHint:

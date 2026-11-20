@@ -13,7 +13,7 @@ export type ShellScreen = 'home' | 'card'
 export type CardKey = `app:${string}` | `sys:${string}`
 
 /** 系统页（宿主自有面，不可卸载）：与业务应用同形态——图标进网格、打开即成卡片 */
-export type SysPageId = 'apps' | 'perms' | 'settings'
+export type SysPageId = 'apps' | 'services' | 'perms' | 'settings'
 
 /** 应用运行态 → 壳展示态（把 PluginState 归并成壳可展示的五个档） */
 export type AppDisplayState = 'running' | 'degraded' | 'dormant' | 'approval' | 'error'

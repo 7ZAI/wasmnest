@@ -1,11 +1,10 @@
 /**
- * 系统服务区（桌面「应用管理」）行为锁
+ * 应用管理「服务迁移」锁（桌面）
  *
- * 需求（spec `.scratch/2026-10-22-monitor-system-service` §3 + 2026-10-23 裁决）：
- * 系统服务区由 **manifest kind** 判定（L1 basic-service / L2 internal-business），
- * 不硬编码 id；业务应用在前、服务在后（服务内部按 L1 → L2 → 名称）；服务不渲染
- * 卸载入口（即便 source 是用户安装）；自启开关仍然可用；没有服务时不渲染空分区标题；
- * 停止动作按 kind 分词语：服务说「停止服务」（`shell.apps.stopService`）。
+ * 2026-11-20 用户裁决：服务型 wasm（basic-service / internal-business）从应用管理
+ * 全量迁往「服务管理」系统页，主屏「服务」宫格同步撤除。本锁守住迁移后的边界：
+ * 应用管理只投影业务应用——不出现服务、不出现服务分组标题、不再有「停止服务」措辞
+ * 与服务专属的卸载豁免；服务本身的行为由 sysServicesView.test.ts 覆盖。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -77,10 +76,10 @@ function entry(overrides: Partial<ShellAppEntry>): ShellAppEntry {
 }
 
 function mountView() {
-  return mount(SysAppsView)
+  return mount(SysAppsView, { global: { stubs: { ShellAppTile: true, ShellIcon: true } } })
 }
 
-/** 分组标题节点（testid 由分组 id 拼出；不渲染空分区） */
+/** 残留的分组标题（服务迁出后应为 0 个：分组壳的标题恒空） */
 function groupTitles(wrapper: ReturnType<typeof mountView>): string[] {
   return wrapper.findAll('[data-testid^="sys-apps-group-"]').map((n) => n.text())
 }
@@ -94,10 +93,10 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('系统服务区（manifest kind 分组）', () => {
-  it('应用区在前；服务区在后、按 L1 → L2 → 名称（不依赖注册表顺序）', () => {
+describe('应用管理只列业务应用（服务已迁入服务管理）', () => {
+  it('服务不出现在应用管理（判据是 kind，不硬编码 id）', () => {
     mocks.plugins.value = [
-      entry({ id: 'com.wasmnest.bedcode', pluginId: 'com.wasmnest.bedcode', name: 'Zed App' }),
+      entry({ id: 'com.wasmnest.bedcode', pluginId: 'com.wasmnest.bedcode', name: 'BedCode' }),
       entry({
         id: 'com.wasmnest.monitor',
         pluginId: 'com.wasmnest.monitor',
@@ -113,50 +112,14 @@ describe('系统服务区（manifest kind 分组）', () => {
     ]
 
     const wrapper = mountView()
-    expect(groupTitles(wrapper)).toEqual(['shell.apps.businessApps', 'shell.apps.systemServices'])
-
     const text = wrapper.text()
-    expect(text.indexOf('Zed App')).toBeLessThan(text.indexOf('Auth Center'))
-    expect(text.indexOf('Auth Center')).toBeLessThan(text.indexOf('Monitor'))
+    expect(text).toContain('BedCode')
+    expect(text).not.toContain('Monitor')
+    expect(text).not.toContain('Auth Center')
+    expect(groupTitles(wrapper)).toEqual([])
   })
 
-  it('系统服务不渲染卸载入口——即便来源是 user-installed（判据是 kind，不是来源）', () => {
-    mocks.plugins.value = [
-      entry({
-        id: 'com.wasmnest.monitor',
-        pluginId: 'com.wasmnest.monitor',
-        name: 'Monitor',
-        kind: 'internal-business',
-        source: 'user-installed',
-      }),
-      entry({
-        id: 'com.wasmnest.third-party',
-        pluginId: 'com.wasmnest.third-party',
-        name: 'Third Party',
-        source: 'user-installed',
-      }),
-    ]
-
-    const wrapper = mountView()
-    const uninstallButtons = wrapper
-      .findAll('button')
-      .filter((b) => b.text().includes('shell.apps.uninstall'))
-
-    expect(uninstallButtons).toHaveLength(1)
-    // 唯一卸载按钮属于业务应用，不属于服务卡片
-    expect(uninstallButtons[0].element.closest('.shell-card')?.textContent).toContain('Third Party')
-  })
-
-  it('没有系统服务时不渲染服务分区标题（不留空标题）', () => {
-    mocks.plugins.value = [
-      entry({ id: 'com.wasmnest.app-a', pluginId: 'com.wasmnest.app-a', name: 'App A' }),
-    ]
-
-    const wrapper = mountView()
-    expect(groupTitles(wrapper)).toEqual(['shell.apps.businessApps'])
-  })
-
-  it('全部是系统服务时不渲染业务应用分区标题', () => {
+  it('只有服务时应用管理为空清单（不渲染服务卡，也不误报有业务应用）', () => {
     mocks.plugins.value = [
       entry({
         id: 'com.wasmnest.auth-center',
@@ -167,40 +130,12 @@ describe('系统服务区（manifest kind 分组）', () => {
     ]
 
     const wrapper = mountView()
-    expect(groupTitles(wrapper)).toEqual(['shell.apps.systemServices'])
+    expect(wrapper.text()).not.toContain('Auth Center')
+    expect(groupTitles(wrapper)).toEqual([])
   })
 
-  it('服务卡片的自启开关可点：按当前值取反写偏好', async () => {
+  it('停用措辞不再分服务/应用：应用管理只有「停用」，没有「停止服务」', () => {
     mocks.plugins.value = [
-      entry({
-        id: 'com.wasmnest.monitor',
-        pluginId: 'com.wasmnest.monitor',
-        name: 'Monitor',
-        kind: 'internal-business',
-        autostart: true,
-      }),
-    ]
-
-    const wrapper = mountView()
-    const autostartLabel = wrapper.find('label[title="shell.apps.autostartHint"]')
-    expect(autostartLabel.exists(), '服务卡片必须显示自启开关').toBe(true)
-    const toggle = autostartLabel.find('button[role="switch"]')
-    expect(toggle.element.getAttribute('aria-checked')).toBe('true')
-
-    await toggle.trigger('click')
-    expect(mocks.setAutostart).toHaveBeenCalledWith('com.wasmnest.monitor', false)
-    expect(mocks.setEnabled).not.toHaveBeenCalled()
-  })
-
-  it('停止按钮按 kind 分词语：服务 = 停止服务，业务应用 = 停用', () => {
-    mocks.plugins.value = [
-      entry({
-        id: 'com.wasmnest.monitor',
-        pluginId: 'com.wasmnest.monitor',
-        name: 'Monitor',
-        kind: 'internal-business',
-        state: 'running',
-      }),
       entry({
         id: 'com.wasmnest.bedcode',
         pluginId: 'com.wasmnest.bedcode',
@@ -211,36 +146,11 @@ describe('系统服务区（manifest kind 分组）', () => {
 
     const wrapper = mountView()
     const labels = wrapper.findAll('button').map((b) => b.text())
-    // 服务卡：停止服务（文案键）；应用卡：停用（不得误带服务词）
-    expect(labels.some((tx) => tx.includes('shell.apps.stopService'))).toBe(true)
-    expect(
-      labels.some((tx) => tx.includes('shell.apps.stop') && !tx.includes('shell.apps.stopService')),
-    ).toBe(true)
+    expect(labels.some((tx) => tx.includes('shell.apps.stop'))).toBe(true)
+    expect(labels.some((tx) => tx.includes('shell.apps.stopService'))).toBe(false)
   })
 
-  it('服务点「停止服务」→ 打开确认弹窗，不直接停止', async () => {
-    mocks.plugins.value = [
-      entry({
-        id: 'com.wasmnest.monitor',
-        pluginId: 'com.wasmnest.monitor',
-        name: 'Monitor',
-        kind: 'internal-business',
-        state: 'running',
-      }),
-    ]
-
-    const wrapper = mountView()
-    const stopBtn = wrapper.findAll('button').find((b) => b.text().includes('shell.apps.stopService'))
-    expect(stopBtn, '服务卡必须渲染「停止服务」按钮').toBeDefined()
-
-    await stopBtn!.trigger('click')
-    // 服务停止 = 先弹确认（dialog 置 stop-service + 关联应用 id），不直调 stopApp
-    expect(mocks.stopApp).not.toHaveBeenCalled()
-    expect(mocks.dialog!.value).toBe('stop-service')
-    expect(mocks.dialogAppId!.value).toBe('com.wasmnest.monitor')
-  })
-
-  it('业务应用点「停用」→ 直接停止，不弹确认', async () => {
+  it('业务应用停用即时生效（服务停止确认属于服务管理页）', async () => {
     mocks.plugins.value = [
       entry({
         id: 'com.wasmnest.bedcode',
@@ -251,12 +161,26 @@ describe('系统服务区（manifest kind 分组）', () => {
     ]
 
     const wrapper = mountView()
-    const stopBtn = wrapper.findAll('button').find(
-      (b) => b.text().includes('shell.apps.stop') && !b.text().includes('shell.apps.stopService'),
-    )
-    expect(stopBtn, '业务应用卡必须渲染「停用」按钮').toBeDefined()
-
+    const stopBtn = wrapper.findAll('button').find((b) => b.text().includes('shell.apps.stop'))
+    expect(stopBtn).toBeDefined()
     await stopBtn!.trigger('click')
     expect(mocks.stopApp).toHaveBeenCalledWith('com.wasmnest.bedcode')
+    expect(mocks.dialog!.value).toBeNull()
+  })
+
+  it('卸载入口对业务应用常驻（不再按 kind 隐藏）', () => {
+    mocks.plugins.value = [
+      entry({
+        id: 'com.wasmnest.third-party',
+        pluginId: 'com.wasmnest.third-party',
+        name: 'Third Party',
+        source: 'user-installed',
+      }),
+    ]
+
+    const wrapper = mountView()
+    expect(
+      wrapper.findAll('button').filter((b) => b.text().includes('shell.apps.uninstall')),
+    ).toHaveLength(1)
   })
 })

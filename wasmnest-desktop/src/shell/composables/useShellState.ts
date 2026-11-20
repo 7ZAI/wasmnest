@@ -33,6 +33,13 @@ const screen = ref<ShellScreen>('home')
 const cards = ref<CardKey[]>([])
 /** 当前全屏面（screen === 'card' 时非空；由路由同步） */
 const activeCard = ref<CardKey | null>(null)
+/**
+ * 进入服务面前所在的面（服务不产卡，返回要回到来处）。
+ *
+ * 2026-11-20 用户裁决：从「服务管理」页点服务进入后，返回应回服务管理页而不是主屏。
+ * null = 从主屏进入 → 返回仍回主屏；只在「从别的面切入」时记录，路由回环不覆盖。
+ */
+const serviceReturnCard = ref<CardKey | null>(null)
 
 // ==================== 覆层（不产卡；Esc 逐层收） ====================
 
@@ -186,6 +193,8 @@ function syncRunningCards(): void {
 
 /** 进入一个面（MRU 置顶 + 切 card 屏；幂等：重复进入只重排不重复产卡） */
 function enterFace(key: CardKey | null): void {
+  // 已经离开服务面：服务返回目标随之作废（避免下次从主屏进服务时误回旧面）
+  serviceReturnCard.value = null
   if (!key) {
     screen.value = 'home'
     activeCard.value = null
@@ -202,9 +211,14 @@ function enterFace(key: CardKey | null): void {
 
 /**
  * 进入服务型应用面：与 enterFace 唯一差异 = 不动 `cards`（不产卡不重排）。
- * 服务型应用回主屏后靠 home「服务」区 / 路由再次进入，不在多任务里切换。
+ * 服务型应用回主屏后靠「服务管理」页 / 路由再次进入，不在多任务里切换。
+ *
+ * 2026-11-20：记录来处面（如「服务管理」系统页卡），返回时回到那里；
+ * `openApp` 之后的 `router.push` 会经 `syncFromRoute` 再进一次本函数，
+ * 此时 activeCard 已是本服务，不会覆盖来处。
  */
 function enterServiceFace(key: CardKey): void {
+  if (activeCard.value !== key) serviceReturnCard.value = activeCard.value
   activeCard.value = key
   screen.value = 'card'
   panelOpen.value = false
@@ -349,6 +363,7 @@ async function closeCard(key: CardKey, _silent = false): Promise<boolean> {
 function goHome(): void {
   screen.value = 'home'
   activeCard.value = null
+  serviceReturnCard.value = null
   panelOpen.value = false
   quickSettingsOpen.value = false
   recentsOpen.value = false
@@ -382,7 +397,24 @@ function goBack(): void {
     recentsOpen.value = false
     return
   }
-  if (screen.value !== 'home') goHome()
+  if (screen.value !== 'home') {
+    // 服务面不产卡：返回到进入服务前的面（2026-11-20 用户裁决，如「服务管理」系统页），
+    // 而不是一律回主屏；从主屏进入服务时来处为空 → 仍回主屏。
+    if (isServiceFace(activeCard.value) && serviceReturnCard.value) {
+      const target = serviceReturnCard.value
+      serviceReturnCard.value = null
+      if (isServiceFace(target)) {
+        // 服务 → 服务：直接回上一个服务面，不叠出往返栈
+        enterServiceFace(target)
+        serviceReturnCard.value = null
+        void getRouter().push(routeOf(target))
+      } else {
+        activateCard(target)
+      }
+      return
+    }
+    goHome()
+  }
 }
 
 /**

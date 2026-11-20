@@ -17,8 +17,8 @@
     </ShellCard>
 
     <!-- 已安装应用清单（注册表投影：真实运行态 / 来源 / 启用 / 自启；动作走真实命令面）。
-         按 manifest kind 分组：业务应用在前、L1/L2 系统服务在后（2026-10-23 用户裁决）；
-         没有服务时不渲染空标题。 -->
+         2026-11-20 起只列业务应用：服务型 wasm 全部迁往「服务管理」页，这里连服务
+         分组标题都不再出现（唯一判据仍是 manifest kind，不硬编码插件 id）。 -->
     <template v-for="group in appGroups" :key="group.id">
       <div
         v-if="group.title"
@@ -104,11 +104,8 @@
             :disabled="busy(app.id)"
             @click="onStop(app)"
           >
-            <!-- 停止动作按装配角色分词语：系统服务（L1/L2）说「停止服务」（2026-10-23 用户裁决）。
-                 系统服务停止前弹确认（ShellDialogLayer stop-service 分支）：服务是常驻能力，
-                 误停影响面广；业务应用停用保持即时生效。 -->
             <ShellIcon name="stop" :size="13" />
-            {{ isServiceKind(app.kind) ? t('shell.apps.stopService') : t('shell.apps.stop') }}
+            {{ t('shell.apps.stop') }}
           </button>
           <button
             v-else
@@ -121,7 +118,6 @@
           </button>
         </template>
         <button
-          v-if="!isServiceKind(app.kind)"
           class="shell-btn danger ghost"
           :disabled="busy(app.id) || app.state === 'running' || app.state === 'degraded'"
           :title="t('shell.apps.uninstallDisabled')"
@@ -215,23 +211,13 @@ const state = useShellState()
 const appsStore = useShellApps()
 
 /**
- * 业务应用 / 系统服务分组（唯一判据 = manifest kind；不在 UI 里硬编码 id）。
- * 业务应用在前、系统服务在后（2026-10-23 用户裁决）；服务按 L1 → L2 → 名称，
- * 应用保持原注册表顺序（运行态排序由主屏负责）。
+ * 业务应用清单（唯一判据 = manifest kind，不硬编码 id）：服务型 wasm 已全部迁往
+ * 「服务管理」页，这里按注册表原序只投影非服务应用（运行态排序由主屏负责）。
+ * 保留分组壳是为了与本页既有卡片结构同形，标题恒空 = 不再渲染分组标题。
  */
-const appGroups = computed(() => {
-  const apps = appsStore.plugins.value.filter((app) => !isServiceKind(app.kind))
-  const services = appsStore.plugins.value
-    .filter((app) => isServiceKind(app.kind))
-    .sort((a, b) => {
-      const rank = (kind?: string) => (kind === 'basic-service' ? 0 : 1)
-      return rank(a.kind) - rank(b.kind) || a.name.localeCompare(b.name, 'zh-Hans-CN')
-    })
-  return [
-    { id: 'apps', title: apps.length > 0 ? t('shell.apps.businessApps') : '', apps },
-    { id: 'services', title: services.length > 0 ? t('shell.apps.systemServices') : '', apps: services },
-  ].filter((group) => group.apps.length > 0)
-})
+const appGroups = computed(() => [
+  { id: 'apps', title: '', apps: appsStore.plugins.value.filter((app) => !isServiceKind(app.kind)) },
+])
 
 function busy(id: string): boolean {
   return appsStore.busyId.value === id
@@ -268,16 +254,8 @@ function onAutostart(app: ShellAppEntry, autostart: boolean) {
 function onApprove(app: ShellAppEntry) {
   void state.approveAndStart(app.id)
 }
-/**
- * 停止入口分派：系统服务（L1/L2）先弹确认（ShellDialogLayer stop-service 分支，
- * 服务是常驻能力，误停影响面广）；业务应用停用保持即时生效。
- */
+/** 业务应用停用即时生效（服务停止确认随服务管理页迁出） */
 function onStop(app: ShellAppEntry) {
-  if (isServiceKind(app.kind)) {
-    state.dialog.value = 'stop-service'
-    state.dialogAppId.value = app.id
-    return
-  }
   void state.stopApp(app.id)
 }
 function onUninstall(app: ShellAppEntry) {
@@ -291,9 +269,9 @@ const updates = useAppUpdates()
 /** script setup 顶层 ref：模板里自动解包（`updateStates[app.id]` 直取状态） */
 const updateStates = updates.states
 
-/** 更新面只对声明了更新源、且不是静态注册（无目录可换）的应用开放；系统服务不参与 */
+/** 更新面只对声明了更新源、且不是静态注册（无目录可换）的业务应用开放 */
 function isUpdatable(app: ShellAppEntry): boolean {
-  return Boolean(app.update) && app.source !== 'builtin' && !isServiceKind(app.kind)
+  return Boolean(app.update) && app.source !== 'builtin'
 }
 
 function updateBusy(appId: string): boolean {

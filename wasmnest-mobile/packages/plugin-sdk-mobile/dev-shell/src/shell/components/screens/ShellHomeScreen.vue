@@ -317,7 +317,7 @@ const {
   toggle: toggleAutoplay,
 } = useSlotCarousel(slotTrack, computed(() => slotCards.value.length))
 
-/** 系统宫格：平台自有面（应用管理 / 权限管理 / 设置），全部 push 进栈以便返回。
+/** 系统宫格：平台自有面（应用管理 / 服务管理 / 权限管理 / 设置），全部 push 进栈以便返回。
  *  每个入口一个档案色（tile*），色相用于入口辨识而非危险等级；
  *  图标为重新绘制版本（圆角宫格 / 盾+勾 / 齿轮+孔）。 */
 const sysEntries = computed(() => [
@@ -329,6 +329,15 @@ const sysEntries = computed(() => [
     tileColor: 'var(--shell-tile-apps-color)',
     tileBorder: 'var(--shell-tile-apps-border)',
     run: () => nav.navigate('apps'),
+  },
+  {
+    id: 'services',
+    label: t('shell.home.sysServices'),
+    icon: 'M3 4h18v6H3z M3 14h18v6H3z M6.5 7h.01 M6.5 17h.01 M11 7h6 M11 17h6',
+    tileBg: 'var(--shell-tile-settings-bg)',
+    tileColor: 'var(--shell-tile-settings-color)',
+    tileBorder: 'var(--shell-tile-settings-border)',
+    run: () => nav.navigate('services'),
   },
   {
     id: 'permissions',

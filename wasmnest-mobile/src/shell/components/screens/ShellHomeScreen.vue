@@ -2,9 +2,8 @@
   <!--
     平台主屏
     --------------------------------------------------------------------------
-    对齐桌面方案 C 的主屏语义（应用宫格 + 服务宫格 + 系统宫格），落到 Android
-    启动器的形态上：壁纸由壳根提供（宿主所有屏共用）、图标宫格、服务与系统入口
-    同层排布。
+    对齐桌面方案 C 的主屏语义（应用宫格 + 系统宫格），落到 Android 启动器的
+    形态上：壁纸由壳根提供（宿主所有屏共用）、图标宫格、系统入口同层排布。
     内容层单独滚动。
   -->
   <div class="relative flex flex-col h-full min-h-0">
@@ -119,47 +118,10 @@
         </p>
       </div>
 
-      <!-- ======== 服务宫格（宿主系统级服务，与应用 / 系统同层） ======== -->
-      <template v-if="serviceEntries.length > 0">
-        <ShellSection :title="t('shell.home.servicesTitle')" class="shell-text-over-wall" :class="{ 'shell-reveal': reveal }" :style="{ animationDelay: '240ms' }" />
-        <div class="px-4">
-          <div class="grid grid-cols-4 gap-4" :class="{ 'shell-reveal': reveal }" role="list" :style="{ animationDelay: '280ms' }">
-            <button
-              v-for="entry in serviceEntries"
-              :key="entry.id"
-              type="button"
-              class="flex flex-col items-center gap-1.5 py-2 rounded-[12px] transition-colors duration-200 active:bg-[var(--mobile-accent-muted)]"
-              :aria-label="entry.label"
-              role="listitem"
-              @click="entry.run()"
-            >
-              <span class="shell-sys-tile" :data-tile="entry.id" aria-hidden="true">
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.55"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path v-for="d in entry.icon" :key="d" :d="d" />
-                </svg>
-              </span>
-              <span class="w-full text-center shell-type-caption shell-type-clamp-2 font-medium text-[var(--mobile-text-primary)]">
-                {{ entry.label }}
-              </span>
-            </button>
-          </div>
-        </div>
-      </template>
-
-      <!-- ======== 系统宫格（平台自有面，与应用同层） ======== -->
-      <ShellSection :title="t('shell.home.sysTitle')" class="shell-text-over-wall" :class="{ 'shell-reveal': reveal }" :style="{ animationDelay: '320ms' }" />
+      <!-- ======== 系统宫格（平台自有面，与应用同层；服务入口已收敛到服务管理） ======== -->
+      <ShellSection :title="t('shell.home.sysTitle')" class="shell-text-over-wall" :class="{ 'shell-reveal': reveal }" :style="{ animationDelay: '240ms' }" />
       <div class="px-4">
-        <div class="grid grid-cols-4 gap-4" :class="{ 'shell-reveal': reveal }" role="list" :style="{ animationDelay: '360ms' }">
+        <div class="grid grid-cols-4 gap-4" :class="{ 'shell-reveal': reveal }" role="list" :style="{ animationDelay: '280ms' }">
           <button
             v-for="entry in sysEntries"
             :key="entry.id"
@@ -175,7 +137,7 @@
               aria-hidden="true"
             >
               <!-- 与桌面 ShellIcon 同源：24 画框 stroke 线稿（fill=none / 1.55），
-                   grid / shield / gear / lock / pulse；未知服务回退 layers -->
+                   grid / shield / gear / server -->
               <svg
                 width="24"
                 height="24"
@@ -214,8 +176,8 @@ let homeRevealed = false
  * 平台主屏
  *
  * 主屏是「应用注册表 + 壳偏好的聚合视图」，自身不含业务：快捷卡片由应用注册组件，
- * 头部多任务入口是平台导航，服务宫格是注册表投影，系统宫格是平台自有面。
- * 新增应用 / 服务不需要改本文件。
+ * 头部多任务入口是平台导航，系统宫格是平台自有面。服务入口 2026-11-20 起收敛到
+ * 「服务管理」系统页，主屏不再铺服务宫格。新增应用不需要改本文件。
  *
  * 壁纸与遮罩由壳根（ShellHost）从壳偏好取用并在所有宿主屏铺开，
  * 本屏只负责内容层（不再自持壁纸，否则只有主屏生效）。
@@ -255,7 +217,7 @@ const { open } = useShellOpen()
 const overlays = useShellOverlays()
 const { notificationCount } = useShellNotifications()
 
-/** 宿主系统级服务：只进服务宫格，不进应用宫格（2026-10-23 用户裁决） */
+/** 宿主系统级服务：只进服务管理，不进应用宫格（2026-10-23 / 11-20 用户裁决） */
 const businessApps = computed(() => sortedApps.value.filter((app) => !isServiceKind(app.kind)))
 
 /** 未读计数：通知 + 待审批（与状态条角标同口径） */
@@ -291,9 +253,9 @@ const {
 } = useSlotCarousel(slotTrack, computed(() => slotCards.value.length))
 
 /**
- * 服务 / 系统宫格图标与桌面壳同源：路径逐字取自桌面 ShellIcon（grid / shield /
- * gear / lock / pulse；未知服务回退 layers），以 24 画框 stroke 线稿渲染；瓦片本身
- * 是中性 card 表面 + 1px border（桌面 .tone-system 同口径），不再按入口上色。
+ * 系统宫格图标与桌面壳同源：路径逐字取自桌面 ShellIcon（grid / shield / gear /
+ * server），以 24 画框 stroke 线稿渲染；瓦片本身是中性 card 表面 + 1px border
+ * （桌面 .tone-system 同口径），不再按入口上色。
  */
 const SYSTEM_ICON_PATHS = {
   grid: ['M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M3 14h7v7H3z', 'M14 14h7v7h-7z'],
@@ -305,54 +267,29 @@ const SYSTEM_ICON_PATHS = {
     'M10.55 5.46L10.01 3.02A9.2 9.2 0 0 1 13.99 3.02L13.45 5.46A6.7 6.7 0 0 1 16.94 7.47L18.78 5.78A9.2 9.2 0 0 1 20.77 9.23L18.39 9.99A6.7 6.7 0 0 1 18.39 14.01L20.77 14.77A9.2 9.2 0 0 1 18.78 18.22L16.94 16.53A6.7 6.7 0 0 1 13.45 18.54L13.99 20.98A9.2 9.2 0 0 1 10.01 20.98L10.55 18.54A6.7 6.7 0 0 1 7.06 16.53L5.22 18.22A9.2 9.2 0 0 1 3.23 14.77L5.61 14.01A6.7 6.7 0 0 1 5.61 9.99L3.23 9.23A9.2 9.2 0 0 1 5.22 5.78L7.06 7.47A6.7 6.7 0 0 1 10.55 5.46Z',
     'M15.4 12a3.4 3.4 0 1 1-6.8 0 3.4 3.4 0 0 1 6.8 0Z',
   ],
-  lock: ['M3 11h18v11H3z', 'M7 11V7a5 5 0 0 1 10 0v4'],
-  pulse: ['M3.75 12h4.5l2.25-6 3 12 2.25-6h4.5'],
-  layers: ['m12 2 9 5-9 5-9-5Z', 'm3 12 9 5 9-5', 'm3 17 9 5 9-5'],
+  server: [
+    'M3 4h18v6H3z',
+    'M3 14h18v6H3z',
+    'M6.5 7h.01',
+    'M6.5 17h.01',
+    'M11 7h6',
+    'M11 17h6',
+  ],
 } as const
 
-/** 宿主系统级服务在服务宫格的图形（与桌面同源：认证中心=lock / 运行监控=pulse） */
-const SERVICE_GLYPHS: Record<
-  string,
-  { id: string; labelKey: string | null; icon: readonly string[] }
-> = {
-  'com.wasmnest.auth-center': {
-    id: 'auth-center',
-    labelKey: 'shell.home.serviceAuthCenter',
-    icon: SYSTEM_ICON_PATHS.lock,
-  },
-  'com.wasmnest.monitor': {
-    id: 'monitor',
-    labelKey: 'shell.home.serviceMonitor',
-    icon: SYSTEM_ICON_PATHS.pulse,
-  },
-}
-
-/**
- * 服务宫格：装配角色为系统服务（basic-service / internal-business）的全部应用。
- * 只在装配存在时出现（注册表投影），不硬编码常驻；未来 wasm 服务类型自动落位。
- * 服务图标按插件 id 取用，未知服务回退 layers + 插件名。
- */
-const serviceEntries = computed(() =>
-  apps.value
-    .filter((app) => isServiceKind(app.kind))
-    .map((app) => {
-      const meta = SERVICE_GLYPHS[app.id]
-      return {
-        id: meta?.id ?? app.id,
-        label: meta?.labelKey ? t(meta.labelKey) : app.name,
-        icon: meta?.icon ?? SYSTEM_ICON_PATHS.layers,
-        run: () => open(app.id),
-      }
-    }),
-)
-
-/** 系统宫格：宿主系统页（应用管理 / 权限管理 / 设置），全部 push 进栈以便返回。 */
+/** 系统宫格：宿主系统页（应用管理 / 服务管理 / 权限管理 / 设置），全部 push 进栈以便返回。 */
 const sysEntries = computed(() => [
   {
     id: 'apps',
     label: t('shell.home.sysApps'),
     icon: SYSTEM_ICON_PATHS.grid,
     run: () => nav.navigate('apps'),
+  },
+  {
+    id: 'services',
+    label: t('shell.home.sysServices'),
+    icon: SYSTEM_ICON_PATHS.server,
+    run: () => nav.navigate('services'),
   },
   {
     id: 'permissions',
