@@ -77,6 +77,13 @@ const RUST_PERMISSION_RULES = [
   // 权限位与域名同源 `connection:read`——不再由 `session:read` 代答「谁能读连接清单」。
   { re: /\bconnections_list\b/, perm: 'connection:read' },
   { re: /\bhttp_fetch\b/, perm: 'network:http' },
+  // 浏览器渲染（WIT `host-browser` 的 fetch-rendered；SDK 方法名
+  // `browser_fetch_rendered`，能力域审计名 `host_browser_fetch_rendered`）：
+  // 与 `network:http` 分域、不互相隐含。无前端面方法，故不进 FRONTEND_PERMISSION_RULES。
+  {
+    re: /\b(host_browser_fetch_rendered|browser_fetch_rendered)\b/,
+    perm: 'network:browser',
+  },
   // ABI v29 服务端域（动态路由注册）：register/unregister 同挂 network:http
   // （与前端面 `http.registerEndpoint` 同权限位）
   { re: /\bhttp_register_endpoint\b/, perm: 'network:http' },

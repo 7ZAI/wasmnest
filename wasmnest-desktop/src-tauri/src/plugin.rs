@@ -32,6 +32,8 @@ pub mod assets;
 pub mod audio;
 pub mod auth;
 pub mod bindings;
+/// 浏览器渲染（host-browser 能力域端口 adapter + 装配自报）
+pub mod browser;
 
 /// 剪贴板（共享域契约 `host-clipboard` 的桌面实现）
 pub mod clipboard;

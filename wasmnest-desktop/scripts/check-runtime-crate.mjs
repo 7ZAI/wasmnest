@@ -55,8 +55,8 @@ const RELEASE_MANIFEST = resolve(DESKTOP_ROOT, '..', 'release-manifest.json')
 export const EXPECTED_LIB_TAG = 'lib-v0.0.1'
 
 /**
- * 宿主直接消费的能力仓 crate 清单（13 条；`wasmnest-server-peer-net-base` 已并入
- * `wasmnest-server-peer-net`，音频 / 语音识别为新增能力域）。
+ * 宿主直接消费的能力仓 crate 清单（14 条；`wasmnest-server-peer-net-base` 已并入
+ * `wasmnest-server-peer-net`，音频 / 语音识别 / 浏览器渲染为新增能力域）。
  * 增删拆分 crate 时同步本清单——清单外/缺失都会转红。
  */
 export const EXPECTED_LIB_CRATES = [
@@ -68,6 +68,7 @@ export const EXPECTED_LIB_CRATES = [
   'wasmnest-discovery-engine',
   'wasmnest-crypto-engine',
   'wasmnest-server-core',
+  'wasmnest-server-browser',
   'wasmnest-server-http',
   'wasmnest-server-websocket',
   'wasmnest-server-peer-net',
@@ -88,6 +89,7 @@ export const LIB_CRATE_VERSION_OVERRIDES = {
   'wasmnest-pty-engine': '0.0.2',
   'wasmnest-audio-engine': '0.0.1',
   'wasmnest-stt-engine': '0.0.1',
+  'wasmnest-server-browser': '0.0.1',
 }
 
 /**

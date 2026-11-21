@@ -259,6 +259,11 @@ pub fn register_core_lifecycle_hooks() {
         }
     });
 
+    // 浏览器 sidecar 回收 — 优先级 12：早于插件停用，避免停用流程等待一个已失效的进程
+    registry.on_shutdown("browser-runtime-reclaim", 12, || async {
+        crate::plugin::browser::shutdown_browser_runtime().await;
+    });
+
     // PluginHost 通知插件关闭 — 优先级 15，在 deactivate 之前
     registry.on_shutdown("plugin-host-shutdown", 15, || async {
         let ctx = crate::system::app_context::AppContext::global();

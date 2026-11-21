@@ -158,7 +158,9 @@ mod tests {
             vec![
                 "api-call",
                 "app",
+                "audio",
                 "auth-center",
+                "browser",
                 "clipboard",
                 "connection-registry",
                 "crypto",
@@ -171,13 +173,14 @@ mod tests {
                 "platform-desktop",
                 "process",
                 "pty",
+                "stt",
                 "task",
                 "timer",
                 "tunnel",
                 "ws",
                 "ws-server",
             ],
-            "caps 键漂移：能力域八片（pty/mdns/peer/http/ws/notify/clipboard/tunnel）+ 端扩展十二片 \
+            "caps 键漂移：能力域十一（pty/mdns/peer/http/ws/notify/clipboard/tunnel/audio/stt/browser）+ 端扩展十二片 \
              （http-endpoint/ws-server/api-call/app/auth-center/connection-registry/crypto/ \
              fs-desktop/platform-desktop/process/task/timer）是当前唯一答案（ADR 0061 §3.2）"
         );

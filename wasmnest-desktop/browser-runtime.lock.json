@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "obscura": {
+    "version": "0.2.7",
+    "license": "Apache-2.0",
+    "variant": "default-render",
+    "releaseApi": "https://api.github.com/repos/h4ckf0r0day/obscura/releases/tags/v0.2.7"
+  },
+  "artifacts": {
+    "linux-x86_64": {
+      "asset": "obscura-x86_64-linux.tar.gz",
+      "bytes": 72018118,
+      "sha256": "11b53d27cd743e00e196e216920e7f3f794cf378e3f1792b8d25d3beabaf9cad",
+      "archive": "tar.gz",
+      "entry": "obscura"
+    },
+    "linux-aarch64": {
+      "asset": "obscura-aarch64-linux.tar.gz",
+      "bytes": 69952302,
+      "sha256": "4ee0aeeb38fa8bb2cb004ba104abe1c79f1bdfd02f51672c694e8234a5ae0e5c",
+      "archive": "tar.gz",
+      "entry": "obscura"
+    },
+    "macos-x86_64": {
+      "asset": "obscura-x86_64-macos.tar.gz",
+      "bytes": 69818596,
+      "sha256": "c47383e5b5551e09d2055ee7bdcce788af409fb4394e39bdaf179734df18e829",
+      "archive": "tar.gz",
+      "entry": "obscura"
+    },
+    "macos-aarch64": {
+      "asset": "obscura-aarch64-macos.tar.gz",
+      "bytes": 67612634,
+      "sha256": "fc7e73f23058f18d6d5be983d83b24ba374d12167677657a307a9476c0f5a7c1",
+      "archive": "tar.gz",
+      "entry": "obscura"
+    },
+    "windows-x86_64": {
+      "asset": "obscura-x86_64-windows.zip",
+      "bytes": 72427564,
+      "sha256": "be983b663552e11faf8c1e07696578bad622dbeb48afb9f59036032ca8e97fb3",
+      "archive": "zip",
+      "entry": "obscura.exe"
+    }
+  }
+}

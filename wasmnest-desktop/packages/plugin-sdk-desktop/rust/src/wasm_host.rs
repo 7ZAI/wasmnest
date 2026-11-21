@@ -15,7 +15,8 @@
 //! trait 签名（`host/*` 定义）保持不变，插件业务代码零改动。
 
 use crate::host::{
-    ConfigKey, CryptoKeypair, FsDirEntry, FsStat, HostApp, HostAuth, HostBus, HostClipboard,
+    BrowserRenderRequest, BrowserRenderResponse, BrowserWaitUntil, ConfigKey,
+    CryptoKeypair, FsDirEntry, FsStat, HostApp, HostAuth, HostBrowser, HostBus, HostClipboard,
     HostConfig, HostConnection, HostCrypto, HostError, HostEvents, HostFs, HostHttp, HostLog,
     HostMdns, HostMetrics, HostNotify, HostPeer, HostPlatform, HostPluginDatabase, HostProcess,
     HostPty, HostStorage, HostTask, HostTunnel, HostWebsocket, NotifyOptions, PeerNodeConfig,
@@ -23,6 +24,7 @@ use crate::host::{
 };
 use crate::wasm::wasmnest::app::host_app;
 use crate::wasm::wasmnest::auth_center::host_auth_center;
+use crate::wasm::wasmnest::browser::host_browser;
 use crate::wasm::wasmnest::clipboard::host_clipboard;
 use crate::wasm::wasmnest::connection_registry::host_connection_registry;
 use crate::wasm::wasmnest::crypto::host_crypto;
@@ -367,6 +369,47 @@ impl HostClipboard for WasmHost {
 
     fn clipboard_write_text(&self, text: &str) -> Result<(), HostError> {
         host_clipboard::write_text(text).map_err(|e| host_err("clipboard_write_text", e))
+    }
+}
+
+// ==================== HostBrowser ====================
+
+impl HostBrowser for WasmHost {
+    /// WIT 请求的 `allow-private-network` **恒为 false**，且在这里字面写死：
+    /// 私网放行只由宿主按用户对该 origin 的既有授权记录裁决，插件不能申请。
+    fn browser_fetch_rendered(
+        &self,
+        request: &BrowserRenderRequest,
+    ) -> Result<BrowserRenderResponse, HostError> {
+        let wit_request = host_browser::Request {
+            url: request.url.clone(),
+            wait_until: match request.wait_until {
+                BrowserWaitUntil::Load => host_browser::WaitUntil::Load,
+                BrowserWaitUntil::DomContentLoaded => host_browser::WaitUntil::DomContentLoaded,
+                BrowserWaitUntil::NetworkIdle => host_browser::WaitUntil::NetworkIdle,
+            },
+            timeout_ms: request.timeout_ms,
+            allow_private_network: false,
+            // 列表提取不在插件可声明面内；正文容器按请求透传
+            extract_list: None,
+            extract_page: request
+                .extract_page
+                .as_ref()
+                .map(|page| host_browser::PageSpec {
+                    content: page.content.clone(),
+                }),
+        };
+        // 错误串原样回传，保留宿主侧的 `browser.*` 前缀，本层不重新分类
+        let response = host_browser::fetch_rendered(&wit_request)
+            .map_err(|e| host_err("browser_fetch_rendered", e))?;
+        Ok(BrowserRenderResponse {
+            status: response.status,
+            final_url: response.final_url,
+            title: response.title,
+            text: response.text,
+            content_text: response.content_text,
+            truncated: response.truncated,
+        })
     }
 }
 

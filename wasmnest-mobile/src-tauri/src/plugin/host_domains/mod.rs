@@ -27,9 +27,11 @@
 //! - 每域一个文件：域逻辑（共享核 adapter）+ 该 interface 的 `Host` impl 同处；
 //! - 域逻辑的机制语义在共享 crate（`wasmnest-server-http` /
 //!   `wasmnest-ws-client-engine`），本层只做「`WasmPluginState` → 端口」接线；
-//! - 装配经 [`MobileHostCoreModule`] 自报：2 个 interface 一次注册，
-//!   `expect_host_module!` 与自报同处（漏一处即装载期 `missing` / `unlisted` 点名）。
+//! - 装配经 [`MobileHostCoreModule`] 自报：3 个 interface 一次注册
+//!   （http / websocket / browser-stub），`expect_host_module!` 与自报同处
+//!   （漏一处即装载期 `missing` / `unlisted` 点名）。
 
+pub(crate) mod browser;
 pub(crate) mod http;
 // mdns 对外可见（其余域 pub(crate)）：宿主开机期要装一次**进程级**发现端口
 // （`mdns::register_process_ports`，类型中枢的泵任务经它派生），无头探针
@@ -84,10 +86,15 @@ pub const MODULE_NAME: &str = "mobile-host-core";
 ///
 /// host-peer / host-mdns 由能力 lib 的 `common-host` 绑定层自报，**不在此列**
 /// （fallback 跳过是整模块粒度：这里若仍声明同名接口，http / websocket 会被一起跳过）
-pub const MODULE_INTERFACES: &[&str] = &["wasmnest:http@0.0.2/host-http", "wasmnest:ws@0.0.1/host-websocket"];
+pub const MODULE_INTERFACES: &[&str] = &[
+    "wasmnest:http@0.0.2/host-http",
+    "wasmnest:ws@0.0.1/host-websocket",
+    // 契约同形、能力不在本端：stub 恒返回 browser.unsupported（见 browser.rs）
+    "wasmnest:browser@0.0.1/host-browser",
+];
 
 /// 本模块读写的权限位（各域权限门的并集；装载期一致性核对用）
-pub const MODULE_PERMISSIONS: &[&str] = &["network:http", "ws:client"];
+pub const MODULE_PERMISSIONS: &[&str] = &["network:http", "ws:client", "network:browser"];
 
 /// 能力模块描述符（机制面：接口路径 / 权限位 / ABI 下界；禁带产品名词）
 const DESC: HostModuleDesc = HostModuleDesc {
@@ -119,6 +126,7 @@ impl HostModule for MobileHostCoreModule {
         for iface in [
             wasmnest::http::host_http::add_to_linker::<WasmPluginState, D>,
             wasmnest::ws::host_websocket::add_to_linker::<WasmPluginState, D>,
+            wasmnest::browser::host_browser::add_to_linker::<WasmPluginState, D>,
         ] {
             iface(linker, |s| s)?;
         }

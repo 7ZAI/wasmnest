@@ -25,4 +25,5 @@ world plugin {
     include wasmnest:tunnel/cap-tunnel@0.0.1;
     include wasmnest:audio/cap-audio@0.0.1;
     include wasmnest:stt/cap-stt@0.0.1;
+    include wasmnest:browser/cap-browser@0.0.1;
 }

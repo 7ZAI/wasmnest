@@ -58,6 +58,9 @@ export const HOST_RUNTIME_REQUIRED_FIELDS = Object.freeze([
   'mountContract',
 ])
 
+/** 已登记的宿主能力特性标记；未知值不拦截（未来能力可就地扩展），只打印提示 */
+export const KNOWN_HOST_RUNTIME_FEATURES = Object.freeze(new Set(['browser']))
+
 /** 严格 semver 数字段（不允许前导零） */
 const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const HEX40_RE = /^[0-9a-f]{40}$/i
@@ -189,6 +192,32 @@ export function validateHostRuntime(manifest, { sdkVersion, mountContract } = {}
     fail(
       `hostRuntime.mountContract=${hostRuntime.mountContract} 与宿主 MOUNT_CONTRACT=${mountContract} 不一致`,
     )
+  }
+
+  // 能力特性标记（可选）：未发布 browser 的宿主可以缺省该字段；存在时只接受
+  // 去重后的非空字符串数组。未知能力不拦截（未来能力可就地扩展），但打印提示。
+  if ('features' in hostRuntime) {
+    const features = hostRuntime.features
+    if (!Array.isArray(features)) {
+      fail('hostRuntime.features 必须是字符串数组')
+    } else {
+      const invalid = features.filter(
+        (feature) => typeof feature !== 'string' || feature.trim() === '',
+      )
+      if (invalid.length > 0) {
+        fail(`hostRuntime.features 含空值或非字符串: ${JSON.stringify(invalid)}`)
+      }
+      const duplicates = features.filter((feature, index) => features.indexOf(feature) !== index)
+      if (duplicates.length > 0) {
+        fail(`hostRuntime.features 含重复项: ${JSON.stringify([...new Set(duplicates)])}`)
+      }
+      const unknown = features.filter(
+        (feature) => typeof feature === 'string' && !KNOWN_HOST_RUNTIME_FEATURES.has(feature),
+      )
+      if (unknown.length > 0) {
+        notices.push(`hostRuntime.features 含未登记能力: ${unknown.join(', ')}（不拦截，仅提示）`)
+      }
+    }
   }
 
   // tar.gz 资产线已退役（2026-10-28 用户裁决：平台仓不再构建 / 发布任何 tar.gz）。

@@ -12,7 +12,7 @@
   "contract": {
     "package": "wasmnest:plugin",
     "version": "0.1.0",
-    "witSha256": "f9030d997f25518134f09dbaf3c0c26c9f36f8806a37035e5b1d09610e1d4a94",
+    "witSha256": "031b88875748ca8b4c3af9b4b75dad7cce1e422848bd2ec13d3affd1e0f0399b",
     "packages": {
       "wasmnest:plugin": "0.1.0",
       "wasmnest:pty": "0.0.1",
@@ -41,7 +41,8 @@
       "wasmnest:fs-mobile": "0.0.1",
       "wasmnest:terminal-stream": "0.0.1",
       "wasmnest:connection-target": "0.0.1",
-      "wasmnest:auth-client": "0.0.1"
+      "wasmnest:auth-client": "0.0.1",
+      "wasmnest:browser": "0.0.1"
     }
   },
   "hostRuntime": {

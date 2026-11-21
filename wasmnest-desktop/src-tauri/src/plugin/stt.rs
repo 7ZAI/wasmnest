@@ -124,7 +124,7 @@ fn gnome_proxy_from(get: impl Fn(&str) -> Option<String>) -> Option<String> {
 }
 
 /// 模型下载代理：显式环境变量 > 标准代理环境变量 > Linux 桌面系统代理。
-fn resolve_download_proxy() -> Option<String> {
+pub(crate) fn resolve_download_proxy() -> Option<String> {
     if let Some(proxy) = proxy_from_env(|key| std::env::var(key).ok()) {
         return Some(proxy);
     }

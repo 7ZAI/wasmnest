@@ -14,4 +14,5 @@ world plugin {
     include wasmnest:connection-target/cap-connection-target@0.0.1;
     include wasmnest:auth-client/cap-auth-client@0.0.1;
     include wasmnest:tunnel/cap-tunnel@0.0.1;
+    include wasmnest:browser/cap-browser@0.0.1;
 }

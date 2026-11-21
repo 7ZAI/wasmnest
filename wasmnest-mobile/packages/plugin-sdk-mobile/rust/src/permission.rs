@@ -23,6 +23,10 @@ pub const PERMISSION_UI_ROUTE: &str = "ui:route";
 pub const PERMISSION_UI_DIALOG: &str = "ui:dialog";
 pub const PERMISSION_UI_BACK: &str = "ui:back";
 pub const PERMISSION_NETWORK_HTTP: &str = "network:http";
+/// 浏览器渲染（WIT `host-browser` 的 `fetch-rendered`）：与桌面同名同形，
+/// 仅为「共享业务核两端共用同一份 wasm 产物」满足 world import 与权限声明；
+/// 移动宿主实现恒返回 `browser.unsupported`，不启动进程、不下载组件。
+pub const PERMISSION_NETWORK_BROWSER: &str = "network:browser";
 pub const PERMISSION_STORAGE: &str = "storage";
 pub const PERMISSION_FS_READ: &str = "fs:read";
 pub const PERMISSION_FS_WRITE: &str = "fs:write";
@@ -91,6 +95,7 @@ pub static VALID_PERMISSIONS: &[&str] = &[
     PERMISSION_UI_DIALOG,
     PERMISSION_UI_BACK,
     PERMISSION_NETWORK_HTTP,
+    PERMISSION_NETWORK_BROWSER,
     PERMISSION_STORAGE,
     PERMISSION_FS_READ,
     PERMISSION_FS_WRITE,
@@ -134,6 +139,8 @@ static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
     (PERMISSION_UI_DIALOG, &["ui.showDialog"]),
     (PERMISSION_UI_BACK, &["ui.onBackPressed"]),
     (PERMISSION_NETWORK_HTTP, &["http.registerEndpoint"]),
+    // 浏览器渲染：移动端只登记审计名（实现恒 unsupported），桌面端同名同形
+    (PERMISSION_NETWORK_BROWSER, &["host_browser_fetch_rendered"]),
     (
         PERMISSION_STORAGE,
         &["storage.get", "storage.set", "storage.delete"],
@@ -385,6 +392,7 @@ mod tests {
             PERMISSION_UI_SETTINGS,
             PERMISSION_UI_ROUTE,
             PERMISSION_NETWORK_HTTP,
+            PERMISSION_NETWORK_BROWSER,
             PERMISSION_STORAGE,
             PERMISSION_FS_READ,
             PERMISSION_FS_WRITE,

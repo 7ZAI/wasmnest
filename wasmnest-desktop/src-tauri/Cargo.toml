@@ -95,6 +95,14 @@ serde_json = "1"
 
 # 应用更新链路（plugin_updates.rs）：Release tag 版本比较 / 下载包摘要复核
 sha2 = "0.10"
+# 浏览器组件解包（browser_runtime.rs）：tar.gz / zip
+flate2 = "1"
+tar = "0.4"
+zip = "4"
+# URL origin 归一化（浏览器审计字段，去 path / query）
+url = "2"
+# 浏览器组件下载的临时目录
+tempfile = "3"
 
 # UUID
 uuid = { version = "1", features = ["v4", "serde"] }
@@ -201,6 +209,10 @@ wasmnest-crypto-engine = { path = "../../../wasmnest-lib/wasmnest-crypto-engine"
 # wasmnest-server-core = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0" }
 wasmnest-server-core = { path = "../../../wasmnest-lib/wasmnest-server-core" }
 
+# 浏览器渲染能力域（host-browser：协议闸门 / 固定提取脚本 / 上限与稳定错误码）
+# wasmnest-server-browser = { version = "0.0.1", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
+wasmnest-server-browser = { path = "../../../wasmnest-lib/wasmnest-server-browser", features = ["common-host"] }
+
 # HTTP 传输面（registry/gateway/controllers/middleware/dtos + HttpTransportFace）
 # wasmnest-server-http = { version = "0.1.0", git = "https://github.com/7ZAI/wasmnest-lib", tag = "lib-v0.1.0", features = ["common-host"] }
 wasmnest-server-http = { path = "../../../wasmnest-lib/wasmnest-server-http", features = ["common-host"] }
@@ -261,7 +273,7 @@ webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
 [dev-dependencies]
 # 伪随机（测试 nonce/密钥生成；运行依赖的随机在 wasm-core/crypto-engine）
 rand = "0.8"
-tempfile = "3"
+
 
 # 集成测试 HTTP 配对（POST /api/auth/* 换取 JWT）：已为运行依赖，dev 复用同版本
 reqwest = { version = "0.12", features = ["json"] }

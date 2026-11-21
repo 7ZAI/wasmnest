@@ -15,6 +15,8 @@
 pub mod app;
 pub mod auth;
 pub mod bus;
+/// 浏览器渲染（共享域契约 `host-browser`）：宿主隔离进程导航后回取正文文本
+pub mod browser;
 /// 系统剪贴板读写（共享域契约 `host-clipboard`；ADR-0006）
 pub mod clipboard;
 pub mod config;
@@ -45,6 +47,9 @@ pub use app::HostApp;
 pub use auth::HostAuth;
 pub use bus::{
     owned_topic, topic_owner, HostBus, API_TOPIC_PREFIX, REPLY_TOPIC_PREFIX, TOPIC_NS_SEP,
+};
+pub use browser::{
+    BrowserPageSpec, BrowserRenderRequest, BrowserRenderResponse, BrowserWaitUntil, HostBrowser,
 };
 pub use clipboard::HostClipboard;
 pub use config::{ConfigKey, HostConfig};
@@ -193,6 +198,7 @@ pub trait HostApi:
     + HostWebsocket
     + HostMetrics
     + HostTunnel
+    + HostBrowser
 {
 }
 
@@ -216,5 +222,6 @@ impl<T> HostApi for T where
         + HostWebsocket
         + HostMetrics
         + HostTunnel
+        + HostBrowser
 {
 }

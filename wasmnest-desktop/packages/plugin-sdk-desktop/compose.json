@@ -92,6 +92,10 @@
     "stt": {
       "file": "../wasmnest-lib/wasmnest-stt-engine/wit/stt.wit",
       "package": "wasmnest:stt"
+    },
+    "browser": {
+      "file": "../wasmnest-lib/wasmnest-server-browser/wit/browser.wit",
+      "package": "wasmnest:browser"
     }
   },
   "worlds": [

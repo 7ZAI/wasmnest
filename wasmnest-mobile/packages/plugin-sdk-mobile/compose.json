@@ -48,6 +48,10 @@
     "tunnel": {
       "file": "../wasmnest-lib/wasmnest-server-peer-net/wit/tunnel.wit",
       "package": "wasmnest:tunnel"
+    },
+    "browser": {
+      "file": "../wasmnest-lib/wasmnest-server-browser/wit/browser.wit",
+      "package": "wasmnest:browser"
     }
   },
   "worlds": ["plugin", "plugin-binary"],

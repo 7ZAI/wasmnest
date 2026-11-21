@@ -58,7 +58,8 @@
     "shortDescription": "基于 wasmtime 的多 WASM 应用运行平台",
     "resources": [
       "resources/config.properties",
-      "resources/plugins/"
+      "resources/plugins/",
+      "../browser-runtime.lock.json"
     ],
     "icon": [
       "icons/32x32.png",

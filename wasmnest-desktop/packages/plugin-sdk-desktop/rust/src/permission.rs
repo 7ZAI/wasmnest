@@ -41,6 +41,12 @@ pub const PERMISSION_UI_INPUT: &str = "ui:input";
 /// 文件处理器贡献（纯前端贡献面）：`ui.registerFileHandler`
 pub const PERMISSION_UI_FILE_HANDLER: &str = "ui:fileHandler";
 pub const PERMISSION_NETWORK_HTTP: &str = "network:http";
+/// 浏览器渲染（WIT `host-browser` 的 `fetch-rendered`）：宿主在隔离浏览器进程里
+/// 导航到目标页并回取文本。比 `network:http` 多出「执行页面内固定提取脚本」与
+/// 「跟随导航 / 重定向」两面，SSRF 与资源占用面更大，故独立成位、fail-closed；
+/// 与 `network:http` **不互相隐含**（声明其一不自动获得另一）。移动端契约同形，
+/// 但实现恒返回 `browser.unsupported`。
+pub const PERMISSION_NETWORK_BROWSER: &str = "network:browser";
 pub const PERMISSION_STORAGE: &str = "storage";
 pub const PERMISSION_FS_READ: &str = "fs:read";
 pub const PERMISSION_FS_WRITE: &str = "fs:write";
@@ -233,6 +239,10 @@ pub const PERMISSION_VOCABULARY: &[(&str, &str)] = &[
         PERMISSION_UI_FILE_HANDLER,
     ),
     (stringify!(PERMISSION_NETWORK_HTTP), PERMISSION_NETWORK_HTTP),
+    (
+        stringify!(PERMISSION_NETWORK_BROWSER),
+        PERMISSION_NETWORK_BROWSER,
+    ),
     (stringify!(PERMISSION_STORAGE), PERMISSION_STORAGE),
     (stringify!(PERMISSION_FS_READ), PERMISSION_FS_READ),
     (stringify!(PERMISSION_FS_WRITE), PERMISSION_FS_WRITE),
@@ -354,6 +364,9 @@ pub static PERMISSION_API_MAP: &[(&str, &[&str])] = &[
     ),
     (PERMISSION_UI_FILE_HANDLER, &["ui.registerFileHandler"]),
     (PERMISSION_NETWORK_HTTP, &["http.registerEndpoint"]),
+    // 浏览器渲染：审计名取能力域传入的 `host_browser_fetch_rendered`（WIT 原语
+    // `fetch-rendered`），前端面无对应贡献方法
+    (PERMISSION_NETWORK_BROWSER, &["host_browser_fetch_rendered"]),
     (
         PERMISSION_STORAGE,
         &[
