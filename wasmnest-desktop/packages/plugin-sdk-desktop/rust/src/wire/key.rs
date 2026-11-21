@@ -49,10 +49,10 @@ impl KeyCode {
     /// 从字符串解析键名
     fn from_str(s: &str) -> Option<Self> {
         match s {
-            "up" => Some(KeyCode::Up),
-            "down" => Some(KeyCode::Down),
-            "left" => Some(KeyCode::Left),
-            "right" => Some(KeyCode::Right),
+            "up" | "arrow_up" => Some(KeyCode::Up),
+            "down" | "arrow_down" => Some(KeyCode::Down),
+            "left" | "arrow_left" => Some(KeyCode::Left),
+            "right" | "arrow_right" => Some(KeyCode::Right),
             "tab" => Some(KeyCode::Tab),
             "enter" => Some(KeyCode::Enter),
             "escape" | "esc" => Some(KeyCode::Escape),
@@ -179,8 +179,44 @@ impl KeyCombo {
         }
 
         // 无修饰键
+        if let Some(key) = KeyCode::from_str(s) {
+            return Some(KeyCombo { modifiers: 0, key });
+        }
+
+        // 旧格式兼容：修饰键用 `_` 连接（ctrl_c / ctrl_shift_c）。
+        // 只有新格式解析失败后才尝试，避免把键名里的 `_`（page_up / arrow_up）误拆。
+        Self::parse_legacy_underscore(s)
+    }
+
+    /// 解析旧格式的修饰键组合：`ctrl_` / `shift_` / `alt_` / `meta_` 可叠加。
+    fn parse_legacy_underscore(mut s: &str) -> Option<Self> {
+        let mut modifiers: u8 = 0;
+        loop {
+            let lower = s.to_ascii_lowercase();
+            let (bit, rest) = if lower.starts_with("ctrl_") {
+                (MOD_CTRL, s.get(5..)?)
+            } else if lower.starts_with("control_") {
+                (MOD_CTRL, s.get(8..)?)
+            } else if lower.starts_with("shift_") {
+                (MOD_SHIFT, s.get(6..)?)
+            } else if lower.starts_with("alt_") {
+                (MOD_ALT, s.get(4..)?)
+            } else if lower.starts_with("meta_") {
+                (MOD_ALT, s.get(5..)?)
+            } else {
+                break;
+            };
+            modifiers |= bit;
+            s = rest;
+            if s.is_empty() {
+                return None;
+            }
+        }
+        if modifiers == 0 {
+            return None;
+        }
         let key = KeyCode::from_str(s)?;
-        Some(KeyCombo { modifiers: 0, key })
+        Some(KeyCombo { modifiers, key })
     }
 
     /// 计算修饰键编号（xterm 修饰键协议）
