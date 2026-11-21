@@ -111,6 +111,12 @@ export interface AppMountHandle {
   /** 宿主面事实变更通知（语言 / 主题） */
   setLocale?(locale: string): void
   setTheme?(theme: string): void
+  /**
+   * 应用内部返回（可选，与宿主同形）：平台返回键在应用前台时先调它。
+   * `true` = 已消费（内部退一页）；`false` / 未实现 = 应用已在根页面，平台兜底。
+   * 声明只为与宿主契约字段对齐（dev-shell 预览无平台返回键）。
+   */
+  back?(): boolean
 }
 
 /**

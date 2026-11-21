@@ -118,6 +118,11 @@ export async function mountApp(root: HTMLElement, env: AppMountEnv) {
 
 The full contract (`invoke` / `appUpdate` / `appLinkCrypto*` / `mountMonitorPanel`, …) lives in the SDK's `dev-shell/src/shell/types.ts` and mirrors the host `useAppMount.ts` field by field (bump `mountContract` only on breaking changes).
 
+**Back (optional)**: `AppMountHandle.back?(): boolean` — the platform toolbar / floating-nav "Back" calls it **first** while the app is in the foreground:
+`true` = the app consumed this back press (went one page up / dismissed an in-app layer) and the platform must not leave the surface; `false` / not implemented lets the platform fall back
+(return to the platform surface the app was opened from, ultimately the home screen). An app at its root page must return `false`, otherwise the back button appears dead.
+New optional members do not bump `mountContract`.
+
 ## Mount Environment API (AppMountEnv)
 
 The `env` injected by the host at mount time is the **single channel** through which an app accesses host capabilities (permissions are still declared in `plugin.json` `permissions` and enforced by the capability layer):

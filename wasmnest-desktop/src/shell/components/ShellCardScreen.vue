@@ -55,7 +55,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { SYS_PAGES, SYS_SUB_PAGES } from '../composables/state'
+import { SYS_PAGES, SYS_SUB_PAGES, sysParentRouteOf } from '../composables/state'
 import ShellIcon from './ShellIcon.vue'
 import SysAppsView from '../sys/SysAppsView.vue'
 import SysServicesView from '../sys/SysServicesView.vue'
@@ -83,7 +83,9 @@ const parentMeta = computed(
 const head = computed(() => sub.value ?? parentMeta.value)
 
 function backToParent(): void {
-  void router.push(`/sys/${sysPageId.value}`)
+  // 与平台返回键同一判据（`sysParentRouteOf`）：两处入口对「能否回父页」不会漂移
+  const parent = sysParentRouteOf(route.path)
+  if (parent) void router.push(parent)
 }
 </script>
 

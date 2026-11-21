@@ -10,7 +10,10 @@
  *   （**真停用**）成功后才摘面
  *   （D2/D5；动作经 useShellApps 收口到宿主命令面）；
  * - 审批：未授权激活落 NeedsApproval → 壳审批弹窗（approval 分支）→ 批准后激活；
- * - 通知：审批通知从待审批应用派生（真实数据源，不再是恒空桩）。
+ * - 通知：审批通知从待审批应用派生（真实数据源，不再是恒空桩）；
+ * - 返回（2026-11-21）：覆层按 z 序 → **应用内部返回**（`AppMountHandle.back`）→
+ *   系统页二级页回父页 → 服务面回进入前的面 → 主屏。应用返回到自己的根页面后
+ *   再返回才由平台退面，分工与移动端系统返回一致。
  */
 import { computed, ref } from 'vue'
 import { useToast } from '@/composables/useToast'
@@ -19,7 +22,19 @@ import { showUserError } from '@/utils/userError'
 import i18n from '@/i18n'
 import { getRouter } from '@/router/instance'
 import { forgetAppRoute, lastRouteOf } from '../mount/appSession'
-import { appCardKey, cardId, cardKind, isHighRisk, mruActivate, mruRemove, notifCount, sysCardKey, sysPageOf } from './state'
+import { appSurfaces } from '../mount/appSurfaceRegistry'
+import {
+  appCardKey,
+  cardId,
+  cardKind,
+  isHighRisk,
+  mruActivate,
+  mruRemove,
+  notifCount,
+  sysCardKey,
+  sysPageOf,
+  sysParentRouteOf,
+} from './state'
 import { isServiceKind, pluginIdOfAppRoute, useShellApps } from './useShellApps'
 import type { CardKey, HostNotif, ShellCtxMenu, ShellDialogKind, ShellScreen } from '../types'
 
@@ -33,6 +48,13 @@ const screen = ref<ShellScreen>('home')
 const cards = ref<CardKey[]>([])
 /** 当前全屏面（screen === 'card' 时非空；由路由同步） */
 const activeCard = ref<CardKey | null>(null)
+/**
+ * 最近一次同步的宿主路由路径（`syncFromRoute` 写入）。
+ *
+ * 返回键要判「系统页二级页 → 父页」，而 `useShellState` 的单测不装真 router；
+ * 把路径随面态同步记在这里，返回消费序与面态同源，不另读 router。
+ */
+const currentPath = ref('/')
 /**
  * 进入服务面前所在的面（服务不产卡，返回要回到来处）。
  *
@@ -229,6 +251,7 @@ function enterServiceFace(key: CardKey): void {
 
 /** 路由变化 → 壳状态同步（ShellHost watch route.path 调用） */
 function syncFromRoute(path: string): void {
+  currentPath.value = path
   const key = faceOfRoute(path)
   if (isServiceFace(key)) {
     // 服务路由（含 openApp 的 router.push 回环、外部直达）：进全屏但不补卡
@@ -369,10 +392,17 @@ function goHome(): void {
   recentsOpen.value = false
   ctxMenu.value = null
   homeQ.value = ''
+  currentPath.value = '/'
   void getRouter().push('/')
 }
 
-/** 返回：覆层按 z 序先收，耗尽后全屏 → 主屏 */
+/**
+ * 返回：覆层按 z 序先收 → 应用内部返回 → 系统页二级页回父页 → 全屏面 → 主屏
+ *
+ * 应用面先问应用（`AppMountHandle.back`）：应用内部逐页回退，到应用根页面返回
+ * false 才由平台退面——桌面等价于移动端系统返回的「应用层在前、平台兜底」分工，
+ * 因此「退到应用根页面后再退一次」才是回平台主页面。系统页二级页同理先回父页。
+ */
 function goBack(): void {
   if (dialog.value) {
     // 退出已确认：宿主正在优雅关闭，Esc / 返回不得收起进度面
@@ -398,6 +428,18 @@ function goBack(): void {
     return
   }
   if (screen.value !== 'home') {
+    const face = activeCard.value
+    // 应用内返回优先：应用自己决定「什么算上一页」（内部路由 / 应用内浮层）。
+    // 应用未实现 back 或已在根页面 → false，继续走平台兜底。
+    if (face && cardKind(face) === 'app' && appSurfaces.back(cardId(face))) return
+
+    // 系统页二级页：先回父页（与 ShellCardScreen 页头返回按钮同一判据）
+    const parentRoute = sysParentRouteOf(currentPath.value)
+    if (face && cardKind(face) === 'sys' && parentRoute) {
+      void getRouter().push(parentRoute)
+      return
+    }
+
     // 服务面不产卡：返回到进入服务前的面（2026-11-20 用户裁决，如「服务管理」系统页），
     // 而不是一律回主屏；从主屏进入服务时来处为空 → 仍回主屏。
     if (isServiceFace(activeCard.value) && serviceReturnCard.value) {
@@ -420,8 +462,11 @@ function goBack(): void {
 /**
  * 是否有可返回的目标（工具栏返回键 / 悬浮导航返回的可用判据）
  *
- * 与 `goBack` 的消费序同源：覆层按 z 序 → 全屏面 → 主屏。放在这里而不是各组件
- * 各写一份，免得两处判据漂移成「按钮亮着却说没东西可退」。
+ * 与 `goBack` 的消费序同源：覆层按 z 序 → 应用内部返回 / 系统页父页 → 全屏面 → 主屏。
+ * 放在这里而不是各组件各写一份，免得两处判据漂移成「按钮亮着却说没东西可退」。
+ *
+ * 全屏面（含应用面）恒为 true：应用内已到根页面时，返回仍会把用户带回平台主屏——
+ * 平台兜底始终是最后一级，按钮不会因为在应用根页面就变成死键。
  */
 const canGoBack = computed(() => {
   // 退出已确认（宿主正在优雅关闭）：`goBack` 对该确认面是 no-op（见其守卫），

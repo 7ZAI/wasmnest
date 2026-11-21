@@ -15,6 +15,7 @@ import {
   mruRemove,
   notifCount,
   sysCardKey,
+  sysParentRouteOf,
   toneOf,
 } from '@/shell/composables/state'
 
@@ -165,5 +166,20 @@ describe('系统页清单与壁纸常量', () => {
   })
   it('壁纸清单含 none + 三张 token 派生渐变，默认 aurora', () => {
     expect(WALLPAPER_DEFAULT).toBe('aurora')
+  })
+})
+
+describe('系统页二级页 → 父页（平台返回键与页头返回共用判据）', () => {
+  it('已登记的二级页回父页（尾斜杠同义）', () => {
+    expect(sysParentRouteOf('/sys/settings/appearance')).toBe('/sys/settings')
+    expect(sysParentRouteOf('/sys/settings/shortcuts')).toBe('/sys/settings')
+    expect(sysParentRouteOf('/sys/settings/appearance/')).toBe('/sys/settings')
+  })
+
+  it('一级页 / 未登记子段 / 非系统页不消费（返回键不得凭空造父页）', () => {
+    expect(sysParentRouteOf('/sys/settings')).toBeNull()
+    expect(sysParentRouteOf('/sys/settings/unknown')).toBeNull()
+    expect(sysParentRouteOf('/chat')).toBeNull()
+    expect(sysParentRouteOf('/')).toBeNull()
   })
 })

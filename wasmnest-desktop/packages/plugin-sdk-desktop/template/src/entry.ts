@@ -50,6 +50,15 @@ export interface AppMountHandle {
   setActive?(active: boolean): void
   setLocale?(locale: string): void
   setTheme?(theme: string): void
+  /**
+   * 应用内部返回（可选）：平台返回键在应用前台时先调它。
+   *
+   * `true` = 本次返回已被应用消费（内部退一页 / 收一层应用内浮层），平台不再退面；
+   * `false` / 未实现 = 应用已在根页面，平台兜底（回进入应用前的平台面）。
+   * 「什么算上一页」由应用决定；应用根页面必须返回 false，否则按返回会无反应。
+   * 实现示例：`back: () => appRouter.back()`（应用自持内存路由时按自己的历史判空）。
+   */
+  back?(): boolean
 }
 
 let vueApp: VueApp | null = null

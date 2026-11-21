@@ -25,6 +25,14 @@ export interface AppSurfaceHandle {
   unmount(): Promise<void>
   /** 前台/后台通知（可选）：false = 已切到后台（DOM 保留但不渲染） */
   setActive?(active: boolean): void
+  /**
+   * 应用内部返回（可选）：平台的「返回」（工具栏 / 悬浮导航）在应用前台时先问它。
+   *
+   * `true` = 本次返回已被应用消费（内部退一页 / 收一层应用内浮层），平台不得再退面；
+   * `false` / 未实现 = 应用已在根页面，由平台兜底（回进入应用前的平台面）。
+   * 同步返回：应用若要异步确认，先自行接入并返回 `true`（已接管）。
+   */
+  back?(): boolean
 }
 
 /** 实例当前挂在哪：挂载槽（前台）/ 多任务卡（预览）/ 后台（不在文档） */
@@ -76,6 +84,14 @@ export interface AppSurfaceRegistry {
   detachPreview(appId: string): boolean
   /** 把实例容器从挂载槽移除（不销毁）；返回 false = 没有该实例 */
   detach(appId: string): boolean
+  /**
+   * 请求应用内部返回（平台返回键在应用前台时调用）。
+   *
+   * 返回 true = 应用已消费（内部退了一页）；false = 无实例 / 未实现 / 已在根页面 /
+   * 回调抛错（异常隔离与 setActive 同口径，应用侧失败不得让平台返回键失效）。
+   * 后台实例不参与：调用方只在当前前台应用面上调用。
+   */
+  back(appId: string): boolean
   /** 真正销毁（停用 / 卸载）；返回 false = 没有该实例 */
   dispose(appId: string): Promise<boolean>
 }
@@ -285,6 +301,17 @@ export function createAppSurfaceRegistry(): AppSurfaceRegistry {
         notifyActive(surface.handle, false)
       }
       return true
+    },
+
+    back(appId) {
+      const surface = surfaces.get(appId)
+      if (!surface) return false
+      try {
+        return surface.handle.back?.() === true
+      } catch {
+        // 应用侧返回回调失败不能吞掉平台返回：交给调用方兜底退面
+        return false
+      }
     },
 
     async dispose(appId) {

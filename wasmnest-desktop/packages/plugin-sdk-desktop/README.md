@@ -120,6 +120,11 @@ export async function mountApp(root: HTMLElement, env: AppMountEnv) {
 
 契约全字段（`invoke` / `appUpdate` / `appLinkCrypto*` / `mountMonitorPanel` 等）见 SDK `dev-shell/src/shell/types.ts`，与宿主 `useAppMount.ts` 逐字段同形（破坏性变更才 bump `mountContract`）。
 
+**返回（可选）**：`AppMountHandle.back?(): boolean` —— 平台工具栏 / 悬浮导航的「返回」在应用前台时**先调它**：
+返回 `true` = 应用已消费（内部退一页 / 收一层应用内浮层），平台不再退面；`false` / 未实现时平台兜底
+（回进入应用前的平台面，最终回主屏）。应用在根页面必须返回 `false`，否则用户按返回会「无反应」。
+新增可选成员不 bump `mountContract`。
+
 ## 挂载环境 API（AppMountEnv）
 
 宿主装载应用时注入的 `env` 是应用访问宿主能力的**唯一通道**（权限仍写入 `plugin.json` 的 `permissions`，由宿主能力层门禁）：

@@ -56,6 +56,20 @@ export const SYS_SUB_PAGES: Readonly<
   },
 }
 
+/**
+ * 系统页二级页 → 父页路由（平台返回键与页头返回按钮共用同一判据）。
+ *
+ * 只认 {@link SYS_SUB_PAGES} 里登记的二级页：未登记的子段在页头上不显示返回，
+ * 返回键也不得把它当成「可回父页」——两处入口对「能不能退」的判断必须同源。
+ *
+ * @returns 父页路由（如 `/sys/settings`）；不是已登记的二级页时返回 null
+ */
+export function sysParentRouteOf(path: string): string | null {
+  const match = /^\/sys\/([^/]+)\/([^/?#]+)\/?$/.exec(path)
+  if (!match) return null
+  return SYS_SUB_PAGES[`${match[1]}/${match[2]}`] ? `/sys/${match[1]}` : null
+}
+
 // ==================== 卡片键 ====================
 
 export function appCardKey(pluginId: string): CardKey {

@@ -75,6 +75,7 @@ vi.mock('@/router/instance', async () => {
 
 import router from '@/router'
 import { clearAppRoutes, lastRouteOf, rememberAppRoute } from '@/shell/mount/appSession'
+import { appSurfaces } from '@/shell/mount/appSurfaceRegistry'
 import { useShellState } from '@/shell/composables/useShellState'
 import { useShellApps } from '@/shell/composables/useShellApps'
 
@@ -84,13 +85,14 @@ const TERMINAL_PLUGIN_ID = 'com.wasmnest.bedcode'
 describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + 真实生命周期）', () => {
   const apps = useShellApps()
 
-  beforeEach(() => {
+  beforeEach(async () => {
     const s = useShellState()
     s.screen.value = 'home'
     s.cards.value = []
     s.activeCard.value = null
     s.panelOpen.value = false
     s.recentsOpen.value = false
+    s.quickSettingsOpen.value = false
     s.ctxMenu.value = null
     s.dialog.value = null
     s.dialogAppId.value = null
@@ -116,8 +118,9 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
     toastError.mockClear()
     vi.mocked(router.push).mockClear()
     toastSuccess.mockClear()
-    // 页面记忆是模块级单例：用例间必须清，否则「有没有记忆」会被前一个用例污染
+    // 页面记忆 / 表面注册表都是模块级单例：用例间必须清，否则「有没有上一页」会被前一个用例污染
     clearAppRoutes()
+    for (const appId of appSurfaces.list()) await appSurfaces.dispose(appId)
   })
 
   /** 种子：运行中应用（带挂载路由）；kind = 装配角色（manifest），服务型应用传 L1/L2 */
@@ -547,6 +550,104 @@ describe('useShellState（主屏 + 全屏面 + 卡片 MRU + 覆层 + 通知 + �
 
       s.screen.value = 'card'
       expect(s.canGoBack.value, '全屏面 → 主屏也是返回').toBe(true)
+    })
+  })
+
+  describe('返回：应用内部逐页返回 → 平台兜底（2026-11-21）', () => {
+    /** 注册前台应用的假实例（保活注册表；不需要真挂 DOM） */
+    function seedSurface(appId: string, back?: () => boolean) {
+      appSurfaces.register(appId, document.createElement('div'), {
+        unmount: async () => {},
+        ...(back ? { back } : {}),
+      })
+    }
+
+    it('应用消费返回（back = true）：平台面不动、宿主路由不跳', async () => {
+      const s = useShellState()
+      seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
+      await s.openApp(TERMINAL_PLUGIN_ID)
+      vi.mocked(router.push).mockClear()
+
+      const back = vi.fn(() => true)
+      seedSurface(TERMINAL_PLUGIN_ID, back)
+
+      s.goBack()
+
+      expect(back).toHaveBeenCalledTimes(1)
+      expect(s.screen.value, '应用已退一页，平台不退面').toBe('card')
+      expect(s.activeCard.value).toBe(`app:${TERMINAL_PLUGIN_ID}`)
+      expect(router.push, '应用内部返回不写宿主路由').not.toHaveBeenCalled()
+    })
+
+    it('应用根页面（back = false）：平台兜底回主屏', async () => {
+      const s = useShellState()
+      seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
+      await s.openApp(TERMINAL_PLUGIN_ID)
+
+      const back = vi.fn(() => false)
+      seedSurface(TERMINAL_PLUGIN_ID, back)
+
+      s.goBack()
+
+      expect(back).toHaveBeenCalledTimes(1)
+      expect(s.screen.value).toBe('home')
+      expect(router.push).toHaveBeenLastCalledWith('/')
+    })
+
+    it('应用未实现 back（旧应用）：平台兜底回主屏（行为与旧宿主一致）', async () => {
+      const s = useShellState()
+      seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
+      await s.openApp(TERMINAL_PLUGIN_ID)
+      seedSurface(TERMINAL_PLUGIN_ID)
+
+      s.goBack()
+
+      expect(s.screen.value).toBe('home')
+      expect(router.push).toHaveBeenLastCalledWith('/')
+    })
+
+    it('应用 back 抛错：异常隔离，平台仍能退面（返回键不失效）', async () => {
+      const s = useShellState()
+      seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
+      await s.openApp(TERMINAL_PLUGIN_ID)
+      seedSurface(TERMINAL_PLUGIN_ID, () => {
+        throw new Error('app back blew up')
+      })
+
+      s.goBack()
+
+      expect(s.screen.value).toBe('home')
+      expect(router.push).toHaveBeenLastCalledWith('/')
+    })
+
+    it('壳覆层优先：覆层打开时应用不参与返回', async () => {
+      const s = useShellState()
+      seedApp(TERMINAL_PLUGIN_ID, 'BedCode', '/sessions')
+      await s.openApp(TERMINAL_PLUGIN_ID)
+      const back = vi.fn(() => true)
+      seedSurface(TERMINAL_PLUGIN_ID, back)
+
+      s.panelOpen.value = true
+      s.goBack()
+
+      expect(s.panelOpen.value, '覆层属壳 chrome，先收它').toBe(false)
+      expect(back).not.toHaveBeenCalled()
+    })
+
+    it('系统页二级页：先回父页，一级页再返回才回主屏（与页头返回同判据）', () => {
+      const s = useShellState()
+      s.openSys('settings')
+      s.syncFromRoute('/sys/settings/appearance')
+      vi.mocked(router.push).mockClear()
+
+      s.goBack()
+      expect(router.push).toHaveBeenLastCalledWith('/sys/settings')
+      expect(s.screen.value, '仍在系统页卡内，不落主屏').toBe('card')
+
+      s.syncFromRoute('/sys/settings')
+      s.goBack()
+      expect(s.screen.value).toBe('home')
+      expect(router.push).toHaveBeenLastCalledWith('/')
     })
   })
 

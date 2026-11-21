@@ -194,6 +194,38 @@ describe('应用表面实例注册表', () => {
     expect(() => registry.detach(APP)).not.toThrow()
     expect(host.parentElement).toBeNull()
   })
+
+  it('back：未注册 / 未实现都不消费（平台兜底退面）', () => {
+    expect(registry.back('ghost')).toBe(false)
+
+    const legacy: AppSurfaceHandle = { unmount: vi.fn(async () => {}) }
+    registry.register(APP, host, legacy)
+    expect(registry.back(APP)).toBe(false)
+  })
+
+  it('back：应用返回 true 才算消费；false 交平台兜底', () => {
+    const appBack = vi.fn(() => true)
+    const withBack: AppSurfaceHandle = { unmount: vi.fn(async () => {}), back: appBack }
+    registry.register(APP, host, withBack)
+
+    expect(registry.back(APP)).toBe(true)
+    expect(appBack).toHaveBeenCalledTimes(1)
+
+    appBack.mockReturnValueOnce(false)
+    expect(registry.back(APP), '应用根页面返回 false：平台继续退面').toBe(false)
+  })
+
+  it('back 抛错不得吞掉平台返回（异常隔离 → false）', () => {
+    const withBack: AppSurfaceHandle = {
+      unmount: vi.fn(async () => {}),
+      back: () => {
+        throw new Error('app back blew up')
+      },
+    }
+    registry.register(APP, host, withBack)
+
+    expect(registry.back(APP)).toBe(false)
+  })
 })
 
 /** jsdom 不做布局：给元素伪造布局尺寸（只读 getter，模拟真实实测值） */
