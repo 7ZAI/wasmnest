@@ -176,14 +176,22 @@ jobs:
           cache-dependency-path: wasmnest/wasmnest-desktop/pnpm-lock.yaml
 
       # 桌面宿主测试有跨仓读取面（hostAppBoundaryLock / i18nDriftLock /
-      # appChromeLock / pageTransition / pluginWatchCopy 读应用仓源码），fresh
-      # checkout 必须有兄弟目录 ../wasmnest-apps（与应用仓 ci.yml 的跨仓装配同理）
+      # appChromeLock / pageTransition / pluginWatchCopy 读应用仓源码；
+      # relayTransportLiteralLock 经 libPath 读能力仓源码），fresh checkout
+      # 必须同时具备兄弟目录 ../wasmnest-apps 与 ../wasmnest-lib。
       - name: 检出应用仓（兄弟目录，跟 ref 不钉 tag）
         run: |
           set -euo pipefail
           git clone --depth 1 --branch "$WASMNEST_APPS_REF" \
             https://github.com/7ZAI/wasmnest-apps.git ../wasmnest-apps
           echo "wasmnest-apps @ $WASMNEST_APPS_REF"
+
+      - name: 检出能力仓（兄弟目录，relayTransportLiteralLock 的 libPath 读取面）
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WASMNEST_LIB_REF" \
+            https://github.com/7ZAI/wasmnest-lib.git ../wasmnest-lib
+          echo "wasmnest-lib @ $WASMNEST_LIB_REF"
 
       - name: 桌面端依赖（独立 workspace）
         working-directory: wasmnest/wasmnest-desktop

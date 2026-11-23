@@ -157,7 +157,8 @@ describe('FileTransferView 浏览加载闸门', () => {
 
     const calls = listRemoteCalls()
     expect(calls).toHaveLength(1)
-    expect(calls[0]!.args).toEqual({ path: '', dirId: '' })
+    // 当前 useRemoteFs.loadRoots 显式带 peerId 寻址（不依赖插件侧 ACTIVE_NODE 时序）
+    expect(calls[0]!.args).toEqual({ path: '', dirId: '', peerId: NODE_A })
 
     wrapper.unmount()
   })
