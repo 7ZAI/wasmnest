@@ -103,6 +103,11 @@ const SCANNED_CRATES: &[&str] = &[
     // 依赖（形态锁在 crate 内 `src/boundary_lock.rs`）。它跑在公网 VPS 上代替宿主
     // 转发密文，**不得**知道任何产品身份——入扫描面正是这条边的判据。
     "wasmnest-relay",
+    // 浏览器渲染能力域 / 语音识别引擎 / 音频采集引擎（能力仓 2026-11-19 新增）：
+    // 均为机制能力 crate，零产品语义；新建即入扫描面（C-3 全覆盖，不留 PENDING 窗口）。
+    "wasmnest-server-browser",
+    "wasmnest-stt-engine",
+    "wasmnest-audio-engine",
 ];
 
 /// 已知的、暂未纳入扫描的 `wasmnest-*` crate（各有明确在办票据）
