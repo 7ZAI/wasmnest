@@ -4,11 +4,35 @@ package hostpeer
 
 import (
 	"go.bytecodealliance.org/cm"
+	"unsafe"
 )
+
+func lower_OptionString(v cm.Option[string]) (f0 uint32, f1 *uint8, f2 uint32) {
+	some := v.Some()
+	if some != nil {
+		f0 = 1
+		v1, v2 := cm.LowerString(*some)
+		f1 = (*uint8)(v1)
+		f2 = (uint32)(v2)
+	}
+	return
+}
+
+// OptionStringShape is used for storage in variant or result types.
+type OptionStringShape struct {
+	_     cm.HostLayout
+	shape [unsafe.Sizeof(cm.Option[string]{})]byte
+}
 
 func lower_PeerNodeConfig(v PeerNodeConfig) (f0 *uint8, f1 uint32, f2 *uint8, f3 uint32, f4 uint32) {
 	f0, f1 = cm.LowerString(v.DataDir)
 	f2, f3 = cm.LowerString(v.DeviceName)
 	f4 = (uint32)(v.ListenPort)
 	return
+}
+
+// PeerNodeInfoShape is used for storage in variant or result types.
+type PeerNodeInfoShape struct {
+	_     cm.HostLayout
+	shape [unsafe.Sizeof(PeerNodeInfo{})]byte
 }

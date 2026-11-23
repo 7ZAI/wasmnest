@@ -3,7 +3,7 @@
  *
  * 场景矩阵：快照恢复首屏（restored → recent 标注）、mdns-found upsert
  * （TXT/cap 位解读 + last-seen 盖章）、畸形载荷丢弃、mdns-lost 按短指纹移除、
- * connect 显式 endpoint 拨号与 denied/unreachable 行内错误、并发拨号防护、
+ * connect 显式 endpoint 拨号与命令抛错的行内错误（unknown 分类 + 原文）、并发拨号防护、
  * 断开乐观摘除、TTL 惰性清扫（refresh 触发）、生命周期幂等。
  */
 
@@ -185,7 +185,7 @@ describe('usePeerDevices orchestration (self-built cache)', () => {
     expect(dev.rows.value[0]?.status).toBe('connected')
   })
 
-  it('denied / unreachable errors land inline without connected badge', async () => {
+  it('command rejections land inline as unknown dial errors with original detail', async () => {
     env.onCommand('file-transfer.dial-peer', (args) =>
       String(args?.endpoint?.nodeId) === NODE_A
         ? Promise.reject(new Error('dial endpoint failed: peer denied'))
@@ -197,12 +197,16 @@ describe('usePeerDevices orchestration (self-built cache)', () => {
     env.emit('plugin:file-transfer:mdns-found', makeFound(NODE_A, 'a'))
     env.emit('plugin:file-transfer:mdns-found', makeFound(NODE_B, 'b'))
 
-    expect(await dev.connect(NODE_A)).toBe('denied')
-    expect(await dev.connect(NODE_B)).toBe('unreachable')
+    // 宿主把命令失败包成信封，前端拿不到分类 token：一律 unknown + 原文，
+    // 不按错误正文猜 denied / unreachable（deviceState.dialFailureFromError）。
+    expect(await dev.connect(NODE_A)).toBe('unknown')
+    expect(await dev.connect(NODE_B)).toBe('unknown')
 
     const rows = Object.fromEntries(dev.rows.value.map((r) => [r.nodeId, r]))
-    expect(rows[NODE_A]?.dialError).toBe('denied')
-    expect(rows[NODE_B]?.dialError).toBe('unreachable')
+    expect(rows[NODE_A]?.dialError?.code).toBe('unknown')
+    expect(rows[NODE_A]?.dialError?.detail).toContain('peer denied')
+    expect(rows[NODE_B]?.dialError?.code).toBe('unknown')
+    expect(rows[NODE_B]?.dialError?.detail).toContain('peer unreachable')
     expect(rows[NODE_A]?.status).toBe('idle')
   })
 
@@ -320,9 +324,16 @@ describe('usePeerDevices orchestration (self-built cache)', () => {
 
     await dev.refresh()
 
-    // 已连接条目不被清扫；断开后同一条目因 lastSeen 过期被清算
+    // 已连接条目不被清扫；连接事件会给远程设备盖章 lastSeen，断开后仍在 TTL 内
     expect(dev.devices.value).toHaveLength(1)
     env.emit('plugin:file-transfer:connection-changed', { nodeId: NODE_A, connected: false })
+    await dev.refresh()
+    expect(dev.devices.value).toHaveLength(1)
+    // 再老化到 TTL 窗口外才清算（远程设备无心跳，时间从最后一次连接算起）
+    dev.devices.value = dev.devices.value.map((d) => ({
+      ...d,
+      lastSeenMs: Date.now() - DEVICE_TTL_MS - 1000,
+    }))
     await dev.refresh()
     expect(dev.devices.value).toHaveLength(0)
   })
@@ -366,11 +377,12 @@ describe('usePeerDevices orchestration (self-built cache)', () => {
     dev.start()
     await env.flush()
 
-    // 未验证的恢复条目：拒绝拨号（不发 dial-peer），改为触发宿主即时重查
-    expect(await dev.connect(NODE_A)).toBe('unreachable')
+    // 未验证的恢复条目：拒绝拨号（不发 dial-peer），改为触发宿主即时重查；
+    // 失败分类走当前词汇 lan-unreachable，行内错误为 { code, detail } 对象
+    expect(await dev.connect(NODE_A)).toBe('lan-unreachable')
     expect(env.calls.some((c) => c.id === 'file-transfer.dial-peer')).toBe(false)
     expect(env.calls.some((c) => c.id === 'file-transfer.refresh-devices')).toBe(true)
-    expect(dev.rows.value[0]?.dialError).toBe('unreachable')
+    expect(dev.rows.value[0]?.dialError?.code).toBe('lan-unreachable')
 
     // 实时 mdns-found 接管（restored 清 false、地址更新）后按实时 endpoint 拨号
     env.onCommand('file-transfer.dial-peer', () => ({ status: 'connected' }))

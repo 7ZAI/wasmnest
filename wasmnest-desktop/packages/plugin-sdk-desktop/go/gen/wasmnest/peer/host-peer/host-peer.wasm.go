@@ -12,6 +12,10 @@ import (
 //go:noescape
 func wasmimport_DialPeer(endpointJson0 *uint8, endpointJson1 uint32, result *cm.Result[string, string, string])
 
+//go:wasmimport wasmnest:peer/host-peer@0.0.1 dial-peer-addrs
+//go:noescape
+func wasmimport_DialPeerAddrs(endpointJson0 *uint8, endpointJson1 uint32, result *cm.Result[string, string, string])
+
 //go:wasmimport wasmnest:peer/host-peer@0.0.1 close
 //go:noescape
 func wasmimport_Close(handle0 *uint8, handle1 uint32, result *cm.Result[string, bool, string])
@@ -27,6 +31,10 @@ func wasmimport_ListTrusted(result *cm.Result[string, string, string])
 //go:wasmimport wasmnest:peer/host-peer@0.0.1 revoke-trusted
 //go:noescape
 func wasmimport_RevokeTrusted(nodeId0 *uint8, nodeId1 uint32, result *cm.Result[string, bool, string])
+
+//go:wasmimport wasmnest:peer/host-peer@0.0.1 trust-node
+//go:noescape
+func wasmimport_TrustNode(nodeId0 *uint8, nodeId1 uint32, displayName0 uint32, displayName1 *uint8, displayName2 uint32, result *cm.Result[string, bool, string])
 
 //go:wasmimport wasmnest:peer/host-peer@0.0.1 send-files
 //go:noescape
@@ -64,6 +72,14 @@ func wasmimport_BrowseDirectory(sessionHandle0 *uint8, sessionHandle1 uint32, di
 //go:noescape
 func wasmimport_PullFiles(sessionHandle0 *uint8, sessionHandle1 uint32, dirId0 *uint8, dirId1 uint32, filesJson0 *uint8, filesJson1 uint32, result *cm.Result[string, uint32, string])
 
+//go:wasmimport wasmnest:peer/host-peer@0.0.1 set-config-snapshot
+//go:noescape
+func wasmimport_SetConfigSnapshot(configJson0 *uint8, configJson1 uint32, result *cm.Result[string, struct{}, string])
+
+//go:wasmimport wasmnest:peer/host-peer@0.0.1 fetch-config
+//go:noescape
+func wasmimport_FetchConfig(sessionHandle0 *uint8, sessionHandle1 uint32, result *cm.Result[OptionStringShape, cm.Option[string], string])
+
 //go:wasmimport wasmnest:peer/host-peer@0.0.1 set-download-dir
 //go:noescape
 func wasmimport_SetDownloadDir(path0 *uint8, path1 uint32, result *cm.Result[string, struct{}, string])
@@ -83,3 +99,11 @@ func wasmimport_ActiveTransfers(result *cm.Result[string, string, string])
 //go:wasmimport wasmnest:peer/host-peer@0.0.1 collect-outgoing
 //go:noescape
 func wasmimport_CollectOutgoing(pathsJson0 *uint8, pathsJson1 uint32, result *cm.Result[string, string, string])
+
+//go:wasmimport wasmnest:peer/host-peer@0.0.1 node-info
+//go:noescape
+func wasmimport_NodeInfo(result *cm.Result[PeerNodeInfoShape, PeerNodeInfo, string])
+
+//go:wasmimport wasmnest:peer/host-peer@0.0.1 configure-relay
+//go:noescape
+func wasmimport_ConfigureRelay(relayAddrsJson0 *uint8, relayAddrsJson1 uint32, enable0 uint32, result *cm.Result[PeerNodeInfoShape, PeerNodeInfo, string])

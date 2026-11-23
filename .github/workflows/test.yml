@@ -176,8 +176,9 @@ jobs:
           cache-dependency-path: wasmnest/wasmnest-desktop/pnpm-lock.yaml
 
       # 桌面宿主测试有跨仓读取面（hostAppBoundaryLock / i18nDriftLock /
-      # appChromeLock / pageTransition / pluginWatchCopy 读应用仓源码），fresh
-      # checkout 必须有兄弟目录 ../wasmnest-apps（与应用仓 ci.yml 的跨仓装配同理）
+      # appChromeLock / pageTransition / pluginWatchCopy 读应用仓源码；
+      # relayTransportLiteralLock 经 libPath 读能力仓源码），fresh checkout
+      # 必须同时具备兄弟目录 ../wasmnest-apps 与 ../wasmnest-lib。
       - name: 检出应用仓（兄弟目录，跟 ref 不钉 tag）
         run: |
           set -euo pipefail
@@ -185,9 +186,22 @@ jobs:
             https://github.com/7ZAI/wasmnest-apps.git ../wasmnest-apps
           echo "wasmnest-apps @ $WASMNEST_APPS_REF"
 
+      - name: 检出能力仓（兄弟目录，relayTransportLiteralLock 的 libPath 读取面）
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WASMNEST_LIB_REF" \
+            https://github.com/7ZAI/wasmnest-lib.git ../wasmnest-lib
+          echo "wasmnest-lib @ $WASMNEST_LIB_REF"
+
       - name: 桌面端依赖（独立 workspace）
         working-directory: wasmnest/wasmnest-desktop
         run: pnpm install --frozen-lockfile
+
+      # SDK 的 exports 指向 dist（gitignore，不入库）：fresh checkout 若只 install
+      # 不构建，workspace:* 链接的包解析不到 .d.ts，vue-tsc 报 TS2307。
+      - name: 桌面 SDK dist（vue-tsc 解析 workspace 包类型）
+        working-directory: wasmnest/wasmnest-desktop/packages/plugin-sdk-desktop
+        run: pnpm run build
 
       - name: vue-tsc --noEmit
         working-directory: wasmnest/wasmnest-desktop
@@ -310,7 +324,7 @@ jobs:
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
             libappindicator3-dev librsvg2-dev patchelf \
-            libsoup-3.0-dev libssl-dev pkg-config libgtk-3-dev build-essential
+            libsoup-3.0-dev libssl-dev pkg-config libgtk-3-dev build-essential libasound2-dev
 
       - uses: dtolnay/rust-toolchain@stable
 

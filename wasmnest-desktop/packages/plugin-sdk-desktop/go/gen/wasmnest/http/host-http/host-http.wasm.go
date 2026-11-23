@@ -6,8 +6,12 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "wasmnest:http@0.0.1".
+// This file contains wasmimport and wasmexport declarations for "wasmnest:http@0.0.2".
 
-//go:wasmimport wasmnest:http/host-http@0.0.1 fetch
+//go:wasmimport wasmnest:http/host-http@0.0.2 fetch
 //go:noescape
 func wasmimport_Fetch(requestJson0 *uint8, requestJson1 uint32, result *cm.Result[OptionStringShape, cm.Option[string], string])
+
+//go:wasmimport wasmnest:http/host-http@0.0.2 request-egress-consent
+//go:noescape
+func wasmimport_RequestEgressConsent(requestJson0 *uint8, requestJson1 uint32, result *cm.Result[string, string, string])

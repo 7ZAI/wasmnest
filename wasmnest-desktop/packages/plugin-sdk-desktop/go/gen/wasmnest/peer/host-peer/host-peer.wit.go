@@ -55,13 +55,43 @@ type PeerNodeConfig struct {
 	ListenPort uint16 `json:"listen-port"`
 }
 
+// PeerNodeInfo represents the record "wasmnest:peer/host-peer@0.0.1#peer-node-info".
+//
+// 本机 peer 节点只读投影（T21 / issue #27）。
+//
+// 不含任何票据 / 长期密钥；`addrs` 是给对端拨号用的多地址候选。
+//
+//	record peer-node-info {
+//		node-id: string,
+//		device-name: string,
+//		addrs: list<string>,
+//		relay-state: string,
+//	}
+type PeerNodeInfo struct {
+	_ cm.HostLayout `json:"-"`
+	// 本机节点 id（64 位小写 hex；宿主身份指纹）
+	NodeID string `json:"node-id"`
+
+	// 人类可读设备名（空 = 宿主未命名）
+	DeviceName string `json:"device-name"`
+
+	// 可拨 multiaddr：LAN 直连在前；仅本机共享节点的 relay 预留处于
+	// `relay-reserved` 时追加 `<relay>/p2p-circuit/p2p/<本机>`
+	// （预留是宿主级事实；任一 owner 生效即代表本节点可经该中继被拨到）
+	Addrs cm.List[string] `json:"addrs"`
+
+	// relay-idle / relay-connecting / relay-reserved / relay-lost
+	RelayState string `json:"relay-state"`
+}
+
 // DialPeer represents the imported function "dial-peer".
 //
 // 按 endpoint 拨号连接（ADR 0022 v2 终态，原 dial-peer-endpoint 转正）：
 // endpoint = `{ nodeId, addr, port }`（camelCase JSON，插件从自身设备缓存/
 // mdns 事件解析后显式传入；宿主不内藏 node-id → 地址解析表）。握手期
 // 「证书指纹 ↔ nodeId 绑定 + 信任检查」语义不变。成功返回 session 句柄
-// （`sess-<uuid>`，后续按句柄寻址）；denied/unreachable 以错误上抛
+// （`sess-<uuid>`，后续按句柄寻址）；denied/unreachable 以错误上抛。
+// 会话句柄记忆该地址作为唯一候选，数据面断线重拨按它重试。
 //
 //	dial-peer: func(endpoint-json: string) -> result<string, string>
 //
@@ -69,6 +99,28 @@ type PeerNodeConfig struct {
 func DialPeer(endpointJSON string) (result cm.Result[string, string, string]) {
 	endpointJson0, endpointJson1 := cm.LowerString(endpointJSON)
 	wasmimport_DialPeer((*uint8)(endpointJson0), (uint32)(endpointJson1), &result)
+	return
+}
+
+// DialPeerAddrs represents the imported function "dial-peer-addrs".
+//
+// 多地址拨号（T11 方案 B；旧 `dial-peer` 语义不变）：endpoint =
+// `{ nodeId, addrs: [multiaddr...] }`（camelCase JSON）。
+//
+// - `addrs` 顺序 = 调用方拨号策略顺序（设计 §4.6：先 LAN，只有 §4.9
+// 判定明确不在内网才把 relay 候选放进列表）；宿主逐候选按短超时尝试，
+// **不排序、不自动切换**——策略真源在应用层；
+// - 成功返回 session 句柄，句柄记忆**全部**候选地址；数据面
+// `send-files` / `list-shared-roots` / `browse-directory` / `pull-files`
+// 断线重拨按同一顺序复用，**不再要求对端在 mDNS 发现缓存里**；
+// - 全候选失败以错误上抛（含逐候选成因）；denied 与 unreachable 不合并。
+//
+//	dial-peer-addrs: func(endpoint-json: string) -> result<string, string>
+//
+//go:nosplit
+func DialPeerAddrs(endpointJSON string) (result cm.Result[string, string, string]) {
+	endpointJson0, endpointJson1 := cm.LowerString(endpointJSON)
+	wasmimport_DialPeerAddrs((*uint8)(endpointJson0), (uint32)(endpointJson1), &result)
 	return
 }
 
@@ -123,6 +175,30 @@ func ListTrusted() (result cm.Result[string, string, string]) {
 func RevokeTrusted(nodeID string) (result cm.Result[string, bool, string]) {
 	nodeId0, nodeId1 := cm.LowerString(nodeID)
 	wasmimport_RevokeTrusted((*uint8)(nodeId0), (uint32)(nodeId1), &result)
+	return
+}
+
+// TrustNode represents the imported function "trust-node".
+//
+// 登记可信对端（与 `revoke-trusted` 对称的**唯一信任写入原语**）。
+//
+// 隧道准入的「已匹配」判据 = 传输层信任表命中（`PeerLink` / `TrustStore`），
+// 而配对流程走一次性票据窗口、不经过首连确认弹窗，因此配对成功后必须由
+// 应用显式落一条信任——否则第二次连隧道仍被判未匹配。
+//
+// `node-id` 必须是宿主已验证的对端身份（peer face 注入的 `peerNodeId`），
+// 调用方不得把客户端自报值写进信任表；`display-name` 可空（已存在且缺名时
+// 补注，不覆盖已有名，与首连确认同语义）。返回是否为新加入（幂等）。
+// 落盘失败显性上抛（内存说可信、磁盘没有会让重启后重连重新走首连确认）。
+//
+//	trust-node: func(node-id: string, display-name: option<string>) -> result<bool,
+//	string>
+//
+//go:nosplit
+func TrustNode(nodeID string, displayName cm.Option[string]) (result cm.Result[string, bool, string]) {
+	nodeId0, nodeId1 := cm.LowerString(nodeID)
+	displayName0, displayName1, displayName2 := lower_OptionString(displayName)
+	wasmimport_TrustNode((*uint8)(nodeId0), (uint32)(nodeId1), (uint32)(displayName0), (*uint8)(displayName1), (uint32)(displayName2), &result)
 	return
 }
 
@@ -278,6 +354,36 @@ func PullFiles(sessionHandle string, dirID string, filesJSON string) (result cm.
 	return
 }
 
+// SetConfigSnapshot represents the imported function "set-config-snapshot".
+//
+// 写入本机穿透配置快照（不透明 JSON 对象，≤16 KiB）：只承载接入元数据，
+// 对端可经 `fetch-config` 按需拉取。覆盖写、幂等；节点重启不清空。
+// 能力域只校验「JSON 对象 + 大小上限」，字段语义归插件。
+//
+//	set-config-snapshot: func(config-json: string) -> result<_, string>
+//
+//go:nosplit
+func SetConfigSnapshot(configJSON string) (result cm.Result[string, struct{}, string]) {
+	configJson0, configJson1 := cm.LowerString(configJSON)
+	wasmimport_SetConfigSnapshot((*uint8)(configJson0), (uint32)(configJson1), &result)
+	return
+}
+
+// FetchConfig represents the imported function "fetch-config".
+//
+// 拉取可信对端的穿透配置快照（单请求会话；session 句柄寻址，断线按记忆
+// 地址重拨）→ 不透明 JSON 字符串；`none` = 对端未设置 / 不提供。
+// 协议失败显性报错——不把「读不到」伪装成「没有配置」。
+//
+//	fetch-config: func(session-handle: string) -> result<option<string>, string>
+//
+//go:nosplit
+func FetchConfig(sessionHandle string) (result cm.Result[OptionStringShape, cm.Option[string], string]) {
+	sessionHandle0, sessionHandle1 := cm.LowerString(sessionHandle)
+	wasmimport_FetchConfig((*uint8)(sessionHandle0), (uint32)(sessionHandle1), &result)
+	return
+}
+
 // SetDownloadDir represents the imported function "set-download-dir".
 //
 // 设置接收落点目录（空串 = 恢复默认 Downloads\WasmNest\；引擎落盘配置原语，
@@ -353,5 +459,43 @@ func ActiveTransfers() (result cm.Result[string, string, string]) {
 func CollectOutgoing(pathsJSON string) (result cm.Result[string, string, string]) {
 	pathsJson0, pathsJson1 := cm.LowerString(pathsJSON)
 	wasmimport_CollectOutgoing((*uint8)(pathsJson0), (uint32)(pathsJson1), &result)
+	return
+}
+
+// NodeInfo represents the imported function "node-info".
+//
+// 只读：本机身份 + 当前可拨地址 + relay 控制面状态（T21 / issue #27）。
+//
+// 需要 `peer` 权限。节点未启动时报错（fail-visible，不返回空身份冒充
+// 「未命名设备」）。不返回任何票据 / 长期密钥。
+//
+//	node-info: func() -> result<peer-node-info, string>
+//
+//go:nosplit
+func NodeInfo() (result cm.Result[PeerNodeInfoShape, PeerNodeInfo, string]) {
+	wasmimport_NodeInfo(&result)
+	return
+}
+
+// ConfigureRelay represents the imported function "configure-relay".
+//
+// 建立 / 释放本插件在本机共享节点上的 relay 预留（幂等，按插件引用计数）。
+//
+// - `enable = true` + 空 `relay-addrs-json` → 显性错误（不静默当 LAN-only）
+// - 同一插件重复调用 = 全量替换（地址变化时重建；相同地址为 no-op）
+// - `enable = false` → 释放本插件份额（其他插件 / 隧道的预留不受影响）
+// - 返回当前 node-info（`addrs` 只在预留真正生效时含 circuit）
+//
+// 权限复用 `peer`（预留 = 公网可达 + 中继带宽，与本域既有信任面同级；
+// 独立 `peer:relay` 位待权限细分票，见 issue #27 的风险记录）。
+//
+//	configure-relay: func(relay-addrs-json: string, enable: bool) -> result<peer-node-info,
+//	string>
+//
+//go:nosplit
+func ConfigureRelay(relayAddrsJSON string, enable bool) (result cm.Result[PeerNodeInfoShape, PeerNodeInfo, string]) {
+	relayAddrsJson0, relayAddrsJson1 := cm.LowerString(relayAddrsJSON)
+	enable0 := (uint32)(cm.BoolToU32(enable))
+	wasmimport_ConfigureRelay((*uint8)(relayAddrsJson0), (uint32)(relayAddrsJson1), (uint32)(enable0), &result)
 	return
 }

@@ -318,6 +318,9 @@ const SHARED_DOMAIN_INTERFACES: &[&str] = &[
     "host-http",
     "host-websocket",
     "host-notify",
+    // 内网穿透通道（T05/T19）：域分片住能力仓 peer-net crate，双端共用同一
+    // 通道原语面；端 UI / 设置表单仍留应用仓，故按共享域 interface 登记。
+    "host-tunnel",
 ];
 
 /// 端扩展 / 端独有 interface 的 Rust 模块路径词（域 crate 生产代码不得出现）
@@ -363,6 +366,47 @@ fn collect_rs(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// `idx` 行是否位于 `#[cfg(feature = "common-host")] mod ... {}` 内。
+///
+/// 能力域把 WIT 绑定集中放在受 feature 门控的子模块里（如
+/// `wasmnest-server-peer-net/src/tunnel/plugin_binding.rs` 的 `mod wit_layer`），
+/// 只看绑定项前一行会把模块级门控误报成未门控。
+fn inside_common_host_module(lines: &[&str], idx: usize) -> bool {
+    const GATE: &str = "#[cfg(feature = \"common-host\")]";
+    let mut pending_gate = false;
+    let mut depth = 0usize;
+    for raw in lines.iter().take(idx) {
+        let trimmed = raw.trim();
+        if trimmed.starts_with("//") {
+            continue;
+        }
+        if trimmed == GATE {
+            pending_gate = true;
+            continue;
+        }
+        if pending_gate && trimmed.starts_with("mod ") && trimmed.ends_with('{') {
+            pending_gate = false;
+            depth = 1;
+            continue;
+        }
+        if depth == 0 {
+            pending_gate = false;
+            continue;
+        }
+        for ch in raw.chars() {
+            if ch == '{' {
+                depth += 1;
+            } else if ch == '}' {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+        }
+    }
+    depth > 0
+}
+
 #[test]
 fn capability_domains_stay_end_neutral() {
     let packages = repo_root().join("../wasmnest-lib");
@@ -390,7 +434,8 @@ fn capability_domains_stay_end_neutral() {
                 if !is_binding_item {
                     continue;
                 }
-                let gated = idx > 0 && lines[idx - 1].trim() == "#[cfg(feature = \"common-host\")]";
+                let gated = inside_common_host_module(&lines, idx)
+                    || (idx > 0 && lines[idx - 1].trim() == "#[cfg(feature = \"common-host\")]");
                 assert!(
                     gated,
                     "{}:{} `{}` 未被 `#[cfg(feature = \"common-host\")]` 门控——\
