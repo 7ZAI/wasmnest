@@ -25,7 +25,7 @@ import { mount } from '@vue/test-utils'
 import type { PluginContext } from '@binblink/wasmnest-plugin-sdk-mobile'
 import FileTransferView from '@apps/file-transfer/mobile/src/components/FileTransferView.vue'
 import BrowseTab from '@apps/file-transfer/mobile/src/components/BrowseTab.vue'
-import TabBar from '@apps/file-transfer/mobile/src/components/TabBar.vue'
+import BottomNav from '@apps/file-transfer/mobile/src/components/BottomNav.vue'
 
 type EventHandler = (payload: any) => void
 
@@ -122,7 +122,7 @@ describe('FileTransferView 浏览加载闸门', () => {
 
   /** 切到浏览 tab（Transition 默认被 VTU stub，emit 后一次 nextTick 即可见） */
   async function openBrowseTab(wrapper: ReturnType<typeof mountView>): Promise<void> {
-    wrapper.findComponent(TabBar).vm.$emit('update:modelValue', 'browse')
+    wrapper.findComponent(BottomNav).vm.$emit('update:modelValue', 'browse')
     await nextTick()
   }
 

@@ -189,6 +189,12 @@ jobs:
         working-directory: wasmnest/wasmnest-desktop
         run: pnpm install --frozen-lockfile
 
+      # SDK 的 exports 指向 dist（gitignore，不入库）：fresh checkout 若只 install
+      # 不构建，workspace:* 链接的包解析不到 .d.ts，vue-tsc 报 TS2307。
+      - name: 桌面 SDK dist（vue-tsc 解析 workspace 包类型）
+        working-directory: wasmnest/wasmnest-desktop/packages/plugin-sdk-desktop
+        run: pnpm run build
+
       - name: vue-tsc --noEmit
         working-directory: wasmnest/wasmnest-desktop
         run: pnpm exec vue-tsc --noEmit
