@@ -24,18 +24,20 @@
 ## 目录
 
 - **上手**：[概览](#概览) · [界面](#界面) · [特性](#特性) · [快速开始](#快速开始)
-- **了解**：[工作原理](#工作原理) · [四仓协作](#四仓协作) · [双端形态](#双端形态) · [内置应用与服务](#内置应用与服务)
+- **了解**：[工作原理](#工作原理) · [系统架构](#系统架构) · [四仓协作](#四仓协作) · [双端形态](#双端形态) · [内置应用与服务](#内置应用与服务)
 - **参与**：[开发一个应用](#开发一个应用) · [文档](#文档) · [开发与贡献](#开发与贡献) · [项目状态](#项目状态)
 
 ## 概览
 
-WasmNest 是一个基于 [WebAssembly Component Model](https://component-model.bytecodealliance.org/) 的双端 wasm 应用宿主：桌面端 Tauri 2 + Vue 3（Windows / Linux），移动端 Tauri 2 + Vue 3（Android）。每个产品能力都被做成可独立构建的 wasm 应用，装进一个薄壳宿主。
+WasmNest 是一个基于 [WebAssembly Component Model](https://component-model.bytecodealliance.org/) 与 [wasmtime 48](https://wasmtime.dev/) 的**双端 Wasm 应用宿主**。它由两个薄壳宿主组成——桌面端（`wasmnest-desktop`，Windows / Linux）与移动端（`wasmnest-mobile`，Android），均基于 Tauri 2 + Vue 3，外加端内 SDK 与跨仓构建 / 发布工具，全部落在本仓。
 
-它解决的核心问题是**把产品能力从宿主代码中彻底解耦**：终端、AI 对话、文件传输、运行监控不写进宿主，而是作为独立应用装载。应用逻辑在 wasmtime 沙箱中按权限运行；应用不被停用就继续运行，停用 / 卸载才是唯一销毁点。宿主只保留通用引擎、安全闸门与装配机制。
+宿主自身不承载任何业务代码，只提供三类应用无关的机制：
 
-应用前端与宿主同 webview、同可信域；安全边界与威胁模型见 [ADR 0058](docs/adr/0058-frontend-trust-boundary-and-command-surface-threat-model.md)。
+- **运行时引擎**：每个应用是独立构建的 wasm Component，在独立的 wasmtime 实例中运行，只能显式导入被批准的宿主能力（`pty`、`fs`、`http`、`ws`、`peer`、`auth`、`crypto` 等能力域），默认零系统能力。
+- **安全闸门**：生效权限 = `plugin.json` 声明 ∩ 用户批准，没有默认授予；出站网络、文件访问、前端调用分别过出站（egress）、文件授权与 ACL / CSP 三层闸门。
+- **装配机制**：桌面按 `mountApp` 契约把独立构建的前端包挂进同一窗口，移动按 `activate` 契约把每个应用建成独立的 Vue 运行面；应用的装载、更新、停用与卸载都不改动宿主。
 
-WasmNest 希望让人快速构建**属于个人的本地「小程序」平台**：写好一个小工具，装进宿主即装即用；能做什么由权限逐项决定——没有默认授予，只有逐项批准。
+所有产品能力都是这类 wasm 应用：终端会话（BedCode）、AI 对话（AI Chatbox）、文件传输（File Transfer）、记事（烂笔头）、运行监控（Monitor）、认证中心（Auth Center）等。它们基于能力仓 `wasmnest-lib` 的引擎、在应用仓 `wasmnest-apps` 开发，按双端共享的 WIT 契约写一次，即可在桌面与移动两端装载。
 
 > 项目处于研发起步期（`0.0.2`）：暂无真实用户，也没有对外 ABI 兼容义务，接口与形态可能直接调整。稳定的是设计边界，不是版本号。
 
@@ -129,6 +131,47 @@ flowchart TB
 
 宿主按 `plugin.json` 校验并授权，把每个应用的 wasm Component 放进独立的 wasmtime 实例；桌面把独立构建的前端包挂进同一 webview，移动注册为宿主壳运行面。
 
+## 系统架构
+
+```mermaid
+flowchart TB
+    subgraph Platform["平台仓 · wasmnest（本仓）"]
+        subgraph Hosts["双端宿主 · 薄壳"]
+            Desktop["桌面宿主<br/>wasmnest-desktop · Tauri 2 + Vue 3<br/>Windows / Linux"]
+            Mobile["移动宿主<br/>wasmnest-mobile · Tauri 2 + Vue 3<br/>Android"]
+        end
+        Sdk["端内 SDK<br/>plugin-sdk-desktop / plugin-sdk-mobile"]
+        Tools["构建 / 发布工具<br/>scripts · release-manifest.json"]
+    end
+
+    subgraph Lib["能力仓 · wasmnest-lib"]
+        Core["wasm-core 引擎<br/>wasmtime 运行时 · host API 实现"]
+        WIT["WIT 契约真源<br/>wasmnest-contract"]
+    end
+
+    subgraph Apps["应用仓 · wasmnest-apps"]
+        Biz["业务应用<br/>BedCode · AI Chatbox<br/>File Transfer · 烂笔头"]
+        Svc["系统服务<br/>Monitor · Auth Center · 网络配置中心"]
+    end
+
+    subgraph Test["测试仓 · wasmnest-test"]
+        Cross["跨端真实互连测试"]
+    end
+
+    Desktop -->|"装配"| Core
+    Mobile -->|"装配"| Core
+    Sdk -.->|"开发工具"| Apps
+    Tools -->|"钉版本"| WIT
+    Biz -->|"wasm Component · 只导入被批准的能力"| Core
+    Svc -->|"wasm Component · 只导入被批准的能力"| Core
+    WIT -.->|"契约边界"| Core
+    WIT -.->|"契约边界"| Apps
+    Cross -.->|"验证"| Desktop
+    Cross -.->|"验证"| Mobile
+```
+
+图为 WasmNest 的四仓布局与契约边界：能力仓 `wasmnest-lib` 提供应用无关的 `wasm-core` 引擎（wasmtime 运行时 + host API 实现）与 WIT 契约真源；平台仓（本仓）提供双端薄壳宿主、端内 SDK 与构建 / 发布工具，把引擎装配成可运行的宿主；应用仓 `wasmnest-apps` 提供业务应用与系统服务，每个都是独立构建的 wasm Component，装载进引擎、只导入被批准的宿主能力；测试仓 `wasmnest-test` 做跨端真实互连验证。WIT / Component Model 契约是宿主与应用之间唯一的边界，版本由 `release-manifest.json` 跨仓钉住。
+
 ## 四仓协作
 
 WasmNest 由四个平级仓库组成，默认按同场（sibling）布局摆放：
@@ -177,7 +220,7 @@ WasmNest 由四个平级仓库组成，默认按同场（sibling）布局摆放�
 | [**Auth Center**](https://github.com/7ZAI/wasmnest-apps/tree/dev/servers/auth-center) | `com.wasmnest.auth-center` | 桌面 | 认证中心：本机入站连接的唯一裁决者（fail-closed）；配对码 / QR / 信任 / 认证策略 / 生物凭证 |
 | [**网络配置中心**](https://github.com/7ZAI/wasmnest-apps/tree/dev/servers/net-config) | `com.wasmnest.net-config` | 桌面 | 穿透配置的跨应用唯一真源：一处导入中继地址、按插件维护「是否允许外网」注册表、部署文本生成与地址校验；唯一例外是只读连通性探测（tunnel:probe） |
 
-## 开发一个应用
+## 开发一个Wasm应用
 
 应用源码不在本仓，住 [`wasmnest-apps`](https://github.com/7ZAI/wasmnest-apps)。桌面应用是独立挂载包（入口 `mountApp(root, env)`），移动应用是宿主壳运行面（入口 `activate(context)` / `deactivate()`）。`plugin.json` 声明 `id` / `platform` / `permissions` 等字段，权限按最小集声明，未声明即拒。
 
