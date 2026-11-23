@@ -318,6 +318,9 @@ const SHARED_DOMAIN_INTERFACES: &[&str] = &[
     "host-http",
     "host-websocket",
     "host-notify",
+    // 内网穿透通道（T05/T19）：域分片住能力仓 peer-net crate，双端共用同一
+    // 通道原语面；端 UI / 设置表单仍留应用仓，故按共享域 interface 登记。
+    "host-tunnel",
 ];
 
 /// 端扩展 / 端独有 interface 的 Rust 模块路径词（域 crate 生产代码不得出现）
