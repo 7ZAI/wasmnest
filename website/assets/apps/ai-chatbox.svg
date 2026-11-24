@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="20" fill="url(#bg)"/>
+  <!-- 聊天气泡 -->
+  <path d="M22 34 Q22 22 34 22 L66 22 Q78 22 78 34 L78 52 Q78 64 66 64 L44 64 L32 78 L34 64 Q22 64 22 52 Z" fill="#FFFFFF" fill-opacity="0.95"/>
+  <!-- 内部 sparkle 四角星（AI 魔法感） -->
+  <path d="M50 30 L54 44 L68 48 L54 52 L50 66 L46 52 L32 48 L46 44 Z" fill="#8B5CF6"/>
+</svg>

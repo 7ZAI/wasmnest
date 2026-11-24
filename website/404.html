@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>404 · WasmNest</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/logo.png" type="image/png">
+<style>
+  @font-face { font-family: "Fraunces"; src: url("assets/fonts/fraunces-normal.woff2") format("woff2"); font-weight: 300 700; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Manrope"; src: url("assets/fonts/manrope.woff2") format("woff2"); font-weight: 400 700; font-style: normal; font-display: swap; }
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    margin: 0;
+    display: grid;
+    place-items: center;
+    padding: 32px;
+    background:
+      radial-gradient(800px 500px at 80% -10%, rgba(240, 161, 58, 0.24), transparent 65%),
+      #f7f3ea;
+    color: #17140d;
+    font-family: "Manrope", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  main { max-width: 560px; }
+  img { width: 48px; height: 48px; border-radius: 12px; }
+  p.label {
+    margin: 28px 0 10px;
+    color: #b9470f;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  h1 {
+    margin: 0;
+    font-family: "Fraunces", "Noto Serif SC", "Songti SC", serif;
+    font-size: clamp(2.6rem, 8vw, 4.4rem);
+    font-weight: 380;
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+  }
+  p.copy { margin: 18px 0 0; color: #6c6353; font-size: 15px; line-height: 1.7; }
+  p.copy span { display: block; }
+  a.home {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 30px;
+    padding: 13px 20px;
+    border-radius: 999px;
+    background: #17140d;
+    color: #f7f3ea;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  a.home:hover { background: #b9470f; }
+</style>
+</head>
+<body>
+<main>
+  <img src="assets/logo.png" alt="WasmNest">
+  <p class="label">404 / not found</p>
+  <h1>这里没有巢。<br>Nothing nested here.</h1>
+  <p class="copy">
+    <span>页面可能已被移走，或者从未存在。</span>
+    <span>This page may have moved, or never existed.</span>
+  </p>
+  <a class="home" href="./">回到首页 / Back home →</a>
+</main>
+</body>
+</html>

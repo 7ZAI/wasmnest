@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#EF4444"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="20" fill="url(#bg)"/>
+  <!-- 报纸 -->
+  <rect x="18" y="24" width="64" height="52" rx="6" fill="#FFFFFF" fill-opacity="0.95"/>
+  <!-- 报头 -->
+  <rect x="26" y="32" width="30" height="6" rx="2" fill="#EF4444"/>
+  <!-- 正文行 -->
+  <rect x="26" y="44" width="48" height="4" rx="2" fill="#B45309" fill-opacity="0.55"/>
+  <rect x="26" y="53" width="44" height="4" rx="2" fill="#B45309" fill-opacity="0.55"/>
+  <rect x="26" y="62" width="34" height="4" rx="2" fill="#B45309" fill-opacity="0.55"/>
+  <circle cx="74" cy="66" r="8" fill="#EF4444"/>
+  <path d="M70.5 66 L73 68.5 L77.5 63.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
