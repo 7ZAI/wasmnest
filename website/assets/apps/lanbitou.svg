@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!--
+    烂笔头 · 水墨散锋（宣纸底 + 墨杆 + 白毫按纸散开 + 湿墨圆散）
+
+    构图判据（改图前先读；这三条是设计意图，不随渲染器变）：
+    1. 笔杆与水平线夹角 72°（rotate(18) 的补角，要求 ≥70°）
+    2. 杆（y 6→48，含笔箍）明显长于白毫（长 10~26）
+    3. 毫毛以笔尖为根按 161°…26° 不规则散开、末端下垂，湿墨与墨点围成圆散
+    形貌全部由几何路径画出：滤镜只做湿墨晕开的微调，去掉滤镜形状依然成立。
+  -->
+  <defs>
+    <radialGradient id="paper" cx="40%" cy="32%" r="80%">
+      <stop offset="0%" stop-color="#FBF7ED"/>
+      <stop offset="58%" stop-color="#F2EADA"/>
+      <stop offset="100%" stop-color="#E0D3B9"/>
+    </radialGradient>
+    <linearGradient id="shaft" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#514A3E"/>
+      <stop offset="22%" stop-color="#2B2721"/>
+      <stop offset="70%" stop-color="#1A1814"/>
+      <stop offset="100%" stop-color="#332D25"/>
+    </linearGradient>
+    <linearGradient id="ferrule" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3D372C"/>
+      <stop offset="42%" stop-color="#17150F"/>
+      <stop offset="100%" stop-color="#2E2820"/>
+    </linearGradient>
+    <!-- 湿墨晕开：噪声位移破齐边，轻模糊出洇感（只用于墨团 / 墨点） -->
+    <filter id="bleed" x="-40%" y="-40%" width="180%" height="180%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="2" seed="9" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="1.4" xChannelSelector="R" yChannelSelector="G"/>
+      <feGaussianBlur stdDeviation="0.35"/>
+    </filter>
+    <filter id="ink" x="-50%" y="-50%" width="200%" height="200%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="4" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="2" xChannelSelector="R" yChannelSelector="G"/>
+      <feGaussianBlur stdDeviation="0.7"/>
+    </filter>
+    <filter id="wet" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.8"/>
+    </filter>
+  </defs>
+
+  <rect width="100" height="100" rx="20" fill="url(#paper)"/>
+  <!-- 纸面墨气：两团极淡湿痕，避免纯色平板 -->
+  <ellipse cx="26" cy="22" rx="30" ry="15" fill="#8C7C5C" opacity="0.05" filter="url(#wet)"/>
+  <ellipse cx="76" cy="84" rx="24" ry="13" fill="#8C7C5C" opacity="0.05" filter="url(#wet)"/>
+
+  <!-- 整支笔绕笔尖旋转 18°：笔杆与水平线成 72° -->
+  <g transform="rotate(18 50 48)">
+    <!-- 落纸的墨：笔尖湿墨核心 + 两条沿毫身洇下的墨丝 -->
+    <g filter="url(#ink)">
+      <ellipse cx="50" cy="51.6" rx="8.4" ry="5.6" fill="#14120E" opacity="0.62"/>
+      <ellipse cx="50" cy="55.4" rx="6.8" ry="4.6" fill="#14120E" opacity="0.4"/>
+      <path d="M46.4 52.6Q44 58 42.2 64" fill="none" stroke="#14120E" stroke-width="2.6" opacity="0.22" stroke-linecap="round"/>
+      <path d="M53.4 52.4Q56 58.4 58.6 64.4" fill="none" stroke="#14120E" stroke-width="2.4" opacity="0.2" stroke-linecap="round"/>
+    </g>
+    <!-- 白毫：笔箍下缘为根 ±47° 不规则散开、长短乱序、末端下垂。
+         用过的一支：毫身是米白，锋尖吸饱墨（黑 = 蘸墨），每根吸墨长短不一。 -->
+    <g fill="none" stroke-linecap="round">
+      <!-- 毫身（白毫本色） -->
+      <g stroke="#FBF5E6">
+        <path d="M47.6 48.8Q40.1 53.8 34.8 63.3" stroke-width="2.6" opacity="0.95"/>
+        <path d="M46.4 48.8Q40.9 59.6 31.9 70.1" stroke-width="3.1" opacity="1.0"/>
+        <path d="M47.2 48.8Q41.4 56.9 37.7 68.1" stroke-width="2.8" opacity="0.98"/>
+        <path d="M46.0 48.8Q43.2 61.8 37.1 74.8" stroke-width="3.4" opacity="1.0"/>
+        <path d="M47.8 48.8Q43.7 59.3 43.6 71.4" stroke-width="3.0" opacity="1.0"/>
+        <path d="M47.0 48.8Q47.9 62.9 46.0 77.3" stroke-width="3.7" opacity="1.0"/>
+        <path d="M48.6 48.8Q48.3 61.3 51.6 74.0" stroke-width="3.2" opacity="1.0"/>
+        <path d="M48.0 48.8Q53.6 61.3 55.4 76.3" stroke-width="3.5" opacity="1.0"/>
+        <path d="M49.2 48.8Q52.4 59.1 58.1 69.9" stroke-width="2.9" opacity="0.99"/>
+        <path d="M49.8 48.8Q58.1 58.5 63.8 72.1" stroke-width="3.3" opacity="1.0"/>
+        <path d="M50.6 48.8Q56.2 56.5 63.2 65.2" stroke-width="2.7" opacity="0.97"/>
+        <path d="M51.4 48.8Q58.0 52.7 63.2 61.0" stroke-width="2.5" opacity="0.95"/>
+        <path d="M46.4 48.8Q38.9 60.6 28.0 71.7" stroke-width="1.2" opacity="0.62"/>
+        <path d="M46.0 48.8Q39.3 59.1 35.9 72.8" stroke-width="1.1" opacity="0.6"/>
+        <path d="M47.0 48.8Q47.1 64.5 43.2 80.2" stroke-width="1.2" opacity="0.66"/>
+        <path d="M48.0 48.8Q48.7 64.0 53.7 79.4" stroke-width="1.1" opacity="0.64"/>
+        <path d="M49.8 48.8Q57.5 59.6 62.4 73.7" stroke-width="1.2" opacity="0.6"/>
+        <path d="M51.4 48.8Q58.1 58.0 67.5 66.6" stroke-width="1.1" opacity="0.56"/>
+      </g>
+      <!-- 锋尖上墨：同一段曲线的 t…1 子段。黑 = 蘸过墨，每根吸墨长短不一 -->
+      <g stroke="#171410" filter="url(#bleed)">
+        <path d="M38.7 57.4Q36.6 60.1 34.8 63.3" stroke-width="2.55" opacity="0.9"/>
+        <path d="M38.9 61.3Q35.7 65.7 31.9 70.1" stroke-width="3.04" opacity="0.9"/>
+        <path d="M40.0 62.1Q38.8 64.9 37.7 68.1" stroke-width="2.74" opacity="0.9"/>
+        <path d="M42.2 62.3Q40.1 68.6 37.1 74.8" stroke-width="3.33" opacity="0.9"/>
+        <path d="M44.2 62.9Q43.7 67.0 43.6 71.4" stroke-width="2.94" opacity="0.9"/>
+        <path d="M47.2 61.8Q47.0 69.5 46.0 77.3" stroke-width="3.63" opacity="0.9"/>
+        <path d="M49.5 63.9Q50.3 68.9 51.6 74.0" stroke-width="3.14" opacity="0.9"/>
+        <path d="M52.7 61.9Q54.5 68.8 55.4 76.3" stroke-width="3.43" opacity="0.9"/>
+        <path d="M54.7 63.0Q56.2 66.5 58.1 69.9" stroke-width="2.84" opacity="0.9"/>
+        <path d="M58.3 60.9Q61.3 66.1 63.8 72.1" stroke-width="3.23" opacity="0.9"/>
+        <path d="M59.1 60.1Q61.1 62.6 63.2 65.2" stroke-width="2.65" opacity="0.9"/>
+        <path d="M60.4 57.0Q61.9 58.9 63.2 61.0" stroke-width="2.45" opacity="0.9"/>
+        <path d="M37.0 61.8Q32.8 66.8 28.0 71.7" stroke-width="1.18" opacity="0.9"/>
+        <path d="M39.9 60.4Q37.5 66.2 35.9 72.8" stroke-width="1.08" opacity="0.9"/>
+        <path d="M46.3 62.6Q45.4 71.4 43.2 80.2" stroke-width="1.18" opacity="0.9"/>
+        <path d="M49.7 63.5Q51.1 71.4 53.7 79.4" stroke-width="1.08" opacity="0.9"/>
+        <path d="M57.3 61.4Q60.1 67.2 62.4 73.7" stroke-width="1.18" opacity="0.9"/>
+        <path d="M60.1 59.3Q63.5 63.0 67.5 66.6" stroke-width="1.08" opacity="0.9"/>
+      </g>
+    </g>
+    <!-- 毫端湿墨：落纸洇开的墨珠，沿毫锋外缘围成圆散 -->
+    <g filter="url(#bleed)" fill="#14110D">
+      <circle cx="34.8" cy="63.3" r="1.00" opacity="0.40"/>
+      <circle cx="31.9" cy="70.1" r="1.22" opacity="0.50"/>
+      <circle cx="37.7" cy="68.1" r="1.44" opacity="0.60"/>
+      <circle cx="37.1" cy="74.8" r="1.66" opacity="0.40"/>
+      <circle cx="43.6" cy="71.4" r="1.00" opacity="0.50"/>
+      <circle cx="46.0" cy="77.3" r="1.22" opacity="0.60"/>
+      <circle cx="51.6" cy="74.0" r="1.44" opacity="0.40"/>
+      <circle cx="55.4" cy="76.3" r="1.66" opacity="0.50"/>
+      <circle cx="58.1" cy="69.9" r="1.00" opacity="0.60"/>
+      <circle cx="63.8" cy="72.1" r="1.22" opacity="0.40"/>
+      <circle cx="63.2" cy="65.2" r="1.44" opacity="0.50"/>
+      <circle cx="63.2" cy="61.0" r="1.66" opacity="0.60"/>
+      <circle cx="28.0" cy="71.7" r="1.00" opacity="0.40"/>
+      <circle cx="35.9" cy="72.8" r="1.22" opacity="0.50"/>
+      <circle cx="43.2" cy="80.2" r="1.44" opacity="0.60"/>
+      <circle cx="53.7" cy="79.4" r="1.66" opacity="0.40"/>
+      <circle cx="62.4" cy="73.7" r="1.00" opacity="0.50"/>
+      <circle cx="67.5" cy="66.6" r="1.22" opacity="0.60"/>
+    </g>
+
+    <!-- 笔箍：墨色一段，上缘一道浅痕 -->
+    <rect x="41.4" y="38.4" width="17.2" height="10.2" rx="2.2" fill="url(#ferrule)"/>
+    <rect x="41.8" y="39.7" width="16.4" height="1" rx="0.5" fill="#8E8674" opacity="0.4"/>
+    <rect x="41.8" y="46.8" width="16.4" height="1.1" rx="0.55" fill="#6B6353" opacity="0.45"/>
+
+    <!-- 笔杆：水墨杆，上略窄下略宽（长 32，加箍共 42，明显长于白毫） -->
+    <path d="M44.8 38.4L45.4 9.2Q45.6 5.8 49 5.8L51 5.8Q54.4 5.8 54.6 9.2L55.2 38.4Z" fill="url(#shaft)"/>
+    <!-- 杆上飞白：一亮一暗两道，破掉满色圆柱感 -->
+    <path d="M48.2 37.6L48.8 9.4Q48.8 8 49.6 8L49.6 37.6Z" fill="#7A7263" opacity="0.36"/>
+    <path d="M52.2 37.6L52.6 10Q52.6 8.8 52.1 8.8L51.6 37.6Z" fill="#0E0D0A" opacity="0.4"/>
+    <!-- 杆顶收口 + 一道箍线 -->
+    <rect x="45" y="5.6" width="10" height="2.6" rx="1.3" fill="#4E4839"/>
+    <rect x="45.2" y="12.8" width="9.6" height="1" rx="0.5" fill="#8C8472" opacity="0.26"/>
+  </g>
+</svg>

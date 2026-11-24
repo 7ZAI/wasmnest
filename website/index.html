@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="zh-CN" data-lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WasmNest · 你的应用，由你构建。</title>
+<meta name="description" content="WasmNest 是一个双端 Wasm 应用宿主：每个产品能力都是独立构建的 wasm 应用，一套 WIT 契约跑桌面与 Android，能力即权限。下载 Windows / Linux / Android 安装包、应用包与 SDK。">
+<meta name="theme-color" content="#f7f3ea">
+<link rel="icon" href="assets/logo.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/logo.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="WasmNest">
+<meta property="og:title" content="WasmNest · 你的应用，由你构建。">
+<meta property="og:description" content="双端 Wasm 应用宿主 —— 能力即权限，宿主保持极简。">
+<meta property="og:url" content="https://7zai.github.io/wasmnest/">
+<meta property="og:image" content="https://7zai.github.io/wasmnest/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="WasmNest —— 你的应用，由你构建。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="css/style.css">
+<script>
+  (function () {
+    try {
+      var query = new URLSearchParams(location.search).get('lang');
+      var stored = localStorage.getItem('wasmnest.site.lang');
+      var lang = query === 'en' || query === 'zh' ? query : (stored === 'en' || stored === 'zh' ? stored : 'zh');
+      document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+      document.documentElement.dataset.lang = lang;
+      document.documentElement.classList.add('js');
+      if (lang === 'en') document.documentElement.classList.add('i18n-pending');
+      window.setTimeout(function () {
+        document.documentElement.classList.remove('i18n-pending');
+      }, 1500);
+    } catch (error) {}
+  })();
+</script>
+</head>
+<body id="top">
+
+<a class="skip-link" href="#main" data-i18n="a11y.skip">跳到主要内容</a>
+
+<header class="site-header" id="siteHeader">
+  <div class="container header-inner">
+    <a class="brand" href="#top" aria-label="WasmNest">
+      <img src="assets/logo.png" width="30" height="30" alt="">
+      <span>WasmNest</span>
+    </a>
+
+    <nav class="primary-nav" id="primaryNav" aria-label="主导航">
+      <a href="#overview" data-i18n="nav.overview">概览</a>
+      <a href="#why" data-i18n="nav.why">特性</a>
+      <a href="#architecture" data-i18n="nav.architecture">架构</a>
+      <a href="#apps" data-i18n="nav.apps">应用</a>
+      <a href="#download" data-i18n="nav.download">下载</a>
+      <a href="#sdk" data-i18n="nav.sdk">SDK</a>
+      <a class="nav-mobile-cta" href="#download" data-i18n="nav.mobileCta">下载 WasmNest</a>
+    </nav>
+
+    <div class="header-actions">
+      <div class="lang-switch" role="group" aria-label="Language / 语言">
+        <button type="button" data-lang-set="zh" aria-pressed="true">中</button>
+        <button type="button" data-lang-set="en" aria-pressed="false">EN</button>
+      </div>
+      <a class="icon-btn" href="https://github.com/7ZAI/wasmnest" target="_blank" rel="noopener" aria-label="GitHub repository">
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+      <a class="btn btn-primary btn-small header-download" href="#download" data-i18n="nav.cta">下载</a>
+      <button class="menu-btn" id="menuBtn" type="button" aria-controls="primaryNav" aria-expanded="false" data-i18n-aria-label="nav.menuLabel" aria-label="打开菜单">
+        <span></span><span></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="hero" aria-labelledby="heroTitle">
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span><span data-i18n="hero.eyebrow">0.0.2 Alpha · 四仓开源 · MIT</span></p>
+        <h1 id="heroTitle" data-i18n-html="hero.title">你的应用，<br><em>由你构建。</em></h1>
+        <p class="hero-lede" data-i18n="hero.lede">双端 Wasm 应用宿主 —— 能力即权限，宿主保持极简。</p>
+        <p class="hero-sub" data-i18n="hero.sub">宿主只提供运行时、安全闸门与装配机制。会话、终端、AI、文件传输……每个产品能力都是一个独立构建的 wasm 应用，写一次，桌面与 Android 都能装载。</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#download">
+            <span data-i18n="hero.ctaPrimary">下载 WasmNest</span>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 8h9M8.5 3.5 13 8l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <a class="btn btn-ghost" href="#apps" data-i18n="hero.ctaSecondary">浏览应用</a>
+        </div>
+        <p class="hero-platforms"><span data-i18n="hero.platforms">Windows · Linux · Android</span><span class="sep" aria-hidden="true">/</span><span class="mono">v0.0.2</span></p>
+      </div>
+
+      <div class="hero-visual" aria-hidden="true">
+        <div class="hero-halo"></div>
+        <figure class="window">
+          <div class="window-bar">
+            <span class="window-dots"><i></i><i></i><i></i></span>
+            <span class="window-title" data-i18n="hero.frameTitle">WasmNest · 主屏</span>
+            <span class="window-badge mono">0.0.2</span>
+          </div>
+          <img src="assets/desktop-home.png" width="1440" height="900" alt="" fetchpriority="high">
+        </figure>
+        <div class="float-card float-perm">
+          <div class="float-head">
+            <span class="float-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3 5 6v5c0 4.4 2.9 8 7 10 4.1-2 7-5.6 7-10V6l-7-3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m8.8 11.8 2.1 2.1 4.3-4.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <span data-i18n="hero.permTitle">权限闸门</span>
+          </div>
+          <div class="perm-formula">
+            <span class="perm-figure"><strong>22</strong><span data-i18n="hero.permDeclared">声明</span></span>
+            <span class="perm-op">∩</span>
+            <span class="perm-figure"><strong>7</strong><span data-i18n="hero.permApproved">批准</span></span>
+            <span class="perm-op">=</span>
+            <span class="perm-figure perm-figure--on"><strong>7</strong><span data-i18n="hero.permEffective">生效</span></span>
+          </div>
+          <p class="float-note" data-i18n="hero.permNote">声明 ∩ 批准，无默认授予</p>
+        </div>
+        <div class="float-card float-app">
+          <span class="pulse-dot"></span>
+          <div>
+            <strong>BedCode</strong>
+            <span data-i18n="hero.appMeta">wasm Component · 运行中</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="stats" aria-label="项目数据">
+        <div class="stat"><span class="stat-num">4</span><span class="stat-label" data-i18n="stats.repos">个仓库</span><span class="stat-sub" data-i18n="stats.reposSub">平台 / 能力 / 应用 / 测试</span></div>
+        <div class="stat"><span class="stat-num">2</span><span class="stat-label" data-i18n="stats.ends">端宿主</span><span class="stat-sub" data-i18n="stats.endsSub">桌面 + Android</span></div>
+        <div class="stat"><span class="stat-num">29</span><span class="stat-label" data-i18n="stats.wit">个 WIT 包</span><span class="stat-sub" data-i18n="stats.witSub">契约按包版本化</span></div>
+        <div class="stat"><span class="stat-num">10</span><span class="stat-label" data-i18n="stats.apps">个 wasm 应用</span><span class="stat-sub" data-i18n="stats.appsSub">业务应用与系统服务</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="cap-marquee" aria-hidden="true">
+    <div class="marquee-track">
+      <span>pty</span><span>fs</span><span>http</span><span>ws</span><span>peer</span><span>mdns</span><span>auth</span><span>crypto</span><span>stt</span><span>tunnel</span><span>notify</span><span>clipboard</span><span>task</span><span>timer</span><span>process</span><span>metrics</span>
+      <span>pty</span><span>fs</span><span>http</span><span>ws</span><span>peer</span><span>mdns</span><span>auth</span><span>crypto</span><span>stt</span><span>tunnel</span><span>notify</span><span>clipboard</span><span>task</span><span>timer</span><span>process</span><span>metrics</span>
+    </div>
+  </div>
+
+  <section class="section" id="overview">
+    <div class="container">
+      <header class="section-head">
+        <div>
+          <p class="eyebrow"><span>01</span><span data-i18n="repos.eyebrow">四仓协作</span></p>
+          <h2 data-i18n-html="repos.title">一个巢，<br>四个仓。</h2>
+        </div>
+        <p class="lead" data-i18n="repos.lead">四个平级仓库各管一层，默认按同场目录摆放；跨仓版本由 release-manifest.json 钉住。宿主装配引擎，应用只依赖契约。</p>
+      </header>
+
+      <div class="repo-grid">
+        <a class="repo-card" href="https://github.com/7ZAI/wasmnest" target="_blank" rel="noopener">
+          <span class="repo-index mono">01</span>
+          <span class="repo-name">wasmnest</span>
+          <span class="repo-role" data-i18n="repos.platformRole">平台仓 · 双端宿主 + 端内 SDK + 发布工具</span>
+          <span class="repo-tag mono">v0.0.2</span>
+          <span class="repo-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M3 13 13 3M6 3h7v7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </a>
+        <a class="repo-card" href="https://github.com/7ZAI/wasmnest-lib" target="_blank" rel="noopener">
+          <span class="repo-index mono">02</span>
+          <span class="repo-name">wasmnest-lib</span>
+          <span class="repo-role" data-i18n="repos.libRole">能力仓 · wasmtime 引擎 + WIT 契约真源</span>
+          <span class="repo-tag mono">lib-v0.1.0</span>
+          <span class="repo-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M3 13 13 3M6 3h7v7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </a>
+        <a class="repo-card" href="https://github.com/7ZAI/wasmnest-apps" target="_blank" rel="noopener">
+          <span class="repo-index mono">03</span>
+          <span class="repo-name">wasmnest-apps</span>
+          <span class="repo-role" data-i18n="repos.appsRole">应用仓 · 业务应用与系统服务</span>
+          <span class="repo-tag mono">apps-v0.0.2</span>
+          <span class="repo-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M3 13 13 3M6 3h7v7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </a>
+        <a class="repo-card" href="https://github.com/7ZAI/wasmnest-test" target="_blank" rel="noopener">
+          <span class="repo-index mono">04</span>
+          <span class="repo-name">wasmnest-test</span>
+          <span class="repo-role" data-i18n="repos.testRole">测试仓 · 真实移动端 ↔ 桌面端互连</span>
+          <span class="repo-tag mono">test-v*</span>
+          <span class="repo-arrow" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M3 13 13 3M6 3h7v7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="why">
+    <div class="container">
+      <header class="section-head">
+        <div>
+          <p class="eyebrow"><span>02</span><span data-i18n="why.eyebrow">为什么不一样</span></p>
+          <h2 data-i18n-html="why.title">薄的是宿主，<br>厚的是边界。</h2>
+        </div>
+        <p class="lead" data-i18n="why.lead">宿主不承载业务，也不替应用做决定。它只负责运行、隔离、授权与装配——把复杂度留在契约上，而不是留在安装包里。</p>
+      </header>
+
+      <div class="bento">
+        <article class="bento-card bento-wide">
+          <div class="bento-body">
+            <span class="bento-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 3 3 7.5 12 12l9-4.5L12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m3 12 9 4.5L21 12M3 16.5l9 4.5 9-4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            </span>
+            <h3 data-i18n="why.sandboxTitle">默认零能力</h3>
+            <p data-i18n="why.sandboxText">每个应用是一个独立的 wasm Component，跑在独立的 wasmtime 实例里。文件、网络、PTY 都要显式导入并经批准；应用失控，影响半径停在自己的实例内。</p>
+          </div>
+          <div class="sandbox-visual" aria-hidden="true">
+            <div class="instance instance--ok"><span>ai-chatbox</span><i></i></div>
+            <div class="instance instance--ok"><span>bedcode</span><i></i></div>
+            <div class="instance instance--ok"><span>monitor</span><i></i></div>
+            <div class="instance instance--trap"><span>unknown</span><i></i></div>
+            <p class="vis-caption" data-i18n="why.sandboxVis">独立实例 · 失控隔离</p>
+          </div>
+        </article>
+
+        <article class="bento-card">
+          <div class="bento-body">
+            <span class="bento-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 3 5 6v5c0 4.4 2.9 8 7 10 4.1-2 7-5.6 7-10V6l-7-3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m8.8 11.8 2.1 2.1 4.3-4.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <h3 data-i18n="why.permissionTitle">能力即权限</h3>
+            <p data-i18n="why.permissionText">生效权限 = plugin.json 声明 ∩ 用户批准。高风险能力按域拆分、逐项开关；权限页保留按应用的访问记录。</p>
+          </div>
+          <div class="gate-visual" aria-hidden="true">
+            <div class="gate-row"><span class="mono">pty:spawn</span><i class="toggle on"></i></div>
+            <div class="gate-row"><span class="mono">fs:write</span><i class="toggle on"></i></div>
+            <div class="gate-row"><span class="mono">network:http</span><i class="toggle"></i></div>
+          </div>
+        </article>
+
+        <article class="bento-card">
+          <div class="bento-body">
+            <span class="bento-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22"><rect x="3" y="5" width="13" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 19h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="14" y="9" width="7" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+            </span>
+            <h3 data-i18n="why.dualTitle">一套契约，两端装载</h3>
+            <p data-i18n="why.dualText">桌面按 mountApp 契约把独立前端包挂进同一窗口；移动注册为宿主壳运行面。WIT 与 SDK 双端共享，应用写一次。</p>
+          </div>
+          <div class="dual-visual" aria-hidden="true">
+            <div class="device"><span class="mono">Desktop</span><i></i></div>
+            <span class="dual-link"></span>
+            <div class="device device--phone"><span class="mono">Android</span><i></i></div>
+          </div>
+        </article>
+
+        <article class="bento-card bento-wide">
+          <div class="bento-body">
+            <span class="bento-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <h3 data-i18n="why.languageTitle">语言不设限</h3>
+            <p data-i18n="why.languageText">宿主与应用只通过 WIT 接口对话，不共享源码。Rust、Go、C/C++、JavaScript……只要能产出 wasm Component，就能进巢。</p>
+          </div>
+          <div class="lang-visual" aria-hidden="true">
+            <span>Rust</span><span>Go</span><span>C / C++</span><span>JS / TS</span><span>Python</span>
+            <span class="lang-arrow">→</span>
+            <span class="lang-target mono">wasm Component</span>
+          </div>
+        </article>
+
+        <article class="bento-card">
+          <div class="bento-body">
+            <span class="bento-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <h3 data-i18n="why.lifecycleTitle">应用独立构建</h3>
+            <p data-i18n="why.lifecycleText">新增、更新、停用应用都不需要重发宿主。切走只是藏起来；停用或卸载是唯一销毁点。</p>
+          </div>
+          <div class="lifecycle-visual" aria-hidden="true">
+            <span data-i18n="why.stepInstall">安装</span><i></i><span data-i18n="why.stepRun">运行</span><i></i><span data-i18n="why.stepStop">停用</span>
+          </div>
+        </article>
+
+        <article class="bento-card">
+          <div class="bento-body">
+            <span class="bento-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22"><path d="M10 13a4.5 4.5 0 0 0 6.4 0l2.1-2.1a4.5 4.5 0 1 0-6.4-6.4L11 5.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 11a4.5 4.5 0 0 0-6.4 0l-2.1 2.1a4.5 4.5 0 1 0 6.4 6.4l1.1-1.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </span>
+            <h3 data-i18n="why.contractTitle">契约锁死漂移</h3>
+            <p data-i18n="why.contractText">四仓版本由 release-manifest.json 钉住，WIT 指纹与清单一致性都有锁；契约漂移当场报错，而不是静默降级。</p>
+          </div>
+          <div class="contract-visual mono" aria-hidden="true">
+            <span>wasmnest:plugin@0.1.0</span>
+            <span>witSha256 031b8887…</span>
+            <span>apps-v0.0.2 · lib-v0.1.0</span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--dark" id="architecture">
+    <div class="container">
+      <header class="section-head section-head--dark">
+        <div>
+          <p class="eyebrow"><span>03</span><span data-i18n="arch.eyebrow">机制</span></p>
+          <h2 data-i18n-html="arch.title">宿主只回答一件事：<br>机制怎么做。</h2>
+        </div>
+        <p class="lead" data-i18n="arch.lead">应用只通过 WIT 与宿主对话，不共享源码。一次装配，跨两端复用；装载、更新、停用与卸载都不改动宿主。</p>
+      </header>
+
+      <div class="arch-layout">
+        <div class="arch-steps">
+          <article class="arch-step">
+            <span class="step-num mono">01</span>
+            <h3 data-i18n="arch.engineTitle">运行时引擎</h3>
+            <p data-i18n="arch.engineText">每个应用跑在独立的 wasmtime 48 实例。宿主提供 PTY、文件、HTTP、WS、对等网络、认证与加密等通用原语，全部按权限开放。</p>
+          </article>
+          <article class="arch-step">
+            <span class="step-num mono">02</span>
+            <h3 data-i18n="arch.gateTitle">安全闸门</h3>
+            <p data-i18n="arch.gateText">出站网络过 egress，文件访问过授权，前端调用过 ACL / CSP。三条闸门站在应用与系统之间。</p>
+          </article>
+          <article class="arch-step">
+            <span class="step-num mono">03</span>
+            <h3 data-i18n="arch.assemblyTitle">装配机制</h3>
+            <p data-i18n="arch.assemblyText">桌面把前端包挂进同一 webview，移动把每个应用建成独立 Vue 运行面。宿主只认契约，不认产品。</p>
+          </article>
+        </div>
+
+        <div class="arch-map" role="img" aria-label="WasmNest architecture">
+          <div class="arch-hosts">
+            <div class="arch-node">
+              <span class="arch-tag mono">HOST · DESKTOP</span>
+              <strong>wasmnest-desktop</strong>
+              <span>Tauri 2 · Vue 3</span>
+            </div>
+            <div class="arch-node">
+              <span class="arch-tag mono">HOST · MOBILE</span>
+              <strong>wasmnest-mobile</strong>
+              <span>Tauri 2 · Vue 3</span>
+            </div>
+          </div>
+          <div class="arch-flow" aria-hidden="true"><span></span></div>
+          <div class="arch-contract">
+            <span class="arch-tag mono" data-i18n="arch.contractTag">WIT 契约边界</span>
+            <strong class="mono">wasmnest:plugin 0.1.0</strong>
+            <span class="arch-meta" data-i18n="arch.contractMeta">29 个包 · release-manifest.json 钉版本</span>
+          </div>
+          <div class="arch-flow" aria-hidden="true"><span></span></div>
+          <div class="arch-apps">
+            <span class="arch-chip"><img src="assets/apps/bedcode.svg" alt="" width="18" height="18">BedCode</span>
+            <span class="arch-chip"><img src="assets/apps/ai-chatbox.svg" alt="" width="18" height="18">AI Chatbox</span>
+            <span class="arch-chip"><img src="assets/apps/file-transfer.svg" alt="" width="18" height="18">File Transfer</span>
+            <span class="arch-chip"><img src="assets/apps/monitor.svg" alt="" width="18" height="18">Monitor</span>
+            <span class="arch-chip"><img src="assets/apps/auth-center.svg" alt="" width="18" height="18">Auth Center</span>
+          </div>
+          <div class="arch-base">
+            <div class="arch-node arch-node--engine">
+              <span class="arch-tag mono">ENGINE</span>
+              <strong>wasm-core</strong>
+              <span data-i18n="arch.engineMeta">wasmtime 48 · host-* 原语</span>
+            </div>
+            <div class="arch-node">
+              <span class="arch-tag mono">SDK</span>
+              <strong>plugin-sdk</strong>
+              <span data-i18n="arch.sdkMeta">类型 · Vite 插件 · CLI</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="gallery">
+        <figure class="shot">
+          <div class="shot-frame"><img src="assets/desktop-home.png" width="1440" height="900" alt="" loading="lazy"></div>
+          <figcaption><strong data-i18n="arch.shotHomeTitle">主屏</strong><span data-i18n="arch.shotHomeText">应用、服务与系统入口，一屏可达。</span></figcaption>
+        </figure>
+        <figure class="shot">
+          <div class="shot-frame"><img src="assets/desktop-permissions.png" width="1440" height="900" alt="" loading="lazy"></div>
+          <figcaption><strong data-i18n="arch.shotPermTitle">权限与授权</strong><span data-i18n="arch.shotPermText">每个应用的文件与网络访问都有记录。</span></figcaption>
+        </figure>
+        <figure class="shot">
+          <div class="shot-frame"><img src="assets/desktop-monitor.png" width="1440" height="900" alt="" loading="lazy"></div>
+          <figcaption><strong data-i18n="arch.shotMonitorTitle">运行监控</strong><span data-i18n="arch.shotMonitorText">只读查看每个 wasm 实例的指标。</span></figcaption>
+        </figure>
+      </div>
+
+      <div class="dual-band">
+        <div class="dual-copy">
+          <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span><span data-i18n="dual.eyebrow">同一契约 · 两端装载</span></p>
+          <h3 data-i18n-html="dual.title">同一套应用，<br>在 Android 上照样入巢。</h3>
+          <p class="dual-text" data-i18n="dual.text">移动宿主把每个应用注册为独立 Vue 运行面，权限、存储与生命周期沿用同一套 wasm 应用模型。桌面与移动不是两套代码，而是同一份产物形态的两种装配。</p>
+          <ul class="check-list check-list--dark">
+            <li data-i18n="dual.point1">应用与系统入口收在同一主屏</li>
+            <li data-i18n="dual.point2">权限、存储与卸载在应用详情收敛</li>
+            <li data-i18n="dual.point3">停用才销毁，切走只是藏起来</li>
+          </ul>
+        </div>
+        <figure class="tablet">
+          <div class="tablet-screen"><img src="assets/mobile-permissions.webp" width="800" height="1280" alt="" loading="lazy"></div>
+          <figcaption data-i18n="dual.caption">Android 宿主 · 应用详情</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="apps">
+    <div class="container">
+      <header class="section-head">
+        <div>
+          <p class="eyebrow"><span>04</span><span data-i18n="apps.eyebrow">应用与服务</span></p>
+          <h2 data-i18n-html="apps.title">每个产品能力，<br>都是一个独立应用。</h2>
+        </div>
+        <p class="lead" data-i18n="apps.lead">业务应用与系统服务同构：独立构建、独立版本、独立发布。桌面与移动产物分开提供；标为「随宿主提供」的应用不单独发 zip。</p>
+      </header>
+
+      <div class="filter-bar" role="group" data-i18n-aria-label="apps.filterLabel" aria-label="筛选应用">
+        <button class="filter is-active" type="button" data-filter="all" aria-pressed="true"><span data-i18n="apps.filterAll">全部</span><span class="count">10</span></button>
+        <button class="filter" type="button" data-filter="app" aria-pressed="false"><span data-i18n="apps.filterApps">业务应用</span><span class="count">5</span></button>
+        <button class="filter" type="button" data-filter="service" aria-pressed="false"><span data-i18n="apps.filterServices">系统服务</span><span class="count">5</span></button>
+        <button class="filter" type="button" data-filter="dual" aria-pressed="false"><span data-i18n="apps.filterDual">双端</span><span class="count">6</span></button>
+      </div>
+
+      <div class="app-grid" id="appGrid">
+
+        <article class="app-card" data-kind="app" data-ends="desktop mobile">
+          <div class="app-head">
+            <img class="app-icon" src="assets/apps/bedcode.svg" width="44" height="44" alt="" loading="lazy">
+            <div class="app-title"><h3 data-i18n="app.bedcode.name">BedCode</h3><span class="app-kind" data-i18n="apps.kindApp">业务应用</span></div>
+            <span class="app-version mono">v0.0.2</span>
+          </div>
+          <p class="app-desc" data-i18n="app.bedcode.desc">终端会话中心：会话配置与生命周期编排、任务队列与 Agent 集成；移动端作为远程终端控制端。</p>
+          <div class="app-meta"><span class="chip" data-i18n="apps.endsBoth">桌面 + 移动</span><span class="chip"><span>22</span> <span data-i18n="apps.caps">项能力</span></span></div>
+          <div class="app-links">
+            <a class="app-link" href="https://github.com/7ZAI/wasmnest-apps/releases/download/bedcode-v0.0.2/bedcode-desktop-v0.0.2.zip" target="_blank" rel="noopener"><span data-i18n="apps.desktopZip">桌面 ZIP</span><span class="size">2.5 MB</span></a>
+            <a class="app-link" href="https://github.com/7ZAI/wasmnest-apps/releases/download/bedcode-v0.0.2/bedcode-mobile-v0.0.2.zip" target="_blank" rel="noopener"><span data-i18n="apps.mobileZip">移动 ZIP</span><span class="size">2.4 MB</span></a>
+          </div>
+        </article>
+
+        <article class="app-card" data-kind="app" data-ends="desktop mobile">
+          <div class="app-head">
+            <img class="app-icon" src="assets/apps/ai-chatbox.svg" width="44" height="44" alt="" loading="lazy">
+            <div class="app-title"><h3 data-i18n="app.chatbox.name">AI Chatbox</h3><span class="app-kind" data-i18n="apps.kindApp">业务应用</span></div>
+            <span class="app-version mono">v0.0.2</span>
+          </div>
+          <p class="app-desc" data-i18n="app.chatbox.desc">多供应商 AI 对话：流式输出、多会话管理，接入任意 OpenAI 兼容供应商。</p>
+          <div class="app-meta"><span class="chip" data-i18n="apps.endsBoth">桌面 + 移动</span><span class="chip"><span>6</span> <span data-i18n="apps.caps">项能力</span></span></div>
+          <div class="app-links">
+            <a class="app-link" href="https://github.com/7ZAI/wasmnest-apps/releases/download/ai-chatbox-v0.0.2/ai-chatbox-desktop-v0.0.2.zip" target="_blank" rel="noopener"><span data-i18n="apps.desktopZip">桌面 ZIP</span><span class="size">618 KB</span></a>
+            <a class="app-link" href="https://github.com/7ZAI/wasmnest-apps/releases/download/ai-chatbox-v0.0.2/ai-chatbox-mobile-v0.0.2.zip" target="_blank" rel="noopener"><span data-i18n="apps.mobileZip">移动 ZIP</span><span class="size">843 KB</span></a>
+          </div>
+        </article>
+
+        <article class="app-card" data-kind="app" data-ends="desktop mobile">
+          <div class="app-head">
+            <img class="app-icon" src="assets/apps/file-transfer.svg" width="44" height="44" alt="" loading="lazy">
+            <div class="app-title"><h3 data-i18n="app.files.name">File Transfer</h3><span class="app-kind" data-i18n="apps.kindApp">业务应用</span></div>
+            <span class="app-version mono">v0.0.2</span>
+          </div>
+          <p class="app-desc" data-i18n="app.files.desc">内网对端发现与双向文件传输：并发队列、暂停 / 恢复、断点续传与共享目录。</p>
+          <div class="app-meta"><span class="chip" data-i18n="apps.endsBoth">桌面 + 移动</span><span class="chip"><span>12</span> <span data-i18n="apps.caps">项能力</span></span></div>
+          <div class="app-links">
+            <a class="app-link" href="https://github.com/7ZAI/wasmnest-apps/releases/download/file-transfer-v0.0.2/file-transfer-desktop-v0.0.2.zip" target="_blank" rel="noopener"><span data-i18n="apps.desktopZip">桌面 ZIP</span><span class="size">437 KB</span></a>
+            <a class="app-link" href="https://github.com/7ZAI/wasmnest-apps/releases/download/file-transfer-v0.0.2/file-transfer-mobile-v0.0.2.zip" target="_blank" rel="noopener"><span data-i18n="apps.mobileZip">移动 ZIP</span><span class="size">479 KB</span></a>
+          </div>
+        </article>
+
+        <article class="app-card" data-kind="app" data-ends="desktop">
+          <div class="app-head">
+            <img class="app-icon" src="assets/apps/lanbitou.svg" width="44" height="44" alt="" loading="lazy">
+            <div class="app-title"><h3 data-i18n="app.lanbitou.name">烂笔头</h3><span class="app-kind" data-i18n="apps.kindApp">业务应用</span></div>
+            <span class="app-version mono">v0.0.1</span>
+          </div>
+          <p class="app-desc" data-i18n="app.lanbitou.desc">轻量级 Markdown 记事本：纯文本编辑 + 实时预览、自动保存、系统剪贴板集成。</p>
+          <div class="app-meta"><span class="chip" data-i18n="apps.endsDesktop">仅桌面</span><span class="chip"><span>4</span> <span data-i18n="apps.caps">项能力</span></span></div>
+          <div class="app-links">
+            <a class="app-link" href="https://github.com/7ZAI/wasmnest-apps/releases/download/lanbitou-v0.0.1/lanbitou-desktop-v0.0.1.zip" target="_blank" rel="noopener"><span data-i18n="apps.desktopZip">桌面 ZIP</span><span class="size">529 KB</span></a>
+          </div>
+        </article>
+
+        <article class="app-card" data-kind="app" data-ends="desktop mobile">
+          <div class="app-head">
+            <img class="app-icon" src="assets/apps/news.svg" width="44" height="44" alt="" loading="lazy">
+            <div class="app-title"><h3 data-i18n="app.news.name">News</h3><span class="app-kind" data-i18n="apps.kindApp">业务应用</span></div>
+            <span class="app-version mono">v0.0.1</span>
+          </div>
+          <p class="app-desc" data-i18n="app.news.desc">个人新闻聚合：按源与圈子汇集 24 小时内的信息条。</p>
+          <div class="app-meta"><span class="chip" data-i18n="apps.endsBoth">桌面 + 移动</span><span class="chip"><span>5</span> <span data-i18n="apps.caps">项能力</span></span></div>
+          <div class="app-links app-links--muted"><span class="bundled"><span class="dot"></span><span data-i18n="apps.bundled">随宿主提供</span></span></div>
+        </article>
+
+        <article class="app-card" data-kind="service" data-ends="desktop mobile">
+          <div class="app-head">
+            <img class="app-icon" src="assets/apps/monitor.svg" width="44" height="44" alt="" loading="lazy">
+            <div class="app-title"><h3 data-i18n="app.monitor.name">运行监控</h3><span class="app-kind app-kind--service" data-i18n="apps.kindService">系统服务</span></div>
+            <span class="app-version mono">v0.0.2</span>
+          </div>
+          <p class="app-desc" data-i18n="app.monitor.desc">只读查看所有已加载 wasm 应用的内存、调用、燃料、Trap 与授权指标，并提供平台总览与阈值预警。</p>
+          <div class="app-meta"><span class="chip" data-i18n="apps.endsBoth">桌面 + 移动</span><span class="chip"><span>3</span> <span data-i18n="apps.caps">项能力</span></span></div>
+          <div class="app-links">
+            <a class="app-link" href="https://github.com/7ZAI/wasmnest-apps/releases/download/monitor-v0.0.2/monitor-desktop-v0.0.2.zip" target="_blank" rel="noopener"><span data-i18n="apps.desktopZip">桌面 ZIP</span><span class="size">243 KB</span></a>
+            <a class="app-link" href="https://github.com/7ZAI/wasmnest-apps/releases/download/monitor-v0.0.2/monitor-mobile-v0.0.2.zip" target="_blank" rel="noopener"><span data-i18n="apps.mobileZip">移动 ZIP</span><span class="size">146 KB</span></a>
+          </div>
+        </article>
+
+        <article class="app-card" data-kind="service" data-ends="desktop">
+          <div class="app-head">
+            <img class="app-icon" src="assets/apps/auth-center.svg" width="44" height="44" alt="" loading="lazy">
+            <div class="app-title"><h3 data-i18n="app.auth.name">认证中心</h3><span class="app-kind app-kind--service" data-i18n="apps.kindService">系统服务</span></div>
+            <span class="app-version mono">v0.0.2</span>
+          </div>
+          <p class="app-desc" data-i18n="app.auth.desc">本机入站连接的唯一裁决者（fail-closed）：配对、信任与认证策略经互调 API 提供给消费方。</p>
+          <div class="app-meta"><span class="chip" data-i18n="apps.endsDesktop">仅桌面</span><span class="chip"><span>4</span> <span data-i18n="apps.caps">项能力</span></span></div>
+          <div class="app-links">
+            <a class="app-link" href="https://github.com/7ZAI/wasmnest-apps/releases/download/auth-center-v0.0.2/auth-center-desktop-v0.0.2.zip" target="_blank" rel="noopener"><span data-i18n="apps.desktopZip">桌面 ZIP</span><span class="size">362 KB</span></a>
+          </div>
+        </article>
+
+        <article class="app-card" data-kind="service" data-ends="desktop">
+          <div class="app-head">
+            <img class="app-icon" src="assets/apps/net-config.svg" width="44" height="44" alt="" loading="lazy">
+            <div class="app-title"><h3 data-i18n="app.netcfg.name">网络配置</h3><span class="app-kind app-kind--service" data-i18n="apps.kindService">系统服务</span></div>
+            <span class="app-version mono">v0.0.1</span>
+          </div>
+          <p class="app-desc" data-i18n="app.netcfg.desc">穿透配置的跨应用唯一真源：中继地址导入、按插件的外网注册表与部署文本生成。</p>
+          <div class="app-meta"><span class="chip" data-i18n="apps.endsDesktop">仅桌面</span><span class="chip"><span>2</span> <span data-i18n="apps.caps">项能力</span></span></div>
+          <div class="app-links">
+            <a class="app-link" href="https://github.com/7ZAI/wasmnest-apps/releases/download/net-config-v0.0.1/net-config-desktop-v0.0.1.zip" target="_blank" rel="noopener"><span data-i18n="apps.desktopZip">桌面 ZIP</span><span class="size">264 KB</span></a>
+          </div>
+        </article>
+
+        <article class="app-card" data-kind="service" data-ends="desktop">
+          <div class="app-head">
+            <img class="app-icon" src="assets/apps/speech.svg" width="44" height="44" alt="" loading="lazy">
+            <div class="app-title"><h3 data-i18n="app.speech.name">语音识别</h3><span class="app-kind app-kind--service" data-i18n="apps.kindService">系统服务</span></div>
+            <span class="app-version mono">v0.0.1</span>
+          </div>
+          <p class="app-desc" data-i18n="app.speech.desc">本地 whisper.cpp 离线识别，或 OpenAI 兼容远端转写；只接收音频字节。</p>
+          <div class="app-meta"><span class="chip" data-i18n="apps.endsDesktop">仅桌面</span><span class="chip"><span>7</span> <span data-i18n="apps.caps">项能力</span></span></div>
+          <div class="app-links app-links--muted"><span class="bundled"><span class="dot"></span><span data-i18n="apps.bundled">随宿主提供</span></span></div>
+        </article>
+
+        <article class="app-card" data-kind="service" data-ends="desktop mobile">
+          <div class="app-head">
+            <img class="app-icon" src="assets/apps/assistant.svg" width="44" height="44" alt="" loading="lazy">
+            <div class="app-title"><h3 data-i18n="app.assistant.name">Nest 助手</h3><span class="app-kind app-kind--service" data-i18n="apps.kindService">系统服务</span></div>
+            <span class="app-version mono">v0.0.1</span>
+          </div>
+          <p class="app-desc" data-i18n="app.assistant.desc">系统级个人助手：情感陪伴对话 + 应用调度执行，本地加密存储记忆与密钥。</p>
+          <div class="app-meta"><span class="chip" data-i18n="apps.endsBoth">桌面 + 移动</span><span class="chip"><span>4</span> <span data-i18n="apps.caps">项能力</span></span></div>
+          <div class="app-links app-links--muted"><span class="bundled"><span class="dot"></span><span data-i18n="apps.bundled">随宿主提供</span></span></div>
+        </article>
+
+      </div>
+
+      <p class="section-foot" data-i18n-html="apps.foot">全部应用发布记录与校验文件见 <a href="https://github.com/7ZAI/wasmnest-apps/releases" target="_blank" rel="noopener">wasmnest-apps Releases</a>。桌面在应用管理里选择 zip 安装；移动从文件安装。</p>
+    </div>
+  </section>
+
+  <section class="section section--download" id="download">
+    <div class="container">
+      <header class="section-head">
+        <div>
+          <p class="eyebrow"><span>05</span><span data-i18n="download.eyebrow">下载</span></p>
+          <h2 data-i18n-html="download.title">把巢搬回<br>你的机器。</h2>
+        </div>
+        <p class="lead" data-i18n="download.lead">安装包由 GitHub Releases 直接分发。每个文件都附 SHA-256，桌面安装包另带 minisign 更新签名。</p>
+      </header>
+
+      <div class="download-grid">
+        <article class="dl-card">
+          <div class="dl-head">
+            <span class="os-icon">
+              <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M3 5.6 10.6 4.5v6.9H3V5.6Zm8.6-1.2L21 3v8.4h-9.4V4.4ZM3 12.6h7.6v6.9L3 18.4v-5.8Zm8.6 0H21V21l-9.4-1.3v-7.1Z"/></svg>
+            </span>
+            <div class="dl-title"><h3>Windows x64</h3><span class="mono">NSIS · .exe</span></div>
+            <span class="dl-size">15.7 MB</span>
+          </div>
+          <div class="dl-actions">
+            <a class="btn btn-primary btn-small" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/WasmNest-0.0.2-release-x64-setup.exe" target="_blank" rel="noopener" data-i18n="download.getExe">下载 EXE</a>
+            <a class="dl-mini" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/WasmNest-0.0.2-release-x64-setup.exe.sig" target="_blank" rel="noopener">.sig</a>
+            <a class="dl-mini" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/WasmNest-0.0.2-release-x64-setup.exe.sha256" target="_blank" rel="noopener">.sha256</a>
+          </div>
+          <button class="hash" type="button" data-copy="ce9d319b3623a6a3f66db9a97acee4c106ede448dcbda167a8e1041fff619c32">
+            <code>ce9d319b3623a6a3f66db9a97acee4c106ede448dcbda167a8e1041fff619c32</code>
+            <span class="hash-action" data-i18n="download.copyHash">复制 SHA-256</span>
+          </button>
+        </article>
+
+        <article class="dl-card">
+          <div class="dl-head">
+            <span class="os-icon">
+              <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 3.2c3.6 0 6.6 2.4 7.4 5.7l1.6-.9-.7 2.6-2.2 1.2H5.9L3.7 9.6l-.7-2.6 1.6.9C5.4 5.6 8.4 3.2 12 3.2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5.9 11.8h12.2v3.1a6.1 6.1 0 0 1-12.2 0v-3.1Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="9.1" cy="6.6" r=".9" fill="currentColor"/><circle cx="14.9" cy="6.6" r=".9" fill="currentColor"/><path d="m8 19.5-1.6 2M16 19.5l1.6 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </span>
+            <div class="dl-title"><h3>Linux amd64</h3><span class="mono">Debian · AppImage</span></div>
+            <span class="dl-size" data-i18n="download.twoPackages">2 个包</span>
+          </div>
+          <div class="dl-variant">
+            <div class="dl-variant-head"><strong>.deb</strong><span>26.2 MB</span></div>
+            <div class="dl-actions">
+              <a class="btn btn-primary btn-small" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/WasmNest-0.0.2-release-amd64.deb" target="_blank" rel="noopener" data-i18n="download.getDeb">下载 DEB</a>
+              <a class="dl-mini" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/WasmNest-0.0.2-release-amd64.deb.sig" target="_blank" rel="noopener">.sig</a>
+              <a class="dl-mini" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/WasmNest-0.0.2-release-amd64.deb.sha256" target="_blank" rel="noopener">.sha256</a>
+            </div>
+            <button class="hash" type="button" data-copy="15c0217fc2b75c7a8faa30b2c06b4213765fd4574a6601e07807702da8e61b55">
+              <code>15c0217fc2b75c7a8faa30b2c06b4213765fd4574a6601e07807702da8e61b55</code>
+              <span class="hash-action" data-i18n="download.copyHash">复制 SHA-256</span>
+            </button>
+          </div>
+          <div class="dl-variant">
+            <div class="dl-variant-head"><strong>.AppImage</strong><span>103.4 MB</span></div>
+            <div class="dl-actions">
+              <a class="btn btn-ghost btn-small" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/WasmNest_0.0.2_amd64.AppImage" target="_blank" rel="noopener" data-i18n="download.getAppImage">下载 AppImage</a>
+              <a class="dl-mini" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/WasmNest_0.0.2_amd64.AppImage.sig" target="_blank" rel="noopener">.sig</a>
+              <a class="dl-mini" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/WasmNest_0.0.2_amd64.AppImage.sha256" target="_blank" rel="noopener">.sha256</a>
+            </div>
+            <button class="hash" type="button" data-copy="0118b9275fb29178857bca41659fedaa45561c96aace102729618acedfb42f3a">
+              <code>0118b9275fb29178857bca41659fedaa45561c96aace102729618acedfb42f3a</code>
+              <span class="hash-action" data-i18n="download.copyHash">复制 SHA-256</span>
+            </button>
+          </div>
+        </article>
+
+        <article class="dl-card">
+          <div class="dl-head">
+            <span class="os-icon">
+              <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M7.2 9.2a4.8 4.8 0 1 1 9.6 0v5.6a4.8 4.8 0 0 1-9.6 0V9.2Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m8.4 5.2-1.3-1.5M15.6 5.2l1.3-1.5M4.2 11.5h1.6M18.2 11.5h1.6M6.6 19l-1.2 1.7M17.4 19l1.2 1.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9.6" cy="9.6" r=".9" fill="currentColor"/><circle cx="14.4" cy="9.6" r=".9" fill="currentColor"/></svg>
+            </span>
+            <div class="dl-title"><h3>Android arm64</h3><span class="mono">.apk</span></div>
+            <span class="dl-size">48.4 MB</span>
+          </div>
+          <div class="dl-actions">
+            <a class="btn btn-primary btn-small" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/WasmNest-0.0.2-release-arm64.apk" target="_blank" rel="noopener" data-i18n="download.getApk">下载 APK</a>
+            <a class="dl-mini" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/WasmNest-0.0.2-release-arm64.apk.sha256" target="_blank" rel="noopener">.sha256</a>
+          </div>
+          <button class="hash" type="button" data-copy="87a79028ad570a187197555538623cf8b11cfa2e9b3e4d03380f4f9d3e2daf1b">
+            <code>87a79028ad570a187197555538623cf8b11cfa2e9b3e4d03380f4f9d3e2daf1b</code>
+            <span class="hash-action" data-i18n="download.copyHash">复制 SHA-256</span>
+          </button>
+        </article>
+      </div>
+
+      <div class="download-foot">
+        <p data-i18n-html="download.note">Windows 安装包目前未做 Authenticode 代码签名，SmartScreen 可能提示「未知发布者」；Android APK 使用 release keystore 签名；macOS / iOS 未纳入发布验证。</p>
+        <div class="download-foot-links">
+          <a class="text-link" href="https://github.com/7ZAI/wasmnest/releases" target="_blank" rel="noopener" data-i18n="download.allReleases">全部版本</a>
+          <a class="text-link" href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/latest.json" target="_blank" rel="noopener">latest.json</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="sdk">
+    <div class="container">
+      <header class="section-head">
+        <div>
+          <p class="eyebrow"><span>06</span><span data-i18n="sdk.eyebrow">SDK</span></p>
+          <h2 data-i18n-html="sdk.title">从依赖开始，<br>把能力装进巢。</h2>
+        </div>
+        <p class="lead" data-i18n="sdk.lead">端内 SDK 已在 npm 与 crates.io 发布（0.0.2，MIT）。前端负责挂载与运行面，Rust 负责 wasm Component 与类型安全的插件 API。</p>
+      </header>
+
+      <div class="sdk-grid">
+        <article class="sdk-card">
+          <div class="sdk-head"><span class="sdk-badge">TypeScript</span><span class="sdk-ver mono">0.0.2</span></div>
+          <h3 data-i18n="sdk.jsTitle">前端 SDK</h3>
+          <p data-i18n="sdk.jsText">类型定义、运行时代理、Vite 构建插件与 CLI。桌面与移动各一个包，脚手架可直接生成工程。</p>
+          <div class="cmd">
+            <code>pnpm add -D @binblink/wasmnest-plugin-sdk-desktop@0.0.2</code>
+            <button class="copy-btn" type="button" data-copy="pnpm add -D @binblink/wasmnest-plugin-sdk-desktop@0.0.2" data-i18n-aria-label="sdk.copy" aria-label="复制"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 10.5V3.8c0-.4.4-.8.8-.8h6.7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          </div>
+          <div class="cmd">
+            <code>pnpm add -D @binblink/wasmnest-plugin-sdk-mobile@0.0.2</code>
+            <button class="copy-btn" type="button" data-copy="pnpm add -D @binblink/wasmnest-plugin-sdk-mobile@0.0.2" data-i18n-aria-label="sdk.copy" aria-label="复制"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 10.5V3.8c0-.4.4-.8.8-.8h6.7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          </div>
+          <div class="sdk-links">
+            <a href="https://www.npmjs.com/package/@binblink/wasmnest-plugin-sdk-desktop" target="_blank" rel="noopener">npm · desktop ↗</a>
+            <a href="https://www.npmjs.com/package/@binblink/wasmnest-plugin-sdk-mobile" target="_blank" rel="noopener">npm · mobile ↗</a>
+          </div>
+        </article>
+
+        <article class="sdk-card">
+          <div class="sdk-head"><span class="sdk-badge">Rust</span><span class="sdk-ver mono">0.0.2</span></div>
+          <h3 data-i18n="sdk.rustTitle">WASM 后端</h3>
+          <p data-i18n="sdk.rustText">插件 API trait 与共享类型，启用 wasm feature 后获得 wit-bindgen 绑定、WasmPlugin 与互调宏。</p>
+          <div class="cmd">
+            <code>cargo add wasmnest-plugin-api@0.0.2 --features wasm</code>
+            <button class="copy-btn" type="button" data-copy="cargo add wasmnest-plugin-api@0.0.2 --features wasm" data-i18n-aria-label="sdk.copy" aria-label="复制"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 10.5V3.8c0-.4.4-.8.8-.8h6.7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          </div>
+          <div class="cmd">
+            <code>cargo add wasmnest-plugin-api-mobile@0.0.2 --features wasm</code>
+            <button class="copy-btn" type="button" data-copy="cargo add wasmnest-plugin-api-mobile@0.0.2 --features wasm" data-i18n-aria-label="sdk.copy" aria-label="复制"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 10.5V3.8c0-.4.4-.8.8-.8h6.7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          </div>
+          <div class="sdk-links">
+            <a href="https://crates.io/crates/wasmnest-plugin-api" target="_blank" rel="noopener">crates.io · api ↗</a>
+            <a href="https://crates.io/crates/wasmnest-plugin-api-mobile" target="_blank" rel="noopener">crates.io · mobile ↗</a>
+            <a href="https://crates.io/crates/wasmnest-plugin-api-macros" target="_blank" rel="noopener">macros ↗</a>
+          </div>
+        </article>
+      </div>
+
+      <div class="code-split">
+        <div class="code-window">
+          <div class="code-bar">
+            <span class="window-dots"><i></i><i></i><i></i></span>
+            <span class="code-title mono">plugin.json</span>
+            <button class="copy-btn copy-btn--light" type="button" data-copy-target="manifestCode" data-i18n-aria-label="sdk.copy" aria-label="复制"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 10.5V3.8c0-.4.4-.8.8-.8h6.7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          </div>
+          <pre><code id="manifestCode">{
+  "id": "com.example.my-app",
+  "name": "My App",
+  "version": "0.1.0",
+  "platform": "desktop",
+  "pluginType": "full",
+  "main": "index.js",
+  "permissions": ["storage", "network:http"],
+  "rustLibrary": "my_app_plugin"
+}</code></pre>
+        </div>
+        <div class="sdk-aside">
+          <h3 data-i18n="sdk.manifestTitle">清单即边界</h3>
+          <p data-i18n="sdk.manifestText">plugin.json 声明应用的身份、形态与权限；宿主只授予「声明 ∩ 批准」的交集，未声明即拒。</p>
+          <ul class="check-list">
+            <li data-i18n="sdk.check1">权限按最小集声明，高风险能力逐项批准</li>
+            <li data-i18n="sdk.check2">桌面挂载包导出 mountApp，移动注册运行面</li>
+            <li data-i18n="sdk.check3">CLI 可生成工程、构建并校验清单</li>
+          </ul>
+          <div class="sdk-aside-links">
+            <a class="text-link" href="https://github.com/7ZAI/wasmnest/blob/main/docs/contracts.md" target="_blank" rel="noopener" data-i18n="sdk.contractsLink">契约文档</a>
+            <a class="text-link" href="https://github.com/7ZAI/wasmnest/tree/main/wasmnest-desktop/packages/plugin-sdk-desktop" target="_blank" rel="noopener" data-i18n="sdk.docsLink">SDK 文档</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--quickstart" id="quickstart">
+    <div class="container quickstart-grid">
+      <div>
+        <p class="eyebrow"><span>07</span><span data-i18n="quick.eyebrow">从源码</span></p>
+        <h2 data-i18n-html="quick.title">四个仓，<br>一条命令。</h2>
+        <p class="lead" data-i18n="quick.lead">项目处于研发起步期。从源码构建需要 Node 22、pnpm 12.2.1、Rust stable 与 sccache；桌面应用构建另需 wasip3 nightly，移动端另需 Android SDK / NDK。</p>
+        <ul class="requirements">
+          <li><span class="req-key mono">Node</span><span>≥ 22</span></li>
+          <li><span class="req-key mono">pnpm</span><span>12.2.1</span></li>
+          <li><span class="req-key mono">Rust</span><span>stable + sccache</span></li>
+          <li><span class="req-key mono">Tauri</span><span>2</span></li>
+        </ul>
+        <div class="quick-links">
+          <a class="text-link" href="https://github.com/7ZAI/wasmnest/blob/main/docs/commands.md" target="_blank" rel="noopener" data-i18n="quick.commandsLink">完整命令</a>
+          <a class="text-link" href="https://github.com/7ZAI/wasmnest/blob/main/AGENTS.md" target="_blank" rel="noopener" data-i18n="quick.agentsLink">开发边界</a>
+        </div>
+      </div>
+
+      <div class="code-window code-window--dark">
+        <div class="code-bar">
+          <span class="window-dots"><i></i><i></i><i></i></span>
+          <span class="code-title mono">workspace.sh</span>
+          <button class="copy-btn copy-btn--dark" type="button" data-copy-target="quickCode" data-i18n-aria-label="sdk.copy" aria-label="复制"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 10.5V3.8c0-.4.4-.8.8-.8h6.7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+        </div>
+        <pre><code id="quickCode">mkdir wasmnest-workspace &amp;&amp; cd wasmnest-workspace
+git clone https://github.com/7ZAI/wasmnest.git
+git clone https://github.com/7ZAI/wasmnest-lib.git
+git clone https://github.com/7ZAI/wasmnest-apps.git
+git clone https://github.com/7ZAI/wasmnest-test.git
+
+cd wasmnest
+pnpm install
+pnpm --dir wasmnest-desktop install
+pnpm --dir wasmnest-mobile install
+
+pnpm --dir wasmnest-desktop run tauri:dev</code></pre>
+        <p class="code-note" data-i18n="quick.note">首次构建内置应用前，按 wasmnest-apps 的说明安装各应用工程依赖。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="container faq-grid">
+      <div class="faq-intro">
+        <p class="eyebrow"><span>08</span><span data-i18n="faq.eyebrow">常见问题</span></p>
+        <h2 data-i18n-html="faq.title">先把疑问<br>留在门外。</h2>
+        <p class="lead" data-i18n="faq.lead">更多机制与边界在仓库文档里；问题与路线图以 GitHub Issues 为真源。</p>
+        <a class="text-link" href="https://github.com/7ZAI/wasmnest/issues" target="_blank" rel="noopener" data-i18n="faq.issuesLink">去 Issues 提问</a>
+      </div>
+
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary><h3 data-i18n="faq.q1">WasmNest 和 Tauri 是什么关系？</h3><span class="faq-mark" aria-hidden="true"></span></summary>
+          <p data-i18n="faq.a1">Tauri 2 负责窗口、系统集成与安装包；WasmNest 在它之上提供 wasmtime 运行时、能力闸门与应用的装载 / 卸载机制。Tauri 插件不是 wasm 应用。</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3 data-i18n="faq.q2">为什么应用要用 WebAssembly？</h3><span class="faq-mark" aria-hidden="true"></span></summary>
+          <p data-i18n="faq.a2">为了隔离与可替换：每个应用是独立 Component，默认零系统能力，只能使用被批准的导入；宿主无需为每个应用重编，应用也可以来自不同语言。</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3 data-i18n="faq.q3">装好宿主后，应用从哪来？</h3><span class="faq-mark" aria-hidden="true"></span></summary>
+          <p data-i18n="faq.a3">内置应用随安装包分发；桌面可在应用管理里选择 zip 安装，移动从文件安装。独立发布的应用包从 wasmnest-apps Releases 下载。</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3 data-i18n="faq.q4">支持 macOS / iOS 吗？</h3><span class="faq-mark" aria-hidden="true"></span></summary>
+          <p data-i18n="faq.a4">当前发布验证覆盖 Windows、Linux 与 Android arm64；macOS / iOS 尚未纳入发布验证。</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3 data-i18n="faq.q5">安装包怎么校验？</h3><span class="faq-mark" aria-hidden="true"></span></summary>
+          <p data-i18n="faq.a5">每个资产旁边有 .sha256，部分带 .sig。桌面 .sig 是 minisign 更新签名；Windows 目前未做 Authenticode 代码签名，SmartScreen 可能提示未知发布者。Android APK 使用 release keystore 签名。</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3 data-i18n="faq.q6">我能写自己的应用并分发吗？</h3><span class="faq-mark" aria-hidden="true"></span></summary>
+          <p data-i18n="faq.a6">可以。两个 SDK 均为 MIT，CLI 可生成桌面 / 移动工程，plugin.json 声明权限。当前没有应用商店审核机制，分发即 zip 或应用包。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="brand" href="#top"><img src="assets/logo.png" width="30" height="30" alt=""><span>WasmNest</span></a>
+        <p data-i18n="footer.tagline">契约之内，自由生长。</p>
+        <span class="footer-status mono">MIT · 0.0.2 alpha</span>
+      </div>
+      <div class="footer-cols">
+        <div>
+          <h3 data-i18n="footer.project">项目</h3>
+          <a href="https://github.com/7ZAI/wasmnest" target="_blank" rel="noopener">wasmnest</a>
+          <a href="https://github.com/7ZAI/wasmnest-lib" target="_blank" rel="noopener">wasmnest-lib</a>
+          <a href="https://github.com/7ZAI/wasmnest-apps" target="_blank" rel="noopener">wasmnest-apps</a>
+          <a href="https://github.com/7ZAI/wasmnest-test" target="_blank" rel="noopener">wasmnest-test</a>
+        </div>
+        <div>
+          <h3 data-i18n="footer.get">获取</h3>
+          <a href="#download" data-i18n="footer.installers">安装包</a>
+          <a href="#apps" data-i18n="footer.appZips">应用 ZIP</a>
+          <a href="https://github.com/7ZAI/wasmnest/releases" target="_blank" rel="noopener" data-i18n="footer.releases">版本记录</a>
+          <a href="https://github.com/7ZAI/wasmnest/releases/download/v0.0.2/latest.json" target="_blank" rel="noopener">latest.json</a>
+        </div>
+        <div>
+          <h3 data-i18n="footer.build">开发</h3>
+          <a href="https://github.com/7ZAI/wasmnest/blob/main/README.md" target="_blank" rel="noopener">README</a>
+          <a href="https://github.com/7ZAI/wasmnest/blob/main/docs/codemap.md" target="_blank" rel="noopener" data-i18n="footer.docs">文档</a>
+          <a href="https://www.npmjs.com/package/@binblink/wasmnest-plugin-sdk-desktop" target="_blank" rel="noopener">npm SDK</a>
+          <a href="https://crates.io/crates/wasmnest-plugin-api" target="_blank" rel="noopener">crates.io</a>
+        </div>
+        <div>
+          <h3 data-i18n="footer.more">更多</h3>
+          <a href="https://github.com/7ZAI/wasmnest/issues" target="_blank" rel="noopener">Issues</a>
+          <a href="https://github.com/7ZAI/wasmnest/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+          <a href="https://github.com/7ZAI/wasmnest/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+          <a href="#faq" data-i18n="footer.faq">常见问题</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-word" aria-hidden="true">WasmNest</div>
+
+    <div class="footer-bottom">
+      <span>© 2026 7ZAI</span>
+      <span data-i18n="footer.builtOn">构建于 Wasmtime · Tauri · Vue</span>
+      <div class="lang-switch lang-switch--footer" role="group" aria-label="Language / 语言">
+        <button type="button" data-lang-set="zh" aria-pressed="true">中</button>
+        <button type="button" data-lang-set="en" aria-pressed="false">EN</button>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<div class="sr-only" aria-live="polite" id="copyStatus"></div>
+
+<script src="js/i18n.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

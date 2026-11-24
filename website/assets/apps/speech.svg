@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Speech service">
+  <rect width="96" height="96" rx="22" fill="#1e293b"/>
+  <rect x="35" y="18" width="26" height="42" rx="13" fill="#f8fafc"/>
+  <path d="M26 45a22 22 0 0 0 44 0" fill="none" stroke="#f8fafc" stroke-width="5" stroke-linecap="round"/>
+  <path d="M48 67v11" stroke="#f8fafc" stroke-width="5" stroke-linecap="round"/>
+  <path d="M36 78h24" stroke="#f8fafc" stroke-width="5" stroke-linecap="round"/>
+  <path d="M18 44v8M12 40v16M78 44v8M84 40v16" stroke="#60a5fa" stroke-width="4" stroke-linecap="round"/>
+</svg>

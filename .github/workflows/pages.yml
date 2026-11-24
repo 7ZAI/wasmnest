@@ -1,0 +1,49 @@
+name: pages
+
+# 对外项目站（website/）发布到 GitHub Pages。
+#
+# 与仓内 site/ 是两套独立站点：本工作流只上传 website/，不碰 site/。
+# 站点为零构建静态文件，不需要 pnpm / Rust；Pages 源需在仓库 Settings → Pages
+# 选择「GitHub Actions」（首次启用为人工步骤），之后 main 推送自动发布。
+#
+# 只监听 main + 手动触发：dev 上的站点改动不会直接覆盖线上。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: 发布项目站
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 检出
+        uses: actions/checkout@v4
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v5
+
+      - name: 上传 website/ 静态产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+      - name: 部署
+        id: deployment
+        uses: actions/deploy-pages@v4
